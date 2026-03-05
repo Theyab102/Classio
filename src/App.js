@@ -647,410 +647,449 @@ function Header({ user, saveStatus, isGuest, onSignOut, character, onOpenCharact
   );
 }
 
-// ─── SPLASH / SIGN IN ─────────────────────────────────────────────────────────
-// ─── AVATAR SVG ──────────────────────────────────────────────────────────────
-// Human-shaped bust avatar with 3D shading, Snapchat-inspired style
-function MiniAvatar({ character: ch, size = 40 }) {
-  const s = size;
-  const cx = s * 0.5;
-  const skinDark  = shadeSkin(ch.skin, -25);
-  const skinLight = shadeSkin(ch.skin, 30);
-  const hairDark  = shadeHex(ch.hair, -30);
-  const topDark   = shadeHex(ch.top,  -20);
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+function shadeHex(hex, amt) {
+  const n = parseInt((hex||"#888888").replace('#',''), 16);
+  const clamp = v => Math.min(255, Math.max(0, v));
+  return `rgb(${clamp((n>>16&255)+amt)},${clamp((n>>8&255)+amt)},${clamp((n&255)+amt)})`;
+}
 
-  // 10 hair styles rendered as SVG
-  const HAIR = {
-    0: <>  {/* Buzz / short crop */}
-      <ellipse cx={cx} cy={s*.19} rx={s*.21} ry={s*.135} fill={ch.hair}/>
-      <rect x={s*.29} y={s*.19} width={s*.42} height={s*.09} fill={ch.hair}/>
-    </>,
-    1: <>  {/* Side-part clean */}
-      <ellipse cx={cx} cy={s*.17} rx={s*.23} ry={s*.15} fill={hairDark}/>
-      <ellipse cx={cx} cy={s*.17} rx={s*.21} ry={s*.12} fill={ch.hair}/>
-      <rect x={s*.29} y={s*.19} width={s*.42} height={s*.1} fill={ch.hair}/>
-      <path d={`M${s*.27} ${s*.17} Q${s*.38} ${s*.1} ${s*.6} ${s*.15}`} stroke={hairDark} strokeWidth={s*.018} fill="none"/>
-    </>,
-    2: <>  {/* Waves / medium */}
-      <ellipse cx={cx} cy={s*.17} rx={s*.23} ry={s*.155} fill={ch.hair}/>
-      <rect x={s*.27} y={s*.2} width={s*.07} height={s*.26} rx={s*.035} fill={ch.hair}/>
-      <rect x={s*.66} y={s*.2} width={s*.07} height={s*.26} rx={s*.035} fill={ch.hair}/>
-      <path d={`M${s*.27} ${s*.28} Q${s*.3} ${s*.35} ${s*.27} ${s*.42}`} stroke={hairDark} strokeWidth={s*.015} fill="none"/>
-      <path d={`M${s*.73} ${s*.28} Q${s*.7} ${s*.35} ${s*.73} ${s*.42}`} stroke={hairDark} strokeWidth={s*.015} fill="none"/>
-    </>,
-    3: <>  {/* Long straight */}
-      <ellipse cx={cx} cy={s*.16} rx={s*.24} ry={s*.155} fill={ch.hair}/>
-      <rect x={s*.26} y={s*.19} width={s*.07} height={s*.46} rx={s*.03} fill={ch.hair}/>
-      <rect x={s*.67} y={s*.19} width={s*.07} height={s*.46} rx={s*.03} fill={ch.hair}/>
-      <rect x={s*.27} y={s*.19} width={s*.46} height={s*.1} fill={ch.hair}/>
-      <ellipse cx={s*.295} cy={s*.65} rx={s*.04} ry={s*.06} fill={hairDark}/>
-      <ellipse cx={s*.705} cy={s*.65} rx={s*.04} ry={s*.06} fill={hairDark}/>
-    </>,
-    4: <>  {/* High bun */}
-      <ellipse cx={cx} cy={s*.2} rx={s*.22} ry={s*.13} fill={ch.hair}/>
-      <rect x={s*.29} y={s*.2} width={s*.42} height={s*.09} fill={ch.hair}/>
-      <circle cx={cx} cy={s*.085} r={s*.1} fill={ch.hair}/>
-      <circle cx={cx} cy={s*.085} r={s*.065} fill={hairDark} opacity={.4}/>
-      <circle cx={cx} cy={s*.085} r={s*.03} fill={skinLight} opacity={.3}/>
-    </>,
-    5: <>  {/* Ponytail */}
-      <ellipse cx={cx} cy={s*.17} rx={s*.23} ry={s*.14} fill={ch.hair}/>
-      <rect x={s*.29} y={s*.19} width={s*.42} height={s*.09} fill={ch.hair}/>
-      <ellipse cx={s*.79} cy={s*.25} rx={s*.055} ry={s*.15} fill={ch.hair} transform={`rotate(-15,${s*.79},${s*.25})`}/>
-      <ellipse cx={s*.79} cy={s*.25} rx={s*.025} ry={s*.1} fill={hairDark} opacity={.4} transform={`rotate(-15,${s*.79},${s*.25})`}/>
-    </>,
-    6: <>  {/* Afro */}
-      {[...Array(14)].map((_,i) => {
-        const a = (i/14)*Math.PI*2;
-        return <circle key={i} cx={cx+Math.cos(a)*s*.19} cy={s*.19+Math.sin(a)*s*.15} r={s*.07} fill={ch.hair}/>;
-      })}
-      <ellipse cx={cx} cy={s*.19} rx={s*.2} ry={s*.16} fill={ch.hair}/>
-    </>,
-    7: <>  {/* Braids */}
-      <ellipse cx={cx} cy={s*.17} rx={s*.23} ry={s*.15} fill={ch.hair}/>
-      {[0,1,2].map(i=><>
-        <rect key={`l${i}`} x={s*(.3+i*.04)} y={s*.22} width={s*.025} height={s*.38} rx={s*.012} fill={i%2===0?ch.hair:hairDark}/>
-        <rect key={`r${i}`} x={s*(.645+i*.04)} y={s*.22} width={s*.025} height={s*.38} rx={s*.012} fill={i%2===0?hairDark:ch.hair}/>
-      </>)}
-    </>,
-    8: <>  {/* Curly bob */}
-      {[...Array(9)].map((_,i) => <circle key={i} cx={s*(.28+i*.055)} cy={s*.18} r={s*.055} fill={ch.hair}/>)}
-      <ellipse cx={cx} cy={s*.21} rx={s*.22} ry={s*.1} fill={ch.hair}/>
-      <rect x={s*.27} y={s*.21} width={s*.07} height={s*.16} rx={s*.035} fill={ch.hair}/>
-      <rect x={s*.66} y={s*.21} width={s*.07} height={s*.16} rx={s*.035} fill={ch.hair}/>
-    </>,
-    9: <>  {/* Locs / dreadlocks */}
-      <ellipse cx={cx} cy={s*.17} rx={s*.23} ry={s*.15} fill={ch.hair}/>
-      {[0,1,2,3,4].map(i=><rect key={`l${i}`} x={s*(.27+i*.046)} y={s*.21} width={s*.03} height={s*(.25+i*.04)} rx={s*.015} fill={i%2===0?ch.hair:hairDark}/>)}
-      {[0,1,2].map(i=><rect key={`r${i}`} x={s*(.65+i*.046)} y={s*.21} width={s*.03} height={s*(.28+i*.04)} rx={s*.015} fill={i%2===0?hairDark:ch.hair}/>)}
-    </>,
+// ─── AVATAR ───────────────────────────────────────────────────────────────────
+function MiniAvatar({ character: ch, size = 40 }) {
+  const s  = size;
+  const cx = s * 0.5;
+  const sd = shadeHex(ch.skin,  -30);
+  const sl = shadeHex(ch.skin,   28);
+  const hd = shadeHex(ch.hair,  -35);
+  const hl = shadeHex(ch.hair,   30);
+  const td = shadeHex(ch.top,   -25);
+  const tl = shadeHex(ch.top,    25);
+  const bg = ch.bg || '#dce8ff';
+  const gid = `av${s}`;   // unique per size to avoid gradient collisions
+
+  // ── Hair paths — all drawn with smooth bezier curves ──────────────────────
+  const H = {
+    // 0 – Clean buzz cut
+    0: <path d={`M${s*.29} ${s*.31} Q${s*.3} ${s*.11} ${cx} ${s*.1} Q${s*.7} ${s*.11} ${s*.71} ${s*.31}`} fill={ch.hair}/>,
+
+    // 1 – Side-part / textured top
+    1: <><path d={`M${s*.28} ${s*.33} Q${s*.27} ${s*.1} ${cx} ${s*.08} Q${s*.73} ${s*.1} ${s*.72} ${s*.33}`} fill={hd}/>
+        <path d={`M${s*.28} ${s*.33} Q${s*.29} ${s*.13} ${cx} ${s*.11} Q${s*.71} ${s*.13} ${s*.72} ${s*.33}`} fill={ch.hair}/>
+        <path d={`M${s*.29} ${s*.2} Q${s*.38} ${s*.09} ${s*.62} ${s*.12}`} stroke={hd} strokeWidth={s*.016} fill="none" strokeLinecap="round"/>
+       </>,
+
+    // 2 – Swept fringe / emo
+    2: <><path d={`M${s*.27} ${s*.35} Q${s*.25} ${s*.1} ${cx} ${s*.08} Q${s*.72} ${s*.1} ${s*.73} ${s*.32}`} fill={ch.hair}/>
+        <path d={`M${s*.29} ${s*.22} Q${s*.45} ${s*.06} ${s*.72} ${s*.19}`} fill={ch.hair}/>
+        <path d={`M${s*.29} ${s*.22} Q${s*.45} ${s*.11} ${s*.7} ${s*.22}`} fill={hd} opacity={.5}/>
+       </>,
+
+    // 3 – Medium textured
+    3: <><path d={`M${s*.26} ${s*.35} Q${s*.24} ${s*.09} ${cx} ${s*.07} Q${s*.76} ${s*.09} ${s*.74} ${s*.35}`} fill={hd}/>
+        <path d={`M${s*.27} ${s*.35} Q${s*.25} ${s*.11} ${cx} ${s*.09} Q${s*.75} ${s*.11} ${s*.73} ${s*.35}`} fill={ch.hair}/>
+        {/* Side sideburns */}
+        <path d={`M${s*.27} ${s*.3} Q${s*.24} ${s*.42} ${s*.27} ${s*.52}`} stroke={ch.hair} strokeWidth={s*.055} strokeLinecap="round" fill="none"/>
+        <path d={`M${s*.73} ${s*.3} Q${s*.76} ${s*.42} ${s*.73} ${s*.52}`} stroke={ch.hair} strokeWidth={s*.055} strokeLinecap="round" fill="none"/>
+       </>,
+
+    // 4 – Long straight (falls past shoulders)
+    4: <><path d={`M${s*.27} ${s*.35} Q${s*.24} ${s*.09} ${cx} ${s*.07} Q${s*.76} ${s*.09} ${s*.73} ${s*.35}`} fill={hd}/>
+        <path d={`M${s*.28} ${s*.35} Q${s*.26} ${s*.11} ${cx} ${s*.09} Q${s*.74} ${s*.11} ${s*.72} ${s*.35}`} fill={ch.hair}/>
+        {/* Long panels */}
+        <path d={`M${s*.27} ${s*.28} C${s*.22} ${s*.45} ${s*.2} ${s*.65} ${s*.23} ${s*.88}`} stroke={ch.hair} strokeWidth={s*.08} strokeLinecap="round" fill="none"/>
+        <path d={`M${s*.24} ${s*.28} C${s*.19} ${s*.45} ${s*.17} ${s*.65} ${s*.2} ${s*.88}`} stroke={hd} strokeWidth={s*.025} strokeLinecap="round" fill="none" opacity={.5}/>
+        <path d={`M${s*.73} ${s*.28} C${s*.78} ${s*.45} ${s*.8} ${s*.65} ${s*.77} ${s*.88}`} stroke={ch.hair} strokeWidth={s*.08} strokeLinecap="round" fill="none"/>
+        <path d={`M${s*.76} ${s*.28} C${s*.81} ${s*.45} ${s*.83} ${s*.65} ${s*.8} ${s*.88}`} stroke={hd} strokeWidth={s*.025} strokeLinecap="round" fill="none" opacity={.5}/>
+       </>,
+
+    // 5 – Wavy long
+    5: <><path d={`M${s*.27} ${s*.35} Q${s*.24} ${s*.09} ${cx} ${s*.07} Q${s*.76} ${s*.09} ${s*.73} ${s*.35}`} fill={ch.hair}/>
+        <path d={`M${s*.27} ${s*.28} C${s*.21} ${s*.4} ${s*.25} ${s*.55} ${s*.2} ${s*.7} C${s*.15} ${s*.85} ${s*.22} ${s*.95} ${s*.22} ${s*.98}`} stroke={ch.hair} strokeWidth={s*.085} strokeLinecap="round" fill="none"/>
+        <path d={`M${s*.27} ${s*.28} C${s*.21} ${s*.4} ${s*.25} ${s*.55} ${s*.2} ${s*.7} C${s*.15} ${s*.85} ${s*.22} ${s*.95} ${s*.22} ${s*.98}`} stroke={hl} strokeWidth={s*.022} strokeLinecap="round" fill="none" opacity={.4}/>
+        <path d={`M${s*.73} ${s*.28} C${s*.79} ${s*.4} ${s*.75} ${s*.55} ${s*.8} ${s*.7} C${s*.85} ${s*.85} ${s*.78} ${s*.95} ${s*.78} ${s*.98}`} stroke={ch.hair} strokeWidth={s*.085} strokeLinecap="round" fill="none"/>
+        <path d={`M${s*.73} ${s*.28} C${s*.79} ${s*.4} ${s*.75} ${s*.55} ${s*.8} ${s*.7} C${s*.85} ${s*.85} ${s*.78} ${s*.95} ${s*.78} ${s*.98}`} stroke={hl} strokeWidth={s*.022} strokeLinecap="round" fill="none" opacity={.4}/>
+       </>,
+
+    // 6 – Ponytail
+    6: <><path d={`M${s*.28} ${s*.35} Q${s*.26} ${s*.11} ${cx} ${s*.09} Q${s*.74} ${s*.11} ${s*.72} ${s*.35}`} fill={ch.hair}/>
+        <path d={`M${s*.28} ${s*.35} Q${s*.26} ${s*.13} ${cx} ${s*.11} Q${s*.74} ${s*.13} ${s*.72} ${s*.35}`} fill={hl} opacity={.3}/>
+        {/* Tail */}
+        <path d={`M${s*.67} ${s*.18} C${s*.82} ${s*.22} ${s*.85} ${s*.38} ${s*.82} ${s*.54} C${s*.79} ${s*.68} ${s*.83} ${s*.78} ${s*.8} ${s*.86}`} stroke={ch.hair} strokeWidth={s*.07} strokeLinecap="round" fill="none"/>
+        <path d={`M${s*.67} ${s*.18} C${s*.82} ${s*.22} ${s*.85} ${s*.38} ${s*.82} ${s*.54} C${s*.79} ${s*.68} ${s*.83} ${s*.78} ${s*.8} ${s*.86}`} stroke={hl} strokeWidth={s*.018} strokeLinecap="round" fill="none" opacity={.45}/>
+        {/* Tie */}
+        <circle cx={s*.755} cy={s*.2} r={s*.022} fill={hd}/>
+       </>,
+
+    // 7 – Top bun
+    7: <><path d={`M${s*.28} ${s*.34} Q${s*.27} ${s*.15} ${cx} ${s*.13} Q${s*.73} ${s*.15} ${s*.72} ${s*.34}`} fill={ch.hair}/>
+        {/* Bun ball */}
+        <circle cx={cx} cy={s*.08} r={s*.1} fill={hd}/>
+        <circle cx={cx} cy={s*.08} r={s*.085} fill={ch.hair}/>
+        <ellipse cx={s*.47} cy={s*.06} rx={s*.04} ry={s*.025} fill={hl} opacity={.5}/>
+        {/* Wrap */}
+        <path d={`M${s*.39} ${s*.14} Q${cx} ${s*.16} ${s*.61} ${s*.14}`} stroke={hd} strokeWidth={s*.018} fill="none"/>
+       </>,
+
+    // 8 – Afro
+    8: <><ellipse cx={cx} cy={s*.16} rx={s*.26} ry={s*.2} fill={hd}/>
+        {[...Array(18)].map((_,i) => {
+          const a = -Math.PI + (i/18)*Math.PI*2;
+          const r = s*(0.2+Math.random()*0.04);
+          return <circle key={i} cx={cx+Math.cos(a)*r} cy={s*.18+Math.sin(a)*r*.7} r={s*.055} fill={i%3===0?hl:ch.hair}/>;
+        })}
+        <ellipse cx={cx} cy={s*.19} rx={s*.19} ry={s*.15} fill={ch.hair}/>
+       </>,
+
+    // 9 – Box braids
+    9: <><path d={`M${s*.28} ${s*.34} Q${s*.26} ${s*.1} ${cx} ${s*.08} Q${s*.74} ${s*.1} ${s*.72} ${s*.34}`} fill={ch.hair}/>
+        {/* Braid strands — alternating shade */}
+        {[...Array(7)].map((_,i) => {
+          const x = s*(0.3 + i*0.058);
+          const len = s*(0.38 + (i%3)*0.09);
+          return <g key={i}>
+            <rect x={x} y={s*.22} width={s*.03} height={len} rx={s*.015} fill={i%2===0?ch.hair:hd}/>
+            <ellipse cx={x+s*.015} cy={s*.22+len} rx={s*.018} ry={s*.012} fill={hd}/>
+          </g>;
+        })}
+       </>,
+
+    // 10 – Curly / coily
+    10: <><ellipse cx={cx} cy={s*.17} rx={s*.24} ry={s*.16} fill={hd}/>
+         {[...Array(22)].map((_,i)=>{
+           const a = (i/22)*Math.PI*2;
+           const rx = 0.18+Math.sin(i*1.3)*0.03;
+           const ry = 0.14+Math.cos(i*1.7)*0.03;
+           return <circle key={i} cx={cx+Math.cos(a)*s*rx} cy={s*.18+Math.sin(a)*s*ry} r={s*.042} fill={i%2===0?ch.hair:hl}/>;
+         })}
+         <ellipse cx={cx} cy={s*.19} rx={s*.17} ry={s*.13} fill={ch.hair}/>
+        </>,
+
+    // 11 – Locs / dreads
+    11: <><path d={`M${s*.28} ${s*.34} Q${s*.26} ${s*.1} ${cx} ${s*.08} Q${s*.74} ${s*.1} ${s*.72} ${s*.34}`} fill={ch.hair}/>
+         {[...Array(9)].map((_,i)=>{
+           const x = s*(0.28+i*0.054);
+           const h = s*(0.32+Math.sin(i*0.8)*0.08);
+           const w = s*.032;
+           return <g key={i}>
+             <rect x={x} y={s*.21} width={w} height={h} rx={w/2} fill={i%2===0?ch.hair:hd}/>
+             <ellipse cx={x+w/2} cy={s*.21+h+s*.012} rx={w*.6} ry={s*.014} fill={hd}/>
+           </g>;
+         })}
+        </>,
+
+    // 12 – Faux hawk / mohawk
+    12: <><path d={`M${s*.28} ${s*.34} Q${s*.27} ${s*.17} ${cx} ${s*.15} Q${s*.73} ${s*.17} ${s*.72} ${s*.34}`} fill={ch.hair}/>
+         {/* Raised center strip */}
+         <path d={`M${s*.41} ${s*.16} C${s*.43} ${s*.03} ${s*.57} ${s*.03} ${s*.59} ${s*.16}`} fill={ch.hair}/>
+         <path d={`M${s*.43} ${s*.16} C${s*.45} ${s*.06} ${s*.55} ${s*.06} ${s*.57} ${s*.16}`} fill={hl} opacity={.45}/>
+        </>,
+
+    // 13 – Space buns
+    13: <><path d={`M${s*.28} ${s*.34} Q${s*.27} ${s*.15} ${cx} ${s*.13} Q${s*.73} ${s*.15} ${s*.72} ${s*.34}`} fill={ch.hair}/>
+         <circle cx={s*.34} cy={s*.1} r={s*.085} fill={hd}/><circle cx={s*.34} cy={s*.1} r={s*.07} fill={ch.hair}/>
+         <ellipse cx={s*.32} cy={s*.08} rx={s*.03} ry={s*.02} fill={hl} opacity={.5}/>
+         <circle cx={s*.66} cy={s*.1} r={s*.085} fill={hd}/><circle cx={s*.66} cy={s*.1} r={s*.07} fill={ch.hair}/>
+         <ellipse cx={s*.64} cy={s*.08} rx={s*.03} ry={s*.02} fill={hl} opacity={.5}/>
+        </>,
   };
 
   const MOUTH = {
-    0: <path d={`M${s*.4} ${s*.515} Q${cx} ${s*.565} ${s*.6} ${s*.515}`} stroke="#c07060" strokeWidth={s*.025} fill="none" strokeLinecap="round"/>,
-    1: <path d={`M${s*.4} ${s*.535} Q${cx} ${s*.49} ${s*.6} ${s*.535}`} stroke="#c07060" strokeWidth={s*.025} fill="none" strokeLinecap="round"/>,
-    2: <ellipse cx={cx} cy={s*.528} rx={s*.08} ry={s*.032} fill="#c07060"/>,
-    3: <>
-      <path d={`M${s*.38} ${s*.51} Q${cx} ${s*.585} ${s*.62} ${s*.51}`} fill="#b05040"/>
-      <path d={`M${s*.38} ${s*.51} Q${cx} ${s*.585} ${s*.62} ${s*.51}`} fill="white" opacity={.5}/>
-      <path d={`M${s*.38} ${s*.51} Q${cx} ${s*.585} ${s*.62} ${s*.51}`} stroke="#c07060" strokeWidth={s*.022} fill="none" strokeLinecap="round"/>
-    </>,
-    4: <>
-      <path d={`M${s*.4} ${s*.515} Q${cx} ${s*.555} ${s*.6} ${s*.515}`} stroke="#c07060" strokeWidth={s*.022} fill="none" strokeLinecap="round"/>
-      <rect x={s*.44} y={s*.515} width={s*.02} height={s*.03} rx={s*.01} fill="#c07060" opacity={.5}/>
-      <rect x={s*.49} y={s*.515} width={s*.02} height={s*.03} rx={s*.01} fill="#c07060" opacity={.5}/>
-    </>,
+    0: <path d={`M${s*.41} ${s*.525} Q${cx} ${s*.575} ${s*.59} ${s*.525}`} stroke="#b06050" strokeWidth={s*.024} fill="none" strokeLinecap="round"/>,
+    1: <path d={`M${s*.41} ${s*.545} Q${cx} ${s*.5} ${s*.59} ${s*.545}`}   stroke="#b06050" strokeWidth={s*.024} fill="none" strokeLinecap="round"/>,
+    2: <><path d={`M${s*.41} ${s*.52} Q${cx} ${s*.585} ${s*.59} ${s*.52}`} fill="#8B3A3A"/>
+        <path d={`M${s*.41} ${s*.52} Q${cx} ${s*.56}  ${s*.59} ${s*.52}`}  fill="white" opacity={.4}/>
+        <path d={`M${s*.41} ${s*.52} Q${cx} ${s*.585} ${s*.59} ${s*.52}`}  stroke="#b06050" strokeWidth={s*.022} fill="none" strokeLinecap="round"/></>,
+    3: <path d={`M${s*.44} ${s*.525} Q${cx} ${s*.555} ${s*.56} ${s*.525}`} stroke="#b06050" strokeWidth={s*.022} fill="none" strokeLinecap="round"/>,
+    4: <><ellipse cx={cx} cy={s*.535} rx={s*.075} ry={s*.028} fill="#b06050"/>
+        <ellipse cx={cx} cy={s*.528} rx={s*.055} ry={s*.014} fill="white" opacity={.35}/></>,
   };
 
   const BROW = {
-    0: <><path d={`M${s*.33} ${s*.305} Q${s*.4} ${s*.275} ${s*.46} ${s*.29}`} stroke={hairDark} strokeWidth={s*.023} fill="none" strokeLinecap="round"/>
-        <path d={`M${s*.54} ${s*.29} Q${s*.6} ${s*.275} ${s*.67} ${s*.305}`} stroke={hairDark} strokeWidth={s*.023} fill="none" strokeLinecap="round"/></>,
-    1: <><line x1={s*.33} y1={s*.295} x2={s*.46} y2={s*.3} stroke={hairDark} strokeWidth={s*.022} strokeLinecap="round"/>
-        <line x1={s*.54} y1={s*.3} x2={s*.67} y2={s*.295} stroke={hairDark} strokeWidth={s*.022} strokeLinecap="round"/></>,
-    2: <><path d={`M${s*.33} ${s*.3} Q${s*.4} ${s*.265} ${s*.46} ${s*.285}`} stroke={hairDark} strokeWidth={s*.03} fill="none" strokeLinecap="round"/>
-        <path d={`M${s*.54} ${s*.285} Q${s*.6} ${s*.265} ${s*.67} ${s*.3}`} stroke={hairDark} strokeWidth={s*.03} fill="none" strokeLinecap="round"/></>,
-    3: <><path d={`M${s*.33} ${s*.29} Q${s*.4} ${s*.31} ${s*.46} ${s*.3}`} stroke={hairDark} strokeWidth={s*.022} fill="none" strokeLinecap="round"/>
-        <path d={`M${s*.54} ${s*.3} Q${s*.6} ${s*.31} ${s*.67} ${s*.29}`} stroke={hairDark} strokeWidth={s*.022} fill="none" strokeLinecap="round"/></>,
+    0: <><path d={`M${s*.34} ${s*.31} Q${s*.405} ${s*.28} ${s*.465} ${s*.295}`} stroke={hd} strokeWidth={s*.025} fill="none" strokeLinecap="round"/>
+        <path d={`M${s*.535} ${s*.295} Q${s*.595} ${s*.28} ${s*.66} ${s*.31}`}  stroke={hd} strokeWidth={s*.025} fill="none" strokeLinecap="round"/></>,
+    1: <><line x1={s*.34} y1={s*.3}  x2={s*.465} y2={s*.305} stroke={hd} strokeWidth={s*.024} strokeLinecap="round"/>
+        <line x1={s*.535} y1={s*.305} x2={s*.66}  y2={s*.3}  stroke={hd} strokeWidth={s*.024} strokeLinecap="round"/></>,
+    2: <><path d={`M${s*.34} ${s*.305} Q${s*.405} ${s*.268} ${s*.465} ${s*.285}`} stroke={hd} strokeWidth={s*.033} fill="none" strokeLinecap="round"/>
+        <path d={`M${s*.535} ${s*.285} Q${s*.595} ${s*.268} ${s*.66} ${s*.305}`}  stroke={hd} strokeWidth={s*.033} fill="none" strokeLinecap="round"/></>,
+    3: <><path d={`M${s*.34} ${s*.295} Q${s*.405} ${s*.315} ${s*.465} ${s*.305}`} stroke={hd} strokeWidth={s*.025} fill="none" strokeLinecap="round"/>
+        <path d={`M${s*.535} ${s*.305} Q${s*.595} ${s*.315} ${s*.66} ${s*.295}`}  stroke={hd} strokeWidth={s*.025} fill="none" strokeLinecap="round"/></>,
   };
 
   const eye = (ex, ey) => {
-    const es = ch.eyeShape || 0;
-    const whites = es===2
-      ? <path d={`M${ex-s*.058} ${ey} Q${ex} ${ey-s*.075} ${ex+s*.058} ${ey} Q${ex} ${ey+s*.04} ${ex-s*.058} ${ey}`} fill="white"/>
-      : <ellipse cx={ex} cy={ey} rx={s*.058} ry={es===1?s*.04:s*.055} fill="white"/>;
+    const sh = ch.eyeShape||0;
+    const W  = sh===1 ? <ellipse cx={ex} cy={ey} rx={s*.062} ry={s*.042} fill="white"/>
+               : sh===2 ? <path d={`M${ex-s*.062} ${ey+s*.01} Q${ex} ${ey-s*.072} ${ex+s*.062} ${ey+s*.01} Q${ex} ${ey+s*.048} ${ex-s*.062} ${ey+s*.01}`} fill="white"/>
+               : <ellipse cx={ex} cy={ey} rx={s*.058} ry={s*.055} fill="white"/>;
     return <>
-      {whites}
-      <ellipse cx={ex} cy={ey} rx={s*.032} ry={s*.032} fill={ch.eyes}/>
-      <ellipse cx={ex} cy={ey} rx={s*.018} ry={s*.018} fill="#111" opacity={.85}/>
-      <circle cx={ex+s*.018} cy={ey-s*.016} r={s*.009} fill="white"/>
-      <circle cx={ex-s*.01} cy={ey+s*.01} r={s*.005} fill="white" opacity={.6}/>
+      {W}
+      <ellipse cx={ex} cy={ey} rx={s*.034} ry={s*.036} fill={ch.eyes}/>
+      <ellipse cx={ex} cy={ey} rx={s*.019} ry={s*.02}  fill="#111" opacity={.88}/>
+      <circle  cx={ex+s*.016} cy={ey-s*.017} r={s*.01} fill="white"/>
+      <circle  cx={ex-s*.009} cy={ey+s*.012} r={s*.005} fill="white" opacity={.55}/>
+      {/* Lashes top */}
+      {sh===2 && <path d={`M${ex-s*.055} ${ey+s*.008} Q${ex} ${ey-s*.075} ${ex+s*.055} ${ey+s*.008}`} stroke="#222" strokeWidth={s*.012} fill="none"/>}
     </>;
   };
 
-  const nose = <><path d={`M${cx} ${s*.415} Q${s*.545} ${s*.455} ${s*.535} ${s*.49}`} stroke={skinDark} strokeWidth={s*.016} fill="none" opacity={.5}/>
-    <ellipse cx={s*.465} cy={s*.495} rx={s*.018} ry={s*.01} fill={skinDark} opacity={.3}/>
-    <ellipse cx={s*.535} cy={s*.495} rx={s*.018} ry={s*.01} fill={skinDark} opacity={.3}/></>;
+  const nose = <>
+    <path d={`M${cx} ${s*.42} Q${s*.545} ${s*.46} ${s*.535} ${s*.495}`} stroke={sd} strokeWidth={s*.015} fill="none" opacity={.45}/>
+    <ellipse cx={s*.464} cy={s*.5}  rx={s*.017} ry={s*.01} fill={sd} opacity={.28}/>
+    <ellipse cx={s*.536} cy={s*.5}  rx={s*.017} ry={s*.01} fill={sd} opacity={.28}/>
+  </>;
 
-  const acc = ch.accessory===1
-    ? <><rect x={s*.3} y={s*.33} width={s*.16} height={s*.1} rx={s*.04} fill="none" stroke="#444" strokeWidth={s*.02}/>
-        <rect x={s*.54} y={s*.33} width={s*.16} height={s*.1} rx={s*.04} fill="none" stroke="#444" strokeWidth={s*.02}/>
-        <line x1={s*.46} y1={s*.38} x2={s*.54} y2={s*.38} stroke="#444" strokeWidth={s*.016}/></>
-    : ch.accessory===2
-    ? <ellipse cx={cx} cy={s*.185} rx={s*.27} ry={s*.075} fill={ch.hair} opacity={.95}/>
-    : ch.accessory===3
-    ? <><path d={`M${s*.28} ${s*.32} Q${cx} ${s*.26} ${s*.72} ${s*.32}`} fill={ch.top} opacity={.85}/>
-        <rect x={s*.35} y={s*.3} width={s*.3} height={s*.06} rx={s*.02} fill={ch.top}/></>
-    : null;
-
-  const bodyGrad = `url(#bg${ch.top.replace('#','')})`;
+  const ACC = {
+    0: null,
+    1: <> {/* Glasses */}
+       <rect x={s*.3} y={s*.33} width={s*.16} height={s*.105} rx={s*.04} fill="none" stroke="#333" strokeWidth={s*.02}/>
+       <rect x={s*.54} y={s*.33} width={s*.16} height={s*.105} rx={s*.04} fill="none" stroke="#333" strokeWidth={s*.02}/>
+       <line x1={s*.46} y1={s*.382} x2={s*.54} y2={s*.382} stroke="#333" strokeWidth={s*.016}/>
+       <line x1={s*.3}  y1={s*.365} x2={s*.26} y2={s*.36} stroke="#333" strokeWidth={s*.016}/>
+       <line x1={s*.7}  y1={s*.365} x2={s*.74} y2={s*.36} stroke="#333" strokeWidth={s*.016}/>
+       </>,
+    2: <> {/* Beanie */}
+       <path d={`M${s*.27} ${s*.33} Q${s*.28} ${s*.1} ${cx} ${s*.08} Q${s*.72} ${s*.1} ${s*.73} ${s*.33}`} fill={ch.top}/>
+       <rect x={s*.25} y={s*.3} width={s*.5} height={s*.055} rx={s*.02} fill={td}/>
+       </>,
+    3: <> {/* Cap */}
+       <path d={`M${s*.27} ${s*.34} Q${s*.28} ${s*.12} ${cx} ${s*.1} Q${s*.72} ${s*.12} ${s*.73} ${s*.34}`} fill={ch.top}/>
+       <rect x={s*.25} y={s*.3} width={s*.5} height={s*.048} rx={s*.02} fill={td}/>
+       <path d={`M${s*.22} ${s*.34} Q${cx} ${s*.37} ${s*.68} ${s*.34}`} fill={td}/>
+       </>,
+    4: <> {/* Headband */}
+       <path d={`M${s*.27} ${s*.3} Q${cx} ${s*.24} ${s*.73} ${s*.3}`} stroke={ch.top} strokeWidth={s*.06} fill="none" strokeLinecap="round"/>
+       </>,
+    5: <> {/* Earrings */}
+       <circle cx={s*.265} cy={s*.44} r={s*.018} fill="#f0c040"/>
+       <circle cx={s*.735} cy={s*.44} r={s*.018} fill="#f0c040"/>
+       </>,
+  };
 
   return (
     <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`} style={{display:"block"}}>
       <defs>
-        <radialGradient id={`face${s}`} cx="40%" cy="35%" r="65%">
-          <stop offset="0%" stopColor={skinLight}/>
-          <stop offset="60%" stopColor={ch.skin}/>
-          <stop offset="100%" stopColor={skinDark}/>
+        <radialGradient id={`f${gid}`} cx="38%" cy="32%" r="68%">
+          <stop offset="0%"   stopColor={sl}/>
+          <stop offset="55%"  stopColor={ch.skin}/>
+          <stop offset="100%" stopColor={sd}/>
         </radialGradient>
-        <radialGradient id={`body${s}`} cx="40%" cy="30%" r="70%">
-          <stop offset="0%" stopColor={shadeHex(ch.top,25)}/>
-          <stop offset="55%" stopColor={ch.top}/>
-          <stop offset="100%" stopColor={topDark}/>
+        <radialGradient id={`b${gid}`} cx="38%" cy="28%" r="72%">
+          <stop offset="0%"   stopColor={tl}/>
+          <stop offset="55%"  stopColor={ch.top}/>
+          <stop offset="100%" stopColor={td}/>
         </radialGradient>
-        <radialGradient id={`bg${s}`} cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor={shadeHex(ch.bg||"#e8f4ff",15)}/>
-          <stop offset="100%" stopColor={ch.bg||"#e8f4ff"}/>
+        <radialGradient id={`g${gid}`} cx="50%" cy="45%" r="55%">
+          <stop offset="0%"   stopColor={shadeHex(bg, 20)}/>
+          <stop offset="100%" stopColor={bg}/>
         </radialGradient>
-        <clipPath id={`clip${s}`}><circle cx={cx} cy={cx} r={cx}/></clipPath>
+        <clipPath id={`c${gid}`}><circle cx={cx} cy={cx} r={cx-.5}/></clipPath>
       </defs>
 
-      {/* Background */}
-      <circle cx={cx} cy={cx} r={cx} fill={`url(#bg${s})`}/>
+      {/* BG */}
+      <circle cx={cx} cy={cx} r={cx} fill={`url(#g${gid})`}/>
 
-      {/* Shoulders / body — human bust shape */}
-      <path d={`M${s*.1} ${s*1.02} Q${s*.18} ${s*.72} ${s*.32} ${s*.67} L${s*.38} ${s*.64} Q${cx} ${s*.62} ${s*.62} ${s*.64} L${s*.68} ${s*.67} Q${s*.82} ${s*.72} ${s*.9} ${s*1.02} Z`}
-        fill={`url(#body${s})`} clipPath={`url(#clip${s})`}/>
-      {/* Shoulder highlight */}
-      <path d={`M${s*.18} ${s*.88} Q${s*.28} ${s*.71} ${s*.38} ${s*.66}`} stroke={shadeHex(ch.top,30)} strokeWidth={s*.025} fill="none" opacity={.4} clipPath={`url(#clip${s})`}/>
+      {/* Shoulders — wide human bust */}
+      <path d={`M${s*.04} ${s*1.04} C${s*.1} ${s*.82} ${s*.25} ${s*.7} ${s*.36} ${s*.66} Q${cx} ${s*.63} ${s*.64} ${s*.66} C${s*.75} ${s*.7} ${s*.9} ${s*.82} ${s*.96} ${s*1.04} Z`}
+        fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
+      {/* Collar / neckline highlight */}
+      <path d={`M${s*.38} ${s*.64} Q${cx} ${s*.6} ${s*.62} ${s*.64}`} stroke={tl} strokeWidth={s*.018} fill="none" opacity={.5} clipPath={`url(#c${gid})`}/>
 
       {/* Neck */}
-      <path d={`M${s*.42} ${s*.56} L${s*.42} ${s*.64} Q${cx} ${s*.67} ${s*.58} ${s*.64} L${s*.58} ${s*.56}`}
-        fill={`url(#face${s})`} clipPath={`url(#clip${s})`}/>
-      {/* Neck shadow */}
-      <ellipse cx={cx} cy={s*.64} rx={s*.1} ry={s*.025} fill={skinDark} opacity={.25} clipPath={`url(#clip${s})`}/>
+      <path d={`M${s*.42} ${s*.565} L${s*.42} ${s*.655} Q${cx} ${s*.685} ${s*.58} ${s*.655} L${s*.58} ${s*.565}`}
+        fill={`url(#f${gid})`} clipPath={`url(#c${gid})`}/>
+      <ellipse cx={cx} cy={s*.655} rx={s*.09} ry={s*.022} fill={sd} opacity={.22} clipPath={`url(#c${gid})`}/>
 
-      {/* Ear left */}
-      <ellipse cx={s*.28} cy={s*.39} rx={s*.04} ry={s*.055} fill={`url(#face${s})`}/>
-      <ellipse cx={s*.285} cy={s*.39} rx={s*.02} ry={s*.032} fill={skinDark} opacity={.3}/>
-      {/* Ear right */}
-      <ellipse cx={s*.72} cy={s*.39} rx={s*.04} ry={s*.055} fill={`url(#face${s})`}/>
-      <ellipse cx={s*.715} cy={s*.39} rx={s*.02} ry={s*.032} fill={skinDark} opacity={.3}/>
+      {/* Ears */}
+      <ellipse cx={s*.275} cy={s*.395} rx={s*.038} ry={s*.052} fill={`url(#f${gid})`}/>
+      <ellipse cx={s*.28}  cy={s*.395} rx={s*.018} ry={s*.03}  fill={sd} opacity={.28}/>
+      <ellipse cx={s*.725} cy={s*.395} rx={s*.038} ry={s*.052} fill={`url(#f${gid})`}/>
+      <ellipse cx={s*.72}  cy={s*.395} rx={s*.018} ry={s*.03}  fill={sd} opacity={.28}/>
 
-      {/* Hair back layer */}
-      {HAIR[ch.hairStyle||0]}
+      {/* Hair (behind face) */}
+      <g clipPath={`url(#c${gid})`}>{H[ch.hairStyle||0]}</g>
 
       {/* Face */}
-      <ellipse cx={cx} cy={s*.38} rx={s*.205} ry={s*.225} fill={`url(#face${s})`}/>
-      {/* Face edge shadow */}
-      <ellipse cx={cx} cy={s*.38} rx={s*.205} ry={s*.225} fill="none" stroke={skinDark} strokeWidth={s*.012} opacity={.18}/>
+      <ellipse cx={cx} cy={s*.385} rx={s*.208} ry={s*.232} fill={`url(#f${gid})`}/>
+      <ellipse cx={cx} cy={s*.385} rx={s*.208} ry={s*.232} fill="none" stroke={sd} strokeWidth={s*.01} opacity={.15}/>
 
       {/* Blush */}
       {ch.blush && <>
-        <ellipse cx={s*.33} cy={s*.46} rx={s*.055} ry={s*.03} fill="#ff6b9d" opacity={.25}/>
-        <ellipse cx={s*.67} cy={s*.46} rx={s*.055} ry={s*.03} fill="#ff6b9d" opacity={.25}/>
+        <ellipse cx={s*.325} cy={s*.465} rx={s*.06}  ry={s*.032} fill="#ff85b3" opacity={.28}/>
+        <ellipse cx={s*.675} cy={s*.465} rx={s*.06}  ry={s*.032} fill="#ff85b3" opacity={.28}/>
       </>}
 
       {/* Eyebrows */}
       {BROW[ch.eyebrow||0]}
       {/* Eyes */}
-      {eye(s*.385, s*.365)}
-      {eye(s*.615, s*.365)}
+      {eye(s*.385, s*.37)}
+      {eye(s*.615, s*.37)}
       {/* Nose */}
       {nose}
       {/* Mouth */}
       {MOUTH[ch.mouth||0]}
 
-      {/* Lip gloss */}
-      {ch.lips && <ellipse cx={cx} cy={s*.515} rx={s*.055} ry={s*.016} fill={ch.lipColor||"#e07070"} opacity={.55}/>}
+      {/* Lip colour */}
+      {ch.lips && <ellipse cx={cx} cy={s*.525} rx={s*.058} ry={s*.018} fill={ch.lipColor||"#d06060"} opacity={.6}/>}
 
-      {/* Accessory */}
-      {acc}
+      {/* Freckles */}
+      {ch.freckles && <>
+        {[[.38,.44],[.43,.47],[.5,.46],[.57,.47],[.62,.44],[.4,.42],[.6,.42]].map(([fx,fy],i)=>
+          <circle key={i} cx={s*fx} cy={s*fy} r={s*.009} fill={sd} opacity={.45}/>)}
+      </>}
+
+      {/* Accessory (on top of everything) */}
+      <g clipPath={`url(#c${gid})`}>{ACC[ch.accessory||0]}</g>
     </svg>
   );
 }
 
-function shadeSkin(hex, pct) { return shadeHex(hex, pct); }
-function shadeHex(hex, pct) {
-  const n = parseInt(hex.replace('#',''),16);
-  const r = Math.min(255,Math.max(0,((n>>16)&255)+pct));
-  const g = Math.min(255,Math.max(0,((n>>8)&255)+pct));
-  const b = Math.min(255,Math.max(0,(n&255)+pct));
-  return `rgb(${r},${g},${b})`;
-}
-
 // ─── CHARACTER MODAL ─────────────────────────────────────────────────────────
 function CharacterModal({ character, onChange, onClose }) {
-  const ch = character;
   const [tab, setTab] = useState("face");
+  const ch = character;
 
   const SKINS  = ["#FDDBB4","#F5C89A","#FFCBA4","#E8A87C","#D4956A","#C68642","#A0693A","#8D5524","#6B3A1F","#F4D6C8"];
-  const HAIRS  = ["#0d0d0d","#2C1810","#4A2912","#7B4F2C","#B5651D","#C9A96E","#E8D5B0","#F2E6C8","#C0392B","#E74C3C","#8E44AD","#2980B9","#27AE60","#F39C12","#1ABC9C","#fd79a8","#636e72","#95a5a6"];
-  const EYES   = ["#1a3a5c","#2980B9","#74b9ff","#27AE60","#52BE80","#8B6914","#C8A84B","#2C2C2C","#555555","#C0392B","#8E44AD","#00b894","#e17055"];
-  const TOPS   = ["#2C3E50","#34495E","#E74C3C","#C0392B","#E67E22","#F39C12","#27AE60","#16A085","#2980B9","#8E44AD","#fd79a8","#FFFFFF","#ECF0F1","#BDC3C7"];
-  const LIP_COLORS = ["#C0392B","#E74C3C","#e07070","#fd79a8","#8E44AD","#D35400","#b5451b","#922B21"];
-  const BG = ["#e8f4ff","#dfe6e9","#ffeaa7","#d5f5e3","#f8d7e3","#e8daef","#ffddd2","#c8e6c9","#fff3e0","#e3f2fd","#1a1a2e","#2d3436"];
-  const HAIR_STYLES = ["Buzz","Side-part","Waves","Long","Bun","Ponytail","Afro","Braids","Curly bob","Locs"];
-  const EYE_SHAPES  = ["Round","Almond","Cat-eye"];
-  const BROWS       = ["Arched","Straight","Thick","Worried"];
-  const MOUTHS      = ["Smile","Frown","Neutral","Big smile","Smirk"];
-  const ACCESSORIES = ["None","Glasses","Hat","Cap"];
-  const TOP_STYLES  = ["T-Shirt","Hoodie","Jacket","Dress","Suit","Crop top"];
+  const HAIRS  = ["#0d0d0d","#1a0a00","#2C1810","#4A2912","#7B4F2C","#B5651D","#C9A96E","#EDD9A3","#F2E6C8",
+                  "#C0392B","#E74C3C","#F39C12","#8E44AD","#2980B9","#27AE60","#1ABC9C","#fd79a8","#00CED1","#FF6347","#808080"];
+  const EYES   = ["#1a3a5c","#2980B9","#74b9ff","#27AE60","#52BE80","#2d6a4f","#8B6914","#C8A84B","#2C2C2C","#6B4226","#C0392B","#8E44AD","#00b894"];
+  const TOPS   = ["#1a1a2e","#2C3E50","#34495E","#7f8c8d","#E74C3C","#C0392B","#E67E22","#F39C12","#27AE60","#16A085","#2980B9","#1abc9c","#8E44AD","#fd79a8","#FFFFFF","#ECF0F1"];
+  const LIP_C  = ["#C0392B","#E74C3C","#c0706a","#fd79a8","#8E44AD","#D35400","#FF1493","#DC143C"];
+  const BG     = ["#dce8ff","#e8f4ff","#dfe6e9","#ffeaa7","#d5f5e3","#f8d7e3","#e8daef","#ffddd2","#c8e6c9","#fff3e0","#1a1a2e","#2d3436","#6c5ce7","#00b894"];
+
+  const HAIR_NAMES = ["Buzz","Side-part","Fringe","Textured","Long","Wavy long","Ponytail","Top bun","Afro","Box braids","Curly","Locs","Faux hawk","Space buns"];
+  const EYE_S  = ["Round","Almond","Cat-eye"];
+  const BROWS  = ["Arched","Straight","Thick","Sad"];
+  const MOUTHS = ["Smile","Frown","Open smile","Smirk","Neutral"];
+  const ACCS   = ["None","Glasses","Beanie","Cap","Headband","Earrings"];
+  const TOPS_S = ["T-Shirt","Hoodie","Jacket","Tank top","Suit","Crop top"];
 
   const TABS = [
-    { id:"face",  icon:"😊", label:"Face"   },
-    { id:"hair",  icon:"💇", label:"Hair"   },
-    { id:"style", icon:"👕", label:"Style"  },
-    { id:"extra", icon:"✨", label:"Extras" },
+    {id:"face", label:"Face",  emoji:"😊"},
+    {id:"hair", label:"Hair",  emoji:"💇"},
+    {id:"fit",  label:"Fit",   emoji:"👕"},
+    {id:"extra",label:"Extra", emoji:"✨"},
   ];
 
-  const Swatches = ({ values, field, size=26 }) => (
-    <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
-      {values.map(v => (
-        <button key={v} onClick={() => onChange({...ch,[field]:v})} style={{
-          width:size, height:size, borderRadius:"50%", background:v,
-          border:`3px solid ${ch[field]===v?"#fff":"transparent"}`,
-          outline:`2px solid ${ch[field]===v?C.accent:"transparent"}`,
-          cursor:"pointer", transition:"transform .15s",
-          transform:ch[field]===v?"scale(1.2)":"scale(1)",
-          boxShadow:"0 1px 4px rgba(0,0,0,.2)"
+  const Swatches = ({vals, field, sz=27}) => (
+    <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+      {vals.map(v=>(
+        <button key={v} onClick={()=>onChange({...ch,[field]:v})} style={{
+          width:sz,height:sz,borderRadius:"50%",background:v,cursor:"pointer",
+          border:`3px solid ${ch[field]===v?"#333":"transparent"}`,
+          outline:`2px solid ${ch[field]===v?"#fff":"transparent"}`,
+          transform:ch[field]===v?"scale(1.22)":"scale(1)",
+          transition:"transform .12s",boxShadow:"0 1px 5px rgba(0,0,0,.25)"
         }}/>
       ))}
     </div>
   );
 
-  const Pills = ({ values, field }) => (
-    <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
-      {values.map((v,i) => (
-        <button key={i} onClick={() => onChange({...ch,[field]:i})} style={{
-          padding:"5px 12px", fontSize:11, fontWeight:700, borderRadius:20,
-          border:"none", cursor:"pointer", transition:"all .15s",
-          background:ch[field]===i?"#FFFC00":C.border,
-          color:ch[field]===i?"#000":C.muted,
-          boxShadow:ch[field]===i?"0 2px 8px rgba(0,0,0,.2)":"none",
+  const Pills = ({vals, field}) => (
+    <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+      {vals.map((v,i)=>(
+        <button key={i} onClick={()=>onChange({...ch,[field]:i})} style={{
+          padding:"5px 11px",fontSize:11,fontWeight:700,borderRadius:20,cursor:"pointer",
+          border:"none",transition:"all .12s",
+          background:ch[field]===i?"#222":"#eee",
+          color:ch[field]===i?"#fff":"#555",
+          boxShadow:ch[field]===i?"0 2px 8px rgba(0,0,0,.3)":"none",
           transform:ch[field]===i?"scale(1.05)":"scale(1)"
         }}>{v}</button>
       ))}
     </div>
   );
 
-  const Toggle = ({ label, field, emoji }) => (
-    <button onClick={() => onChange({...ch,[field]:!ch[field]})} style={{
-      display:"flex", alignItems:"center", gap:8, padding:"8px 14px",
-      borderRadius:20, border:"none", cursor:"pointer",
-      background:ch[field]?"#FFFC00":C.border,
-      color:ch[field]?"#000":C.muted, fontWeight:700, fontSize:12,
-      boxShadow:ch[field]?"0 2px 8px rgba(0,0,0,.2)":"none"
-    }}>{emoji} {label}: {ch[field]?"ON":"OFF"}</button>
+  const Toggle = ({label,field,emoji}) => (
+    <button onClick={()=>onChange({...ch,[field]:!ch[field]})} style={{
+      display:"flex",alignItems:"center",gap:7,padding:"7px 14px",
+      borderRadius:20,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,
+      background:ch[field]?"#222":"#eee",color:ch[field]?"#fff":"#555",
+      transition:"all .15s",boxShadow:ch[field]?"0 2px 8px rgba(0,0,0,.2)":"none"
+    }}>{emoji} {label}</button>
   );
 
   return (
-    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)", zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center", padding:12 }}>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.65)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:12}}>
       <div onClick={e=>e.stopPropagation()} style={{
-        background:"#f7f7f7", borderRadius:28, width:"100%", maxWidth:500,
-        maxHeight:"93vh", overflow:"hidden", display:"flex", flexDirection:"column",
-        boxShadow:"0 32px 100px rgba(0,0,0,.4)"
+        background:"#fff",borderRadius:24,width:"100%",maxWidth:490,
+        maxHeight:"94vh",overflow:"hidden",display:"flex",flexDirection:"column",
+        boxShadow:"0 32px 100px rgba(0,0,0,.45)"
       }}>
 
-        {/* Top bar — Snapchat yellow */}
-        <div style={{ background:"#FFFC00", padding:"14px 20px 10px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-          <span style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:900, color:"#000" }}>My Avatar</span>
-          <button onClick={onClose} style={{ background:"rgba(0,0,0,.12)", border:"none", borderRadius:"50%", width:32, height:32, fontSize:18, cursor:"pointer", color:"#000", fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
+        {/* Header */}
+        <div style={{padding:"16px 20px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1.5px solid #eee"}}>
+          <span style={{fontFamily:"'Fraunces',serif",fontSize:20,fontWeight:900,color:"#111",letterSpacing:-.5}}>My Avatar</span>
+          <button onClick={onClose} style={{background:"#eee",border:"none",borderRadius:"50%",width:30,height:30,fontSize:17,cursor:"pointer",fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",color:"#555"}}>×</button>
         </div>
 
-        {/* Preview strip */}
-        <div style={{ background:"linear-gradient(135deg,#667eea22,#764ba222)", padding:"16px 0 10px", display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
-          <div style={{ borderRadius:999, overflow:"hidden", boxShadow:"0 8px 32px rgba(0,0,0,.2)", border:"3px solid #FFFC00" }}>
-            <MiniAvatar character={ch} size={120}/>
+        {/* Preview */}
+        <div style={{background:"linear-gradient(160deg,#f0f4ff,#e8f0ff)",padding:"18px 0 12px",display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
+          <div style={{borderRadius:"50%",overflow:"hidden",boxShadow:"0 6px 24px rgba(0,0,0,.18)",border:"3px solid #fff"}}>
+            <MiniAvatar character={ch} size={115}/>
           </div>
-          <input value={ch.name||""} onChange={e=>onChange({...ch,name:e.target.value})} placeholder="Your name…"
-            style={{ border:"2px solid #FFFC00", borderRadius:20, padding:"5px 16px", fontSize:13, fontWeight:700, outline:"none", color:"#000", background:"white", textAlign:"center", width:160 }}/>
+          <input value={ch.name||""} onChange={e=>onChange({...ch,name:e.target.value})} placeholder="Nickname…"
+            style={{border:"1.5px solid #ddd",borderRadius:20,padding:"5px 14px",fontSize:13,fontWeight:700,outline:"none",color:"#111",background:"white",textAlign:"center",width:155}}/>
         </div>
 
-        {/* Tab bar */}
-        <div style={{ display:"flex", background:"#fff", borderBottom:"2px solid #eee" }}>
-          {TABS.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)} style={{
-              flex:1, padding:"10px 4px", border:"none", cursor:"pointer",
-              background:tab===t.id?"#FFFC00":"#fff",
-              fontWeight:700, fontSize:11, color:tab===t.id?"#000":"#888",
-              borderBottom:tab===t.id?"3px solid #000":"3px solid transparent",
-              transition:"all .15s"
-            }}>{t.icon}<br/>{t.label}</button>
+        {/* Tabs */}
+        <div style={{display:"flex",background:"#fff",borderBottom:"1.5px solid #eee"}}>
+          {TABS.map(t=>(
+            <button key={t.id} onClick={()=>setTab(t.id)} style={{
+              flex:1,padding:"9px 4px 7px",border:"none",cursor:"pointer",background:"#fff",
+              fontWeight:800,fontSize:10,color:tab===t.id?"#111":"#aaa",
+              borderBottom:`2.5px solid ${tab===t.id?"#111":"transparent"}`,
+              transition:"all .15s",letterSpacing:.5
+            }}>{t.emoji}<br/>{t.label.toUpperCase()}</button>
           ))}
         </div>
 
-        {/* Options */}
-        <div style={{ flex:1, overflowY:"auto", padding:"16px 18px", display:"flex", flexDirection:"column", gap:16 }}>
+        {/* Content */}
+        <div style={{flex:1,overflowY:"auto",padding:"16px 18px",display:"flex",flexDirection:"column",gap:18}}>
 
           {tab==="face" && <>
-            <div>
-              <p style={{ fontSize:11, fontWeight:800, color:"#555", letterSpacing:1, marginBottom:8 }}>SKIN TONE</p>
-              <Swatches values={SKINS} field="skin"/>
-            </div>
-            <div>
-              <p style={{ fontSize:11, fontWeight:800, color:"#555", letterSpacing:1, marginBottom:8 }}>EYE SHAPE</p>
-              <Pills values={EYE_SHAPES} field="eyeShape"/>
-            </div>
-            <div>
-              <p style={{ fontSize:11, fontWeight:800, color:"#555", letterSpacing:1, marginBottom:8 }}>EYE COLOUR</p>
-              <Swatches values={EYES} field="eyes"/>
-            </div>
-            <div>
-              <p style={{ fontSize:11, fontWeight:800, color:"#555", letterSpacing:1, marginBottom:8 }}>EYEBROWS</p>
-              <Pills values={BROWS} field="eyebrow"/>
-            </div>
-            <div>
-              <p style={{ fontSize:11, fontWeight:800, color:"#555", letterSpacing:1, marginBottom:8 }}>EXPRESSION</p>
-              <Pills values={MOUTHS} field="mouth"/>
-            </div>
+            <div><p style={{fontSize:10,fontWeight:800,color:"#aaa",letterSpacing:1,marginBottom:8}}>SKIN TONE</p><Swatches vals={SKINS} field="skin"/></div>
+            <div><p style={{fontSize:10,fontWeight:800,color:"#aaa",letterSpacing:1,marginBottom:8}}>EYE SHAPE</p><Pills vals={EYE_S} field="eyeShape"/></div>
+            <div><p style={{fontSize:10,fontWeight:800,color:"#aaa",letterSpacing:1,marginBottom:8}}>EYE COLOUR</p><Swatches vals={EYES} field="eyes"/></div>
+            <div><p style={{fontSize:10,fontWeight:800,color:"#aaa",letterSpacing:1,marginBottom:8}}>EYEBROWS</p><Pills vals={BROWS} field="eyebrow"/></div>
+            <div><p style={{fontSize:10,fontWeight:800,color:"#aaa",letterSpacing:1,marginBottom:8}}>EXPRESSION</p><Pills vals={MOUTHS} field="mouth"/></div>
           </>}
 
           {tab==="hair" && <>
-            <div>
-              <p style={{ fontSize:11, fontWeight:800, color:"#555", letterSpacing:1, marginBottom:8 }}>HAIR STYLE</p>
-              <Pills values={HAIR_STYLES} field="hairStyle"/>
-            </div>
-            <div>
-              <p style={{ fontSize:11, fontWeight:800, color:"#555", letterSpacing:1, marginBottom:8 }}>HAIR COLOUR</p>
-              <Swatches values={HAIRS} field="hair"/>
-            </div>
+            <div><p style={{fontSize:10,fontWeight:800,color:"#aaa",letterSpacing:1,marginBottom:8}}>STYLE — {HAIR_NAMES[ch.hairStyle||0]}</p><Pills vals={HAIR_NAMES} field="hairStyle"/></div>
+            <div><p style={{fontSize:10,fontWeight:800,color:"#aaa",letterSpacing:1,marginBottom:8}}>COLOUR</p><Swatches vals={HAIRS} field="hair" sz={24}/></div>
           </>}
 
-          {tab==="style" && <>
-            <div>
-              <p style={{ fontSize:11, fontWeight:800, color:"#555", letterSpacing:1, marginBottom:8 }}>OUTFIT</p>
-              <Pills values={TOP_STYLES} field="topStyle"/>
-            </div>
-            <div>
-              <p style={{ fontSize:11, fontWeight:800, color:"#555", letterSpacing:1, marginBottom:8 }}>OUTFIT COLOUR</p>
-              <Swatches values={TOPS} field="top"/>
-            </div>
-            <div>
-              <p style={{ fontSize:11, fontWeight:800, color:"#555", letterSpacing:1, marginBottom:8 }}>BACKGROUND</p>
-              <Swatches values={BG} field="bg"/>
-            </div>
-            <div>
-              <p style={{ fontSize:11, fontWeight:800, color:"#555", letterSpacing:1, marginBottom:8 }}>ACCESSORIES</p>
-              <Pills values={ACCESSORIES} field="accessory"/>
-            </div>
+          {tab==="fit" && <>
+            <div><p style={{fontSize:10,fontWeight:800,color:"#aaa",letterSpacing:1,marginBottom:8}}>OUTFIT STYLE</p><Pills vals={TOPS_S} field="topStyle"/></div>
+            <div><p style={{fontSize:10,fontWeight:800,color:"#aaa",letterSpacing:1,marginBottom:8}}>OUTFIT COLOUR</p><Swatches vals={TOPS} field="top"/></div>
+            <div><p style={{fontSize:10,fontWeight:800,color:"#aaa",letterSpacing:1,marginBottom:8}}>ACCESSORY</p><Pills vals={ACCS} field="accessory"/></div>
+            <div><p style={{fontSize:10,fontWeight:800,color:"#aaa",letterSpacing:1,marginBottom:8}}>BACKGROUND</p><Swatches vals={BG} field="bg" sz={24}/></div>
           </>}
 
           {tab==="extra" && <>
-            <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
-              <Toggle label="Blush" field="blush" emoji="🌸"/>
-              <Toggle label="Lip gloss" field="lips" emoji="💋"/>
+            <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+              <Toggle label="Blush"    field="blush"    emoji="🌸"/>
+              <Toggle label="Lip gloss" field="lips"   emoji="💋"/>
+              <Toggle label="Freckles" field="freckles" emoji="🟤"/>
             </div>
-            {ch.lips && <div>
-              <p style={{ fontSize:11, fontWeight:800, color:"#555", letterSpacing:1, marginBottom:8 }}>LIP COLOUR</p>
-              <Swatches values={LIP_COLORS} field="lipColor"/>
-            </div>}
-            <button onClick={()=>onChange({skin:"#FDDBB4",hair:"#3D2B1F",hairStyle:0,eyes:"#2980B9",top:"#2C3E50",bg:"#e8f4ff",mouth:0,eyebrow:0,eyeShape:0,accessory:0,topStyle:0,blush:false,lips:false,lipColor:"#e07070",name:ch.name})}
-              style={{ padding:"8px 20px", background:"#eee", border:"none", borderRadius:20, fontSize:12, fontWeight:700, cursor:"pointer", color:"#555", alignSelf:"flex-start" }}>
-              🔄 Reset to default
+            {ch.lips && <div><p style={{fontSize:10,fontWeight:800,color:"#aaa",letterSpacing:1,marginBottom:8}}>LIP COLOUR</p><Swatches vals={LIP_C} field="lipColor" sz={24}/></div>}
+            <button onClick={()=>onChange({skin:"#FDDBB4",hair:"#3D2B1F",hairStyle:0,eyes:"#2980B9",top:"#2C3E50",bg:"#dce8ff",mouth:0,eyebrow:0,eyeShape:0,accessory:0,topStyle:0,blush:false,lips:false,freckles:false,lipColor:"#d06060",name:ch.name})}
+              style={{padding:"8px 18px",background:"#eee",border:"none",borderRadius:20,fontSize:12,fontWeight:700,cursor:"pointer",color:"#555",alignSelf:"flex-start"}}>
+              🔄 Reset
             </button>
           </>}
         </div>
 
-        {/* Done button */}
-        <div style={{ padding:"10px 18px 14px", background:"#fff", borderTop:"1px solid #eee" }}>
-          <button onClick={onClose} style={{ width:"100%", background:"#FFFC00", color:"#000", border:"none", borderRadius:14, padding:"12px", fontSize:15, fontWeight:900, cursor:"pointer", boxShadow:"0 4px 16px rgba(0,0,0,.15)" }}>
-            ✓ Done
+        {/* Done */}
+        <div style={{padding:"10px 18px 14px",borderTop:"1.5px solid #eee"}}>
+          <button onClick={onClose} style={{width:"100%",background:"#111",color:"#fff",border:"none",borderRadius:14,padding:"12px",fontSize:14,fontWeight:900,cursor:"pointer",letterSpacing:.3}}>
+            Done ✓
           </button>
         </div>
+
       </div>
     </div>
   );
 }
-
 // ─── LINK FILES BUTTON ────────────────────────────────────────────────────────
 function LinkBtn({ file, allFiles, onSave }) {
   const [open, setOpen] = useState(false);
