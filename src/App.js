@@ -635,14 +635,10 @@ function Header({ user, saveStatus, isGuest, onSignOut, character, onOpenCharact
           </span>
         )}
         {isGuest && <span className="desktop-only" style={{ fontSize:11, background:C.warmL, color:C.warm, border:`1px solid ${C.warm}44`, borderRadius:20, padding:"3px 8px", fontWeight:600 }}>Guest</span>}
-        <button onClick={onOpenCharacter} title="My Character"
-          style={{ background:"none", border:`1.5px solid ${C.border}`, borderRadius:"50%", width:30, height:30, padding:0, cursor:"pointer", overflow:"hidden", flexShrink:0 }}>
-          <MiniAvatar character={character} size={30} />
+        <button onClick={onOpenCharacter} title="Edit my avatar"
+          style={{ background:"none", border:"none", borderRadius:"50%", width:36, height:36, padding:0, cursor:"pointer", overflow:"hidden", flexShrink:0, boxShadow:"0 2px 8px rgba(0,0,0,.15)" }}>
+          <MiniAvatar character={character} size={36} />
         </button>
-        {user?.photoURL
-          ? <img src={user.photoURL} alt="" style={{ width:30, height:30, borderRadius:"50%", border:`2px solid ${C.border}`, flexShrink:0 }} />
-          : <div style={{ width:30, height:30, background:isGuest?C.warmL:C.accentL, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:isGuest?C.warm:C.accent, flexShrink:0 }}>{user?.displayName?.[0]?.toUpperCase() || "G"}</div>
-        }
         <span className="desktop-only" style={{ fontSize:13, fontWeight:600, color:C.text }}>{isGuest ? user?.displayName : user?.displayName?.split(" ")[0]}</span>
         <button onClick={onSignOut} className="hov"
           style={{ fontSize:12, color:C.muted, background:"none", border:`1px solid ${C.border}`, borderRadius:7, padding:"4px 9px", cursor:"pointer", whiteSpace:"nowrap" }}>{isGuest ? "Exit" : "Sign out"}</button>
@@ -653,266 +649,407 @@ function Header({ user, saveStatus, isGuest, onSignOut, character, onOpenCharact
 
 // ─── SPLASH / SIGN IN ─────────────────────────────────────────────────────────
 // ─── AVATAR SVG ──────────────────────────────────────────────────────────────
+// Human-shaped bust avatar with 3D shading, Snapchat-inspired style
 function MiniAvatar({ character: ch, size = 40 }) {
   const s = size;
-  const cx = s / 2;
-  // Hair shapes
-  const hairShapes = {
-    0: <> {/* Short */}
-      <ellipse cx={cx} cy={s*0.18} rx={s*0.21} ry={s*0.13} fill={ch.hair}/>
-      <rect x={s*0.29} y={s*0.18} width={s*0.42} height={s*0.1} fill={ch.hair}/>
+  const cx = s * 0.5;
+  const skinDark  = shadeSkin(ch.skin, -25);
+  const skinLight = shadeSkin(ch.skin, 30);
+  const hairDark  = shadeHex(ch.hair, -30);
+  const topDark   = shadeHex(ch.top,  -20);
+
+  // 10 hair styles rendered as SVG
+  const HAIR = {
+    0: <>  {/* Buzz / short crop */}
+      <ellipse cx={cx} cy={s*.19} rx={s*.21} ry={s*.135} fill={ch.hair}/>
+      <rect x={s*.29} y={s*.19} width={s*.42} height={s*.09} fill={ch.hair}/>
     </>,
-    1: <> {/* Medium wavy */}
-      <ellipse cx={cx} cy={s*0.17} rx={s*0.23} ry={s*0.15} fill={ch.hair}/>
-      <rect x={s*0.27} y={s*0.2} width={s*0.07} height={s*0.25} rx={s*0.035} fill={ch.hair}/>
-      <rect x={s*0.66} y={s*0.2} width={s*0.07} height={s*0.25} rx={s*0.035} fill={ch.hair}/>
+    1: <>  {/* Side-part clean */}
+      <ellipse cx={cx} cy={s*.17} rx={s*.23} ry={s*.15} fill={hairDark}/>
+      <ellipse cx={cx} cy={s*.17} rx={s*.21} ry={s*.12} fill={ch.hair}/>
+      <rect x={s*.29} y={s*.19} width={s*.42} height={s*.1} fill={ch.hair}/>
+      <path d={`M${s*.27} ${s*.17} Q${s*.38} ${s*.1} ${s*.6} ${s*.15}`} stroke={hairDark} strokeWidth={s*.018} fill="none"/>
     </>,
-    2: <> {/* Long */}
-      <ellipse cx={cx} cy={s*0.17} rx={s*0.23} ry={s*0.15} fill={ch.hair}/>
-      <rect x={s*0.27} y={s*0.2} width={s*0.07} height={s*0.42} rx={s*0.035} fill={ch.hair}/>
-      <rect x={s*0.66} y={s*0.2} width={s*0.07} height={s*0.42} rx={s*0.035} fill={ch.hair}/>
-      <ellipse cx={s*0.305} cy={s*0.62} rx={s*0.055} ry={s*0.04} fill={ch.hair}/>
-      <ellipse cx={s*0.695} cy={s*0.62} rx={s*0.055} ry={s*0.04} fill={ch.hair}/>
+    2: <>  {/* Waves / medium */}
+      <ellipse cx={cx} cy={s*.17} rx={s*.23} ry={s*.155} fill={ch.hair}/>
+      <rect x={s*.27} y={s*.2} width={s*.07} height={s*.26} rx={s*.035} fill={ch.hair}/>
+      <rect x={s*.66} y={s*.2} width={s*.07} height={s*.26} rx={s*.035} fill={ch.hair}/>
+      <path d={`M${s*.27} ${s*.28} Q${s*.3} ${s*.35} ${s*.27} ${s*.42}`} stroke={hairDark} strokeWidth={s*.015} fill="none"/>
+      <path d={`M${s*.73} ${s*.28} Q${s*.7} ${s*.35} ${s*.73} ${s*.42}`} stroke={hairDark} strokeWidth={s*.015} fill="none"/>
     </>,
-    3: <> {/* Bun */}
-      <ellipse cx={cx} cy={s*0.2} rx={s*0.22} ry={s*0.13} fill={ch.hair}/>
-      <circle cx={cx} cy={s*0.07} r={s*0.1} fill={ch.hair}/>
-      <circle cx={cx} cy={s*0.07} r={s*0.055} fill={ch.hair==="#F2E6C8"?"#E0D0A8":ch.hair} opacity={0.5}/>
+    3: <>  {/* Long straight */}
+      <ellipse cx={cx} cy={s*.16} rx={s*.24} ry={s*.155} fill={ch.hair}/>
+      <rect x={s*.26} y={s*.19} width={s*.07} height={s*.46} rx={s*.03} fill={ch.hair}/>
+      <rect x={s*.67} y={s*.19} width={s*.07} height={s*.46} rx={s*.03} fill={ch.hair}/>
+      <rect x={s*.27} y={s*.19} width={s*.46} height={s*.1} fill={ch.hair}/>
+      <ellipse cx={s*.295} cy={s*.65} rx={s*.04} ry={s*.06} fill={hairDark}/>
+      <ellipse cx={s*.705} cy={s*.65} rx={s*.04} ry={s*.06} fill={hairDark}/>
     </>,
-    4: <> {/* Curly */}
-      {[0,1,2,3,4,5].map(i => <circle key={i} cx={s*(0.3+i*0.08)} cy={s*0.16} r={s*0.055} fill={ch.hair}/>)}
-      <ellipse cx={cx} cy={s*0.2} rx={s*0.22} ry={s*0.09} fill={ch.hair}/>
+    4: <>  {/* High bun */}
+      <ellipse cx={cx} cy={s*.2} rx={s*.22} ry={s*.13} fill={ch.hair}/>
+      <rect x={s*.29} y={s*.2} width={s*.42} height={s*.09} fill={ch.hair}/>
+      <circle cx={cx} cy={s*.085} r={s*.1} fill={ch.hair}/>
+      <circle cx={cx} cy={s*.085} r={s*.065} fill={hairDark} opacity={.4}/>
+      <circle cx={cx} cy={s*.085} r={s*.03} fill={skinLight} opacity={.3}/>
     </>,
-    5: <> {/* Ponytail */}
-      <ellipse cx={cx} cy={s*0.18} rx={s*0.22} ry={s*0.13} fill={ch.hair}/>
-      <ellipse cx={s*0.78} cy={s*0.22} rx={s*0.06} ry={s*0.14} fill={ch.hair} transform={`rotate(-20,${s*0.78},${s*0.22})`}/>
+    5: <>  {/* Ponytail */}
+      <ellipse cx={cx} cy={s*.17} rx={s*.23} ry={s*.14} fill={ch.hair}/>
+      <rect x={s*.29} y={s*.19} width={s*.42} height={s*.09} fill={ch.hair}/>
+      <ellipse cx={s*.79} cy={s*.25} rx={s*.055} ry={s*.15} fill={ch.hair} transform={`rotate(-15,${s*.79},${s*.25})`}/>
+      <ellipse cx={s*.79} cy={s*.25} rx={s*.025} ry={s*.1} fill={hairDark} opacity={.4} transform={`rotate(-15,${s*.79},${s*.25})`}/>
+    </>,
+    6: <>  {/* Afro */}
+      {[...Array(14)].map((_,i) => {
+        const a = (i/14)*Math.PI*2;
+        return <circle key={i} cx={cx+Math.cos(a)*s*.19} cy={s*.19+Math.sin(a)*s*.15} r={s*.07} fill={ch.hair}/>;
+      })}
+      <ellipse cx={cx} cy={s*.19} rx={s*.2} ry={s*.16} fill={ch.hair}/>
+    </>,
+    7: <>  {/* Braids */}
+      <ellipse cx={cx} cy={s*.17} rx={s*.23} ry={s*.15} fill={ch.hair}/>
+      {[0,1,2].map(i=><>
+        <rect key={`l${i}`} x={s*(.3+i*.04)} y={s*.22} width={s*.025} height={s*.38} rx={s*.012} fill={i%2===0?ch.hair:hairDark}/>
+        <rect key={`r${i}`} x={s*(.645+i*.04)} y={s*.22} width={s*.025} height={s*.38} rx={s*.012} fill={i%2===0?hairDark:ch.hair}/>
+      </>)}
+    </>,
+    8: <>  {/* Curly bob */}
+      {[...Array(9)].map((_,i) => <circle key={i} cx={s*(.28+i*.055)} cy={s*.18} r={s*.055} fill={ch.hair}/>)}
+      <ellipse cx={cx} cy={s*.21} rx={s*.22} ry={s*.1} fill={ch.hair}/>
+      <rect x={s*.27} y={s*.21} width={s*.07} height={s*.16} rx={s*.035} fill={ch.hair}/>
+      <rect x={s*.66} y={s*.21} width={s*.07} height={s*.16} rx={s*.035} fill={ch.hair}/>
+    </>,
+    9: <>  {/* Locs / dreadlocks */}
+      <ellipse cx={cx} cy={s*.17} rx={s*.23} ry={s*.15} fill={ch.hair}/>
+      {[0,1,2,3,4].map(i=><rect key={`l${i}`} x={s*(.27+i*.046)} y={s*.21} width={s*.03} height={s*(.25+i*.04)} rx={s*.015} fill={i%2===0?ch.hair:hairDark}/>)}
+      {[0,1,2].map(i=><rect key={`r${i}`} x={s*(.65+i*.046)} y={s*.21} width={s*.03} height={s*(.28+i*.04)} rx={s*.015} fill={i%2===0?hairDark:ch.hair}/>)}
     </>,
   };
 
-  // Mouth shapes
-  const mouths = {
-    0: <path d={`M${s*0.41} ${s*0.52} Q${cx} ${s*0.57} ${s*0.59} ${s*0.52}`} stroke="#c0836a" strokeWidth={s*0.025} fill="none" strokeLinecap="round"/>,
-    1: <path d={`M${s*0.41} ${s*0.54} Q${cx} ${s*0.49} ${s*0.59} ${s*0.54}`} stroke="#c0836a" strokeWidth={s*0.025} fill="none" strokeLinecap="round"/>,
-    2: <ellipse cx={cx} cy={s*0.535} rx={s*0.09} ry={s*0.04} fill="#c0836a"/>,
-    3: <> <path d={`M${s*0.41} ${s*0.52} Q${cx} ${s*0.585} ${s*0.59} ${s*0.52}`} stroke="#c0836a" strokeWidth={s*0.025} fill={ch.skin} strokeLinecap="round"/>
-           <path d={`M${s*0.41} ${s*0.52} Q${cx} ${s*0.585} ${s*0.59} ${s*0.52}`} fill="white" opacity={0.6}/>
-        </>,
+  const MOUTH = {
+    0: <path d={`M${s*.4} ${s*.515} Q${cx} ${s*.565} ${s*.6} ${s*.515}`} stroke="#c07060" strokeWidth={s*.025} fill="none" strokeLinecap="round"/>,
+    1: <path d={`M${s*.4} ${s*.535} Q${cx} ${s*.49} ${s*.6} ${s*.535}`} stroke="#c07060" strokeWidth={s*.025} fill="none" strokeLinecap="round"/>,
+    2: <ellipse cx={cx} cy={s*.528} rx={s*.08} ry={s*.032} fill="#c07060"/>,
+    3: <>
+      <path d={`M${s*.38} ${s*.51} Q${cx} ${s*.585} ${s*.62} ${s*.51}`} fill="#b05040"/>
+      <path d={`M${s*.38} ${s*.51} Q${cx} ${s*.585} ${s*.62} ${s*.51}`} fill="white" opacity={.5}/>
+      <path d={`M${s*.38} ${s*.51} Q${cx} ${s*.585} ${s*.62} ${s*.51}`} stroke="#c07060" strokeWidth={s*.022} fill="none" strokeLinecap="round"/>
+    </>,
+    4: <>
+      <path d={`M${s*.4} ${s*.515} Q${cx} ${s*.555} ${s*.6} ${s*.515}`} stroke="#c07060" strokeWidth={s*.022} fill="none" strokeLinecap="round"/>
+      <rect x={s*.44} y={s*.515} width={s*.02} height={s*.03} rx={s*.01} fill="#c07060" opacity={.5}/>
+      <rect x={s*.49} y={s*.515} width={s*.02} height={s*.03} rx={s*.01} fill="#c07060" opacity={.5}/>
+    </>,
   };
 
-  // Eyebrow shapes
-  const eyebrows = {
-    0: <> <path d={`M${s*0.35} ${s*0.3} Q${s*0.41} ${s*0.27} ${s*0.47} ${s*0.29}`} stroke={ch.hair} strokeWidth={s*0.025} fill="none" strokeLinecap="round"/>
-          <path d={`M${s*0.53} ${s*0.29} Q${s*0.59} ${s*0.27} ${s*0.65} ${s*0.3}`} stroke={ch.hair} strokeWidth={s*0.025} fill="none" strokeLinecap="round"/>
-       </>,
-    1: <> <path d={`M${s*0.35} ${s*0.28} L${s*0.47} ${s*0.31}`} stroke={ch.hair} strokeWidth={s*0.025} fill="none" strokeLinecap="round"/>
-          <path d={`M${s*0.53} ${s*0.31} L${s*0.65} ${s*0.28}`} stroke={ch.hair} strokeWidth={s*0.025} fill="none" strokeLinecap="round"/>
-       </>,
-    2: <> <path d={`M${s*0.35} ${s*0.31} Q${s*0.41} ${s*0.26} ${s*0.47} ${s*0.29}`} stroke={ch.hair} strokeWidth={s*0.028} fill="none" strokeLinecap="round"/>
-          <path d={`M${s*0.53} ${s*0.29} Q${s*0.59} ${s*0.26} ${s*0.65} ${s*0.31}`} stroke={ch.hair} strokeWidth={s*0.028} fill="none" strokeLinecap="round"/>
-       </>,
+  const BROW = {
+    0: <><path d={`M${s*.33} ${s*.305} Q${s*.4} ${s*.275} ${s*.46} ${s*.29}`} stroke={hairDark} strokeWidth={s*.023} fill="none" strokeLinecap="round"/>
+        <path d={`M${s*.54} ${s*.29} Q${s*.6} ${s*.275} ${s*.67} ${s*.305}`} stroke={hairDark} strokeWidth={s*.023} fill="none" strokeLinecap="round"/></>,
+    1: <><line x1={s*.33} y1={s*.295} x2={s*.46} y2={s*.3} stroke={hairDark} strokeWidth={s*.022} strokeLinecap="round"/>
+        <line x1={s*.54} y1={s*.3} x2={s*.67} y2={s*.295} stroke={hairDark} strokeWidth={s*.022} strokeLinecap="round"/></>,
+    2: <><path d={`M${s*.33} ${s*.3} Q${s*.4} ${s*.265} ${s*.46} ${s*.285}`} stroke={hairDark} strokeWidth={s*.03} fill="none" strokeLinecap="round"/>
+        <path d={`M${s*.54} ${s*.285} Q${s*.6} ${s*.265} ${s*.67} ${s*.3}`} stroke={hairDark} strokeWidth={s*.03} fill="none" strokeLinecap="round"/></>,
+    3: <><path d={`M${s*.33} ${s*.29} Q${s*.4} ${s*.31} ${s*.46} ${s*.3}`} stroke={hairDark} strokeWidth={s*.022} fill="none" strokeLinecap="round"/>
+        <path d={`M${s*.54} ${s*.3} Q${s*.6} ${s*.31} ${s*.67} ${s*.29}`} stroke={hairDark} strokeWidth={s*.022} fill="none" strokeLinecap="round"/></>,
   };
 
-  // Eye shapes
-  const eyeShape = (ex, ey) => ch.eyeShape === 1
-    ? <> <ellipse cx={ex} cy={ey} rx={s*0.055} ry={s*0.04} fill={ch.eyes}/>
-         <ellipse cx={ex} cy={ey} rx={s*0.025} ry={s*0.025} fill="#000" opacity={0.7}/>
-         <circle cx={ex+s*0.02} cy={ey-s*0.015} r={s*0.01} fill="white"/>
-      </>
-    : ch.eyeShape === 2
-    ? <> <path d={`M${ex-s*0.055} ${ey} Q${ex} ${ey-s*0.07} ${ex+s*0.055} ${ey}`} fill={ch.eyes}/>
-         <ellipse cx={ex} cy={ey} rx={s*0.025} ry={s*0.022} fill="#000" opacity={0.7}/>
-      </>
-    : <> <circle cx={ex} cy={ey} r={s*0.055} fill={ch.eyes}/>
-         <circle cx={ex} cy={ey} r={s*0.028} fill="#000" opacity={0.75}/>
-         <circle cx={ex+s*0.02} cy={ey-s*0.018} r={s*0.012} fill="white"/>
-      </>;
+  const eye = (ex, ey) => {
+    const es = ch.eyeShape || 0;
+    const whites = es===2
+      ? <path d={`M${ex-s*.058} ${ey} Q${ex} ${ey-s*.075} ${ex+s*.058} ${ey} Q${ex} ${ey+s*.04} ${ex-s*.058} ${ey}`} fill="white"/>
+      : <ellipse cx={ex} cy={ey} rx={s*.058} ry={es===1?s*.04:s*.055} fill="white"/>;
+    return <>
+      {whites}
+      <ellipse cx={ex} cy={ey} rx={s*.032} ry={s*.032} fill={ch.eyes}/>
+      <ellipse cx={ex} cy={ey} rx={s*.018} ry={s*.018} fill="#111" opacity={.85}/>
+      <circle cx={ex+s*.018} cy={ey-s*.016} r={s*.009} fill="white"/>
+      <circle cx={ex-s*.01} cy={ey+s*.01} r={s*.005} fill="white" opacity={.6}/>
+    </>;
+  };
 
-  // Accessories
-  const accessory = ch.accessory === 1
-    ? <> <rect x={s*0.3} y={s*0.33} width={s*0.17} height={s*0.11} rx={s*0.04} fill="none" stroke="#555" strokeWidth={s*0.02}/>
-         <rect x={s*0.53} y={s*0.33} width={s*0.17} height={s*0.11} rx={s*0.04} fill="none" stroke="#555" strokeWidth={s*0.02}/>
-         <line x1={s*0.47} y1={s*0.385} x2={s*0.53} y2={s*0.385} stroke="#555" strokeWidth={s*0.018}/>
-      </>
-    : ch.accessory === 2
-    ? <ellipse cx={cx} cy={s*0.18} rx={s*0.26} ry={s*0.08} fill={ch.hair} opacity={0.9}/>
+  const nose = <><path d={`M${cx} ${s*.415} Q${s*.545} ${s*.455} ${s*.535} ${s*.49}`} stroke={skinDark} strokeWidth={s*.016} fill="none" opacity={.5}/>
+    <ellipse cx={s*.465} cy={s*.495} rx={s*.018} ry={s*.01} fill={skinDark} opacity={.3}/>
+    <ellipse cx={s*.535} cy={s*.495} rx={s*.018} ry={s*.01} fill={skinDark} opacity={.3}/></>;
+
+  const acc = ch.accessory===1
+    ? <><rect x={s*.3} y={s*.33} width={s*.16} height={s*.1} rx={s*.04} fill="none" stroke="#444" strokeWidth={s*.02}/>
+        <rect x={s*.54} y={s*.33} width={s*.16} height={s*.1} rx={s*.04} fill="none" stroke="#444" strokeWidth={s*.02}/>
+        <line x1={s*.46} y1={s*.38} x2={s*.54} y2={s*.38} stroke="#444" strokeWidth={s*.016}/></>
+    : ch.accessory===2
+    ? <ellipse cx={cx} cy={s*.185} rx={s*.27} ry={s*.075} fill={ch.hair} opacity={.95}/>
+    : ch.accessory===3
+    ? <><path d={`M${s*.28} ${s*.32} Q${cx} ${s*.26} ${s*.72} ${s*.32}`} fill={ch.top} opacity={.85}/>
+        <rect x={s*.35} y={s*.3} width={s*.3} height={s*.06} rx={s*.02} fill={ch.top}/></>
     : null;
 
-  // Outfit/shirt with collar
-  const topColor = ch.top;
-  const topStyle = ch.topStyle || 0;
+  const bodyGrad = `url(#bg${ch.top.replace('#','')})`;
 
   return (
-    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`} style={{ display:"block" }}>
-      {/* Background circle */}
-      <circle cx={cx} cy={cx} r={cx} fill={ch.bg || "#e8f4ff"}/>
-      {/* Hair back */}
-      {hairShapes[ch.hairStyle || 0]}
+    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`} style={{display:"block"}}>
+      <defs>
+        <radialGradient id={`face${s}`} cx="40%" cy="35%" r="65%">
+          <stop offset="0%" stopColor={skinLight}/>
+          <stop offset="60%" stopColor={ch.skin}/>
+          <stop offset="100%" stopColor={skinDark}/>
+        </radialGradient>
+        <radialGradient id={`body${s}`} cx="40%" cy="30%" r="70%">
+          <stop offset="0%" stopColor={shadeHex(ch.top,25)}/>
+          <stop offset="55%" stopColor={ch.top}/>
+          <stop offset="100%" stopColor={topDark}/>
+        </radialGradient>
+        <radialGradient id={`bg${s}`} cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor={shadeHex(ch.bg||"#e8f4ff",15)}/>
+          <stop offset="100%" stopColor={ch.bg||"#e8f4ff"}/>
+        </radialGradient>
+        <clipPath id={`clip${s}`}><circle cx={cx} cy={cx} r={cx}/></clipPath>
+      </defs>
+
+      {/* Background */}
+      <circle cx={cx} cy={cx} r={cx} fill={`url(#bg${s})`}/>
+
+      {/* Shoulders / body — human bust shape */}
+      <path d={`M${s*.1} ${s*1.02} Q${s*.18} ${s*.72} ${s*.32} ${s*.67} L${s*.38} ${s*.64} Q${cx} ${s*.62} ${s*.62} ${s*.64} L${s*.68} ${s*.67} Q${s*.82} ${s*.72} ${s*.9} ${s*1.02} Z`}
+        fill={`url(#body${s})`} clipPath={`url(#clip${s})`}/>
+      {/* Shoulder highlight */}
+      <path d={`M${s*.18} ${s*.88} Q${s*.28} ${s*.71} ${s*.38} ${s*.66}`} stroke={shadeHex(ch.top,30)} strokeWidth={s*.025} fill="none" opacity={.4} clipPath={`url(#clip${s})`}/>
+
       {/* Neck */}
-      <rect x={s*0.43} y={s*0.54} width={s*0.14} height={s*0.1} rx={s*0.04} fill={ch.skin}/>
-      {/* Body/outfit */}
-      {topStyle === 0
-        ? <ellipse cx={cx} cy={s*0.82} rx={s*0.28} ry={s*0.2} fill={topColor}/>
-        : topStyle === 1
-        ? <> <ellipse cx={cx} cy={s*0.82} rx={s*0.28} ry={s*0.2} fill={topColor}/>
-             <rect x={s*0.41} y={s*0.6} width={s*0.18} height={s*0.22} fill={topColor=="#fff"?"#eee":"white"} opacity={0.3}/>
-          </>
-        : <> <ellipse cx={cx} cy={s*0.82} rx={s*0.28} ry={s*0.2} fill={topColor}/>
-             {[0,1,2].map(i=><circle key={i} cx={cx} cy={s*(0.63+i*0.06)} r={s*0.018} fill="white" opacity={0.5}/>)}
-          </>
-      }
+      <path d={`M${s*.42} ${s*.56} L${s*.42} ${s*.64} Q${cx} ${s*.67} ${s*.58} ${s*.64} L${s*.58} ${s*.56}`}
+        fill={`url(#face${s})`} clipPath={`url(#clip${s})`}/>
+      {/* Neck shadow */}
+      <ellipse cx={cx} cy={s*.64} rx={s*.1} ry={s*.025} fill={skinDark} opacity={.25} clipPath={`url(#clip${s})`}/>
+
+      {/* Ear left */}
+      <ellipse cx={s*.28} cy={s*.39} rx={s*.04} ry={s*.055} fill={`url(#face${s})`}/>
+      <ellipse cx={s*.285} cy={s*.39} rx={s*.02} ry={s*.032} fill={skinDark} opacity={.3}/>
+      {/* Ear right */}
+      <ellipse cx={s*.72} cy={s*.39} rx={s*.04} ry={s*.055} fill={`url(#face${s})`}/>
+      <ellipse cx={s*.715} cy={s*.39} rx={s*.02} ry={s*.032} fill={skinDark} opacity={.3}/>
+
+      {/* Hair back layer */}
+      {HAIR[ch.hairStyle||0]}
+
       {/* Face */}
-      <ellipse cx={cx} cy={s*0.38} rx={s*0.2} ry={s*0.22} fill={ch.skin}/>
-      {/* Cheek blush */}
-      {ch.blush && <> <ellipse cx={s*0.35} cy={s*0.45} rx={s*0.05} ry={s*0.03} fill="#f48" opacity={0.22}/> <ellipse cx={s*0.65} cy={s*0.45} rx={s*0.05} ry={s*0.03} fill="#f48" opacity={0.22}/> </>}
+      <ellipse cx={cx} cy={s*.38} rx={s*.205} ry={s*.225} fill={`url(#face${s})`}/>
+      {/* Face edge shadow */}
+      <ellipse cx={cx} cy={s*.38} rx={s*.205} ry={s*.225} fill="none" stroke={skinDark} strokeWidth={s*.012} opacity={.18}/>
+
+      {/* Blush */}
+      {ch.blush && <>
+        <ellipse cx={s*.33} cy={s*.46} rx={s*.055} ry={s*.03} fill="#ff6b9d" opacity={.25}/>
+        <ellipse cx={s*.67} cy={s*.46} rx={s*.055} ry={s*.03} fill="#ff6b9d" opacity={.25}/>
+      </>}
+
       {/* Eyebrows */}
-      {eyebrows[ch.eyebrow || 0]}
+      {BROW[ch.eyebrow||0]}
       {/* Eyes */}
-      {eyeShape(s*0.39, s*0.37)}
-      {eyeShape(s*0.61, s*0.37)}
+      {eye(s*.385, s*.365)}
+      {eye(s*.615, s*.365)}
       {/* Nose */}
-      <path d={`M${cx} ${s*0.41} Q${s*0.54} ${s*0.46} ${s*0.52} ${s*0.49}`} stroke={ch.skin==="#F4D6C8"?"#d4a090":ch.skin==="#FDDBB4"?"#c9956a":"#8B5E3C"} strokeWidth={s*0.018} fill="none" opacity={0.6}/>
+      {nose}
       {/* Mouth */}
-      {mouths[ch.mouth || 0]}
+      {MOUTH[ch.mouth||0]}
+
+      {/* Lip gloss */}
+      {ch.lips && <ellipse cx={cx} cy={s*.515} rx={s*.055} ry={s*.016} fill={ch.lipColor||"#e07070"} opacity={.55}/>}
+
       {/* Accessory */}
-      {accessory}
+      {acc}
     </svg>
   );
+}
+
+function shadeSkin(hex, pct) { return shadeHex(hex, pct); }
+function shadeHex(hex, pct) {
+  const n = parseInt(hex.replace('#',''),16);
+  const r = Math.min(255,Math.max(0,((n>>16)&255)+pct));
+  const g = Math.min(255,Math.max(0,((n>>8)&255)+pct));
+  const b = Math.min(255,Math.max(0,(n&255)+pct));
+  return `rgb(${r},${g},${b})`;
 }
 
 // ─── CHARACTER MODAL ─────────────────────────────────────────────────────────
 function CharacterModal({ character, onChange, onClose }) {
   const ch = character;
-  const SKINS  = ["#FDDBB4","#F5C89A","#E8A87C","#C68642","#8D5524","#F4D6C8","#FFCBA4","#D4956A"];
-  const HAIRS  = ["#1a0a00","#3D2B1F","#7B4F2C","#C9A96E","#F2E6C8","#E8323C","#9B59B6","#2C7BB6","#00b894","#f9ca24","#fd79a8","#636e72"];
-  const EYES   = ["#3D5A80","#4A7C59","#8B6914","#2C2C2C","#C45C5C","#6B4E8A","#00b894","#74b9ff","#e17055"];
-  const TOPS   = ["#3D5A80","#2d3436","#e17055","#00b894","#6B4E8A","#fdcb6e","#fd79a8","#0984e3","#C17F5A","#ffffff"];
-  const BG_COLORS = ["#e8f4ff","#ffeaa7","#dfe6e9","#d5f5e3","#f8d7e3","#e8daef","#ffddd2","#c8e6c9"];
-  const HAIR_STYLES = ["Short","Waves","Long","Bun","Curly","Ponytail"];
-  const EYE_SHAPES  = ["Round","Almond","Cat"];
-  const EYEBROWS    = ["Arched","Flat","Thick"];
-  const MOUTHS      = ["Smile","Sad","Neutral","Big smile"];
-  const ACCESSORIES = ["None","Glasses","Hat"];
-  const TOP_STYLES  = ["T-Shirt","Jacket","Button-up"];
+  const [tab, setTab] = useState("face");
 
-  const Section = ({ label, children }) => (
-    <div style={{ marginBottom:18 }}>
-      <p style={{ fontSize:11, fontWeight:700, color:C.muted, letterSpacing:.8, marginBottom:8 }}>{label}</p>
-      {children}
-    </div>
-  );
+  const SKINS  = ["#FDDBB4","#F5C89A","#FFCBA4","#E8A87C","#D4956A","#C68642","#A0693A","#8D5524","#6B3A1F","#F4D6C8"];
+  const HAIRS  = ["#0d0d0d","#2C1810","#4A2912","#7B4F2C","#B5651D","#C9A96E","#E8D5B0","#F2E6C8","#C0392B","#E74C3C","#8E44AD","#2980B9","#27AE60","#F39C12","#1ABC9C","#fd79a8","#636e72","#95a5a6"];
+  const EYES   = ["#1a3a5c","#2980B9","#74b9ff","#27AE60","#52BE80","#8B6914","#C8A84B","#2C2C2C","#555555","#C0392B","#8E44AD","#00b894","#e17055"];
+  const TOPS   = ["#2C3E50","#34495E","#E74C3C","#C0392B","#E67E22","#F39C12","#27AE60","#16A085","#2980B9","#8E44AD","#fd79a8","#FFFFFF","#ECF0F1","#BDC3C7"];
+  const LIP_COLORS = ["#C0392B","#E74C3C","#e07070","#fd79a8","#8E44AD","#D35400","#b5451b","#922B21"];
+  const BG = ["#e8f4ff","#dfe6e9","#ffeaa7","#d5f5e3","#f8d7e3","#e8daef","#ffddd2","#c8e6c9","#fff3e0","#e3f2fd","#1a1a2e","#2d3436"];
+  const HAIR_STYLES = ["Buzz","Side-part","Waves","Long","Bun","Ponytail","Afro","Braids","Curly bob","Locs"];
+  const EYE_SHAPES  = ["Round","Almond","Cat-eye"];
+  const BROWS       = ["Arched","Straight","Thick","Worried"];
+  const MOUTHS      = ["Smile","Frown","Neutral","Big smile","Smirk"];
+  const ACCESSORIES = ["None","Glasses","Hat","Cap"];
+  const TOP_STYLES  = ["T-Shirt","Hoodie","Jacket","Dress","Suit","Crop top"];
 
-  const Swatches = ({ values, field, size=28 }) => (
-    <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-      {values.map(v => <button key={v} onClick={() => onChange({...ch, [field]:v})}
-        style={{ width:size, height:size, borderRadius:"50%", background:v, border:`3px solid ${ch[field]===v?C.accent:"transparent"}`, cursor:"pointer", boxShadow:ch[field]===v?"0 0 0 1px white inset":"none" }} />)}
+  const TABS = [
+    { id:"face",  icon:"😊", label:"Face"   },
+    { id:"hair",  icon:"💇", label:"Hair"   },
+    { id:"style", icon:"👕", label:"Style"  },
+    { id:"extra", icon:"✨", label:"Extras" },
+  ];
+
+  const Swatches = ({ values, field, size=26 }) => (
+    <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
+      {values.map(v => (
+        <button key={v} onClick={() => onChange({...ch,[field]:v})} style={{
+          width:size, height:size, borderRadius:"50%", background:v,
+          border:`3px solid ${ch[field]===v?"#fff":"transparent"}`,
+          outline:`2px solid ${ch[field]===v?C.accent:"transparent"}`,
+          cursor:"pointer", transition:"transform .15s",
+          transform:ch[field]===v?"scale(1.2)":"scale(1)",
+          boxShadow:"0 1px 4px rgba(0,0,0,.2)"
+        }}/>
+      ))}
     </div>
   );
 
   const Pills = ({ values, field }) => (
-    <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-      {values.map((v,i) => <button key={i} onClick={() => onChange({...ch, [field]:i})}
-        style={{ padding:"5px 12px", fontSize:12, fontWeight:600, borderRadius:20, border:`1.5px solid ${ch[field]===i?C.accent:C.border}`, background:ch[field]===i?C.accentL:"#fff", color:ch[field]===i?C.accent:C.muted, cursor:"pointer" }}>
-        {v}
-      </button>)}
+    <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
+      {values.map((v,i) => (
+        <button key={i} onClick={() => onChange({...ch,[field]:i})} style={{
+          padding:"5px 12px", fontSize:11, fontWeight:700, borderRadius:20,
+          border:"none", cursor:"pointer", transition:"all .15s",
+          background:ch[field]===i?"#FFFC00":C.border,
+          color:ch[field]===i?"#000":C.muted,
+          boxShadow:ch[field]===i?"0 2px 8px rgba(0,0,0,.2)":"none",
+          transform:ch[field]===i?"scale(1.05)":"scale(1)"
+        }}>{v}</button>
+      ))}
     </div>
   );
 
+  const Toggle = ({ label, field, emoji }) => (
+    <button onClick={() => onChange({...ch,[field]:!ch[field]})} style={{
+      display:"flex", alignItems:"center", gap:8, padding:"8px 14px",
+      borderRadius:20, border:"none", cursor:"pointer",
+      background:ch[field]?"#FFFC00":C.border,
+      color:ch[field]?"#000":C.muted, fontWeight:700, fontSize:12,
+      boxShadow:ch[field]?"0 2px 8px rgba(0,0,0,.2)":"none"
+    }}>{emoji} {label}: {ch[field]?"ON":"OFF"}</button>
+  );
+
   return (
-    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.55)", zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background:C.bg, borderRadius:24, width:"100%", maxWidth:480, maxHeight:"90vh", overflow:"hidden", display:"flex", flexDirection:"column", boxShadow:"0 24px 80px rgba(0,0,0,.3)" }}>
+    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)", zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center", padding:12 }}>
+      <div onClick={e=>e.stopPropagation()} style={{
+        background:"#f7f7f7", borderRadius:28, width:"100%", maxWidth:500,
+        maxHeight:"93vh", overflow:"hidden", display:"flex", flexDirection:"column",
+        boxShadow:"0 32px 100px rgba(0,0,0,.4)"
+      }}>
 
-        {/* Header */}
-        <div style={{ padding:"18px 24px 12px", borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center", justifyContent:"space-between", background:C.surface }}>
-          <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:700, color:C.text }}>My Avatar</h2>
-          <button onClick={onClose} style={{ background:"none", border:"none", fontSize:22, cursor:"pointer", color:C.muted }}>×</button>
+        {/* Top bar — Snapchat yellow */}
+        <div style={{ background:"#FFFC00", padding:"14px 20px 10px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <span style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:900, color:"#000" }}>My Avatar</span>
+          <button onClick={onClose} style={{ background:"rgba(0,0,0,.12)", border:"none", borderRadius:"50%", width:32, height:32, fontSize:18, cursor:"pointer", color:"#000", fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
         </div>
 
-        <div style={{ display:"flex", overflow:"hidden", flex:1 }}>
-          {/* Preview panel */}
-          <div style={{ width:150, flexShrink:0, background:C.surface, borderRight:`1px solid ${C.border}`, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:20, gap:12 }}>
-            <div style={{ borderRadius:24, overflow:"hidden", boxShadow:"0 8px 24px rgba(0,0,0,.15)" }}>
-              <MiniAvatar character={ch} size={110} />
+        {/* Preview strip */}
+        <div style={{ background:"linear-gradient(135deg,#667eea22,#764ba222)", padding:"16px 0 10px", display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
+          <div style={{ borderRadius:999, overflow:"hidden", boxShadow:"0 8px 32px rgba(0,0,0,.2)", border:"3px solid #FFFC00" }}>
+            <MiniAvatar character={ch} size={120}/>
+          </div>
+          <input value={ch.name||""} onChange={e=>onChange({...ch,name:e.target.value})} placeholder="Your name…"
+            style={{ border:"2px solid #FFFC00", borderRadius:20, padding:"5px 16px", fontSize:13, fontWeight:700, outline:"none", color:"#000", background:"white", textAlign:"center", width:160 }}/>
+        </div>
+
+        {/* Tab bar */}
+        <div style={{ display:"flex", background:"#fff", borderBottom:"2px solid #eee" }}>
+          {TABS.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)} style={{
+              flex:1, padding:"10px 4px", border:"none", cursor:"pointer",
+              background:tab===t.id?"#FFFC00":"#fff",
+              fontWeight:700, fontSize:11, color:tab===t.id?"#000":"#888",
+              borderBottom:tab===t.id?"3px solid #000":"3px solid transparent",
+              transition:"all .15s"
+            }}>{t.icon}<br/>{t.label}</button>
+          ))}
+        </div>
+
+        {/* Options */}
+        <div style={{ flex:1, overflowY:"auto", padding:"16px 18px", display:"flex", flexDirection:"column", gap:16 }}>
+
+          {tab==="face" && <>
+            <div>
+              <p style={{ fontSize:11, fontWeight:800, color:"#555", letterSpacing:1, marginBottom:8 }}>SKIN TONE</p>
+              <Swatches values={SKINS} field="skin"/>
             </div>
-            <input value={ch.name||""} onChange={e=>onChange({...ch,name:e.target.value})} placeholder="Your name…"
-              style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:8, padding:"6px 8px", fontSize:12, outline:"none", color:C.text, background:C.bg, textAlign:"center" }} />
-            <button onClick={()=>onChange({ skin:"#FDDBB4",hair:"#3D2B1F",hairStyle:0,eyes:"#3D5A80",top:"#3D5A80",bg:"#e8f4ff",mouth:0,eyebrow:0,eyeShape:0,accessory:0,topStyle:0,blush:false,name:ch.name })}
-              style={{ fontSize:11, color:C.muted, background:"none", border:`1px solid ${C.border}`, borderRadius:6, padding:"4px 8px", cursor:"pointer" }}>Reset</button>
-          </div>
+            <div>
+              <p style={{ fontSize:11, fontWeight:800, color:"#555", letterSpacing:1, marginBottom:8 }}>EYE SHAPE</p>
+              <Pills values={EYE_SHAPES} field="eyeShape"/>
+            </div>
+            <div>
+              <p style={{ fontSize:11, fontWeight:800, color:"#555", letterSpacing:1, marginBottom:8 }}>EYE COLOUR</p>
+              <Swatches values={EYES} field="eyes"/>
+            </div>
+            <div>
+              <p style={{ fontSize:11, fontWeight:800, color:"#555", letterSpacing:1, marginBottom:8 }}>EYEBROWS</p>
+              <Pills values={BROWS} field="eyebrow"/>
+            </div>
+            <div>
+              <p style={{ fontSize:11, fontWeight:800, color:"#555", letterSpacing:1, marginBottom:8 }}>EXPRESSION</p>
+              <Pills values={MOUTHS} field="mouth"/>
+            </div>
+          </>}
 
-          {/* Options panel */}
-          <div style={{ flex:1, overflowY:"auto", padding:"16px 20px" }}>
+          {tab==="hair" && <>
+            <div>
+              <p style={{ fontSize:11, fontWeight:800, color:"#555", letterSpacing:1, marginBottom:8 }}>HAIR STYLE</p>
+              <Pills values={HAIR_STYLES} field="hairStyle"/>
+            </div>
+            <div>
+              <p style={{ fontSize:11, fontWeight:800, color:"#555", letterSpacing:1, marginBottom:8 }}>HAIR COLOUR</p>
+              <Swatches values={HAIRS} field="hair"/>
+            </div>
+          </>}
 
-            <Section label="SKIN TONE">
-              <Swatches values={SKINS} field="skin" />
-            </Section>
+          {tab==="style" && <>
+            <div>
+              <p style={{ fontSize:11, fontWeight:800, color:"#555", letterSpacing:1, marginBottom:8 }}>OUTFIT</p>
+              <Pills values={TOP_STYLES} field="topStyle"/>
+            </div>
+            <div>
+              <p style={{ fontSize:11, fontWeight:800, color:"#555", letterSpacing:1, marginBottom:8 }}>OUTFIT COLOUR</p>
+              <Swatches values={TOPS} field="top"/>
+            </div>
+            <div>
+              <p style={{ fontSize:11, fontWeight:800, color:"#555", letterSpacing:1, marginBottom:8 }}>BACKGROUND</p>
+              <Swatches values={BG} field="bg"/>
+            </div>
+            <div>
+              <p style={{ fontSize:11, fontWeight:800, color:"#555", letterSpacing:1, marginBottom:8 }}>ACCESSORIES</p>
+              <Pills values={ACCESSORIES} field="accessory"/>
+            </div>
+          </>}
 
-            <Section label="HAIR STYLE">
-              <Pills values={HAIR_STYLES} field="hairStyle" />
-            </Section>
-
-            <Section label="HAIR COLOUR">
-              <Swatches values={HAIRS} field="hair" size={24} />
-            </Section>
-
-            <Section label="EYES">
-              <div style={{ display:"flex", gap:12, alignItems:"center" }}>
-                <div style={{ flex:1 }}>
-                  <p style={{ fontSize:10, color:C.muted, marginBottom:5 }}>SHAPE</p>
-                  <Pills values={EYE_SHAPES} field="eyeShape" />
-                </div>
-              </div>
-              <div style={{ marginTop:8 }}>
-                <p style={{ fontSize:10, color:C.muted, marginBottom:5 }}>COLOUR</p>
-                <Swatches values={EYES} field="eyes" size={24} />
-              </div>
-            </Section>
-
-            <Section label="EYEBROWS">
-              <Pills values={EYEBROWS} field="eyebrow" />
-            </Section>
-
-            <Section label="EXPRESSION">
-              <Pills values={MOUTHS} field="mouth" />
-            </Section>
-
-            <Section label="OUTFIT">
-              <div style={{ marginBottom:8 }}>
-                <p style={{ fontSize:10, color:C.muted, marginBottom:5 }}>STYLE</p>
-                <Pills values={TOP_STYLES} field="topStyle" />
-              </div>
-              <p style={{ fontSize:10, color:C.muted, marginBottom:5 }}>COLOUR</p>
-              <Swatches values={TOPS} field="top" />
-            </Section>
-
-            <Section label="BACKGROUND">
-              <Swatches values={BG_COLORS} field="bg" size={24} />
-            </Section>
-
-            <Section label="ACCESSORIES">
-              <Pills values={ACCESSORIES} field="accessory" />
-            </Section>
-
-            <Section label="EXTRAS">
-              <button onClick={()=>onChange({...ch,blush:!ch.blush})}
-                style={{ padding:"5px 14px", fontSize:12, fontWeight:600, borderRadius:20, border:`1.5px solid ${ch.blush?C.accent:C.border}`, background:ch.blush?C.accentL:"#fff", color:ch.blush?C.accent:C.muted, cursor:"pointer" }}>
-                🌸 Blush {ch.blush?"ON":"OFF"}
-              </button>
-            </Section>
-          </div>
+          {tab==="extra" && <>
+            <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+              <Toggle label="Blush" field="blush" emoji="🌸"/>
+              <Toggle label="Lip gloss" field="lips" emoji="💋"/>
+            </div>
+            {ch.lips && <div>
+              <p style={{ fontSize:11, fontWeight:800, color:"#555", letterSpacing:1, marginBottom:8 }}>LIP COLOUR</p>
+              <Swatches values={LIP_COLORS} field="lipColor"/>
+            </div>}
+            <button onClick={()=>onChange({skin:"#FDDBB4",hair:"#3D2B1F",hairStyle:0,eyes:"#2980B9",top:"#2C3E50",bg:"#e8f4ff",mouth:0,eyebrow:0,eyeShape:0,accessory:0,topStyle:0,blush:false,lips:false,lipColor:"#e07070",name:ch.name})}
+              style={{ padding:"8px 20px", background:"#eee", border:"none", borderRadius:20, fontSize:12, fontWeight:700, cursor:"pointer", color:"#555", alignSelf:"flex-start" }}>
+              🔄 Reset to default
+            </button>
+          </>}
         </div>
 
-        {/* Save */}
-        <div style={{ padding:"12px 20px", background:C.surface, borderTop:`1px solid ${C.border}` }}>
-          <button onClick={onClose}
-            style={{ width:"100%", background:C.accent, color:"#fff", border:"none", borderRadius:12, padding:"11px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
-            ✓ Save Avatar
+        {/* Done button */}
+        <div style={{ padding:"10px 18px 14px", background:"#fff", borderTop:"1px solid #eee" }}>
+          <button onClick={onClose} style={{ width:"100%", background:"#FFFC00", color:"#000", border:"none", borderRadius:14, padding:"12px", fontSize:15, fontWeight:900, cursor:"pointer", boxShadow:"0 4px 16px rgba(0,0,0,.15)" }}>
+            ✓ Done
           </button>
         </div>
       </div>
     </div>
   );
 }
-
 
 // ─── LINK FILES BUTTON ────────────────────────────────────────────────────────
 function LinkBtn({ file, allFiles, onSave }) {
@@ -1792,26 +1929,76 @@ ${fileContext}`
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 200px)", minHeight:400 }}>
       <div style={{ flex:1, overflowY:"auto", padding:"16px 0", display:"flex", flexDirection:"column", gap:12 }}>
-        {/* Folder-level file selector */}
-        {!file && allFiles && allFiles.length > 0 && (
-          <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:14, padding:"14px 16px", marginBottom:8 }}>
-            <p style={{ fontSize:12, fontWeight:700, color:C.muted, marginBottom:10, letterSpacing:.5 }}>CHOOSE FILES FOR AI TO USE</p>
-            <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-              {allFiles.map(f => {
-                const sel = selectedFileIds.includes(f.id);
-                return (
-                  <button key={f.id} onClick={() => setSelectedFileIds(prev => sel ? prev.filter(id=>id!==f.id) : [...prev, f.id])}
-                    style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px", borderRadius:9, border:`1.5px solid ${sel?C.accent:C.border}`, background:sel?C.accentL:"#fff", cursor:"pointer", textAlign:"left" }}>
-                    <span style={{ fontSize:16 }}>{sel?"✅":"⬜"}</span>
-                    <span style={{ fontSize:13, fontWeight:600, color:sel?C.accent:C.text, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name}</span>
-                    {(f.linkedFileIds||[]).length > 0 && <span style={{ fontSize:11, color:C.muted }}>🔗{(f.linkedFileIds||[]).length}</span>}
-                  </button>
-                );
-              })}
+        {/* Folder-level file selector — smart linked pairs */}
+        {!file && allFiles && allFiles.length > 0 && (() => {
+          // Build linked groups: each file that has linkedFileIds forms a group
+          const linked = allFiles.filter(f => (f.linkedFileIds||[]).length > 0);
+          const standalone = allFiles.filter(f => (f.linkedFileIds||[]).length === 0 &&
+            !allFiles.some(o => (o.linkedFileIds||[]).includes(f.id)));
+          // Deduplicate groups: group = [file, ...its linked files]
+          const seen = new Set();
+          const groups = [];
+          for (const f of linked) {
+            if (seen.has(f.id)) continue;
+            const members = [f, ...(f.linkedFileIds||[]).map(id => allFiles.find(x=>x.id===id)).filter(Boolean)];
+            members.forEach(m => seen.add(m.id));
+            groups.push(members);
+          }
+          return (
+            <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:16, padding:"14px 16px", marginBottom:10 }}>
+              <p style={{ fontSize:11, fontWeight:800, color:C.muted, letterSpacing:.8, marginBottom:12 }}>CHOOSE FILES FOR AI</p>
+
+              {groups.length > 0 && <>
+                <p style={{ fontSize:11, fontWeight:700, color:C.accent, marginBottom:8 }}>🔗 LINKED PAIRS</p>
+                {groups.map((grp, gi) => {
+                  const allSel = grp.every(f => selectedFileIds.includes(f.id));
+                  const someSel = grp.some(f => selectedFileIds.includes(f.id));
+                  return (
+                    <div key={gi} style={{ border:`2px solid ${allSel?C.accent:someSel?C.accentS:C.border}`, borderRadius:12, padding:"10px 12px", marginBottom:8, background:allSel?C.accentL:someSel?"#f0f5ff":"#fff" }}>
+                      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
+                        <span style={{ fontSize:11, fontWeight:700, color:C.accent }}>Group {gi+1}</span>
+                        <button onClick={() => {
+                          const ids = grp.map(f=>f.id);
+                          setSelectedFileIds(prev => allSel ? prev.filter(id=>!ids.includes(id)) : [...new Set([...prev,...ids])]);
+                        }} style={{ fontSize:11, fontWeight:700, background:allSel?C.accent:C.accentL, color:allSel?"#fff":C.accent, border:"none", borderRadius:20, padding:"3px 10px", cursor:"pointer" }}>
+                          {allSel?"Deselect all":"Select all"}
+                        </button>
+                      </div>
+                      {grp.map(f => {
+                        const sel = selectedFileIds.includes(f.id);
+                        return (
+                          <button key={f.id} onClick={() => setSelectedFileIds(prev => sel ? prev.filter(id=>id!==f.id) : [...prev, f.id])}
+                            style={{ display:"flex", alignItems:"center", gap:8, width:"100%", padding:"6px 8px", borderRadius:8, border:`1.5px solid ${sel?C.accent:C.border}`, background:sel?C.accentL:"#f8f8f8", cursor:"pointer", textAlign:"left", marginBottom:4 }}>
+                            <span>{sel?"✅":"⬜"}</span>
+                            <span style={{ fontSize:12, fontWeight:600, color:sel?C.accent:C.text, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </>}
+
+              {standalone.length > 0 && <>
+                <p style={{ fontSize:11, fontWeight:700, color:C.muted, marginBottom:8, marginTop: groups.length>0?8:0 }}>📄 INDIVIDUAL FILES</p>
+                {standalone.map(f => {
+                  const sel = selectedFileIds.includes(f.id);
+                  return (
+                    <button key={f.id} onClick={() => setSelectedFileIds(prev => sel ? prev.filter(id=>id!==f.id) : [...prev, f.id])}
+                      style={{ display:"flex", alignItems:"center", gap:8, width:"100%", padding:"7px 10px", borderRadius:9, border:`1.5px solid ${sel?C.accent:C.border}`, background:sel?C.accentL:"#fff", cursor:"pointer", textAlign:"left", marginBottom:5 }}>
+                      <span>{sel?"✅":"⬜"}</span>
+                      <span style={{ fontSize:13, fontWeight:600, color:sel?C.accent:C.text, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name}</span>
+                    </button>
+                  );
+                })}
+              </>}
+
+              {selectedFileIds.length > 0 && (
+                <p style={{ fontSize:11, color:C.accent, marginTop:8, fontWeight:700 }}>✓ AI will read {selectedFileIds.length} file{selectedFileIds.length>1?"s":""}</p>
+              )}
             </div>
-            {selectedFileIds.length > 0 && <p style={{ fontSize:11, color:C.accent, marginTop:8, fontWeight:600 }}>✓ AI will use {selectedFileIds.length} file{selectedFileIds.length>1?"s":""}</p>}
-          </div>
-        )}
+          );
+        })()}
         {msgs.length === 0 && (
           <div style={{ textAlign:"center", padding:"24px 20px", color:C.muted }}>
             <div style={{ fontSize:40, marginBottom:12 }}>🤖</div>
