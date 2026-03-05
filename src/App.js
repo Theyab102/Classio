@@ -1069,6 +1069,191 @@ ${text.slice(0, 3000)}`
 }
 
 
+// ─── FILE VIEWER HELPERS ──────────────────────────────────────────────────────
+function TextViewer({ fileObj }) {
+  const [text, setText] = useState("");
+  useEffect(() => {
+    readFileAsText(fileObj).then(t => setText(t || "File appears to be empty.")).catch(() => setText("Could not read file."));
+  }, [fileObj]);
+  return (
+    <div style={{ background:"#fff", padding:"24px 28px", borderRadius:4, maxWidth:800, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,.4)", whiteSpace:"pre-wrap", fontFamily:"monospace", fontSize:13, lineHeight:1.7, color:"#1a1a1a", minHeight:400, wordBreak:"break-word", overflowWrap:"break-word" }}>
+      {text || "Loading…"}
+    </div>
+  );
+}
+
+function WordViewer({ fileObj }) {
+  const [html, setHtml] = useState("");
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!window.mammoth) {
+          await new Promise((res, rej) => {
+            const s = document.createElement("script");
+            s.src = "https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js";
+            s.onload = res; s.onerror = rej; document.head.appendChild(s);
+          });
+        }
+        const ab = await fileObj.arrayBuffer();
+        const result = await window.mammoth.convertToHtml({ arrayBuffer: ab });
+        setHtml(result.value);
+      } catch(e) { setHtml("<p>Could not render Word file.</p>"); }
+      setLoading(false);
+    })();
+  }, [fileObj]);
+  return (
+    <div style={{ background:"#fff", padding:"40px 48px", borderRadius:4, maxWidth:820, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,.4)", minHeight:400, color:"#1a1a1a", lineHeight:1.8, fontSize:14 }}>
+      {loading ? "Loading…" : <div dangerouslySetInnerHTML={{ __html: html }} />}
+    </div>
+  );
+}
+
+function PPTViewer({ fileObj, page, onTotalPages }) {
+  const [slides, setSlides] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!window.JSZip) {
+          await new Promise((res, rej) => {
+            const s = document.createElement("script");
+            s.src = "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";
+            s.onload = res; s.onerror = rej; document.head.appendChild(s);
+          });
+        }
+        const ab = await fileObj.arrayBuffer();
+        const zip = await window.JSZip.loadAsync(ab);
+        const slideFiles = Object.keys(zip.files).filter(n => n.match(/ppt\/slides\/slide[0-9]+\.xml$/)).sort();
+        onTotalPages && onTotalPages(slideFiles.length);
+        const parsed = await Promise.all(slideFiles.map(async sf => {
+          const xml = await zip.files[sf].async("string");
+          const texts = [];
+          const regex = /<a:t[^>]*>([^<]*)<\/a:t>/g;
+          let m;
+          while ((m = regex.exec(xml)) !== null) { if (m[1].trim()) texts.push(m[1].trim()); }
+          return texts;
+        }));
+        setSlides(parsed);
+      } catch(e) { setSlides([["Could not render PowerPoint."]]); }
+      setLoading(false);
+    })();
+  }, [fileObj]);
+  const slide = slides[(page || 1) - 1] || [];
+  return (
+    <div style={{ background:"#fff", borderRadius:8, maxWidth:820, width:"100%", minHeight:460, boxShadow:"0 8px 32px rgba(0,0,0,.4)", padding:"40px 48px", display:"flex", flexDirection:"column", justifyContent:"flex-start" }}>
+      {loading ? <p style={{ color:"#888" }}>Loading slides…</p> : slide.length === 0 ? <p style={{ color:"#888" }}>No text on this slide.</p> :
+        slide.map((t, i) => (
+          <p key={i} style={{ fontSize: i === 0 ? 22 : 14, fontWeight: i === 0 ? 700 : 400, color: "#1a1a1a", marginBottom: i === 0 ? 18 : 6, lineHeight: 1.5,
+            borderBottom: i===0&&slide.length>1 ? "1px solid rgba(128,128,128,.2)" : "none", paddingBottom: i===0&&slide.length>1 ? 16 : 0 }}>
+            {t}
+          </p>
+        ))
+      }
+    </div>
+  );
+}
+
+function ExcelViewer({ fileObj }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!window.XLSX) {
+          await new Promise((res, rej) => {
+            const s = document.createElement("script");
+            s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+            s.onload = res; s.onerror = rej; document.head.appendChild(s);
+          });
+        }
+        const ab = await fileObj.arrayBuffer();
+        const wb = window.XLSX.read(ab, { type:"array" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const data = window.XLSX.utils.sheet_to_json(ws, { header:1 });
+        setRows(data.slice(0, 100));
+      } catch(e) { setRows([["Could not render spreadsheet."]]); }
+      setLoading(false);
+    })();
+  }, [fileObj]);
+  return (
+    <div style={{ background:"#fff", borderRadius:4, maxWidth:900, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,.4)", overflow:"auto", maxHeight:"70vh" }}>
+      {loading ? <p style={{ padding:24, color:"#888" }}>Loading…</p> :
+        <table style={{ borderCollapse:"collapse", width:"100%", fontSize:13 }}>
+          <tbody>
+            {rows.map((row, i) => (
+              <tr key={i} style={{ background: i===0 ? "#f3f4f6" : i%2===0 ? "#fff" : "#f9fafb" }}>
+                {(Array.isArray(row) ? row : [row]).map((cell, j) => (
+                  <td key={j} style={{ border:"1px solid #e5e7eb", padding:"6px 10px", fontWeight: i===0?700:400, whiteSpace:"nowrap" }}>
+                    {cell ?? ""}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      }
+    </div>
+  );
+}
+
+// ─── AI TAB ───────────────────────────────────────────────────────────────────
+function AITab({ file, allFiles, folder, onUpdate }) {
+  const [msgs, setMsgs] = useState([]);
+  const [inp, setInp] = useState("");
+  const [loading, setLoading] = useState(false);
+  const bottomRef = useRef(null);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:"smooth" }); }, [msgs]);
+  const send = async () => {
+    const text = inp.trim();
+    if (!text || loading) return;
+    const userMsg = { role:"user", content: text };
+    const newMsgs = [...msgs, userMsg];
+    setMsgs(newMsgs); setInp(""); setLoading(true);
+    try {
+      const ctx = file ? `You are helping a student with the file "${file.name}".` : `You are helping a student with the folder "${folder?.name}".`;
+      const reply = await callClaudeChat(
+        ctx + " Answer clearly. Use plain text only, no asterisks or markdown symbols.",
+        newMsgs.map(m => ({ role: m.role, content: m.content }))
+      );
+      setMsgs([...newMsgs, { role:"assistant", content: reply }]);
+    } catch(e) { setMsgs([...newMsgs, { role:"assistant", content:"Error: " + e.message }]); }
+    setLoading(false);
+  };
+  return (
+    <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 200px)", minHeight:400 }}>
+      <div style={{ flex:1, overflowY:"auto", padding:"16px 0", display:"flex", flexDirection:"column", gap:12 }}>
+        {msgs.length === 0 && (
+          <div style={{ textAlign:"center", padding:"40px 20px", color:C.muted }}>
+            <div style={{ fontSize:40, marginBottom:12 }}>🤖</div>
+            <p style={{ fontSize:15, fontWeight:600, color:C.text, marginBottom:6 }}>AI Assistant</p>
+            <p style={{ fontSize:13 }}>Ask anything about {file ? `"${file.name}"` : "your files"}.</p>
+          </div>
+        )}
+        {msgs.map((m,i) => (
+          <div key={i} style={{ display:"flex", justifyContent:m.role==="user"?"flex-end":"flex-start" }}>
+            <div style={{ maxWidth:"80%", padding:"10px 14px", borderRadius:14, background:m.role==="user"?C.accent:C.surface, color:m.role==="user"?"#fff":C.text, fontSize:14, lineHeight:1.6, border:m.role==="user"?"none":`1px solid ${C.border}` }}>
+              <Fmt text={m.content} />
+            </div>
+          </div>
+        ))}
+        {loading && <div style={{ display:"flex", gap:5, padding:"10px 14px" }}>{[0,1,2].map(j=><div key={j} style={{ width:7,height:7,borderRadius:"50%",background:C.accent,animation:"bounce 1.2s infinite",animationDelay:`${j*.2}s` }}/>)}</div>}
+        <div ref={bottomRef} />
+      </div>
+      <div style={{ display:"flex", gap:10, paddingTop:12, borderTop:`1px solid ${C.border}` }}>
+        <input value={inp} onChange={e=>setInp(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}}
+          placeholder="Ask a question…"
+          style={{ flex:1, border:`1.5px solid ${C.border}`, borderRadius:12, padding:"11px 16px", fontSize:14, outline:"none", background:C.bg, color:C.text }} />
+        <button onClick={send} disabled={!inp.trim()||loading}
+          style={{ background:inp.trim()&&!loading?C.accent:"#ccc", color:"#fff", border:"none", borderRadius:12, padding:"11px 20px", fontSize:14, fontWeight:600, cursor:inp.trim()&&!loading?"pointer":"not-allowed" }}>
+          Send
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
 function NotesTab({ file, onUpdate, user, isGuest }) {
   const [notes, setNotes] = useState(file.notes||"");
   const [gen, setGen] = useState(false);
