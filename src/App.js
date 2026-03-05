@@ -231,10 +231,6 @@ const GS = `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@3
 ::-webkit-scrollbar{width:6px} ::-webkit-scrollbar-thumb{background:#D8D4CF;border-radius:3px}
 .hov:hover{opacity:0.82} .card-hov:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.10)!important}
 .card-hov{transition:all .2s} .tab:hover{background:#F0EDE9!important} .row:hover{background:#F7F5F2!important} .row{transition:background .15s}
-@media(min-width:769px){
-  .ad-bar{height:60px!important}
-  .ad-bar .ad-inner{height:50px!important}
-}
 @media(max-width:768px){
   .desktop-only{display:none!important}
   .mobile-stack{flex-direction:column!important}
@@ -242,14 +238,11 @@ const GS = `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@3
   .mobile-pad{padding:12px 14px!important}
   .mobile-small-text{font-size:12px!important}
   .tab-label{display:none}
-  .ad-bar{height:50px!important}
-  .ad-bar .ad-inner{height:42px!important}
   .toolbar-wrap{flex-wrap:wrap;gap:6px!important}
 }
-@media(max-width:480px){
-  .ad-bar{height:40px!important}
-  .ad-bar .ad-inner{height:32px!important}
-}
+/* Hard cap on AdSense iframe so it never expands beyond our container */
+ins.adsbygoogle{max-height:46px!important;overflow:hidden!important}
+ins.adsbygoogle iframe{max-height:46px!important}
 @keyframes bounce{0%,80%,100%{transform:scale(.8);opacity:.5}40%{transform:scale(1.1);opacity:1}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
 `; 
@@ -440,7 +433,7 @@ export default function App() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'DM Sans', sans-serif", paddingBottom: 60 }}>
+    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'DM Sans', sans-serif", paddingBottom: 50 }}>
       <style>{GS}</style>
       <Header user={isGuest ? { displayName: guestName, photoURL: null } : user} saving={saving} isGuest={isGuest} onSignOut={isGuest ? handleGuestSignOut : () => signOut(auth)} />
       <AdBanner />
@@ -526,17 +519,19 @@ function AdBanner() {
   }, []);
 
   return (
-    <div className="ad-bar" style={{ position:"fixed", bottom:0, left:0, right:0, zIndex:999, background:C.surface, borderTop:`1px solid ${C.border}`, display:"flex", alignItems:"center", justifyContent:"center", padding:"4px 8px", height:60 }}>
-      <div className="ad-inner" style={{ position:"relative", width:"100%", maxWidth:728, height:50 }}>
-        <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", background:C.bg, border:`1px dashed ${C.border}`, borderRadius:4, pointerEvents:"none" }}>
-          <span className="ad-label" style={{ fontSize:9, color:C.muted, letterSpacing:.5 }}>AD</span>
-        </div>
+    <div style={{
+      position:"fixed", bottom:0, left:0, right:0, zIndex:999,
+      height:50, maxHeight:50, overflow:"hidden",
+      background:C.surface, borderTop:`1px solid ${C.border}`,
+      display:"flex", alignItems:"center", justifyContent:"center",
+    }}>
+      <div style={{ position:"relative", width:"100%", maxWidth:728, height:46, overflow:"hidden" }}>
         <ins className="adsbygoogle"
-          style={{ display:"block", width:"100%", height:"100%", position:"relative", zIndex:1 }}
+          style={{ display:"block", width:"100%", height:46, overflow:"hidden" }}
           data-ad-client="ca-pub-5802600279565250"
           data-ad-slot="7527000448"
-          data-ad-format="auto"
-          data-full-width-responsive="true" />
+          data-ad-format="horizontal"
+          data-full-width-responsive="false" />
       </div>
     </div>
   );
