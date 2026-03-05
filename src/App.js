@@ -1219,11 +1219,7 @@ Rules:
 
 "${raw}"`
       );
-      const combined = notes ? notes + "
-
----
-
-" + result : result;
+      const combined = notes ? notes + "\n\n---\n\n" + result : result;
       setNotes(combined); onUpdate({...file, notes: combined});
       setVoiceStatus("✅ Notes added!");
       setTimeout(() => setVoiceStatus(""), 3000);
