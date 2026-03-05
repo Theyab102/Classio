@@ -321,28 +321,76 @@ export default function App() {
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(FOLDER_COLORS[0]);
 
-  // Restore files from IDB on every load (works for both logged-in and guest)
+  // ── Refs that always hold the latest values (no stale closure issues) ────────
+  const foldersRef  = useRef([]);
+  const userRef     = useRef(null);
+  const isGuestRef  = useRef(false);
+  useEffect(() => { foldersRef.current  = folders;  }, [folders]);
+  useEffect(() => { userRef.current     = user;     }, [user]);
+  useEffect(() => { isGuestRef.current  = isGuest;  }, [isGuest]);
+
+  // ── Save status ────────────────────────────────────────────────────────────
+  const [saveStatus, setSaveStatus] = useState("idle"); // idle | saving | saved | error
+  const saveTimer = useRef(null);
+
+  // ── Strip blobs before saving ──────────────────────────────────────────────
+  const cleanFolders = (flds) => flds.map(folder => ({
+    ...folder,
+    files: (folder.files || []).map(f => {
+      const { _fileObj, ...rest } = f;
+      return { ...rest, linkedFiles: (rest.linkedFiles || []).map(lf => { const { _fileObj: _, ...lr } = lf; return lr; }) };
+    }),
+  }));
+
+  // ── Core save — always reads from ref so it is never stale ────────────────
+  const doSave = useCallback(async () => {
+    const flds    = foldersRef.current;
+    const u       = userRef.current;
+    const guest   = isGuestRef.current;
+    const clean   = cleanFolders(flds);
+    setSaveStatus("saving");
+    try {
+      if (u && !guest) {
+        await setDoc(doc(db, "users", u.uid), { folders: clean }, { merge: true });
+      } else {
+        localStorage.setItem("classio_guest_folders", JSON.stringify(clean));
+      }
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 2000);
+    } catch(e) {
+      console.error("Save error:", e);
+      setSaveStatus("error");
+      setTimeout(() => setSaveStatus("idle"), 3000);
+    }
+  }, []);
+
+  // ── Debounced auto-save: fires 1.5s after last change ─────────────────────
+  const scheduleSave = useCallback(() => {
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(doSave, 1500);
+  }, [doSave]);
+
+  // ── Restore file blobs from IDB ────────────────────────────────────────────
   const restoreFileBlobs = async (rawFolders) => {
-    const storedFiles = await idbGetAll();
+    const stored = await idbGetAll();
     return rawFolders.map(folder => ({
       ...folder,
       files: (folder.files || []).map(file => {
-        const blob = storedFiles[file.id] || FILE_STORE.get(file.id) || null;
+        const blob = stored[file.id] || FILE_STORE.get(file.id) || null;
         if (blob) FILE_STORE.set(file.id, blob);
         return { ...file, _fileObj: blob };
       }),
     }));
   };
 
+  // ── Auth + load ────────────────────────────────────────────────────────────
   useEffect(() => {
-    // Restore guest folders from IDB on load
+    // Try restoring guest data immediately
     (async () => {
       const raw = localStorage.getItem("classio_guest_folders");
       if (raw) {
         try {
-          const parsed = JSON.parse(raw);
-          const restored = await restoreFileBlobs(parsed);
-          // Only use if user is still not logged in
+          const restored = await restoreFileBlobs(JSON.parse(raw));
           setFolders(prev => prev.length === 0 ? restored : prev);
         } catch {}
       }
@@ -353,71 +401,26 @@ export default function App() {
       if (u) {
         setIsGuest(false);
         const snap = await getDoc(doc(db, "users", u.uid)).catch(() => null);
-        const rawFolders = snap?.exists() ? (snap.data().folders || []) : [];
-        const restored = await restoreFileBlobs(rawFolders);
+        const raw  = snap?.exists() ? (snap.data().folders || []) : [];
+        const restored = await restoreFileBlobs(raw);
         setFolders(restored);
       }
     });
   }, []);
 
-  // Manual save — called when user taps the Save button
-  const [saveStatus, setSaveStatus] = useState("idle"); // idle | saving | saved | error
-
-  const manualSave = useCallback(async (flds) => {
-    const foldersToSave = flds || folders;
-    setSaveStatus("saving");
-    try {
-      const clean = foldersToSave.map(folder => ({
-        ...folder,
-        files: (folder.files || []).map(f => {
-          const { _fileObj, ...rest } = f;
-          return {
-            ...rest,
-            linkedFiles: (rest.linkedFiles || []).map(lf => {
-              const { _fileObj: _lfo, ...lr } = lf;
-              return lr;
-            }),
-          };
-        }),
-      }));
-      if (user && !isGuest) {
-        await setDoc(doc(db, "users", user.uid), { folders: clean }, { merge: true });
-      } else {
-        localStorage.setItem("classio_guest_folders", JSON.stringify(clean));
-      }
-      setSaveStatus("saved");
-      setTimeout(() => setSaveStatus("idle"), 2000);
-    } catch(e) {
-      console.error("Save failed:", e);
-      setSaveStatus("error");
-      setTimeout(() => setSaveStatus("idle"), 3000);
-    }
-  }, [folders, user, isGuest]);
-
-  const setFoldersSave = useCallback((flds) => {
+  // ── setFolders + schedule save in one call ─────────────────────────────────
+  const setFoldersSave = (flds) => {
     setFolders(flds);
-    // Guest: always auto-save to localStorage instantly (it is fast)
-    if (isGuest) {
-      try {
-        const clean = flds.map(folder => ({
-          ...folder,
-          files: (folder.files || []).map(f => { const { _fileObj, ...rest } = f; return rest; }),
-        }));
-        localStorage.setItem("classio_guest_folders", JSON.stringify(clean));
-      } catch {}
-    }
-  }, [isGuest]);
+    scheduleSave();
+  };
 
-  const foldersRef = useRef([]);
-  useEffect(() => { foldersRef.current = folders; }, [folders]);
-
-  const updateFolder = useCallback((updated) => {
+  const updateFolder = (updated) => {
     const next = foldersRef.current.map(f => f.id === updated.id ? updated : f);
     setFoldersSave(next);
     if (activeFolder?.id === updated.id) setActiveFolder(updated);
-  }, [setFoldersSave, activeFolder]);
+  };
 
-  const updateFile = useCallback((folderId, updated) => {
+  const updateFile = (folderId, updated) => {
     const withObj = { ...updated, _fileObj: updated._fileObj || FILE_STORE.get(updated.id) || null };
     const next = foldersRef.current.map(f => f.id === folderId
       ? { ...f, files: f.files.map(fi => fi.id === withObj.id ? withObj : fi) }
@@ -425,7 +428,7 @@ export default function App() {
     setFoldersSave(next);
     setActiveFile(withObj);
     setActiveFolder(prev => prev ? { ...prev, files: prev.files.map(fi => fi.id === withObj.id ? withObj : fi) } : prev);
-  }, [setFoldersSave]);
+  };
 
   const handleGuest = (name) => { setGuestName(name); setIsGuest(true); setFolders([]); };
 
@@ -456,7 +459,7 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'DM Sans', sans-serif", paddingBottom: 50 }}>
       <style>{GS}</style>
-      <Header user={isGuest ? { displayName: guestName, photoURL: null } : user} saveStatus={saveStatus} onSave={() => manualSave()} isGuest={isGuest} onSignOut={isGuest ? handleGuestSignOut : () => signOut(auth)} />
+      <Header user={isGuest ? { displayName: guestName, photoURL: null } : user} saveStatus={saveStatus} isGuest={isGuest} onSignOut={isGuest ? handleGuestSignOut : () => signOut(auth)} />
       <AdBanner />
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 14px" }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: 32 }}>
@@ -559,7 +562,7 @@ function AdBanner() {
 }
 
 // ─── HEADER ───────────────────────────────────────────────────────────────────
-function Header({ user, saveStatus, onSave, isGuest, onSignOut }) {
+function Header({ user, saveStatus, isGuest, onSignOut }) {
   return (
     <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 16px", height:56, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
       <div style={{ display:"flex", alignItems:"center", gap:8 }}>
@@ -569,16 +572,11 @@ function Header({ user, saveStatus, onSave, isGuest, onSignOut }) {
         <span style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:700, color:C.text, letterSpacing:-0.5 }}>Classio</span>
       </div>
       <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-        {!isGuest && (
-          <button onClick={onSave} disabled={saveStatus === "saving"}
-            style={{
-              fontSize:12, fontWeight:600, cursor: saveStatus==="saving" ? "default" : "pointer",
-              background: saveStatus==="saved" ? C.green : saveStatus==="error" ? "#e53e3e" : C.accent,
-              color:"#fff", border:"none", borderRadius:8, padding:"5px 14px",
-              opacity: saveStatus==="saving" ? 0.7 : 1, transition:"background .3s"
-            }}>
-            {saveStatus==="saving" ? "Saving…" : saveStatus==="saved" ? "✓ Saved" : saveStatus==="error" ? "Error — Retry" : "💾 Save"}
-          </button>
+        {!isGuest && saveStatus !== "idle" && (
+          <span style={{ fontSize:12, fontWeight:600,
+            color: saveStatus==="saved" ? C.green : saveStatus==="error" ? "#e53e3e" : C.muted }}>
+            {saveStatus==="saving" ? "Saving…" : saveStatus==="saved" ? "✓ Saved" : "⚠ Save failed"}
+          </span>
         )}
         {isGuest && <span className="desktop-only" style={{ fontSize:11, background:C.warmL, color:C.warm, border:`1px solid ${C.warm}44`, borderRadius:20, padding:"3px 8px", fontWeight:600 }}>Guest</span>}
         {user?.photoURL
