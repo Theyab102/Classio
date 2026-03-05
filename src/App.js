@@ -238,9 +238,16 @@ const GS = `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@3
   .mobile-pad{padding:12px 14px!important}
   .mobile-small-text{font-size:12px!important}
   .tab-label{display:none}
-  .ad-bar{height:44px!important}
-  .ad-bar ins{height:36px!important}
+  .ad-bar{height:36px!important;padding:2px 6px!important}
+  .ad-bar .ad-inner{height:28px!important;max-width:100%!important}
+  .ad-bar ins{height:28px!important;max-height:28px!important}
   .toolbar-wrap{flex-wrap:wrap;gap:6px!important}
+  .ad-bar .ad-label{font-size:9px!important}
+}
+@media(max-width:480px){
+  .ad-bar{height:32px!important;padding:1px 4px!important}
+  .ad-bar .ad-inner{height:24px!important}
+  .ad-bar ins{height:24px!important;max-height:24px!important}
 }
 @keyframes bounce{0%,80%,100%{transform:scale(.8);opacity:.5}40%{transform:scale(1.1);opacity:1}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
@@ -339,7 +346,7 @@ export default function App() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'DM Sans', sans-serif", paddingBottom: 52 }}>
+    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'DM Sans', sans-serif", paddingBottom: 48 }}>
       <style>{GS}</style>
       <Header user={isGuest ? { displayName: guestName, photoURL: null } : user} saving={saving} isGuest={isGuest} onSignOut={isGuest ? handleGuestSignOut : () => signOut(auth)} />
       <AdBanner />
@@ -425,13 +432,13 @@ function AdBanner() {
   }, []);
 
   return (
-    <div className="ad-bar" style={{ position:"fixed", bottom:0, left:0, right:0, zIndex:999, background:C.surface, borderTop:`1px solid ${C.border}`, display:"flex", alignItems:"center", justifyContent:"center", padding:"3px 8px", height:50 }}>
-      <div style={{ position:"relative", width:"100%", maxWidth:728, height:42 }}>
-        <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", background:C.bg, border:`1px dashed ${C.border}`, borderRadius:6, pointerEvents:"none" }}>
-          <span style={{ fontSize:10, color:C.muted, letterSpacing:1 }}>ADVERTISEMENT</span>
+    <div className="ad-bar" style={{ position:"fixed", bottom:0, left:0, right:0, zIndex:999, background:C.surface, borderTop:`1px solid ${C.border}`, display:"flex", alignItems:"center", justifyContent:"center", padding:"2px 6px", height:46 }}>
+      <div className="ad-inner" style={{ position:"relative", width:"100%", maxWidth:728, height:38 }}>
+        <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", background:C.bg, border:`1px dashed ${C.border}`, borderRadius:4, pointerEvents:"none" }}>
+          <span className="ad-label" style={{ fontSize:9, color:C.muted, letterSpacing:.5 }}>AD</span>
         </div>
         <ins className="adsbygoogle"
-          style={{ display:"block", width:"100%", height:42, position:"relative", zIndex:1 }}
+          style={{ display:"block", width:"100%", height:"100%", position:"relative", zIndex:1 }}
           data-ad-client="ca-pub-5802600279565250"
           data-ad-slot="7527000448"
           data-ad-format="auto"
@@ -668,7 +675,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
 function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
   const [tab, setTab] = useState("view");
   const TABS = [
-    {id:"view",label:"View & Annotate",icon:I.file},
+    {id:"view",label:"View File",icon:I.file},
     {id:"notes",label:"Notes",icon:I.notes},
     {id:"cards",label:"Study Cards",icon:I.cards},
     {id:"ai",label:"AI Assistant",icon:I.ai},
@@ -711,127 +718,100 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
 }
 
 function ViewTab({ file, onUpdate }) {
-  const canvasRef = useRef(null);
-  const drawCanvasRef = useRef(null);
-  const [pdfDoc, setPdfDoc] = useState(null);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [tool, setTool] = useState("pen");
-  const [color, setColor] = useState("#E53E3E");
-  const [brushSize, setBrushSize] = useState(3);
-  const [drawing, setDrawing] = useState(false);
-  const [lastPos, setLastPos] = useState(null);
+  const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
+  const [objectUrl, setObjectUrl] = useState(null);
   const [explaining, setExplaining] = useState(false);
   const [explanation, setExplanation] = useState("");
   const [showExplain, setShowExplain] = useState(false);
-  const [explainPageNum, setExplainPageNum] = useState(1);
-  const [imgSrc, setImgSrc] = useState(null);
+  const [pageNum, setPageNum] = useState(1);
+  const [tool, setTool] = useState("pen");
+  const [color, setColor] = useState("#E53E3E");
+  const [brushSize, setBrushSize] = useState(3);
+  const canvasRef = useRef(null);
+  const drawCanvasRef = useRef(null);
+  const pdfDocRef = useRef(null);
+  const renderTaskRef = useRef(null);
+  const [totalPages, setTotalPages] = useState(0);
+  const [pdfLoaded, setPdfLoaded] = useState(false);
   const [annotations, setAnnotations] = useState({});
-  // Resolve file object — check live reference first, then fall back to FILE_STORE
-  const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
+  const [drawing, setDrawing] = useState(false);
+  const [lastPos, setLastPos] = useState(null);
 
-  const isPDF = fileObj && (fileObj.type === "application/pdf" || fileObj.name.toLowerCase().endsWith(".pdf"));
-  const isImage = fileObj && fileObj.type.startsWith("image/");
-  const isText = fileObj && (fileObj.type.startsWith("text/") || fileObj.name.endsWith(".txt") || fileObj.name.endsWith(".md") || fileObj.name.endsWith(".csv"));
-  const isWord = fileObj && (fileObj.name.toLowerCase().endsWith(".docx") || fileObj.name.toLowerCase().endsWith(".doc"));
-  const isPPT = fileObj && (fileObj.name.toLowerCase().endsWith(".pptx") || fileObj.name.toLowerCase().endsWith(".ppt"));
-  const isExcel = fileObj && (fileObj.name.toLowerCase().endsWith(".xlsx") || fileObj.name.toLowerCase().endsWith(".xls"));
-  const isOffice = isWord || isPPT || isExcel;
+  const isPDF = fileObj && (fileObj.type === "application/pdf" || fileObj.name?.toLowerCase().endsWith(".pdf"));
+  const isImage = fileObj && fileObj.type?.startsWith("image/");
+  const isOfficeOrText = fileObj && !isPDF && !isImage;
 
-  // Load PDF
+  // Create a blob URL for the file so browser renders it natively
+  useEffect(() => {
+    if (!fileObj) return;
+    const url = URL.createObjectURL(fileObj);
+    setObjectUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [fileObj]);
+
+  // Load PDF using pdf.js for annotation support
   useEffect(() => {
     if (!isPDF || !fileObj) return;
-    setLoading(true);
     (async () => {
       if (!window.pdfjsLib) {
         await new Promise((res, rej) => {
           const s = document.createElement("script");
           s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
-          s.onload = res; s.onerror = rej;
-          document.head.appendChild(s);
+          s.onload = res; s.onerror = rej; document.head.appendChild(s);
         });
         window.pdfjsLib.GlobalWorkerOptions.workerSrc =
           "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
       }
       const ab = await fileObj.arrayBuffer();
       const doc = await window.pdfjsLib.getDocument({ data: ab }).promise;
-      setPdfDoc(doc);
+      pdfDocRef.current = doc;
       setTotalPages(doc.numPages);
-      setLoading(false);
+      setPdfLoaded(true);
     })();
   }, [fileObj]);
 
-  // Load image URL
-  useEffect(() => {
-    if (!isImage || !fileObj) return;
-    const url = URL.createObjectURL(fileObj);
-    setImgSrc(url);
-    return () => URL.revokeObjectURL(url);
-  }, [fileObj]);
-
-  // Save annotation for current page before switching
-  const saveAnnotation = () => {
-    if (drawCanvasRef.current) {
-      setAnnotations(prev => ({ ...prev, [page]: drawCanvasRef.current.toDataURL() }));
-    }
-  };
-
-  // Render PDF page - clean render of exactly what the user uploaded
-  const renderTaskRef = useRef(null);
-  const renderPage = async (doc, pageNum) => {
-    if (!canvasRef.current) return;
-    // Cancel any existing render first
-    if (renderTaskRef.current) {
-      try { renderTaskRef.current.cancel(); } catch {}
-      renderTaskRef.current = null;
-    }
+  // Render PDF page cleanly
+  const renderPDFPage = async (pg) => {
+    if (!pdfDocRef.current || !canvasRef.current) return;
+    if (renderTaskRef.current) { try { renderTaskRef.current.cancel(); } catch {} }
     try {
-      const pdfPage = await doc.getPage(pageNum);
-      // Use scale based on container width for best fit
-      const containerWidth = canvasRef.current.parentElement?.clientWidth || 800;
+      const pdfPage = await pdfDocRef.current.getPage(pg);
+      const containerW = canvasRef.current.parentElement?.clientWidth || 780;
       const baseVp = pdfPage.getViewport({ scale: 1 });
-      const scale = Math.min(1.8, (containerWidth - 40) / baseVp.width);
+      const scale = Math.min(2.0, (containerW - 32) / baseVp.width);
       const vp = pdfPage.getViewport({ scale });
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      // Set canvas to exact PDF page dimensions
-      canvas.width = vp.width;
-      canvas.height = vp.height;
-      const ctx = canvas.getContext("2d");
-      // White background - renders the PDF exactly as it is
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      // Render the actual PDF page pixels
-      const task = pdfPage.render({ canvasContext: ctx, viewport: vp });
+      const c = canvasRef.current;
+      c.width = vp.width; c.height = vp.height;
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, c.width, c.height);
+      const task = pdfPage.render({ canvasContext: ctx, viewport: vp, intent: "display" });
       renderTaskRef.current = task;
       await task.promise;
       renderTaskRef.current = null;
-      // Set up drawing layer on top - same size
+      // Sync draw canvas
       if (drawCanvasRef.current) {
         const dc = drawCanvasRef.current;
-        dc.width = vp.width;
-        dc.height = vp.height;
+        dc.width = vp.width; dc.height = vp.height;
         dc.getContext("2d").clearRect(0, 0, dc.width, dc.height);
-        // Restore any annotations for this page
-        if (annotations[pageNum]) {
+        if (annotations[pg]) {
           const img = new Image();
-          img.onload = () => { if (dc) dc.getContext("2d").drawImage(img, 0, 0); };
-          img.src = annotations[pageNum];
+          img.onload = () => dc.getContext("2d").drawImage(img, 0, 0);
+          img.src = annotations[pg];
         }
       }
-    } catch(e) {
-      if (e.name !== "RenderingCancelledException") console.error("PDF render:", e);
-    }
+    } catch(e) { if (e.name !== "RenderingCancelledException") console.error(e); }
   };
 
-  useEffect(() => {
-    if (pdfDoc) renderPage(pdfDoc, page);
-  }, [pdfDoc, page]);
+  useEffect(() => { if (pdfLoaded) renderPDFPage(pageNum); }, [pdfLoaded, pageNum]);
 
-  const changePage = (n) => { saveAnnotation(); setPage(n); };
+  const saveAnnotation = () => {
+    if (drawCanvasRef.current)
+      setAnnotations(prev => ({ ...prev, [pageNum]: drawCanvasRef.current.toDataURL() }));
+  };
+  const changePage = (n) => { saveAnnotation(); setPageNum(n); };
 
-  // Drawing helpers
+  // Drawing
   const getPos = (e, canvas) => {
     const r = canvas.getBoundingClientRect();
     const sx = canvas.width / r.width, sy = canvas.height / r.height;
@@ -839,85 +819,61 @@ function ViewTab({ file, onUpdate }) {
     const cy = e.touches ? e.touches[0].clientY : e.clientY;
     return { x: (cx - r.left) * sx, y: (cy - r.top) * sy };
   };
-
-  const startDraw = (e) => {
-    e.preventDefault();
-    if (!drawCanvasRef.current) return;
-    setDrawing(true);
-    setLastPos(getPos(e, drawCanvasRef.current));
-  };
-
+  const startDraw = (e) => { e.preventDefault(); if (!drawCanvasRef.current) return; setDrawing(true); setLastPos(getPos(e, drawCanvasRef.current)); };
   const doDraw = (e) => {
     e.preventDefault();
     if (!drawing || !drawCanvasRef.current || !lastPos) return;
     const canvas = drawCanvasRef.current;
     const ctx = canvas.getContext("2d");
     const pos = getPos(e, canvas);
-    ctx.beginPath();
-    ctx.moveTo(lastPos.x, lastPos.y);
-    ctx.lineTo(pos.x, pos.y);
-    if (tool === "eraser") {
-      ctx.globalCompositeOperation = "destination-out";
-      ctx.lineWidth = brushSize * 6;
-    } else if (tool === "highlight") {
-      ctx.globalCompositeOperation = "source-over";
-      ctx.globalAlpha = 0.35;
-      ctx.lineWidth = brushSize * 8;
-      ctx.strokeStyle = color;
-    } else {
-      ctx.globalCompositeOperation = "source-over";
-      ctx.globalAlpha = 1;
-      ctx.lineWidth = brushSize;
-      ctx.strokeStyle = color;
-    }
-    ctx.lineCap = "round"; ctx.lineJoin = "round";
-    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(lastPos.x, lastPos.y); ctx.lineTo(pos.x, pos.y);
+    if (tool === "eraser") { ctx.globalCompositeOperation = "destination-out"; ctx.lineWidth = brushSize * 6; }
+    else if (tool === "highlight") { ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 0.35; ctx.lineWidth = brushSize * 8; ctx.strokeStyle = color; }
+    else { ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 1; ctx.lineWidth = brushSize; ctx.strokeStyle = color; }
+    ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.stroke();
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = "source-over";
     setLastPos(pos);
   };
-
   const stopDraw = () => { if (drawing) { setDrawing(false); saveAnnotation(); } };
-
-  const clearDrawing = () => {
-    if (drawCanvasRef.current) {
-      drawCanvasRef.current.getContext("2d").clearRect(0, 0, drawCanvasRef.current.width, drawCanvasRef.current.height);
-      setAnnotations(prev => { const n = {...prev}; delete n[page]; return n; });
-    }
+  const clearDraw = () => {
+    if (drawCanvasRef.current) drawCanvasRef.current.getContext("2d").clearRect(0, 0, drawCanvasRef.current.width, drawCanvasRef.current.height);
+    setAnnotations(prev => { const n={...prev}; delete n[pageNum]; return n; });
   };
 
-  const doExplain = async (pg) => {
+  const doExplain = async () => {
     setExplaining(true); setShowExplain(true); setExplanation("");
     try {
       let pageText = "";
-      if (pdfDoc) {
-        const p = await pdfDoc.getPage(pg);
+      if (pdfDocRef.current) {
+        // Only get text from the CURRENT page
+        const p = await pdfDocRef.current.getPage(pageNum);
         const tc = await p.getTextContent();
-        pageText = tc.items.map(i => i.str).join(" ");
+        pageText = tc.items.map(i => i.str).join(" ").trim();
       } else {
         const t = await extractFileText(fileObj).catch(() => "");
         pageText = (t || "").slice(0, 4000);
       }
       const txt = await callClaude(
-        "You are a helpful study tutor. Explain content clearly for a student. Use **bold** for key terms and • for bullet points.",
+        "You are a helpful study tutor. Explain the content clearly and simply for a student. Use plain text only — no asterisks, no markdown symbols.",
         pageText
-          ? `Explain this content from ${isPDF ? `page ${pg} of` : ""} "${file.name}" clearly:
+          ? `Explain ONLY this content from page ${pageNum} of "${file.name}". Do not add outside information:
 
-${pageText.slice(0, 4000)}`
-          : `Briefly explain what a student should know about this topic from "${file.name}".`
+${pageText.slice(0, 3000)}`
+          : `Briefly explain the topic of "${file.name}" page ${pageNum} to a student.`
       );
       setExplanation(txt);
-    } catch(e) { setExplanation(`Error: ${e.message}`); }
+    } catch(e) { setExplanation("Error: " + e.message); }
     setExplaining(false);
   };
 
-  const COLORS = ["#E53E3E","#FF8C00","#ECC94B","#38A169","#3182CE","#805AD5","#000000","#FFFFFF"];
-  const TOOLS = [{ id:"pen", label:"✏️" }, { id:"highlight", label:"🖊️" }, { id:"eraser", label:"🧹" }];
+  const COLORS = ["#E53E3E","#FF8C00","#ECC94B","#38A169","#3182CE","#805AD5","#1a1a1a","#fff"];
+  const TOOLS = [{ id:"pen", label:"✏️", title:"Pen" }, { id:"highlight", label:"🖊️", title:"Highlight" }, { id:"eraser", label:"🧹", title:"Eraser" }];
 
   if (!fileObj) return (
     <div style={{ textAlign:"center", padding:"60px 24px" }}>
       <div style={{ fontSize:48, marginBottom:12 }}>📂</div>
       <p style={{ fontSize:16, fontWeight:600, color:C.text, marginBottom:6 }}>Open file to view it</p>
-      <p style={{ fontSize:13, color:C.muted, marginBottom:16 }}>This file needs to be opened from your device to display here.</p>
+      <p style={{ fontSize:13, color:C.muted, marginBottom:16 }}>Re-open this file from the folder to view it here.</p>
       <label style={{ display:"inline-flex", alignItems:"center", gap:8, background:C.accent, color:"#fff", borderRadius:10, padding:"10px 20px", cursor:"pointer", fontSize:14, fontWeight:600 }}>
         📁 Open File
         <input type="file" style={{ display:"none" }} onChange={e => {
@@ -930,106 +886,89 @@ ${pageText.slice(0, 4000)}`
 
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 108px)" }}>
-      {/* Toolbar */}
-      <div className="toolbar-wrap" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"7px 12px", display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
-        {/* Draw tools */}
-        <div style={{ display:"flex", gap:4 }}>
+      {/* Toolbar — only for PDF */}
+      {isPDF && (
+        <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"7px 14px", display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
           {TOOLS.map(t => (
-            <button key={t.id} onClick={() => setTool(t.id)}
+            <button key={t.id} onClick={() => setTool(t.id)} title={t.title}
               style={{ width:32, height:32, borderRadius:7, border:`1.5px solid ${tool===t.id?C.accent:C.border}`, background:tool===t.id?C.accentL:"#fff", cursor:"pointer", fontSize:14 }}>
               {t.label}
             </button>
           ))}
-        </div>
-        <div style={{ width:1, height:20, background:C.border }} />
-        {/* Colors */}
-        <div style={{ display:"flex", gap:3 }}>
+          <div style={{ width:1, height:20, background:C.border }} />
           {COLORS.map(col => (
             <button key={col} onClick={() => setColor(col)}
               style={{ width:18, height:18, borderRadius:"50%", background:col, border:color===col?`3px solid ${C.accent}`:`1px solid ${C.border}`, cursor:"pointer", flexShrink:0 }} />
           ))}
-        </div>
-        <div style={{ width:1, height:20, background:C.border }} />
-        <div style={{ display:"flex", alignItems:"center", gap:5 }}>
-          <span style={{ fontSize:11, color:C.muted }}>Size</span>
+          <div style={{ width:1, height:20, background:C.border }} />
           <input type="range" min="1" max="20" value={brushSize} onChange={e => setBrushSize(+e.target.value)} style={{ width:60 }} />
-        </div>
-        <button onClick={clearDrawing} style={{ fontSize:12, background:"none", border:`1px solid ${C.border}`, borderRadius:6, padding:"4px 8px", cursor:"pointer", color:C.muted }}>🗑️</button>
-        <div style={{ flex:1 }} />
-        {/* Page nav */}
-        {(isPDF || isPPT) && totalPages > 0 && (
+          <button onClick={clearDraw} style={{ fontSize:12, background:"none", border:`1px solid ${C.border}`, borderRadius:6, padding:"4px 8px", cursor:"pointer", color:C.muted }}>🗑️ Clear</button>
+          <div style={{ flex:1 }} />
           <div style={{ display:"flex", alignItems:"center", gap:5 }}>
-            <button onClick={() => changePage(Math.max(1, page-1))} disabled={page===1}
-              style={{ width:28, height:28, borderRadius:6, border:`1px solid ${C.border}`, background:"#fff", cursor:page===1?"not-allowed":"pointer", opacity:page===1?.4:1 }}>‹</button>
-            <input type="number" min="1" max={totalPages} value={page}
+            <button onClick={() => changePage(Math.max(1, pageNum-1))} disabled={pageNum===1}
+              style={{ width:28, height:28, borderRadius:6, border:`1px solid ${C.border}`, background:"#fff", cursor:pageNum===1?"not-allowed":"pointer", opacity:pageNum===1?.4:1 }}>‹</button>
+            <input type="number" min="1" max={totalPages} value={pageNum}
               onChange={e => { const v=parseInt(e.target.value); if(v>=1&&v<=totalPages) changePage(v); }}
               style={{ width:40, textAlign:"center", border:`1px solid ${C.border}`, borderRadius:6, padding:"3px 2px", fontSize:13, outline:"none" }} />
             <span style={{ fontSize:12, color:C.muted }}>/{totalPages}</span>
-            <button onClick={() => changePage(Math.min(totalPages, page+1))} disabled={page===totalPages}
-              style={{ width:28, height:28, borderRadius:6, border:`1px solid ${C.border}`, background:"#fff", cursor:page===totalPages?"not-allowed":"pointer", opacity:page===totalPages?.4:1 }}>›</button>
+            <button onClick={() => changePage(Math.min(totalPages, pageNum+1))} disabled={pageNum===totalPages}
+              style={{ width:28, height:28, borderRadius:6, border:`1px solid ${C.border}`, background:"#fff", cursor:pageNum===totalPages?"not-allowed":"pointer", opacity:pageNum===totalPages?.4:1 }}>›</button>
           </div>
-        )}
-        {/* AI Explain */}
-        {isPDF && totalPages > 0 ? (
-          <div style={{ display:"flex", alignItems:"center", gap:5 }}>
-            <span style={{ fontSize:11, color:C.muted }}>Explain pg</span>
-            <input type="number" min="1" max={totalPages} value={explainPageNum}
-              onChange={e => setExplainPageNum(Math.max(1, Math.min(totalPages, parseInt(e.target.value)||1)))}
-              style={{ width:40, textAlign:"center", border:`1px solid ${C.border}`, borderRadius:6, padding:"3px 2px", fontSize:13, outline:"none" }} />
-            <button onClick={() => doExplain(explainPageNum)} disabled={explaining}
-              style={{ display:"flex", alignItems:"center", gap:5, background:C.accent, color:"#fff", border:"none", borderRadius:7, padding:"6px 12px", fontSize:12, fontWeight:600, cursor:explaining?"not-allowed":"pointer" }}>
-              <Icon d={I.sparkle} size={12} color="#fff" sw={2} />{explaining?"…":"Explain"}
-            </button>
-          </div>
-        ) : (isImage || isText || isOffice) && (
-          <button onClick={() => doExplain(1)} disabled={explaining}
-            style={{ display:"flex", alignItems:"center", gap:5, background:C.accent, color:"#fff", border:"none", borderRadius:7, padding:"6px 12px", fontSize:12, fontWeight:600, cursor:explaining?"not-allowed":"pointer" }}>
-            <Icon d={I.sparkle} size={12} color="#fff" sw={2} />{explaining?"Explaining…":"AI Explain"}
+          <button onClick={doExplain} disabled={explaining}
+            style={{ display:"flex", alignItems:"center", gap:5, background:C.accent, color:"#fff", border:"none", borderRadius:7, padding:"6px 14px", fontSize:13, fontWeight:600, cursor:explaining?"not-allowed":"pointer" }}>
+            <Icon d={I.sparkle} size={12} color="#fff" sw={2} />{explaining ? "Explaining…" : `Explain Page ${pageNum}`}
           </button>
-        )}
-      </div>
+        </div>
+      )}
+      {/* Non-PDF toolbar */}
+      {!isPDF && (
+        <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"7px 14px", display:"flex", alignItems:"center", gap:8 }}>
+          <span style={{ fontSize:13, color:C.muted }}>Viewing: <strong style={{ color:C.text }}>{file.name}</strong></span>
+          <div style={{ flex:1 }} />
+          <button onClick={doExplain} disabled={explaining}
+            style={{ display:"flex", alignItems:"center", gap:5, background:C.accent, color:"#fff", border:"none", borderRadius:7, padding:"6px 14px", fontSize:13, fontWeight:600, cursor:explaining?"not-allowed":"pointer" }}>
+            <Icon d={I.sparkle} size={12} color="#fff" sw={2} />{explaining ? "Explaining…" : "AI Explain"}
+          </button>
+        </div>
+      )}
 
-      {/* Viewer area */}
+      {/* Viewer + Explain panel */}
       <div style={{ flex:1, display:"flex", overflow:"hidden" }}>
-        <div style={{ flex:1, overflow:"auto", background:"#3a3a3a", display:"flex", justifyContent:"center", alignItems:"flex-start", padding:"20px", position:"relative" }}>
-          {loading && (
-            <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", background:"#3a3a3a" }}>
-              <div style={{ textAlign:"center", color:"#fff" }}>
-                <div style={{ fontSize:32, marginBottom:10 }}>📄</div>
-                <p style={{ fontSize:14 }}>Loading file…</p>
-              </div>
-            </div>
-          )}
-          {/* PDF */}
+        <div style={{ flex:1, overflow:"auto", background:"#404040", display:"flex", justifyContent:"center", alignItems:"flex-start", padding:"20px" }}>
+          {/* PDF: canvas render with drawing layer */}
           {isPDF && (
-            <div style={{ position:"relative", boxShadow:"0 8px 40px rgba(0,0,0,.5)", display:"inline-block", lineHeight:0 }}>
+            <div style={{ position:"relative", display:"inline-block", lineHeight:0, boxShadow:"0 4px 24px rgba(0,0,0,.5)" }}>
               <canvas ref={canvasRef} style={{ display:"block" }} />
               <canvas ref={drawCanvasRef}
-                style={{ position:"absolute", top:0, left:0, width:"100%", height:"100%", cursor:tool==="eraser"?"cell":"crosshair", touchAction:"none", opacity:1 }}
+                style={{ position:"absolute", top:0, left:0, width:"100%", height:"100%", cursor:tool==="eraser"?"cell":"crosshair", touchAction:"none" }}
                 onMouseDown={startDraw} onMouseMove={doDraw} onMouseUp={stopDraw} onMouseLeave={stopDraw}
                 onTouchStart={startDraw} onTouchMove={doDraw} onTouchEnd={stopDraw} />
             </div>
           )}
-          {isImage && imgSrc && <img src={imgSrc} alt={file.name} style={{ maxWidth:"100%", boxShadow:"0 8px 40px rgba(0,0,0,.5)" }} />}
-          {isText && <TextViewer fileObj={fileObj} />}
-          {isWord && <WordViewer fileObj={fileObj} />}
-          {isPPT && <PPTViewer fileObj={fileObj} page={page} onTotalPages={setTotalPages} />}
-          {isExcel && <ExcelViewer fileObj={fileObj} />}
-          {!isPDF && !isImage && !isText && !isOffice && (
-            <div style={{ textAlign:"center", color:"#fff", padding:"60px 20px" }}>
-              <div style={{ fontSize:56, marginBottom:14 }}>📎</div>
-              <p style={{ fontSize:15, fontWeight:600, marginBottom:6 }}>{file.name}</p>
-              <p style={{ opacity:.6, fontSize:13 }}>Preview not available. Use AI Assistant tab.</p>
+          {/* Images: show directly */}
+          {isImage && objectUrl && (
+            <img src={objectUrl} alt={file.name} style={{ maxWidth:"100%", maxHeight:"calc(100vh - 200px)", boxShadow:"0 4px 24px rgba(0,0,0,.5)", borderRadius:4 }} />
+          )}
+          {/* Office/Text files: use browser native iframe viewer */}
+          {isOfficeOrText && objectUrl && (
+            <div style={{ width:"100%", height:"calc(100vh - 200px)", background:"#fff", borderRadius:4, overflow:"hidden", boxShadow:"0 4px 24px rgba(0,0,0,.5)" }}>
+              <iframe
+                src={objectUrl}
+                title={file.name}
+                style={{ width:"100%", height:"100%", border:"none" }}
+                sandbox="allow-same-origin allow-scripts"
+              />
             </div>
           )}
         </div>
+
         {/* AI Explain panel */}
         {showExplain && (
-          <div style={{ width:320, minWidth:260, background:C.surface, borderLeft:`1px solid ${C.border}`, display:"flex", flexDirection:"column", overflow:"hidden" }}>
+          <div style={{ width:320, background:C.surface, borderLeft:`1px solid ${C.border}`, display:"flex", flexDirection:"column", overflow:"hidden" }}>
             <div style={{ padding:"12px 16px", borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
               <div style={{ display:"flex", alignItems:"center", gap:7 }}>
                 <Icon d={I.sparkle} size={14} color={C.accent} sw={2} />
-                <span style={{ fontSize:13, fontWeight:700, color:C.text }}>{isPDF ? `Page ${explainPageNum}` : "AI"} Explanation</span>
+                <span style={{ fontSize:13, fontWeight:700, color:C.text }}>{isPDF ? `Page ${pageNum} Explanation` : "AI Explanation"}</span>
               </div>
               <button onClick={() => setShowExplain(false)} style={{ background:"none", border:"none", cursor:"pointer" }}>
                 <Icon d={I.x} size={14} color={C.muted} />
@@ -1038,7 +977,7 @@ ${pageText.slice(0, 4000)}`
             <div style={{ flex:1, overflowY:"auto", padding:"14px 16px" }}>
               {explaining
                 ? <div style={{ display:"flex", gap:5, paddingTop:8 }}>{[0,1,2].map(j=><div key={j} style={{ width:7,height:7,borderRadius:"50%",background:C.accent,animation:"bounce 1.2s infinite",animationDelay:`${j*.2}s` }}/>)}</div>
-                : <div style={{ fontSize:13, lineHeight:1.7, color:C.text }}><Fmt text={explanation} /></div>
+                : <div style={{ fontSize:13, lineHeight:1.7, color:C.text, whiteSpace:"pre-wrap" }}>{explanation}</div>
               }
             </div>
           </div>
@@ -1368,15 +1307,16 @@ STRICT FORMATTING RULES - you MUST follow these exactly:
     try {
       const result = await callClaude(
         `You are an expert note-taker. A student recorded a voice note from a lecture or study session.
-Rules:
+STRICT RULES:
 1. ONLY use what was said — never add outside information
-2. Fix grammar, remove filler words (um, uh, like, you know)
-3. Organise into clear notes with **BOLD HEADINGS**
-4. Use bullet points (•) for key facts
-5. Bold important terms
-6. Make notes clear and useful for exam revision
-7. Do your best even if the recording is short or unclear`,
-        `Turn this raw speech into clean organised study notes:
+2. Fix grammar, remove all filler words (um, uh, like, you know, sort of)
+3. Write section headings in ALL CAPS on their own line (example: INTRODUCTION)
+4. Use a dash (-) for every bullet point
+5. NEVER use asterisks (*) or double asterisks (**) anywhere in your response
+6. NEVER use pound signs (#) or any markdown formatting
+7. Plain text only — no symbols except dashes and dots
+8. Make notes clear and useful for exam revision`,
+        `Turn this raw speech into clean organised study notes. No asterisks, no markdown:
 
 "${raw}"`
       );
@@ -1636,16 +1576,26 @@ function GameTab({ file }) {
   if (activeGame==="speedrun") return <Speedrun cards={cards} onBack={()=>setActiveGame(null)} />;
   if (activeGame==="truefalse") return <TrueFalse cards={cards} onBack={()=>setActiveGame(null)} />;
   if (activeGame==="memory") return <Memory cards={cards} onBack={()=>setActiveGame(null)} />;
+  if (activeGame==="fillblank") return <FillBlank cards={cards} onBack={()=>setActiveGame(null)} />;
+  if (activeGame==="flashcard") return <FlashcardFlip cards={cards} onBack={()=>setActiveGame(null)} />;
+  if (activeGame==="quizshow") return <QuizShow cards={cards} onBack={()=>setActiveGame(null)} />;
+  if (activeGame==="rapidfire") return <RapidFire cards={cards} onBack={()=>setActiveGame(null)} />;
+  if (activeGame==="voice") return <VoiceAnswer cards={cards} onBack={()=>setActiveGame(null)} />;
 
   const GAMES = [
-    {id:"mcq",emoji:"🧠",title:"Multiple Choice",desc:"Pick the correct answer from 4 options",bg:C.accentL,accent:C.accent},
-    {id:"scramble",emoji:"🔀",title:"Word Scramble",desc:"Unscramble the answer letters",bg:C.warmL,accent:C.warm},
-    {id:"match",emoji:"🔗",title:"Matching Pairs",desc:"Connect each term to its definition",bg:C.greenL,accent:C.green},
-    {id:"falling",emoji:"🧱",title:"Falling Blocks",desc:"Type the answer before the block falls!",bg:C.purpleL,accent:C.purple},
-    {id:"tower",emoji:"🏗️",title:"Answer Tower",desc:"Build a tower — answer correctly to stack blocks",bg:"#E6FFFA",accent:"#2C7A7B"},
-    {id:"speedrun",emoji:"⚡",title:"Speed Run",desc:"Answer as many as you can in 60 seconds!",bg:"#FFFFF0",accent:"#D69E2E"},
+    {id:"mcq",emoji:"🧠",title:"Multiple Choice",desc:"4 options — pick the right one",bg:C.accentL,accent:C.accent},
+    {id:"voice",emoji:"🎙️",title:"Voice Answer",desc:"Speak your answer out loud — AI grades it",bg:"#f5f3ff",accent:"#7c3aed"},
+    {id:"flashcard",emoji:"🃏",title:"Flashcard Flip",desc:"Flip cards and track what you know",bg:"#f5f3ff",accent:"#7c3aed"},
+    {id:"quizshow",emoji:"🎤",title:"Quiz Show",desc:"Who Wants to Be a Millionaire style with lifelines",bg:"#fef2f2",accent:"#dc2626"},
+    {id:"fillblank",emoji:"✏️",title:"Fill in the Blank",desc:"Complete the sentence with the right answer",bg:"#ecfeff",accent:"#0694a2"},
+    {id:"rapidfire",emoji:"⚡",title:"Rapid Fire",desc:"Type as many correct answers as you can in 45s",bg:"#f0fdf4",accent:"#059669"},
     {id:"truefalse",emoji:"✅",title:"True or False",desc:"Decide if the statement is true or false",bg:"#FAF5FF",accent:"#6B46C1"},
-    {id:"memory",emoji:"🃏",title:"Memory Flip",desc:"Flip cards and match question to answer",bg:"#FFF5F5",accent:"#C53030"},
+    {id:"memory",emoji:"🎴",title:"Memory Flip",desc:"Match question cards to answer cards",bg:"#FFF5F5",accent:"#C53030"},
+    {id:"match",emoji:"🔗",title:"Matching Pairs",desc:"Connect each term to its definition",bg:C.greenL,accent:C.green},
+    {id:"scramble",emoji:"🔀",title:"Word Scramble",desc:"Unscramble the answer letters",bg:C.warmL,accent:C.warm},
+    {id:"speedrun",emoji:"🏃",title:"Speed Run",desc:"Answer as many as you can in 60 seconds",bg:"#FFFFF0",accent:"#D69E2E"},
+    {id:"tower",emoji:"🏗️",title:"Answer Tower",desc:"Build a tower — answer correctly to stack blocks",bg:"#E6FFFA",accent:"#2C7A7B"},
+    {id:"falling",emoji:"🧱",title:"Falling Blocks",desc:"Type the answer before the block falls",bg:C.purpleL,accent:C.purple},
   ];
 
   return (
@@ -2039,6 +1989,500 @@ function Memory({ cards, onBack }) {
         })}
       </div>
       <style>{`.preserve-3d{transform-style:preserve-3d}`}</style>
+    </div>
+  );
+}
+
+
+// ─── GAME: FILL IN THE BLANK ──────────────────────────────────────────────────
+function FillBlank({ cards, onBack }) {
+  const accent = "#0694a2";
+  const [deck] = useState(() => [...cards].sort(() => Math.random() - .5));
+  const [curr, setCurr] = useState(0);
+  const [inp, setInp] = useState("");
+  const [result, setResult] = useState(null);
+  const [score, setScore] = useState(0);
+  const [done, setDone] = useState(false);
+  const inputRef = useRef(null);
+
+  useEffect(() => { if (inputRef.current) inputRef.current.focus(); }, [curr]);
+
+  const card = deck[curr];
+  // Hide last word of question to create blank
+  const words = (card?.question || "").trim().split(" ");
+  const blank = words.length > 1 ? words[words.length - 1].replace(/[?:.]/g, "") : card?.answer;
+  const questionWithBlank = words.length > 1 ? words.slice(0, -1).join(" ") + " ___?" : "What is the answer?";
+
+  const check = () => {
+    if (!inp.trim()) return;
+    const ok = inp.trim().toLowerCase() === (card.answer || "").trim().toLowerCase() ||
+               inp.trim().toLowerCase() === blank.toLowerCase();
+    setResult(ok);
+    if (ok) setScore(s => s + 1);
+  };
+
+  const next = () => {
+    if (curr + 1 >= deck.length) { setDone(true); return; }
+    setCurr(c => c + 1); setInp(""); setResult(null);
+  };
+
+  if (done) return <GResults score={score} total={deck.length} onBack={onBack} msg="Fill in the Blank done!" />;
+
+  return (
+    <div style={{ maxWidth: 540, margin: "0 auto" }}>
+      <GHeader title="Fill in the Blank" score={score} curr={curr} total={deck.length} onBack={onBack} accent={accent} />
+      <div style={{ background: "#E6FFFE", border: `2px solid ${accent}33`, borderRadius: 18, padding: "30px 28px", marginBottom: 20, textAlign: "center" }}>
+        <p style={{ fontSize: 11, fontWeight: 700, color: accent, letterSpacing: 1, marginBottom: 14, textTransform: "uppercase" }}>Complete the sentence</p>
+        <p style={{ fontSize: 20, fontWeight: 600, color: C.text, lineHeight: 1.5 }}>{questionWithBlank}</p>
+      </div>
+      {result === null ? (
+        <div style={{ display: "flex", gap: 10 }}>
+          <input ref={inputRef} value={inp} onChange={e => setInp(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && check()}
+            placeholder="Type your answer…"
+            style={{ flex: 1, border: `2px solid ${C.border}`, borderRadius: 12, padding: "12px 16px", fontSize: 15, outline: "none", color: C.text }} />
+          <button onClick={check} disabled={!inp.trim()}
+            style={{ background: accent, color: "#fff", border: "none", borderRadius: 12, padding: "12px 22px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>Check</button>
+        </div>
+      ) : (
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 44, marginBottom: 10 }}>{result ? "✅" : "❌"}</div>
+          {!result && <p style={{ color: C.red, fontSize: 15, marginBottom: 6 }}>Correct answer: <strong>{card.answer}</strong></p>}
+          <button onClick={next} style={{ background: accent, color: "#fff", border: "none", borderRadius: 12, padding: "12px 32px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
+            {curr + 1 >= deck.length ? "See Results" : "Next →"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── GAME: FLASHCARD FLIP ─────────────────────────────────────────────────────
+function FlashcardFlip({ cards, onBack }) {
+  const accent = "#7c3aed";
+  const [deck] = useState(() => [...cards].sort(() => Math.random() - .5));
+  const [curr, setCurr] = useState(0);
+  const [flipped, setFlipped] = useState(false);
+  const [known, setKnown] = useState(0);
+  const [reviewing, setReviewing] = useState([]);
+  const [done, setDone] = useState(false);
+
+  const card = deck[curr];
+
+  const respond = (didKnow) => {
+    if (!didKnow) setReviewing(r => [...r, card]);
+    else setKnown(k => k + 1);
+    if (curr + 1 >= deck.length) { setDone(true); return; }
+    setCurr(c => c + 1); setFlipped(false);
+  };
+
+  if (done) return (
+    <div style={{ maxWidth: 480, margin: "0 auto", textAlign: "center", padding: "40px 0" }}>
+      <div style={{ fontSize: 56, marginBottom: 12 }}>{known >= deck.length * .8 ? "🌟" : "📚"}</div>
+      <h2 style={{ fontFamily: "'Fraunces',serif", fontSize: 26, fontWeight: 700, color: C.text, marginBottom: 8 }}>Done!</h2>
+      <p style={{ fontSize: 32, fontWeight: 700, color: accent, marginBottom: 4 }}>{known}/{deck.length} known</p>
+      <p style={{ fontSize: 14, color: C.muted, marginBottom: 28 }}>{reviewing.length > 0 ? `${reviewing.length} cards to review again` : "You knew them all!"}</p>
+      <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+        {reviewing.length > 0 && <button onClick={() => { /* restart with reviewing cards */ }} style={{ background: "#FFF5F5", color: C.red, border: `1.5px solid ${C.red}33`, borderRadius: 12, padding: "11px 22px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Review {reviewing.length} missed</button>}
+        <button onClick={onBack} style={{ background: accent, color: "#fff", border: "none", borderRadius: 12, padding: "11px 22px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>← Back</button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ maxWidth: 540, margin: "0 auto" }}>
+      <GHeader title="Flashcard Flip" score={known} curr={curr} total={deck.length} onBack={onBack} accent={accent} />
+      <div onClick={() => setFlipped(f => !f)} style={{ cursor: "pointer", perspective: 900, height: 240, marginBottom: 20 }}>
+        <div style={{ position: "relative", width: "100%", height: "100%", transformStyle: "preserve-3d", transition: "transform .5s", transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)" }}>
+          <div style={{ position: "absolute", inset: 0, backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden", background: `linear-gradient(135deg, #ede9fe, #ddd6fe)`, border: `2px solid ${accent}33`, borderRadius: 20, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 28px", textAlign: "center" }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: accent, letterSpacing: 1, marginBottom: 12 }}>QUESTION — tap to flip</p>
+            <p style={{ fontSize: 19, fontWeight: 600, color: C.text, lineHeight: 1.5 }}>{card.question}</p>
+          </div>
+          <div style={{ position: "absolute", inset: 0, backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden", transform: "rotateY(180deg)", background: `linear-gradient(135deg, #f0fdf4, #dcfce7)`, border: "2px solid #16a34a33", borderRadius: 20, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 28px", textAlign: "center" }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: "#16a34a", letterSpacing: 1, marginBottom: 12 }}>ANSWER</p>
+            <p style={{ fontSize: 19, fontWeight: 600, color: C.text, lineHeight: 1.5 }}>{card.answer}</p>
+          </div>
+        </div>
+      </div>
+      {flipped && (
+        <div style={{ display: "flex", gap: 12 }}>
+          <button onClick={() => respond(false)} style={{ flex: 1, background: "#FFF5F5", color: C.red, border: `2px solid ${C.red}33`, borderRadius: 14, padding: "14px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>😕 Still learning</button>
+          <button onClick={() => respond(true)} style={{ flex: 1, background: "#f0fdf4", color: "#16a34a", border: "2px solid #16a34a33", borderRadius: 14, padding: "14px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>✅ Got it!</button>
+        </div>
+      )}
+      {!flipped && <p style={{ textAlign: "center", color: C.muted, fontSize: 13 }}>Tap the card to reveal the answer</p>}
+    </div>
+  );
+}
+
+// ─── GAME: QUIZ SHOW ──────────────────────────────────────────────────────────
+function QuizShow({ cards, onBack }) {
+  const accent = "#dc2626";
+  const [deck] = useState(() => [...cards].sort(() => Math.random() - .5));
+  const [curr, setCurr] = useState(0);
+  const [score, setScore] = useState(0);
+  const [streak, setStreak] = useState(0);
+  const [sel, setSel] = useState(null);
+  const [done, setDone] = useState(false);
+  const [lifelines, setLifelines] = useState({ fifty: true, skip: true });
+
+  const card = deck[curr];
+  const [opts] = useState(() => deck.map(c => {
+    const wrong = cards.filter(x => x.answer !== c.answer).sort(() => Math.random() - .5).slice(0, 3).map(x => x.answer);
+    return [...wrong, c.answer].sort(() => Math.random() - .5);
+  }));
+
+  const [visibleOpts, setVisibleOpts] = useState(() => opts[0]);
+  useEffect(() => { setVisibleOpts(opts[curr]); }, [curr]);
+
+  const choose = (opt) => {
+    if (sel !== null) return;
+    setSel(opt);
+    if (opt === card.answer) { setScore(s => s + (streak >= 2 ? 2 : 1)); setStreak(s => s + 1); }
+    else setStreak(0);
+    setTimeout(() => {
+      if (curr + 1 >= deck.length) setDone(true);
+      else { setCurr(c => c + 1); setSel(null); }
+    }, 1200);
+  };
+
+  const useFifty = () => {
+    if (!lifelines.fifty) return;
+    const wrong = visibleOpts.filter(o => o !== card.answer);
+    const remove = wrong.sort(() => Math.random() - .5).slice(0, 2);
+    setVisibleOpts(v => v.filter(o => !remove.includes(o)));
+    setLifelines(l => ({ ...l, fifty: false }));
+  };
+
+  const useSkip = () => {
+    if (!lifelines.skip) return;
+    setLifelines(l => ({ ...l, skip: false }));
+    if (curr + 1 >= deck.length) setDone(true);
+    else { setCurr(c => c + 1); setSel(null); }
+  };
+
+  if (done) return <GResults score={score} total={deck.length} onBack={onBack} msg="Quiz Show Complete! 🎤" />;
+
+  const OPTION_LABELS = ["A", "B", "C", "D"];
+
+  return (
+    <div style={{ maxWidth: 580, margin: "0 auto" }}>
+      <GHeader title="Quiz Show" score={score} curr={curr} total={deck.length} onBack={onBack} accent={accent} />
+      {streak >= 3 && <div style={{ background: "#fef9c3", border: "1.5px solid #ca8a04", borderRadius: 10, padding: "6px 14px", marginBottom: 12, fontSize: 13, fontWeight: 700, color: "#92400e", textAlign: "center" }}>🔥 {streak} in a row! Double points!</div>}
+      <div style={{ background: "linear-gradient(135deg,#fef2f2,#fee2e2)", border: `2px solid ${accent}22`, borderRadius: 18, padding: "26px 24px", marginBottom: 20, textAlign: "center" }}>
+        <p style={{ fontSize: 12, fontWeight: 700, color: accent, letterSpacing: 1, marginBottom: 12 }}>QUESTION {curr + 1}</p>
+        <p style={{ fontSize: 19, fontWeight: 600, color: C.text, lineHeight: 1.5 }}>{card.question}</p>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+        {visibleOpts.map((opt, i) => {
+          let bg = "#fff", border = `1.5px solid ${C.border}`, color = C.text;
+          if (sel !== null) {
+            if (opt === card.answer) { bg = "#f0fdf4"; border = "2px solid #16a34a"; color = "#16a34a"; }
+            else if (opt === sel) { bg = "#fef2f2"; border = `2px solid ${accent}`; color = accent; }
+          }
+          return (
+            <button key={opt} onClick={() => choose(opt)} disabled={sel !== null}
+              style={{ background: bg, border, borderRadius: 12, padding: "14px 12px", fontSize: 14, fontWeight: 600, color, cursor: sel !== null ? "default" : "pointer", textAlign: "left", display: "flex", gap: 10, alignItems: "center", transition: "all .15s" }}>
+              <span style={{ width: 24, height: 24, borderRadius: "50%", background: accent + "22", color: accent, fontSize: 12, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{OPTION_LABELS[i]}</span>
+              {opt}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+        <button onClick={useFifty} disabled={!lifelines.fifty || sel !== null}
+          style={{ background: lifelines.fifty ? "#fef9c3" : "#f3f4f6", color: lifelines.fifty ? "#92400e" : C.muted, border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: lifelines.fifty ? "pointer" : "not-allowed" }}>
+          50/50 {!lifelines.fifty ? "(used)" : ""}
+        </button>
+        <button onClick={useSkip} disabled={!lifelines.skip || sel !== null}
+          style={{ background: lifelines.skip ? "#eff6ff" : "#f3f4f6", color: lifelines.skip ? "#1d4ed8" : C.muted, border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: lifelines.skip ? "pointer" : "not-allowed" }}>
+          Skip {!lifelines.skip ? "(used)" : ""}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── GAME: RAPID FIRE ─────────────────────────────────────────────────────────
+function RapidFire({ cards, onBack }) {
+  const accent = "#059669";
+  const TOTAL_TIME = 45;
+  const [deck] = useState(() => [...cards].sort(() => Math.random() - .5));
+  const [curr, setCurr] = useState(0);
+  const [score, setScore] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(TOTAL_TIME);
+  const [inp, setInp] = useState("");
+  const [flash, setFlash] = useState(null);
+  const [done, setDone] = useState(false);
+  const inputRef = useRef(null);
+  const timerRef = useRef(null);
+
+  useEffect(() => {
+    timerRef.current = setInterval(() => {
+      setTimeLeft(t => {
+        if (t <= 1) { clearInterval(timerRef.current); setDone(true); return 0; }
+        return t - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timerRef.current);
+  }, []);
+
+  useEffect(() => { if (inputRef.current) inputRef.current.focus(); }, [curr]);
+
+  const submit = () => {
+    const card = deck[curr % deck.length];
+    const ok = inp.trim().toLowerCase() === (card.answer || "").trim().toLowerCase();
+    setFlash(ok ? "correct" : "wrong");
+    if (ok) setScore(s => s + 1);
+    setTimeout(() => { setFlash(null); setCurr(c => c + 1); setInp(""); }, 400);
+  };
+
+  if (done) return (
+    <div style={{ maxWidth: 420, margin: "0 auto", textAlign: "center", padding: "40px 0" }}>
+      <div style={{ fontSize: 56, marginBottom: 12 }}>⚡</div>
+      <h2 style={{ fontFamily: "'Fraunces',serif", fontSize: 28, fontWeight: 700, color: C.text, marginBottom: 8 }}>Time Up!</h2>
+      <p style={{ fontSize: 48, fontWeight: 700, color: accent, marginBottom: 4 }}>{score}</p>
+      <p style={{ fontSize: 16, color: C.muted, marginBottom: 28 }}>correct answers in {TOTAL_TIME}s</p>
+      <button onClick={onBack} style={{ background: accent, color: "#fff", border: "none", borderRadius: 14, padding: "13px 32px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>← Back to Games</button>
+    </div>
+  );
+
+  const card = deck[curr % deck.length];
+  const pct = (timeLeft / TOTAL_TIME) * 100;
+
+  return (
+    <div style={{ maxWidth: 520, margin: "0 auto" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, fontSize: 14, display: "flex", alignItems: "center", gap: 6 }}>
+          <Icon d={I.back} size={16} color={C.muted} /> All Games
+        </button>
+        <span style={{ fontSize: 28, fontWeight: 800, color: timeLeft <= 10 ? C.red : accent }}>{timeLeft}s</span>
+        <span style={{ fontSize: 16, fontWeight: 700, color: accent }}>✓ {score}</span>
+      </div>
+      <div style={{ height: 8, background: C.border, borderRadius: 4, marginBottom: 20, overflow: "hidden" }}>
+        <div style={{ height: "100%", width: `${pct}%`, background: timeLeft <= 10 ? C.red : accent, borderRadius: 4, transition: "width 1s linear, background .3s" }} />
+      </div>
+      <div style={{ background: flash === "correct" ? "#f0fdf4" : flash === "wrong" ? "#fef2f2" : "#f8f9ff", border: `2px solid ${flash === "correct" ? "#16a34a" : flash === "wrong" ? C.red : accent}33`, borderRadius: 18, padding: "28px 24px", marginBottom: 20, textAlign: "center", transition: "all .2s" }}>
+        <p style={{ fontSize: 12, fontWeight: 700, color: accent, letterSpacing: 1, marginBottom: 10 }}>TYPE THE ANSWER</p>
+        <p style={{ fontSize: 20, fontWeight: 600, color: C.text }}>{card.question}</p>
+      </div>
+      <div style={{ display: "flex", gap: 10 }}>
+        <input ref={inputRef} value={inp} onChange={e => setInp(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && submit()}
+          placeholder="Answer…"
+          style={{ flex: 1, border: `2px solid ${C.border}`, borderRadius: 12, padding: "12px 16px", fontSize: 15, outline: "none", color: C.text }} />
+        <button onClick={submit} disabled={!inp.trim()}
+          style={{ background: accent, color: "#fff", border: "none", borderRadius: 12, padding: "12px 22px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>Go</button>
+      </div>
+      <p style={{ textAlign: "center", color: C.muted, fontSize: 12, marginTop: 10 }}>Press Enter to submit fast!</p>
+    </div>
+  );
+}
+
+
+// ─── GAME: VOICE ANSWER ───────────────────────────────────────────────────────
+function VoiceAnswer({ cards, onBack }) {
+  const accent = "#7c3aed";
+  const [deck] = useState(() => [...cards].sort(() => Math.random() - .5));
+  const [curr, setCurr] = useState(0);
+  const [score, setScore] = useState(0);
+  const [done, setDone] = useState(false);
+
+  // Recording state
+  const [listening, setListening] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const [checking, setChecking] = useState(false);
+  const [result, setResult] = useState(null); // { ok, heard, correct }
+  const recognitionRef = useRef(null);
+  const isListeningRef = useRef(false);
+
+  const card = deck[curr];
+
+  const startListening = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { alert("Speech recognition not supported. Please use Chrome or Edge."); return; }
+    setTranscript("");
+    setResult(null);
+    isListeningRef.current = true;
+    const rec = new SR();
+    rec.continuous = false;       // stop after one phrase
+    rec.interimResults = true;
+    rec.lang = "en-US";
+    rec.maxAlternatives = 3;
+
+    rec.onresult = (e) => {
+      let interim = "";
+      let final = "";
+      for (let i = 0; i < e.results.length; i++) {
+        if (e.results[i].isFinal) final += e.results[i][0].transcript;
+        else interim += e.results[i][0].transcript;
+      }
+      setTranscript(final || interim);
+    };
+
+    rec.onerror = (e) => {
+      isListeningRef.current = false;
+      setListening(false);
+      if (e.error === "not-allowed") setTranscript("Microphone access denied.");
+      else if (e.error !== "no-speech") setTranscript("Error: " + e.error);
+    };
+
+    rec.onend = () => {
+      isListeningRef.current = false;
+      setListening(false);
+      // Auto check once speech ends
+      const heard = recognitionRef.current?._lastTranscript || "";
+      recognitionRef.current = null;
+    };
+
+    // Track transcript for auto-check on end
+    let lastFinal = "";
+    rec.onresult = (e) => {
+      let interim = "";
+      for (let i = 0; i < e.results.length; i++) {
+        if (e.results[i].isFinal) lastFinal += e.results[i][0].transcript + " ";
+        else interim += e.results[i][0].transcript;
+      }
+      setTranscript((lastFinal + interim).trim());
+    };
+
+    rec.onend = () => {
+      isListeningRef.current = false;
+      setListening(false);
+      if (lastFinal.trim()) {
+        checkAnswer(lastFinal.trim());
+      }
+    };
+
+    rec.start();
+    recognitionRef.current = rec;
+    setListening(true);
+  };
+
+  const stopListening = () => {
+    isListeningRef.current = false;
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch {}
+    }
+  };
+
+  const checkAnswer = async (heard) => {
+    if (!heard.trim()) { setTranscript("Nothing heard. Try again."); return; }
+    setChecking(true);
+    try {
+      const correct = card.answer;
+      // Use AI to judge if the spoken answer matches the correct answer
+      const judgment = await callClaude(
+        `You are grading a spoken quiz answer. Reply with ONLY "YES" or "NO".
+YES = the spoken answer is correct or close enough (synonyms, minor mispronunciation, partial but clearly correct).
+NO = the spoken answer is wrong or off-topic.`,
+        `Question: ${card.question}
+Correct answer: ${correct}
+Student said: "${heard}"
+Is the student correct? Reply only YES or NO.`
+      );
+      const ok = judgment.trim().toUpperCase().startsWith("YES");
+      setResult({ ok, heard: heard.trim(), correct });
+      if (ok) setScore(s => s + 1);
+    } catch(e) {
+      // Fallback: simple string match
+      const ok = heard.trim().toLowerCase().includes(card.answer.trim().toLowerCase()) ||
+                 card.answer.trim().toLowerCase().includes(heard.trim().toLowerCase().split(" ")[0]);
+      setResult({ ok, heard: heard.trim(), correct: card.answer });
+      if (ok) setScore(s => s + 1);
+    }
+    setChecking(false);
+  };
+
+  const next = () => {
+    if (curr + 1 >= deck.length) { setDone(true); return; }
+    setCurr(c => c + 1);
+    setTranscript("");
+    setResult(null);
+  };
+
+  if (done) return <GResults score={score} total={deck.length} onBack={onBack} msg="Voice Round Done! 🎙️" />;
+
+  return (
+    <div style={{ maxWidth: 560, margin: "0 auto" }}>
+      <GHeader title="Voice Answer" score={score} curr={curr} total={deck.length} onBack={onBack} accent={accent} />
+
+      {/* Question card */}
+      <div style={{ background: "linear-gradient(135deg,#f5f3ff,#ede9fe)", border: `2px solid ${accent}22`, borderRadius: 20, padding: "30px 28px", marginBottom: 24, textAlign: "center" }}>
+        <p style={{ fontSize: 11, fontWeight: 700, color: accent, letterSpacing: 1, marginBottom: 14, textTransform: "uppercase" }}>Speak your answer</p>
+        <p style={{ fontSize: 21, fontWeight: 600, color: "#1a1a2e", lineHeight: 1.5 }}>{card.question}</p>
+      </div>
+
+      {/* Mic button */}
+      {result === null && !checking && (
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
+          <button
+            onClick={listening ? stopListening : startListening}
+            style={{
+              width: 88, height: 88, borderRadius: "50%", border: "none", cursor: "pointer",
+              background: listening ? "#dc2626" : accent,
+              boxShadow: listening ? "0 0 0 12px rgba(220,38,38,.2), 0 0 0 24px rgba(220,38,38,.08)" : `0 4px 20px ${accent}44`,
+              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36,
+              transition: "all .3s", margin: "0 auto",
+              animation: listening ? "pulse 1.2s infinite" : "none",
+            }}>
+            {listening ? "⏹" : "🎙️"}
+          </button>
+          <p style={{ marginTop: 14, fontSize: 13, color: listening ? "#dc2626" : "#6b7280", fontWeight: 600 }}>
+            {listening ? "Listening… tap to stop" : "Tap to speak your answer"}
+          </p>
+          {transcript && !listening && (
+            <p style={{ marginTop: 8, fontSize: 13, color: "#6b7280", fontStyle: "italic" }}>
+              Heard: "{transcript}"
+            </p>
+          )}
+          {listening && transcript && (
+            <p style={{ marginTop: 8, fontSize: 13, color: accent, fontStyle: "italic" }}>
+              "{transcript}"
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Checking */}
+      {checking && (
+        <div style={{ textAlign: "center", padding: "20px 0" }}>
+          <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 10 }}>
+            {[0,1,2].map(j => <div key={j} style={{ width: 8, height: 8, borderRadius: "50%", background: accent, animation: "bounce 1.2s infinite", animationDelay: `${j * .2}s` }} />)}
+          </div>
+          <p style={{ fontSize: 13, color: "#6b7280" }}>Checking your answer…</p>
+        </div>
+      )}
+
+      {/* Result */}
+      {result !== null && (
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 52, marginBottom: 12 }}>{result.ok ? "✅" : "❌"}</div>
+          <p style={{ fontSize: 18, fontWeight: 700, color: result.ok ? "#16a34a" : "#dc2626", marginBottom: 8 }}>
+            {result.ok ? "Correct!" : "Not quite"}
+          </p>
+          <div style={{ background: "#f9fafb", border: `1px solid ${result.ok ? "#16a34a" : "#dc2626"}33`, borderRadius: 12, padding: "14px 18px", marginBottom: 20, textAlign: "left" }}>
+            <p style={{ fontSize: 12, color: "#6b7280", marginBottom: 4 }}>You said:</p>
+            <p style={{ fontSize: 14, color: "#1a1a2e", fontStyle: "italic", marginBottom: result.ok ? 0 : 10 }}>"{result.heard}"</p>
+            {!result.ok && (
+              <>
+                <p style={{ fontSize: 12, color: "#6b7280", marginBottom: 4 }}>Correct answer:</p>
+                <p style={{ fontSize: 14, fontWeight: 700, color: "#16a34a" }}>{result.correct}</p>
+              </>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+            <button onClick={() => { setResult(null); setTranscript(""); }}
+              style={{ background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 12, padding: "11px 22px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+              🔄 Try again
+            </button>
+            <button onClick={next}
+              style={{ background: accent, color: "#fff", border: "none", borderRadius: 12, padding: "11px 22px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+              {curr + 1 >= deck.length ? "See Results" : "Next →"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
