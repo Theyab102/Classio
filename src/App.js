@@ -320,8 +320,6 @@ export default function App() {
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(FOLDER_COLORS[0]);
-  const [saving, setSaving] = useState(false);
-  const saveTimer = useRef(null);
 
   // Restore files from IDB on every load (works for both logged-in and guest)
   const restoreFileBlobs = async (rawFolders) => {
@@ -362,63 +360,53 @@ export default function App() {
     });
   }, []);
 
-  // Ref to always have latest user without closure staleness
-  const userRef = useRef(null);
-  useEffect(() => { userRef.current = user; }, [user]);
-  const isGuestRef = useRef(false);
-  useEffect(() => { isGuestRef.current = isGuest; }, [isGuest]);
+  // Manual save — called when user taps the Save button
+  const [saveStatus, setSaveStatus] = useState("idle"); // idle | saving | saved | error
 
-  const save = useCallback((flds, uid) => {
-    if (!uid) return;
-    clearTimeout(saveTimer.current);
-    setSaving(true);
-    saveTimer.current = setTimeout(async () => {
-      try {
-        // Strip non-serialisable fields before saving to Firebase
-        const clean = flds.map(folder => ({
-          ...folder,
-          files: (folder.files || []).map(f => {
-            const { _fileObj, ...rest } = f;
-            return {
-              ...rest,
-              linkedFiles: (rest.linkedFiles || []).map(lf => {
-                const { _fileObj: _lfo, ...lr } = lf;
-                return lr;
-              }),
-            };
-          }),
-        }));
-        await setDoc(doc(db, "users", uid), { folders: clean }, { merge: true });
-        setSaving(false);
-      } catch(e) {
-        console.error("Firebase save failed:", e);
-        setSaving(false);
+  const manualSave = useCallback(async (flds) => {
+    const foldersToSave = flds || folders;
+    setSaveStatus("saving");
+    try {
+      const clean = foldersToSave.map(folder => ({
+        ...folder,
+        files: (folder.files || []).map(f => {
+          const { _fileObj, ...rest } = f;
+          return {
+            ...rest,
+            linkedFiles: (rest.linkedFiles || []).map(lf => {
+              const { _fileObj: _lfo, ...lr } = lf;
+              return lr;
+            }),
+          };
+        }),
+      }));
+      if (user && !isGuest) {
+        await setDoc(doc(db, "users", user.uid), { folders: clean }, { merge: true });
+      } else {
+        localStorage.setItem("classio_guest_folders", JSON.stringify(clean));
       }
-    }, 800);
-  }, []);
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 2000);
+    } catch(e) {
+      console.error("Save failed:", e);
+      setSaveStatus("error");
+      setTimeout(() => setSaveStatus("idle"), 3000);
+    }
+  }, [folders, user, isGuest]);
 
   const setFoldersSave = useCallback((flds) => {
     setFolders(flds);
-    const currentUser = userRef.current;
-    const currentIsGuest = isGuestRef.current;
-    if (currentUser && !currentIsGuest) {
-      // Logged in — save to Firebase
-      save(flds, currentUser.uid);
-    } else {
-      // Guest — save structure to localStorage, blobs already in IDB
-      setSaving(false);
+    // Guest: always auto-save to localStorage instantly (it is fast)
+    if (isGuest) {
       try {
         const clean = flds.map(folder => ({
           ...folder,
-          files: (folder.files || []).map(f => {
-            const { _fileObj, ...rest } = f;
-            return rest;
-          }),
+          files: (folder.files || []).map(f => { const { _fileObj, ...rest } = f; return rest; }),
         }));
         localStorage.setItem("classio_guest_folders", JSON.stringify(clean));
-      } catch(e) { console.error("localStorage save failed:", e); }
+      } catch {}
     }
-  }, [save]);
+  }, [isGuest]);
 
   const foldersRef = useRef([]);
   useEffect(() => { foldersRef.current = folders; }, [folders]);
@@ -468,7 +456,7 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'DM Sans', sans-serif", paddingBottom: 50 }}>
       <style>{GS}</style>
-      <Header user={isGuest ? { displayName: guestName, photoURL: null } : user} saving={saving} isGuest={isGuest} onSignOut={isGuest ? handleGuestSignOut : () => signOut(auth)} />
+      <Header user={isGuest ? { displayName: guestName, photoURL: null } : user} saveStatus={saveStatus} onSave={() => manualSave()} isGuest={isGuest} onSignOut={isGuest ? handleGuestSignOut : () => signOut(auth)} />
       <AdBanner />
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 14px" }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: 32 }}>
@@ -571,7 +559,7 @@ function AdBanner() {
 }
 
 // ─── HEADER ───────────────────────────────────────────────────────────────────
-function Header({ user, saving, isGuest, onSignOut }) {
+function Header({ user, saveStatus, onSave, isGuest, onSignOut }) {
   return (
     <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 16px", height:56, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
       <div style={{ display:"flex", alignItems:"center", gap:8 }}>
@@ -581,7 +569,17 @@ function Header({ user, saving, isGuest, onSignOut }) {
         <span style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:700, color:C.text, letterSpacing:-0.5 }}>Classio</span>
       </div>
       <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-        {!isGuest && <span className="desktop-only" style={{ fontSize:12, color: saving ? C.muted : C.green }}>{saving ? "Saving…" : "✓ Saved"}</span>}
+        {!isGuest && (
+          <button onClick={onSave} disabled={saveStatus === "saving"}
+            style={{
+              fontSize:12, fontWeight:600, cursor: saveStatus==="saving" ? "default" : "pointer",
+              background: saveStatus==="saved" ? C.green : saveStatus==="error" ? "#e53e3e" : C.accent,
+              color:"#fff", border:"none", borderRadius:8, padding:"5px 14px",
+              opacity: saveStatus==="saving" ? 0.7 : 1, transition:"background .3s"
+            }}>
+            {saveStatus==="saving" ? "Saving…" : saveStatus==="saved" ? "✓ Saved" : saveStatus==="error" ? "Error — Retry" : "💾 Save"}
+          </button>
+        )}
         {isGuest && <span className="desktop-only" style={{ fontSize:11, background:C.warmL, color:C.warm, border:`1px solid ${C.warm}44`, borderRadius:20, padding:"3px 8px", fontWeight:600 }}>Guest</span>}
         {user?.photoURL
           ? <img src={user.photoURL} alt="" style={{ width:30, height:30, borderRadius:"50%", border:`2px solid ${C.border}`, flexShrink:0 }} />
