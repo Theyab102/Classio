@@ -362,49 +362,82 @@ export default function App() {
     });
   }, []);
 
+  // Ref to always have latest user without closure staleness
+  const userRef = useRef(null);
+  useEffect(() => { userRef.current = user; }, [user]);
+  const isGuestRef = useRef(false);
+  useEffect(() => { isGuestRef.current = isGuest; }, [isGuest]);
+
   const save = useCallback((flds, uid) => {
     if (!uid) return;
     clearTimeout(saveTimer.current);
     setSaving(true);
     saveTimer.current = setTimeout(async () => {
-      const clean = flds.map(f => ({ ...f, files: f.files.map(({ _fileObj, linkedFiles, ...rest }) => ({
-        ...rest,
-        linkedFiles: (linkedFiles || []).map(({ _fileObj: _lfo, ...lr }) => lr),
-      }))}));
-      await setDoc(doc(db, "users", uid), { folders: clean }, { merge: true }).catch(console.error);
-      setSaving(false);
+      try {
+        // Strip non-serialisable fields before saving to Firebase
+        const clean = flds.map(folder => ({
+          ...folder,
+          files: (folder.files || []).map(f => {
+            const { _fileObj, ...rest } = f;
+            return {
+              ...rest,
+              linkedFiles: (rest.linkedFiles || []).map(lf => {
+                const { _fileObj: _lfo, ...lr } = lf;
+                return lr;
+              }),
+            };
+          }),
+        }));
+        await setDoc(doc(db, "users", uid), { folders: clean }, { merge: true });
+        setSaving(false);
+      } catch(e) {
+        console.error("Firebase save failed:", e);
+        setSaving(false);
+      }
     }, 800);
   }, []);
 
-  const setFoldersSave = (flds) => {
+  const setFoldersSave = useCallback((flds) => {
     setFolders(flds);
-    if (user && !isGuest) {
-      save(flds, user.uid);
+    const currentUser = userRef.current;
+    const currentIsGuest = isGuestRef.current;
+    if (currentUser && !currentIsGuest) {
+      // Logged in — save to Firebase
+      save(flds, currentUser.uid);
     } else {
-      // Guest: save folder structure (without blobs) to localStorage
+      // Guest — save structure to localStorage, blobs already in IDB
+      setSaving(false);
       try {
-        const clean = flds.map(f => ({ ...f, files: f.files.map(({ _fileObj, ...rest }) => rest) }));
+        const clean = flds.map(folder => ({
+          ...folder,
+          files: (folder.files || []).map(f => {
+            const { _fileObj, ...rest } = f;
+            return rest;
+          }),
+        }));
         localStorage.setItem("classio_guest_folders", JSON.stringify(clean));
-      } catch {}
+      } catch(e) { console.error("localStorage save failed:", e); }
     }
-  };
+  }, [save]);
 
-  const updateFolder = (updated) => {
-    const next = folders.map(f => f.id === updated.id ? updated : f);
+  const foldersRef = useRef([]);
+  useEffect(() => { foldersRef.current = folders; }, [folders]);
+
+  const updateFolder = useCallback((updated) => {
+    const next = foldersRef.current.map(f => f.id === updated.id ? updated : f);
     setFoldersSave(next);
     if (activeFolder?.id === updated.id) setActiveFolder(updated);
-  };
+  }, [setFoldersSave, activeFolder]);
 
-  const updateFile = (folderId, updated) => {
-    // Always carry _fileObj forward so viewer never loses it
+  const updateFile = useCallback((folderId, updated) => {
     const withObj = { ...updated, _fileObj: updated._fileObj || FILE_STORE.get(updated.id) || null };
-    const next = folders.map(f => f.id === folderId
+    const next = foldersRef.current.map(f => f.id === folderId
       ? { ...f, files: f.files.map(fi => fi.id === withObj.id ? withObj : fi) }
       : f);
     setFoldersSave(next);
     setActiveFile(withObj);
     setActiveFolder(prev => prev ? { ...prev, files: prev.files.map(fi => fi.id === withObj.id ? withObj : fi) } : prev);
-  };
+  }, [setFoldersSave]);
 
   const handleGuest = (name) => { setGuestName(name); setIsGuest(true); setFolders([]); };
 
