@@ -637,7 +637,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
             }
           </>
         )}
-        {tab === "ai" && <AIChat context={`folder "${folder.name}" containing: ${folder.files.map(f=>f.name).join(", ")||"no files"}`} placeholder="Ask anything about this folder…" files={[]} />}
+        {tab === "ai" && <AITab file={null} allFiles={folder.files} folder={folder} onUpdate={()=>{}} />}
       </div>
     </div>
   );
@@ -1134,6 +1134,65 @@ function ExcelViewer({ fileObj }) {
 
 
 // ─── NOTES TAB ────────────────────────────────────────────────────────────────
+// ─── AI TAB ───────────────────────────────────────────────────────────────────
+function AITab({ file, allFiles, folder, onUpdate }) {
+  const [msgs, setMsgs] = useState([]);
+  const [inp, setInp] = useState("");
+  const [loading, setLoading] = useState(false);
+  const bottomRef = useRef(null);
+
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:"smooth" }); }, [msgs]);
+
+  const send = async () => {
+    const text = inp.trim();
+    if (!text || loading) return;
+    const userMsg = { role:"user", content: text };
+    const newMsgs = [...msgs, userMsg];
+    setMsgs(newMsgs); setInp(""); setLoading(true);
+    try {
+      const fileContext = file ? `You are helping a student with the file "${file.name}".` : `You are helping a student with the folder "${folder?.name}".`;
+      const reply = await callClaudeChat(
+        fileContext + " Answer clearly and helpfully. Use bullet points and bold for key info.",
+        newMsgs.map(m => ({ role: m.role, content: m.content }))
+      );
+      setMsgs([...newMsgs, { role:"assistant", content: reply }]);
+    } catch(e) { setMsgs([...newMsgs, { role:"assistant", content:"Error: " + e.message }]); }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 200px)", minHeight:400 }}>
+      <div style={{ flex:1, overflowY:"auto", padding:"16px 0", display:"flex", flexDirection:"column", gap:12 }}>
+        {msgs.length === 0 && (
+          <div style={{ textAlign:"center", padding:"40px 20px", color:C.muted }}>
+            <div style={{ fontSize:40, marginBottom:12 }}>🤖</div>
+            <p style={{ fontSize:15, fontWeight:600, color:C.text, marginBottom:6 }}>AI Assistant</p>
+            <p style={{ fontSize:13 }}>Ask anything about {file ? `"${file.name}"` : "your files"}.</p>
+          </div>
+        )}
+        {msgs.map((m,i) => (
+          <div key={i} style={{ display:"flex", justifyContent:m.role==="user"?"flex-end":"flex-start" }}>
+            <div style={{ maxWidth:"80%", padding:"10px 14px", borderRadius:14, background:m.role==="user"?C.accent:C.surface, color:m.role==="user"?"#fff":C.text, fontSize:14, lineHeight:1.6, border:m.role==="user"?"none":`1px solid ${C.border}` }}>
+              <Fmt text={m.content} />
+            </div>
+          </div>
+        ))}
+        {loading && <div style={{ display:"flex", gap:5, padding:"10px 14px" }}>{[0,1,2].map(j=><div key={j} style={{ width:7,height:7,borderRadius:"50%",background:C.accent,animation:"bounce 1.2s infinite",animationDelay:`${j*.2}s` }}/>)}</div>}
+        <div ref={bottomRef} />
+      </div>
+      <div style={{ display:"flex", gap:10, paddingTop:12, borderTop:`1px solid ${C.border}` }}>
+        <input value={inp} onChange={e=>setInp(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}}
+          placeholder="Ask a question…"
+          style={{ flex:1, border:`1.5px solid ${C.border}`, borderRadius:12, padding:"11px 16px", fontSize:14, outline:"none", background:C.bg, color:C.text }} />
+        <button onClick={send} disabled={!inp.trim()||loading}
+          style={{ background:inp.trim()&&!loading?C.accent:"#ccc", color:"#fff", border:"none", borderRadius:12, padding:"11px 20px", fontSize:14, fontWeight:600, cursor:inp.trim()&&!loading?"pointer":"not-allowed" }}>
+          Send
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function NotesTab({ file, onUpdate, user, isGuest }) {
   const [notes, setNotes] = useState(file.notes||"");
   const [gen, setGen] = useState(false);
@@ -1789,10 +1848,10 @@ function TrueFalse({ cards, onBack }) {
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
         {[{val:true,label:"✅ True",bg:"#E6FFFA",color:"#2C7A7B"},{val:false,label:"❌ False",bg:C.redL,color:C.red}].map(opt=>{
-          let bg=opt.bg,border=`1.5px solid ${opt.color}33`;
+          let bg=opt.bg; let border=`1.5px solid ${opt.color}33`;
           if(res){
-            if(opt.val===card.correct)bg="#E6FFFA",border="2px solid #2C7A7B";
-            else if(res.chosen===opt.val&&!res.ok)bg=C.redL,border=`2px solid ${C.red}`;
+            if(opt.val===card.correct){ bg="#E6FFFA"; border="2px solid #2C7A7B"; }
+            else if(res.chosen===opt.val&&!res.ok){ bg=C.redL; border=`2px solid ${C.red}`; }
           }
           return <button key={String(opt.val)} onClick={()=>answer(opt.val)}
             style={{ background:bg, border, borderRadius:14, padding:"20px", fontSize:18, fontWeight:700, color:opt.color, cursor:res?"default":"pointer", transition:"all .2s" }}>{opt.label}</button>;
