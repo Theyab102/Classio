@@ -309,6 +309,27 @@ async function idbGetAll() {
 }
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
+
+// Defined OUTSIDE component so it is never re-created and has no closure issues
+function stripBlobs(flds) {
+  return (flds || []).map(fo => ({
+    id: fo.id || "",
+    name: fo.name || "",
+    color: fo.color || "#3D5A80",
+    files: (fo.files || []).map(fi => ({
+      id: fi.id || "",
+      name: fi.name || "",
+      type: fi.type || "",
+      size: fi.size || 0,
+      colorIndex: fi.colorIndex || 0,
+      notes: fi.notes || "",
+      studyCards: fi.studyCards || [],
+      uploadedAt: fi.uploadedAt || "",
+      linkedFileIds: fi.linkedFileIds || [],
+    })),
+  }));
+}
+
 export default function App() {
   const [user, setUser] = useState(undefined);
   const [isGuest, setIsGuest] = useState(false);
@@ -320,68 +341,64 @@ export default function App() {
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(FOLDER_COLORS[0]);
+  const [showCharacter, setShowCharacter] = useState(false);
+  const [character, setCharacter] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("classio_char") || "null") || { skin:"#FDDBB4", hair:"#3D2B1F", hairStyle:0, eyes:"#3D5A80", top:"#3D5A80", name:"" }; }
+    catch { return { skin:"#FDDBB4", hair:"#3D2B1F", hairStyle:0, eyes:"#3D5A80", top:"#3D5A80", name:"" }; }
+  });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SAVE SYSTEM
-  // Strategy: write to localStorage instantly on every change (never fails).
-  // Also write to Firebase in the background when logged in.
-  // On load: read localStorage first (instant), then Firebase (sync).
-  // Everything goes through saveRef so there are ZERO stale closures.
+  // SAVE SYSTEM — localStorage primary, Firebase secondary
+  // Key insight: we pass data directly into every function so there are
+  // zero stale closures. No useEffect syncing, no refs for data.
   // ═══════════════════════════════════════════════════════════════════════════
   const [saveStatus, setSaveStatus] = useState("idle");
-  const saveRef = useRef({ folders:[], user:null, timer:null, statusTimer:null });
+  const saveTimer    = useRef(null);
+  const statusTimer  = useRef(null);
 
-  // Keep saveRef in sync — this is the only place we touch state
-  useEffect(() => { saveRef.current.folders = folders; }, [folders]);
-  useEffect(() => { saveRef.current.user    = user;    }, [user]);
-
-  // Strip file blobs — only plain serialisable data
-  function stripBlobs(flds) {
-    return flds.map(fo => ({
-      id: fo.id, name: fo.name, color: fo.color,
-      files: (fo.files || []).map(fi => ({
-        id: fi.id, name: fi.name, type: fi.type || "",
-        size: fi.size || 0, colorIndex: fi.colorIndex || 0,
-        notes: fi.notes || "", studyCards: fi.studyCards || [],
-        uploadedAt: fi.uploadedAt || "",
-      })),
-    }));
-  }
-
-  // The actual write — called from the debounce timer
+  // Write clean JSON to localStorage + Firebase
+  // flds and u are passed directly — never read from closure/ref
   function persist(flds, u) {
     const clean = stripBlobs(flds);
-    // 1. localStorage — synchronous, always works
-    try { localStorage.setItem("classio_v2", JSON.stringify(clean)); } catch(e) { console.error("LS write:", e); }
-    // 2. Firebase — async, best effort
-    if (u) {
-      setDoc(doc(db, "users", u.uid), { v2: clean }, { merge: true })
+
+    // 1. localStorage — instant, works offline, no permissions needed
+    try { localStorage.setItem("classio_v2", JSON.stringify(clean)); } catch(e) { console.error("LS save error:", e); }
+
+    // 2. Firebase — best effort background sync
+    if (u?.uid) {
+      // Correct Firestore path: collection="users", document=uid
+      setDoc(doc(db, "users", u.uid), { folders: clean }, { merge: true })
         .then(() => {
-          clearTimeout(saveRef.current.statusTimer);
+          clearTimeout(statusTimer.current);
           setSaveStatus("saved");
-          saveRef.current.statusTimer = setTimeout(() => setSaveStatus("idle"), 2000);
+          statusTimer.current = setTimeout(() => setSaveStatus("idle"), 2000);
         })
-        .catch(e => { console.error("FB write:", e); setSaveStatus("idle"); });
+        .catch(e => {
+          // localStorage already saved — Firebase failing is not critical
+          console.warn("Firebase sync failed (data saved locally):", e.code, e.message);
+          clearTimeout(statusTimer.current);
+          setSaveStatus("saved"); // local save succeeded
+          statusTimer.current = setTimeout(() => setSaveStatus("idle"), 2000);
+        });
     } else {
-      clearTimeout(saveRef.current.statusTimer);
+      clearTimeout(statusTimer.current);
       setSaveStatus("saved");
-      saveRef.current.statusTimer = setTimeout(() => setSaveStatus("idle"), 1500);
+      statusTimer.current = setTimeout(() => setSaveStatus("idle"), 2000);
     }
   }
 
-  // Debounced save — waits 800ms after last change then writes
-  function scheduleSave(flds) {
+  // Debounce: wait 500ms after last change, then persist
+  // Takes flds AND u directly so nothing is stale
+  function scheduleSave(flds, u) {
     setSaveStatus("saving");
-    clearTimeout(saveRef.current.timer);
-    saveRef.current.timer = setTimeout(() => {
-      persist(flds, saveRef.current.user);
-    }, 800);
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => persist(flds, u), 500);
   }
 
-  // Attach file blobs from IndexedDB to raw folder data
-  async function attachBlobs(rawFolders) {
+  // Attach file blobs (non-serialisable) back onto plain folder data
+  async function attachBlobs(raw) {
     const stored = await idbGetAll();
-    return rawFolders.map(fo => ({
+    return (raw || []).map(fo => ({
       ...fo,
       files: (fo.files || []).map(fi => {
         const blob = stored[fi.id] || FILE_STORE.get(fi.id) || null;
@@ -391,67 +408,70 @@ export default function App() {
     }));
   }
 
-  // Load on startup
+  // Startup: load localStorage instantly, then Firebase if logged in
   useEffect(() => {
-    // Step 1: load localStorage immediately so app feels instant
     const local = localStorage.getItem("classio_v2");
     if (local) {
-      try {
-        attachBlobs(JSON.parse(local)).then(r => setFolders(p => p.length === 0 ? r : p));
-      } catch {}
+      try { attachBlobs(JSON.parse(local)).then(r => setFolders(p => p.length === 0 ? r : p)); } catch {}
     }
-
-    // Step 2: auth listener — if logged in, also load from Firebase
     const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u) {
         setIsGuest(false);
         try {
           const snap = await getDoc(doc(db, "users", u.uid));
-          const raw  = snap?.exists() ? (snap.data().v2 || snap.data().folders || []) : [];
+          const raw  = snap?.exists() ? (snap.data().folders || []) : [];
           if (raw.length > 0) {
             const r = await attachBlobs(raw);
             setFolders(r);
-            // Mirror to localStorage so next load is instant
             try { localStorage.setItem("classio_v2", JSON.stringify(stripBlobs(r))); } catch {}
           }
-        } catch(e) { console.warn("FB load failed, using local:", e); }
+        } catch(e) { console.warn("Firebase load failed, using local data:", e.message); }
       }
     });
     return unsub;
   }, []);
 
-  // Single entry point for all folder mutations
-  function setFoldersSave(flds) {
+  // THE ONE entry point for ALL data changes — always call this instead of setFolders
+  function applyAndSave(flds) {
     setFolders(flds);
-    scheduleSave(flds);          // pass flds directly — no closure needed
+    scheduleSave(flds, user); // user from component scope — always current at call time
   }
 
   const updateFolder = (updated) => {
-    const next = saveRef.current.folders.map(f => f.id === updated.id ? updated : f);
-    setFoldersSave(next);
+    setFolders(prev => {
+      const next = prev.map(f => f.id === updated.id ? updated : f);
+      scheduleSave(next, user);
+      return next;
+    });
     if (activeFolder?.id === updated.id) setActiveFolder(updated);
   };
 
   const updateFile = (folderId, updated) => {
     const withObj = { ...updated, _fileObj: updated._fileObj || FILE_STORE.get(updated.id) || null };
-    const next = saveRef.current.folders.map(f => f.id === folderId
-      ? { ...f, files: f.files.map(fi => fi.id === withObj.id ? withObj : fi) }
-      : f);
-    setFoldersSave(next);
+    setFolders(prev => {
+      const next = prev.map(f => f.id === folderId
+        ? { ...f, files: f.files.map(fi => fi.id === withObj.id ? withObj : fi) }
+        : f);
+      scheduleSave(next, user);
+      return next;
+    });
     setActiveFile(withObj);
     setActiveFolder(prev => prev ? { ...prev, files: prev.files.map(fi => fi.id === withObj.id ? withObj : fi) } : prev);
   };
 
   const deleteFolder = (folderId) => {
-    // Delete all file blobs inside the folder from IDB + FILE_STORE
-    const folder = saveRef.current.folders.find(f => f.id === folderId);
-    if (folder) {
-      (folder.files || []).forEach(f => { idbDelete(f.id); FILE_STORE.delete(f.id); });
-    }
-    const next = saveRef.current.folders.filter(f => f.id !== folderId);
-    setFoldersSave(next);
+    setFolders(prev => {
+      const folder = prev.find(f => f.id === folderId);
+      if (folder) (folder.files || []).forEach(f => { idbDelete(f.id); FILE_STORE.delete(f.id); });
+      const next = prev.filter(f => f.id !== folderId);
+      scheduleSave(next, user);
+      return next;
+    });
   };
+
+  // Keep setFoldersSave for places that still use it (folder creation etc.)
+  const setFoldersSave = (flds) => applyAndSave(flds);
 
   const handleGuest = (name) => { setGuestName(name); setIsGuest(true); setFolders([]); };
 
@@ -482,7 +502,8 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'DM Sans', sans-serif", paddingBottom: 50 }}>
       <style>{GS}</style>
-      <Header user={isGuest ? { displayName: guestName, photoURL: null } : user} saveStatus={saveStatus} isGuest={isGuest} onSignOut={isGuest ? handleGuestSignOut : () => signOut(auth)} />
+      <Header user={isGuest ? { displayName: guestName, photoURL: null } : user} saveStatus={saveStatus} isGuest={isGuest} onSignOut={isGuest ? handleGuestSignOut : () => signOut(auth)} character={character} onOpenCharacter={() => setShowCharacter(true)} />
+      {showCharacter && <CharacterModal character={character} onChange={c => { setCharacter(c); localStorage.setItem("classio_char", JSON.stringify(c)); }} onClose={() => setShowCharacter(false)} />}
       <AdBanner />
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 14px" }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: 32 }}>
@@ -597,7 +618,7 @@ function AdBanner() {
 }
 
 // ─── HEADER ───────────────────────────────────────────────────────────────────
-function Header({ user, saveStatus, isGuest, onSignOut }) {
+function Header({ user, saveStatus, isGuest, onSignOut, character, onOpenCharacter }) {
   return (
     <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 16px", height:56, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
       <div style={{ display:"flex", alignItems:"center", gap:8 }}>
@@ -614,6 +635,10 @@ function Header({ user, saveStatus, isGuest, onSignOut }) {
           </span>
         )}
         {isGuest && <span className="desktop-only" style={{ fontSize:11, background:C.warmL, color:C.warm, border:`1px solid ${C.warm}44`, borderRadius:20, padding:"3px 8px", fontWeight:600 }}>Guest</span>}
+        <button onClick={onOpenCharacter} title="My Character"
+          style={{ background:"none", border:`1.5px solid ${C.border}`, borderRadius:"50%", width:30, height:30, padding:0, cursor:"pointer", overflow:"hidden", flexShrink:0 }}>
+          <MiniAvatar character={character} size={30} />
+        </button>
         {user?.photoURL
           ? <img src={user.photoURL} alt="" style={{ width:30, height:30, borderRadius:"50%", border:`2px solid ${C.border}`, flexShrink:0 }} />
           : <div style={{ width:30, height:30, background:isGuest?C.warmL:C.accentL, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:isGuest?C.warm:C.accent, flexShrink:0 }}>{user?.displayName?.[0]?.toUpperCase() || "G"}</div>
@@ -627,6 +652,156 @@ function Header({ user, saveStatus, isGuest, onSignOut }) {
 }
 
 // ─── SPLASH / SIGN IN ─────────────────────────────────────────────────────────
+// ─── MINI AVATAR (SVG) ────────────────────────────────────────────────────────
+function MiniAvatar({ character: ch, size = 40 }) {
+  const s = size;
+  const styles = [
+    // hairStyle 0 — short
+    `<ellipse cx="${s*0.5}" cy="${s*0.22}" rx="${s*0.22}" ry="${s*0.14}" fill="${ch.hair}"/>`,
+    // hairStyle 1 — medium
+    `<ellipse cx="${s*0.5}" cy="${s*0.2}" rx="${s*0.24}" ry="${s*0.18}" fill="${ch.hair}"/><rect x="${s*0.26}" y="${s*0.28}" width="${s*0.06}" height="${s*0.18}" rx="${s*0.03}" fill="${ch.hair}"/><rect x="${s*0.68}" y="${s*0.28}" width="${s*0.06}" height="${s*0.18}" rx="${s*0.03}" fill="${ch.hair}"/>`,
+    // hairStyle 2 — long
+    `<ellipse cx="${s*0.5}" cy="${s*0.2}" rx="${s*0.24}" ry="${s*0.18}" fill="${ch.hair}"/><rect x="${s*0.26}" y="${s*0.28}" width="${s*0.06}" height="${s*0.32}" rx="${s*0.03}" fill="${ch.hair}"/><rect x="${s*0.68}" y="${s*0.28}" width="${s*0.06}" height="${s*0.32}" rx="${s*0.03}" fill="${ch.hair}"/>`,
+    // hairStyle 3 — bun
+    `<ellipse cx="${s*0.5}" cy="${s*0.22}" rx="${s*0.22}" ry="${s*0.14}" fill="${ch.hair}"/><circle cx="${s*0.5}" cy="${s*0.1}" r="${s*0.08}" fill="${ch.hair}"/>`,
+  ];
+  const hairSvg = styles[ch.hairStyle || 0];
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 ${s} ${s}">
+    ${hairSvg}
+    <ellipse cx="${s*0.5}" cy="${s*0.36}" rx="${s*0.18}" ry="${s*0.2}" fill="${ch.skin}"/>
+    <circle cx="${s*0.43}" cy="${s*0.34}" r="${s*0.04}" fill="${ch.eyes}"/>
+    <circle cx="${s*0.57}" cy="${s*0.34}" r="${s*0.04}" fill="${ch.eyes}"/>
+    <path d="M${s*0.43} ${s*0.42} Q${s*0.5} ${s*0.47} ${s*0.57} ${s*0.42}" stroke="#7a4f3a" stroke-width="${s*0.02}" fill="none" stroke-linecap="round"/>
+    <ellipse cx="${s*0.5}" cy="${s*0.72}" rx="${s*0.22}" ry="${s*0.18}" fill="${ch.top}"/>
+    <ellipse cx="${s*0.5}" cy="${s*0.54}" rx="${s*0.14}" ry="${s*0.08}" fill="${ch.skin}"/>
+  </svg>`;
+  return <img src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`} width={s} height={s} alt="avatar" style={{ display:"block" }} />;
+}
+
+// ─── CHARACTER MODAL ─────────────────────────────────────────────────────────
+function CharacterModal({ character, onChange, onClose }) {
+  const ch = character;
+  const SKINS  = ["#FDDBB4","#F5C89A","#E8A87C","#C68642","#8D5524","#F4D6C8"];
+  const HAIRS  = ["#3D2B1F","#7B4F2C","#C9A96E","#F2E6C8","#E8323C","#1a1a2e","#9B59B6","#2C7BB6"];
+  const EYES   = ["#3D5A80","#4A7C59","#8B6914","#2C2C2C","#C45C5C","#6B4E8A"];
+  const TOPS   = ["#3D5A80","#C17F5A","#4A7C59","#6B4E8A","#C45C5C","#4A5568","#E53E3E","#2C7BB6","#F6AD55","#1a1a2e"];
+  const HAIR_NAMES = ["Short","Medium","Long","Bun"];
+
+  return (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background:C.surface, borderRadius:20, padding:28, width:"100%", maxWidth:440, boxShadow:"0 20px 60px rgba(0,0,0,.25)" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20 }}>
+          <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:22, fontWeight:700, color:C.text }}>My Character</h2>
+          <button onClick={onClose} style={{ background:"none", border:"none", fontSize:22, cursor:"pointer", color:C.muted }}>×</button>
+        </div>
+
+        {/* Preview */}
+        <div style={{ display:"flex", justifyContent:"center", marginBottom:24 }}>
+          <div style={{ background:"linear-gradient(180deg,#e0f0ff 0%,#c8e6c9 100%)", borderRadius:20, padding:16, border:`2px solid ${C.border}` }}>
+            <MiniAvatar character={ch} size={100} />
+          </div>
+        </div>
+
+        {/* Name */}
+        <label style={{ fontSize:12, fontWeight:700, color:C.muted, letterSpacing:.5 }}>NICKNAME</label>
+        <input value={ch.name || ""} onChange={e => onChange({...ch, name:e.target.value})} placeholder="Give your character a name…"
+          style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:10, padding:"8px 12px", fontSize:14, outline:"none", marginTop:6, marginBottom:16, color:C.text, background:C.bg }} />
+
+        {/* Hair style */}
+        <label style={{ fontSize:12, fontWeight:700, color:C.muted, letterSpacing:.5 }}>HAIR STYLE</label>
+        <div style={{ display:"flex", gap:8, marginTop:6, marginBottom:16 }}>
+          {HAIR_NAMES.map((n, i) => (
+            <button key={i} onClick={() => onChange({...ch, hairStyle:i})}
+              style={{ flex:1, padding:"6px 4px", fontSize:12, fontWeight:600, borderRadius:8, border:`1.5px solid ${ch.hairStyle===i?C.accent:C.border}`, background:ch.hairStyle===i?C.accentL:"#fff", color:ch.hairStyle===i?C.accent:C.muted, cursor:"pointer" }}>
+              {n}
+            </button>
+          ))}
+        </div>
+
+        {/* Skin */}
+        <label style={{ fontSize:12, fontWeight:700, color:C.muted, letterSpacing:.5 }}>SKIN TONE</label>
+        <div style={{ display:"flex", gap:8, marginTop:6, marginBottom:16 }}>
+          {SKINS.map(s => <button key={s} onClick={() => onChange({...ch, skin:s})}
+            style={{ width:30, height:30, borderRadius:"50%", background:s, border:`3px solid ${ch.skin===s?C.accent:"transparent"}`, cursor:"pointer" }} />)}
+        </div>
+
+        {/* Hair colour */}
+        <label style={{ fontSize:12, fontWeight:700, color:C.muted, letterSpacing:.5 }}>HAIR COLOUR</label>
+        <div style={{ display:"flex", gap:8, marginTop:6, marginBottom:16 }}>
+          {HAIRS.map(s => <button key={s} onClick={() => onChange({...ch, hair:s})}
+            style={{ width:26, height:26, borderRadius:"50%", background:s, border:`3px solid ${ch.hair===s?C.accent:"transparent"}`, cursor:"pointer" }} />)}
+        </div>
+
+        {/* Eye colour */}
+        <label style={{ fontSize:12, fontWeight:700, color:C.muted, letterSpacing:.5 }}>EYE COLOUR</label>
+        <div style={{ display:"flex", gap:8, marginTop:6, marginBottom:16 }}>
+          {EYES.map(s => <button key={s} onClick={() => onChange({...ch, eyes:s})}
+            style={{ width:26, height:26, borderRadius:"50%", background:s, border:`3px solid ${ch.eyes===s?C.accent:"transparent"}`, cursor:"pointer" }} />)}
+        </div>
+
+        {/* Outfit */}
+        <label style={{ fontSize:12, fontWeight:700, color:C.muted, letterSpacing:.5 }}>OUTFIT COLOUR</label>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginTop:6, marginBottom:20 }}>
+          {TOPS.map(s => <button key={s} onClick={() => onChange({...ch, top:s})}
+            style={{ width:26, height:26, borderRadius:"50%", background:s, border:`3px solid ${ch.top===s?C.accent:"transparent"}`, cursor:"pointer" }} />)}
+        </div>
+
+        <button onClick={onClose}
+          style={{ width:"100%", background:C.accent, color:"#fff", border:"none", borderRadius:12, padding:"11px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
+          ✓ Save Character
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+// ─── LINK FILES BUTTON ────────────────────────────────────────────────────────
+function LinkBtn({ file, allFiles, onSave }) {
+  const [open, setOpen] = useState(false);
+  const others = allFiles.filter(f => f.id !== file.id);
+  const linked = file.linkedFileIds || [];
+
+  if (others.length === 0) return null;
+
+  return (
+    <>
+      <button onClick={() => setOpen(true)} className="hov"
+        style={{ display:"flex", alignItems:"center", gap:5, background:linked.length>0?C.accentL:"none", color:C.accent, border:`1px solid ${C.border}`, borderRadius:8, padding:"5px 10px", fontSize:12, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap" }}>
+        🔗 {linked.length > 0 ? `${linked.length} linked` : "Link files"}
+      </button>
+      {open && (
+        <div onClick={() => setOpen(false)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.45)", zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background:C.surface, borderRadius:18, padding:24, width:"100%", maxWidth:380, boxShadow:"0 16px 48px rgba(0,0,0,.2)" }}>
+            <h3 style={{ fontFamily:"'Fraunces',serif", fontSize:18, fontWeight:700, color:C.text, marginBottom:6 }}>Link Related Files</h3>
+            <p style={{ fontSize:13, color:C.muted, marginBottom:16 }}>The AI will use all linked files together when you ask questions about <strong>{file.name}</strong>.</p>
+            <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:20 }}>
+              {others.map(f => {
+                const isLinked = linked.includes(f.id);
+                return (
+                  <button key={f.id} onClick={() => {
+                    const next = isLinked ? linked.filter(id=>id!==f.id) : [...linked, f.id];
+                    onSave(next);
+                  }}
+                    style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", borderRadius:10, border:`1.5px solid ${isLinked?C.accent:C.border}`, background:isLinked?C.accentL:"#fff", cursor:"pointer", textAlign:"left" }}>
+                    <span style={{ fontSize:18 }}>{isLinked?"✅":"⬜"}</span>
+                    <span style={{ fontSize:13, fontWeight:600, color:isLinked?C.accent:C.text, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <button onClick={() => setOpen(false)}
+              style={{ width:"100%", background:C.accent, color:"#fff", border:"none", borderRadius:10, padding:"11px", fontSize:14, fontWeight:700, cursor:"pointer" }}>
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+
 function Splash() {
   return (
     <div style={{ minHeight:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center" }}>
@@ -720,7 +895,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
       return {
         id, name: f.name, type: f.type, size: f.size,
         colorIndex: 0, notes: "", studyCards: [], uploadedAt: new Date().toLocaleDateString(),
-        linkedFiles: [], _fileObj: f,
+        linkedFileIds: [], _fileObj: f,
       };
     });
     onUpdate({ ...folder, files: [...folder.files, ...added] });
@@ -794,7 +969,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
                             <p style={{ fontSize:14, fontWeight:600, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{file.name}</p>
                             <p style={{ fontSize:12, color:C.muted }}>
                               {(file.size/1024).toFixed(1)} KB · {file.uploadedAt}
-                              {linked.length > 0 && <span style={{ marginLeft:8, color:C.accent }}>🔗 {linked.length} linked</span>}
+                              {(file.linkedFileIds||[]).length > 0 && <span style={{ marginLeft:8, color:C.accent }}>🔗 {(file.linkedFileIds||[]).length} linked</span>}
                             </p>
                           </div>
                           <div style={{ display:"flex", gap:4 }}>
@@ -803,6 +978,8 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
                                 style={{ width:14, height:14, borderRadius:"50%", background:col.accent, border:file.colorIndex===ci?`2px solid ${C.text}`:"2px solid transparent", cursor:"pointer" }} />
                             ))}
                           </div>
+                          <LinkBtn file={file} allFiles={folder.files}
+                            onSave={ids => onUpdate({...folder,files:folder.files.map(f=>f.id===file.id?{...f,linkedFileIds:ids}:f)})} />
                           <button onClick={() => onOpenFile(file)} className="hov"
                             style={{ display:"flex", alignItems:"center", gap:6, background:C.accentL, color:C.accent, border:"none", borderRadius:8, padding:"7px 14px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
                             <Icon d={I.edit} size={13} color={C.accent} /> Open
@@ -1413,11 +1590,33 @@ function AITab({ file, allFiles, folder, onUpdate }) {
     const newMsgs = [...msgs, userMsg];
     setMsgs(newMsgs); setInp(""); setLoading(true);
     try {
-      const ctx = file ? `You are helping a student with the file "${file.name}".` : `You are helping a student with the folder "${folder?.name}".`;
-      const reply = await callClaudeChat(
-        ctx + " Answer clearly. Use plain text only, no asterisks or markdown symbols.",
-        newMsgs.map(m => ({ role: m.role, content: m.content }))
-      );
+      // Build context from this file + any linked files
+      let fileContext = "";
+      if (file) {
+        const mainText = file._fileObj ? (await extractFileText(file._fileObj).catch(()=>"")).slice(0,2000) : "";
+        if (mainText) fileContext += `File "${file.name}":
+${mainText}
+
+`;
+        // Add linked files content
+        const linkedIds = file.linkedFileIds || [];
+        for (const lid of linkedIds) {
+          const lf = allFiles?.find(f => f.id === lid);
+          if (lf?._fileObj) {
+            const lt = (await extractFileText(lf._fileObj).catch(()=>"")).slice(0,1500);
+            if (lt) fileContext += `Linked file "${lf.name}":
+${lt}
+
+`;
+          }
+        }
+      }
+      const sys = fileContext
+        ? `You are a study AI. Use ONLY the following file content to answer. Plain text, no asterisks.
+
+${fileContext}`
+        : `You are helping a student with "${folder?.name || "their files"}". Plain text, no asterisks.`;
+      const reply = await callClaudeChat(sys, newMsgs.map(m => ({ role:m.role, content:m.content })));
       setMsgs([...newMsgs, { role:"assistant", content: reply }]);
     } catch(e) { setMsgs([...newMsgs, { role:"assistant", content:"Error: " + e.message }]); }
     setLoading(false);
