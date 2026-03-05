@@ -238,16 +238,13 @@ const GS = `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@3
   .mobile-pad{padding:12px 14px!important}
   .mobile-small-text{font-size:12px!important}
   .tab-label{display:none}
-  .ad-bar{height:36px!important;padding:2px 6px!important}
-  .ad-bar .ad-inner{height:28px!important;max-width:100%!important}
-  .ad-bar ins{height:28px!important;max-height:28px!important}
+  .ad-bar{height:60px!important}
+  .ad-bar .ad-inner{height:52px!important}
   .toolbar-wrap{flex-wrap:wrap;gap:6px!important}
-  .ad-bar .ad-label{font-size:9px!important}
 }
 @media(max-width:480px){
-  .ad-bar{height:32px!important;padding:1px 4px!important}
-  .ad-bar .ad-inner{height:24px!important}
-  .ad-bar ins{height:24px!important;max-height:24px!important}
+  .ad-bar{height:44px!important}
+  .ad-bar .ad-inner{height:36px!important}
 }
 @keyframes bounce{0%,80%,100%{transform:scale(.8);opacity:.5}40%{transform:scale(1.1);opacity:1}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
@@ -329,23 +326,40 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const saveTimer = useRef(null);
 
+  // Restore files from IDB on every load (works for both logged-in and guest)
+  const restoreFileBlobs = async (rawFolders) => {
+    const storedFiles = await idbGetAll();
+    return rawFolders.map(folder => ({
+      ...folder,
+      files: (folder.files || []).map(file => {
+        const blob = storedFiles[file.id] || FILE_STORE.get(file.id) || null;
+        if (blob) FILE_STORE.set(file.id, blob);
+        return { ...file, _fileObj: blob };
+      }),
+    }));
+  };
+
   useEffect(() => {
+    // Restore guest folders from IDB on load
+    (async () => {
+      const raw = localStorage.getItem("classio_guest_folders");
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          const restored = await restoreFileBlobs(parsed);
+          // Only use if user is still not logged in
+          setFolders(prev => prev.length === 0 ? restored : prev);
+        } catch {}
+      }
+    })();
+
     return onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u) {
         setIsGuest(false);
         const snap = await getDoc(doc(db, "users", u.uid)).catch(() => null);
         const rawFolders = snap?.exists() ? (snap.data().folders || []) : [];
-        // Restore file blobs from IndexedDB
-        const storedFiles = await idbGetAll();
-        const restored = rawFolders.map(folder => ({
-          ...folder,
-          files: (folder.files || []).map(file => {
-            const blob = storedFiles[file.id] || FILE_STORE.get(file.id) || null;
-            if (blob) FILE_STORE.set(file.id, blob);
-            return { ...file, _fileObj: blob };
-          }),
-        }));
+        const restored = await restoreFileBlobs(rawFolders);
         setFolders(restored);
       }
     });
@@ -367,7 +381,15 @@ export default function App() {
 
   const setFoldersSave = (flds) => {
     setFolders(flds);
-    if (user && !isGuest) save(flds, user.uid);
+    if (user && !isGuest) {
+      save(flds, user.uid);
+    } else {
+      // Guest: save folder structure (without blobs) to localStorage
+      try {
+        const clean = flds.map(f => ({ ...f, files: f.files.map(({ _fileObj, ...rest }) => rest) }));
+        localStorage.setItem("classio_guest_folders", JSON.stringify(clean));
+      } catch {}
+    }
   };
 
   const updateFolder = (updated) => {
@@ -414,7 +436,7 @@ export default function App() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'DM Sans', sans-serif", paddingBottom: 48 }}>
+    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'DM Sans', sans-serif", paddingBottom: 96 }}>
       <style>{GS}</style>
       <Header user={isGuest ? { displayName: guestName, photoURL: null } : user} saving={saving} isGuest={isGuest} onSignOut={isGuest ? handleGuestSignOut : () => signOut(auth)} />
       <AdBanner />
@@ -500,8 +522,8 @@ function AdBanner() {
   }, []);
 
   return (
-    <div className="ad-bar" style={{ position:"fixed", bottom:0, left:0, right:0, zIndex:999, background:C.surface, borderTop:`1px solid ${C.border}`, display:"flex", alignItems:"center", justifyContent:"center", padding:"2px 6px", height:46 }}>
-      <div className="ad-inner" style={{ position:"relative", width:"100%", maxWidth:728, height:38 }}>
+    <div className="ad-bar" style={{ position:"fixed", bottom:0, left:0, right:0, zIndex:999, background:C.surface, borderTop:`1px solid ${C.border}`, display:"flex", alignItems:"center", justifyContent:"center", padding:"4px 8px", height:96 }}>
+      <div className="ad-inner" style={{ position:"relative", width:"100%", maxWidth:728, height:84 }}>
         <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", background:C.bg, border:`1px dashed ${C.border}`, borderRadius:4, pointerEvents:"none" }}>
           <span className="ad-label" style={{ fontSize:9, color:C.muted, letterSpacing:.5 }}>AD</span>
         </div>
@@ -788,123 +810,106 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
 
 function ViewTab({ file, onUpdate }) {
   const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
+  const fileName = fileObj?.name || file.name || "";
+  const ext  = fileName.split(".").pop().toLowerCase();
+  const mime = fileObj?.type || "";
 
-  const ext = (fileObj?.name || file.name || "").split(".").pop().toLowerCase();
-  const isPDF  = ext === "pdf" || fileObj?.type === "application/pdf";
-  const isImage = fileObj?.type?.startsWith("image/");
-  const isText  = ["txt","md","csv","json","js","py","html","css"].includes(ext);
+  const isPDF   = ext === "pdf" || mime === "application/pdf";
+  const isImage = mime.startsWith("image/") || ["jpg","jpeg","png","gif","webp","bmp","svg"].includes(ext);
+  const isText  = ["txt","md","csv","json","js","ts","jsx","py","html","css","xml","yaml","yml"].includes(ext);
   const isWord  = ["doc","docx"].includes(ext);
   const isPPT   = ["ppt","pptx"].includes(ext);
   const isExcel = ["xls","xlsx"].includes(ext);
 
-  // ── PDF state ──────────────────────────────────────────────────────────────
-  const canvasRef   = useRef(null);
-  const drawRef     = useRef(null);
-  const renderRef   = useRef(null);
-  const pdfRef      = useRef(null); // holds loaded pdf document
+  // PDF state
+  const canvasRef  = useRef(null);
+  const drawRef    = useRef(null);
+  const renderRef  = useRef(null);
+  const pdfRef     = useRef(null);
   const [totalPages, setTotalPages] = useState(0);
   const [pageNum,    setPageNum]    = useState(1);
   const [pdfReady,   setPdfReady]   = useState(false);
-  const [annotations, setAnnotations] = useState({});
-
-  // ── Draw state ─────────────────────────────────────────────────────────────
+  const [annotations,setAnnotations]= useState({});
   const [tool,      setTool]      = useState("pen");
-  const [color,     setColor]     = useState("#E53E3E");
+  const [penColor,  setPenColor]  = useState("#E53E3E");
   const [brushSize, setBrushSize] = useState(3);
   const [drawing,   setDrawing]   = useState(false);
-  const lastPosRef  = useRef(null);
+  const lastPosRef = useRef(null);
 
-  // ── Explain state ──────────────────────────────────────────────────────────
+  // Explain state
   const [explaining,  setExplaining]  = useState(false);
   const [explanation, setExplanation] = useState("");
   const [showExplain, setShowExplain] = useState(false);
 
-  // ── Load PDF ───────────────────────────────────────────────────────────────
+  // PPT page nav
+  const [pptTotal, setPptTotal] = useState(0);
+  const [pptPage,  setPptPage]  = useState(1);
+
+  // Load PDF
   useEffect(() => {
     if (!isPDF || !fileObj) return;
-    setPdfReady(false);
-    pdfRef.current = null;
-    setPageNum(1);
+    setPdfReady(false); pdfRef.current = null; setPageNum(1);
     (async () => {
       try {
         if (!window.pdfjsLib) {
           await new Promise((res, rej) => {
             const s = document.createElement("script");
             s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
-            s.onload = res; s.onerror = rej;
-            document.head.appendChild(s);
+            s.onload = res; s.onerror = rej; document.head.appendChild(s);
           });
           window.pdfjsLib.GlobalWorkerOptions.workerSrc =
             "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
         }
-        const ab = await fileObj.arrayBuffer();
-        const pdf = await window.pdfjsLib.getDocument({ data: new Uint8Array(ab) }).promise;
+        const buf = await fileObj.arrayBuffer();
+        const pdf = await window.pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
         pdfRef.current = pdf;
         setTotalPages(pdf.numPages);
-        setPdfReady(true); // triggers render
+        setPdfReady(true);
       } catch(e) { console.error("PDF load:", e); }
     })();
   }, [fileObj]);
 
-  // ── Render page whenever pdfReady or pageNum changes ──────────────────────
+  // Render PDF page
   useEffect(() => {
     if (!pdfReady || !pdfRef.current) return;
-    const pdf = pdfRef.current;
-    const pg  = pageNum;
+    const pdf = pdfRef.current; const pg = pageNum;
     (async () => {
-      // cancel any previous render
-      if (renderRef.current) {
-        try { renderRef.current.cancel(); } catch {}
-        renderRef.current = null;
-      }
-      // wait for canvas to exist in the DOM
-      let c = canvasRef.current;
-      if (!c) return;
+      if (renderRef.current) { try { renderRef.current.cancel(); } catch {} renderRef.current = null; }
+      const c = canvasRef.current; if (!c) return;
       try {
-        const pdfPage  = await pdf.getPage(pg);
-        const parentW  = c.parentElement?.offsetWidth || 780;
-        const baseVp   = pdfPage.getViewport({ scale: 1 });
-        const scale    = Math.min(2.5, (parentW - 32) / baseVp.width);
-        const vp       = pdfPage.getViewport({ scale });
-        c.width  = vp.width;
-        c.height = vp.height;
+        const pdfPage = await pdf.getPage(pg);
+        const parentW = c.parentElement?.offsetWidth || 760;
+        const base    = pdfPage.getViewport({ scale: 1 });
+        const scale   = Math.min(2.5, (parentW - 32) / base.width);
+        const vp      = pdfPage.getViewport({ scale });
+        c.width = vp.width; c.height = vp.height;
         const ctx = c.getContext("2d");
-        ctx.fillStyle = "#fff";
-        ctx.fillRect(0, 0, c.width, c.height);
+        ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
         const task = pdfPage.render({ canvasContext: ctx, viewport: vp });
         renderRef.current = task;
-        await task.promise;
-        renderRef.current = null;
-        // sync draw layer
+        await task.promise; renderRef.current = null;
         const dc = drawRef.current;
         if (dc) {
-          dc.width  = vp.width;
-          dc.height = vp.height;
+          dc.width = vp.width; dc.height = vp.height;
           dc.getContext("2d").clearRect(0, 0, dc.width, dc.height);
           if (annotations[pg]) {
             const img = new Image();
-            img.onload = () => dc.getContext("2d").drawImage(img, 0, 0);
+            img.onload = () => dc.getContext("2d")?.drawImage(img, 0, 0);
             img.src = annotations[pg];
           }
         }
-      } catch(e) {
-        if (e?.name !== "RenderingCancelledException") console.error("Render:", e);
-      }
+      } catch(e) { if (e?.name !== "RenderingCancelledException") console.error("Render:", e); }
     })();
   }, [pdfReady, pageNum]);
 
   const saveAnnotation = () => {
-    if (drawRef.current)
-      setAnnotations(prev => ({ ...prev, [pageNum]: drawRef.current.toDataURL() }));
+    if (drawRef.current) setAnnotations(p => ({ ...p, [pageNum]: drawRef.current.toDataURL() }));
   };
   const changePage = (n) => {
-    const clamped = Math.max(1, Math.min(totalPages, n));
-    if (clamped === pageNum) return;
-    saveAnnotation();
-    setPageNum(clamped);
+    const v = Math.max(1, Math.min(totalPages, n));
+    if (v === pageNum) return;
+    saveAnnotation(); setPageNum(v);
   };
-
-  // ── Drawing ────────────────────────────────────────────────────────────────
   const getPos = (e) => {
     const dc = drawRef.current;
     const r  = dc.getBoundingClientRect();
@@ -918,12 +923,10 @@ function ViewTab({ file, onUpdate }) {
     if (!drawing || !lastPosRef.current || !drawRef.current) return;
     const ctx = drawRef.current.getContext("2d");
     const pos = getPos(e);
-    ctx.beginPath();
-    ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y);
-    ctx.lineTo(pos.x, pos.y);
-    if (tool === "eraser")        { ctx.globalCompositeOperation = "destination-out"; ctx.lineWidth = brushSize * 5; }
-    else if (tool === "highlight"){ ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 0.3; ctx.lineWidth = brushSize * 7; ctx.strokeStyle = color; }
-    else                          { ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 1;   ctx.lineWidth = brushSize; ctx.strokeStyle = color; }
+    ctx.beginPath(); ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y); ctx.lineTo(pos.x, pos.y);
+    if (tool === "eraser")         { ctx.globalCompositeOperation = "destination-out"; ctx.lineWidth = brushSize * 5; }
+    else if (tool === "highlight") { ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 0.3; ctx.lineWidth = brushSize * 8; ctx.strokeStyle = penColor; }
+    else                           { ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 1; ctx.lineWidth = brushSize; ctx.strokeStyle = penColor; }
     ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.stroke();
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = "source-over";
     lastPosRef.current = pos;
@@ -934,20 +937,18 @@ function ViewTab({ file, onUpdate }) {
     setAnnotations(p => { const n = {...p}; delete n[pageNum]; return n; });
   };
 
-  // ── AI Explain ─────────────────────────────────────────────────────────────
   const doExplain = async () => {
     setExplaining(true); setShowExplain(true); setExplanation("");
     try {
       let text = "";
       if (pdfRef.current) {
         const pg = await pdfRef.current.getPage(pageNum);
-        const tc = await pg.getTextContent();
-        text = tc.items.map(i => i.str).join(" ").trim().slice(0, 3000);
+        text = (await pg.getTextContent()).items.map(i => i.str).join(" ").trim().slice(0, 3000);
       } else if (fileObj) {
         text = (await extractFileText(fileObj).catch(() => "")).slice(0, 3000);
       }
       const res = await callClaude(
-        "You are a helpful study tutor. Explain the content clearly and simply. Plain text only — no asterisks, no markdown.",
+        "You are a helpful study tutor. Explain clearly and simply. Plain text only — no asterisks, no markdown.",
         text
           ? `Explain ONLY this content from page ${pageNum} of "${file.name}":
 
@@ -962,14 +963,13 @@ ${text}`
   const COLORS = ["#E53E3E","#FF8C00","#ECC94B","#38A169","#3182CE","#805AD5","#1a1a1a","#ffffff"];
   const TOOLS  = [{id:"pen",icon:"✏️"},{id:"highlight",icon:"🖊️"},{id:"eraser",icon:"🧹"}];
 
-  // ── No file loaded ─────────────────────────────────────────────────────────
   if (!fileObj) return (
     <div style={{ textAlign:"center", padding:"60px 24px" }}>
       <div style={{ fontSize:48, marginBottom:12 }}>📂</div>
       <p style={{ fontSize:16, fontWeight:600, color:C.text, marginBottom:8 }}>File not loaded</p>
-      <p style={{ fontSize:13, color:C.muted, marginBottom:20 }}>Re-open the file once to reload it.</p>
+      <p style={{ fontSize:13, color:C.muted, marginBottom:20 }}>Files need to be re-uploaded once after a full page refresh.</p>
       <label style={{ display:"inline-flex", alignItems:"center", gap:8, background:C.accent, color:"#fff", borderRadius:10, padding:"11px 22px", cursor:"pointer", fontSize:14, fontWeight:600 }}>
-        📁 Open File
+        📁 Re-open File
         <input type="file" style={{ display:"none" }} onChange={e => {
           const f = e.target.files?.[0]; if (!f) return;
           FILE_STORE.set(file.id, f); idbSave(file.id, f); onUpdate({...file, _fileObj: f});
@@ -981,7 +981,7 @@ ${text}`
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 112px)" }}>
 
-      {/* ── Toolbar ── */}
+      {/* Toolbar */}
       <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"6px 14px", display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
         {isPDF ? (<>
           {TOOLS.map(t => (
@@ -990,42 +990,49 @@ ${text}`
               {t.icon}
             </button>
           ))}
-          <div style={{ width:1, height:20, background:C.border }} />
+          <div style={{ width:1, height:20, background:C.border, flexShrink:0 }} />
           {COLORS.map(col => (
-            <button key={col} onClick={() => setColor(col)}
-              style={{ width:18, height:18, borderRadius:"50%", background:col, border:color===col?`3px solid ${C.accent}`:`1.5px solid ${C.border}`, cursor:"pointer", flexShrink:0 }} />
+            <button key={col} onClick={() => setPenColor(col)}
+              style={{ width:18, height:18, borderRadius:"50%", background:col, border:penColor===col?`3px solid ${C.accent}`:`1.5px solid ${C.border}`, cursor:"pointer", flexShrink:0 }} />
           ))}
-          <div style={{ width:1, height:20, background:C.border }} />
+          <div style={{ width:1, height:20, background:C.border, flexShrink:0 }} />
           <input type="range" min="1" max="20" value={brushSize} onChange={e => setBrushSize(+e.target.value)} style={{ width:60 }} />
           <button onClick={clearDraw} style={{ fontSize:12, background:"none", border:`1px solid ${C.border}`, borderRadius:6, padding:"4px 8px", cursor:"pointer", color:C.muted }}>🗑️ Clear</button>
           <div style={{ flex:1 }} />
           <div style={{ display:"flex", alignItems:"center", gap:5 }}>
-            <button onClick={() => changePage(pageNum - 1)} disabled={pageNum <= 1}
-              style={{ width:28, height:28, borderRadius:6, border:`1px solid ${C.border}`, background:"#fff", cursor:pageNum<=1?"default":"pointer", opacity:pageNum<=1?.4:1, fontSize:16 }}>‹</button>
+            <button onClick={() => changePage(pageNum-1)} disabled={pageNum<=1}
+              style={{ width:28, height:28, borderRadius:6, border:`1px solid ${C.border}`, background:"#fff", cursor:pageNum<=1?"default":"pointer", opacity:pageNum<=1?.4:1, fontSize:18 }}>‹</button>
             <input type="number" value={pageNum} min="1" max={totalPages}
-              onChange={e => changePage(parseInt(e.target.value) || 1)}
+              onChange={e => changePage(parseInt(e.target.value)||1)}
               style={{ width:42, textAlign:"center", border:`1px solid ${C.border}`, borderRadius:6, padding:"3px 4px", fontSize:13, outline:"none" }} />
             <span style={{ fontSize:12, color:C.muted }}>/ {totalPages}</span>
-            <button onClick={() => changePage(pageNum + 1)} disabled={pageNum >= totalPages}
-              style={{ width:28, height:28, borderRadius:6, border:`1px solid ${C.border}`, background:"#fff", cursor:pageNum>=totalPages?"default":"pointer", opacity:pageNum>=totalPages?.4:1, fontSize:16 }}>›</button>
+            <button onClick={() => changePage(pageNum+1)} disabled={pageNum>=totalPages}
+              style={{ width:28, height:28, borderRadius:6, border:`1px solid ${C.border}`, background:"#fff", cursor:pageNum>=totalPages?"default":"pointer", opacity:pageNum>=totalPages?.4:1, fontSize:18 }}>›</button>
           </div>
           <button onClick={doExplain} disabled={explaining}
-            style={{ display:"flex", alignItems:"center", gap:5, background:C.accent, color:"#fff", border:"none", borderRadius:7, padding:"6px 14px", fontSize:13, fontWeight:600, cursor:explaining?"default":"pointer" }}>
-            <Icon d={I.sparkle} size={12} color="#fff" sw={2} />
-            {explaining ? "…" : `Explain Page ${pageNum}`}
+            style={{ display:"flex", alignItems:"center", gap:5, background:C.accent, color:"#fff", border:"none", borderRadius:7, padding:"6px 14px", fontSize:13, fontWeight:600, cursor:explaining?"default":"pointer", whiteSpace:"nowrap" }}>
+            <Icon d={I.sparkle} size={12} color="#fff" sw={2} />{explaining?"…":`Explain Page ${pageNum}`}
           </button>
         </>) : (<>
-          <span style={{ fontSize:13, color:C.muted }}>📄 <strong style={{ color:C.text }}>{file.name}</strong></span>
+          <span style={{ fontSize:13, color:C.muted }}>📄 <strong style={{ color:C.text }}>{fileName}</strong></span>
           <div style={{ flex:1 }} />
+          {isPPT && pptTotal > 1 && (
+            <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+              <button onClick={() => setPptPage(p=>Math.max(1,p-1))} disabled={pptPage<=1}
+                style={{ width:28, height:28, borderRadius:6, border:`1px solid ${C.border}`, background:"#fff", cursor:pptPage<=1?"default":"pointer", opacity:pptPage<=1?.4:1, fontSize:18 }}>‹</button>
+              <span style={{ fontSize:13, color:C.muted }}>{pptPage}/{pptTotal}</span>
+              <button onClick={() => setPptPage(p=>Math.min(pptTotal,p+1))} disabled={pptPage>=pptTotal}
+                style={{ width:28, height:28, borderRadius:6, border:`1px solid ${C.border}`, background:"#fff", cursor:pptPage>=pptTotal?"default":"pointer", opacity:pptPage>=pptTotal?.4:1, fontSize:18 }}>›</button>
+            </div>
+          )}
           <button onClick={doExplain} disabled={explaining}
             style={{ display:"flex", alignItems:"center", gap:5, background:C.accent, color:"#fff", border:"none", borderRadius:7, padding:"6px 14px", fontSize:13, fontWeight:600, cursor:explaining?"default":"pointer" }}>
-            <Icon d={I.sparkle} size={12} color="#fff" sw={2} />
-            {explaining ? "Explaining…" : "AI Explain"}
+            <Icon d={I.sparkle} size={12} color="#fff" sw={2} />{explaining?"Explaining…":"AI Explain"}
           </button>
         </>)}
       </div>
 
-      {/* ── Viewer ── */}
+      {/* Viewer */}
       <div style={{ flex:1, display:"flex", overflow:"hidden" }}>
         <div style={{ flex:1, overflow:"auto", background:"#404040", padding:"24px", display:"flex", justifyContent:"center", alignItems:"flex-start" }}>
 
@@ -1039,28 +1046,20 @@ ${text}`
             </div>
           )}
 
-          {isImage && fileObj && (
-            <img src={URL.createObjectURL(fileObj)} alt={file.name}
-              style={{ maxWidth:"100%", maxHeight:"calc(100vh - 200px)", boxShadow:"0 4px 32px rgba(0,0,0,.5)", borderRadius:4 }} />
-          )}
-
-          {isText  && <TextViewer  fileObj={fileObj} />}
-          {isWord  && <WordViewer  fileObj={fileObj} />}
-          {isPPT   && <PPTViewer   fileObj={fileObj} page={pageNum} onTotalPages={setTotalPages} />}
-          {isExcel && <ExcelViewer fileObj={fileObj} />}
+          {isImage  && <ImageViewer  fileObj={fileObj} fileName={fileName} />}
+          {isText   && <TextViewer   fileObj={fileObj} />}
+          {isWord   && <WordViewer   fileObj={fileObj} />}
+          {isPPT    && <PPTViewer    fileObj={fileObj} page={pptPage} onTotalPages={setPptTotal} />}
+          {isExcel  && <ExcelViewer  fileObj={fileObj} />}
 
           {!isPDF && !isImage && !isText && !isWord && !isPPT && !isExcel && (
-            <div style={{ textAlign:"center", color:"#fff", padding:"60px 20px" }}>
-              <div style={{ fontSize:56, marginBottom:14 }}>📎</div>
-              <p style={{ fontSize:16, fontWeight:600, marginBottom:8 }}>{file.name}</p>
-              <p style={{ opacity:.6, fontSize:13 }}>Preview not available. Use AI Assistant to ask questions about it.</p>
-            </div>
+            <DownloadViewer fileObj={fileObj} fileName={fileName} />
           )}
         </div>
 
-        {/* AI Explain panel */}
+        {/* Explain panel */}
         {showExplain && (
-          <div style={{ width:300, background:C.surface, borderLeft:`1px solid ${C.border}`, display:"flex", flexDirection:"column" }}>
+          <div style={{ width:300, background:C.surface, borderLeft:`1px solid ${C.border}`, display:"flex", flexDirection:"column", flexShrink:0 }}>
             <div style={{ padding:"12px 16px", borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
               <span style={{ fontSize:13, fontWeight:700, color:C.text }}>
                 {isPDF ? `Page ${pageNum} — Explanation` : "AI Explanation"}
@@ -1071,7 +1070,7 @@ ${text}`
             </div>
             <div style={{ flex:1, overflowY:"auto", padding:"14px 16px" }}>
               {explaining
-                ? <div style={{ display:"flex", gap:5, paddingTop:8 }}>{[0,1,2].map(j=><div key={j} style={{ width:7,height:7,borderRadius:"50%",background:C.accent,animation:"bounce 1.2s infinite",animationDelay:`${j*.2}s` }}/>)}</div>
+                ? <div style={{ display:"flex", gap:5 }}>{[0,1,2].map(j=><div key={j} style={{ width:7,height:7,borderRadius:"50%",background:C.accent,animation:"bounce 1.2s infinite",animationDelay:`${j*.2}s` }}/>)}</div>
                 : <div style={{ fontSize:13, lineHeight:1.7, color:C.text, whiteSpace:"pre-wrap" }}>{explanation}</div>
               }
             </div>
@@ -1082,23 +1081,40 @@ ${text}`
   );
 }
 
-
 // ─── FILE VIEWER HELPERS ──────────────────────────────────────────────────────
-function TextViewer({ fileObj }) {
-  const [text, setText] = useState("");
+
+function ImageViewer({ fileObj, fileName }) {
+  const [url, setUrl] = useState(null);
   useEffect(() => {
-    readFileAsText(fileObj).then(t => setText(t || "File appears to be empty.")).catch(() => setText("Could not read file."));
+    const u = URL.createObjectURL(fileObj);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [fileObj]);
+  if (!url) return null;
+  return (
+    <img src={url} alt={fileName}
+      style={{ maxWidth:"100%", maxHeight:"calc(100vh - 200px)", borderRadius:6, boxShadow:"0 4px 32px rgba(0,0,0,.5)", background:"#fff" }} />
+  );
+}
+
+function TextViewer({ fileObj }) {
+  const [text, setText] = useState("Loading…");
+  useEffect(() => {
+    readFileAsText(fileObj)
+      .then(t => setText(t || "(empty)"))
+      .catch(() => setText("Could not read file."));
   }, [fileObj]);
   return (
-    <div style={{ background:"#fff", padding:"24px 28px", borderRadius:4, maxWidth:800, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,.4)", whiteSpace:"pre-wrap", fontFamily:"monospace", fontSize:13, lineHeight:1.7, color:"#1a1a1a", minHeight:400, wordBreak:"break-word", overflowWrap:"break-word" }}>
-      {text || "Loading…"}
+    <div style={{ background:"#1e1e2e", color:"#cdd6f4", padding:"24px 28px", borderRadius:8, width:"100%", maxWidth:860, boxShadow:"0 8px 32px rgba(0,0,0,.5)", whiteSpace:"pre-wrap", fontFamily:"monospace", fontSize:13, lineHeight:1.8, minHeight:400, wordBreak:"break-word" }}>
+      {text}
     </div>
   );
 }
 
 function WordViewer({ fileObj }) {
-  const [html, setHtml] = useState("");
+  const [html,    setHtml]    = useState("");
   const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState("");
   useEffect(() => {
     (async () => {
       try {
@@ -1109,23 +1125,32 @@ function WordViewer({ fileObj }) {
             s.onload = res; s.onerror = rej; document.head.appendChild(s);
           });
         }
-        const ab = await fileObj.arrayBuffer();
-        const result = await window.mammoth.convertToHtml({ arrayBuffer: ab });
-        setHtml(result.value);
-      } catch(e) { setHtml("<p>Could not render Word file.</p>"); }
+        const ab  = await fileObj.arrayBuffer();
+        const out = await window.mammoth.convertToHtml({ arrayBuffer: ab });
+        if (out.value) setHtml(out.value);
+        else setError("Document appears empty.");
+      } catch(e) {
+        console.error("Word:", e);
+        setError("Could not render this Word file: " + e.message);
+      }
       setLoading(false);
     })();
   }, [fileObj]);
+
   return (
-    <div style={{ background:"#fff", padding:"40px 48px", borderRadius:4, maxWidth:820, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,.4)", minHeight:400, color:"#1a1a1a", lineHeight:1.8, fontSize:14 }}>
-      {loading ? "Loading…" : <div dangerouslySetInnerHTML={{ __html: html }} />}
+    <div style={{ background:"#fff", padding:"48px 60px", borderRadius:4, maxWidth:860, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,.4)", minHeight:500, fontSize:14, lineHeight:1.9, color:"#111" }}>
+      {loading && <p style={{ color:"#888" }}>Loading document…</p>}
+      {error   && <p style={{ color:"#e53e3e" }}>{error}</p>}
+      {html    && <div dangerouslySetInnerHTML={{ __html: html }} />}
     </div>
   );
 }
 
 function PPTViewer({ fileObj, page, onTotalPages }) {
-  const [slides, setSlides] = useState([]);
+  const [slides,  setSlides]  = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState("");
+
   useEffect(() => {
     (async () => {
       try {
@@ -1136,41 +1161,97 @@ function PPTViewer({ fileObj, page, onTotalPages }) {
             s.onload = res; s.onerror = rej; document.head.appendChild(s);
           });
         }
-        const ab = await fileObj.arrayBuffer();
+        const ab  = await fileObj.arrayBuffer();
         const zip = await window.JSZip.loadAsync(ab);
-        const slideFiles = Object.keys(zip.files).filter(n => n.match(/ppt\/slides\/slide[0-9]+\.xml$/)).sort();
-        onTotalPages && onTotalPages(slideFiles.length);
-        const parsed = await Promise.all(slideFiles.map(async sf => {
-          const xml = await zip.files[sf].async("string");
+
+        // Find slides in correct order
+        const slideKeys = Object.keys(zip.files)
+          .filter(k => /^ppt\/slides\/slide\d+\.xml$/.test(k))
+          .sort((a, b) => {
+            const na = parseInt(a.match(/\d+/)[0]);
+            const nb = parseInt(b.match(/\d+/)[0]);
+            return na - nb;
+          });
+
+        if (slideKeys.length === 0) { setError("No slides found in this file."); setLoading(false); return; }
+        onTotalPages && onTotalPages(slideKeys.length);
+
+        const parsed = await Promise.all(slideKeys.map(async sk => {
+          const xml  = await zip.files[sk].async("string");
+          // Extract all text nodes
           const texts = [];
-          const regex = /<a:t[^>]*>([^<]*)<\/a:t>/g;
+          const re = /<a:t[^>]*>([^<]*)<\/a:t>/g;
           let m;
-          while ((m = regex.exec(xml)) !== null) { if (m[1].trim()) texts.push(m[1].trim()); }
-          return texts;
+          while ((m = re.exec(xml)) !== null) if (m[1].trim()) texts.push(m[1].trim());
+          // Extract embedded images
+          const relKey = sk.replace("slides/slide", "slides/_rels/slide").replace(".xml", ".xml.rels");
+          const imgs = [];
+          if (zip.files[relKey]) {
+            const relXml = await zip.files[relKey].async("string");
+            const imgRe  = /Target="\.\.\/media\/([^"]+)"/g;
+            let rm;
+            while ((rm = imgRe.exec(relXml)) !== null) {
+              const path = "ppt/media/" + rm[1];
+              if (zip.files[path]) {
+                const ext2 = rm[1].split(".").pop().toLowerCase();
+                const mt   = ext2==="png"?"image/png":ext2==="gif"?"image/gif":ext2==="svg"?"image/svg+xml":"image/jpeg";
+                const b64  = await zip.files[path].async("base64");
+                imgs.push({ src:`data:${mt};base64,${b64}`, ext: ext2 });
+              }
+            }
+          }
+          return { texts, imgs };
         }));
+
         setSlides(parsed);
-      } catch(e) { setSlides([["Could not render PowerPoint."]]); }
+      } catch(e) {
+        console.error("PPT:", e);
+        setError("Could not render PowerPoint: " + e.message);
+      }
       setLoading(false);
     })();
   }, [fileObj]);
-  const slide = slides[(page || 1) - 1] || [];
+
+  const slide = slides[Math.max(0, (page||1) - 1)] || { texts:[], imgs:[] };
+
+  if (loading) return <div style={{ color:"#fff", padding:40 }}>Loading presentation…</div>;
+  if (error)   return <div style={{ color:"#fca5a5", padding:40, background:"#1e1e2e", borderRadius:8 }}>{error}</div>;
+
   return (
-    <div style={{ background:"#fff", borderRadius:8, maxWidth:820, width:"100%", minHeight:460, boxShadow:"0 8px 32px rgba(0,0,0,.4)", padding:"40px 48px", display:"flex", flexDirection:"column", justifyContent:"flex-start" }}>
-      {loading ? <p style={{ color:"#888" }}>Loading slides…</p> : slide.length === 0 ? <p style={{ color:"#888" }}>No text on this slide.</p> :
-        slide.map((t, i) => (
-          <p key={i} style={{ fontSize: i === 0 ? 22 : 14, fontWeight: i === 0 ? 700 : 400, color: "#1a1a1a", marginBottom: i === 0 ? 18 : 6, lineHeight: 1.5,
-            borderBottom: i===0&&slide.length>1 ? "1px solid rgba(128,128,128,.2)" : "none", paddingBottom: i===0&&slide.length>1 ? 16 : 0 }}>
-            {t}
-          </p>
-        ))
-      }
+    <div style={{ background:"#fff", borderRadius:8, width:"100%", maxWidth:900, minHeight:480, boxShadow:"0 8px 32px rgba(0,0,0,.4)", overflow:"hidden" }}>
+      {/* Slide header */}
+      {slide.texts[0] && (
+        <div style={{ background:"linear-gradient(135deg, #1a1a2e, #16213e)", padding:"28px 36px" }}>
+          <p style={{ fontSize:24, fontWeight:800, color:"#fff", lineHeight:1.3 }}>{slide.texts[0]}</p>
+        </div>
+      )}
+      {/* Images */}
+      {slide.imgs.length > 0 && (
+        <div style={{ padding:"20px 36px 0", display:"flex", gap:12, flexWrap:"wrap" }}>
+          {slide.imgs.map((img, i) => (
+            <img key={i} src={img.src} alt="" style={{ maxWidth:"100%", maxHeight:280, objectFit:"contain", borderRadius:6, border:"1px solid #e5e7eb" }} />
+          ))}
+        </div>
+      )}
+      {/* Body text */}
+      <div style={{ padding:"20px 36px 32px" }}>
+        {slide.texts.slice(1).map((t, i) => (
+          <p key={i} style={{ fontSize:15, color:"#374151", marginBottom:8, lineHeight:1.7 }}>• {t}</p>
+        ))}
+        {slide.texts.length === 0 && slide.imgs.length === 0 && (
+          <p style={{ color:"#9ca3af", fontStyle:"italic", marginTop:40, textAlign:"center" }}>No content on this slide.</p>
+        )}
+      </div>
     </div>
   );
 }
 
 function ExcelViewer({ fileObj }) {
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [sheets,      setSheets]      = useState([]);
+  const [activeSheet, setActiveSheet] = useState(0);
+  const [loading,     setLoading]     = useState(true);
+  const [error,       setError]       = useState("");
+
   useEffect(() => {
     (async () => {
       try {
@@ -1183,35 +1264,79 @@ function ExcelViewer({ fileObj }) {
         }
         const ab = await fileObj.arrayBuffer();
         const wb = window.XLSX.read(ab, { type:"array" });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const data = window.XLSX.utils.sheet_to_json(ws, { header:1 });
-        setRows(data.slice(0, 100));
-      } catch(e) { setRows([["Could not render spreadsheet."]]); }
+        const all = wb.SheetNames.map(sn => ({
+          name: sn,
+          rows: window.XLSX.utils.sheet_to_json(wb.Sheets[sn], { header:1, defval:"" }),
+        }));
+        if (all.length === 0) setError("No sheets found.");
+        else setSheets(all);
+      } catch(e) {
+        console.error("Excel:", e);
+        setError("Could not read spreadsheet: " + e.message);
+      }
       setLoading(false);
     })();
   }, [fileObj]);
+
+  if (loading) return <div style={{ color:"#fff", padding:40 }}>Loading spreadsheet…</div>;
+  if (error)   return <div style={{ color:"#fca5a5", padding:40, background:"#1e1e2e", borderRadius:8 }}>{error}</div>;
+
+  const sheet = sheets[activeSheet] || { rows:[] };
+  // Find max columns
+  const maxCols = Math.max(...sheet.rows.map(r => r.length), 0);
+
   return (
-    <div style={{ background:"#fff", borderRadius:4, maxWidth:900, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,.4)", overflow:"auto", maxHeight:"70vh" }}>
-      {loading ? <p style={{ padding:24, color:"#888" }}>Loading…</p> :
-        <table style={{ borderCollapse:"collapse", width:"100%", fontSize:13 }}>
+    <div style={{ background:"#fff", borderRadius:8, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,.4)", overflow:"hidden" }}>
+      {sheets.length > 1 && (
+        <div style={{ display:"flex", background:"#f3f4f6", borderBottom:"1px solid #e5e7eb", overflowX:"auto" }}>
+          {sheets.map((s, i) => (
+            <button key={i} onClick={() => setActiveSheet(i)}
+              style={{ padding:"8px 18px", border:"none", background:activeSheet===i?"#fff":"transparent", borderBottom:activeSheet===i?`2px solid ${C.accent}`:"2px solid transparent", fontWeight:activeSheet===i?700:400, color:activeSheet===i?C.accent:C.muted, fontSize:13, cursor:"pointer", whiteSpace:"nowrap" }}>
+              {s.name}
+            </button>
+          ))}
+        </div>
+      )}
+      <div style={{ overflowX:"auto", maxHeight:"calc(100vh - 250px)" }}>
+        <table style={{ borderCollapse:"collapse", width:"100%", fontSize:13, minWidth: maxCols * 100 }}>
           <tbody>
-            {rows.map((row, i) => (
-              <tr key={i} style={{ background: i===0 ? "#f3f4f6" : i%2===0 ? "#fff" : "#f9fafb" }}>
-                {(Array.isArray(row) ? row : [row]).map((cell, j) => (
-                  <td key={j} style={{ border:"1px solid #e5e7eb", padding:"6px 10px", fontWeight: i===0?700:400, whiteSpace:"nowrap" }}>
-                    {cell ?? ""}
+            {sheet.rows.map((row, ri) => (
+              <tr key={ri} style={{ background: ri===0?"#eff6ff": ri%2===0?"#fff":"#f9fafb" }}>
+                {Array.from({ length: Math.max(row.length, maxCols) }, (_, ci) => (
+                  <td key={ci} style={{ border:"1px solid #e5e7eb", padding:"6px 12px", fontWeight:ri===0?700:400, whiteSpace:"nowrap", maxWidth:240, overflow:"hidden", textOverflow:"ellipsis", color: ri===0?"#1d4ed8":"#111" }}>
+                    {row[ci] ?? ""}
                   </td>
                 ))}
               </tr>
             ))}
           </tbody>
         </table>
-      }
+      </div>
     </div>
   );
 }
 
-// ─── AI TAB ───────────────────────────────────────────────────────────────────
+function DownloadViewer({ fileObj, fileName }) {
+  const [url, setUrl] = useState(null);
+  useEffect(() => {
+    const u = URL.createObjectURL(fileObj);
+    setUrl(u); return () => URL.revokeObjectURL(u);
+  }, [fileObj]);
+  const sizeKB = Math.round((fileObj?.size||0)/1024);
+  return (
+    <div style={{ textAlign:"center", color:"#fff", padding:"60px 20px" }}>
+      <div style={{ fontSize:72, marginBottom:20 }}>📎</div>
+      <p style={{ fontSize:20, fontWeight:700, marginBottom:8 }}>{fileName}</p>
+      <p style={{ opacity:.6, fontSize:13, marginBottom:28 }}>{sizeKB} KB · Preview not available in browser</p>
+      {url && <a href={url} download={fileName}
+        style={{ display:"inline-flex", alignItems:"center", gap:8, background:C.accent, color:"#fff", borderRadius:10, padding:"12px 24px", fontSize:15, fontWeight:600, textDecoration:"none" }}>
+        ⬇️ Download File
+      </a>}
+    </div>
+  );
+}
+
+
 function AITab({ file, allFiles, folder, onUpdate }) {
   const [msgs, setMsgs] = useState([]);
   const [inp, setInp] = useState("");
@@ -2423,13 +2548,13 @@ function VoiceAnswer({ cards, onBack }) {
       }
       setTranscript((lastFinal + interim).trim());
 
-      // Reset silence detection — start countdown only after 1.5s of silence
+      // Reset silence detection — start countdown only after 0.6s of silence
       clearTimeout(silenceTimer);
       if (lastFinal.trim()) {
         silenceTimer = setTimeout(() => {
-          // Stop recognition — onend will start the 5s countdown
+          // Stop recognition — onend will start the countdown
           try { rec.stop(); } catch {}
-        }, 1500);
+        }, 600);
       }
     };
 
@@ -2442,8 +2567,8 @@ function VoiceAnswer({ cards, onBack }) {
       isListeningRef.current = false;
       setListening(false);
       if (!lastFinal.trim()) return;
-      // Start 5 second countdown
-      let countdown = 5;
+      // Start 3 second countdown at 400ms ticks (feels snappy)
+      let countdown = 3;
       setVoiceCountdown(countdown);
       const timer = setInterval(() => {
         countdown -= 1;
@@ -2454,7 +2579,7 @@ function VoiceAnswer({ cards, onBack }) {
           setVoiceCountdown(null);
           checkAnswer(lastFinal.trim());
         }
-      }, 1000);
+      }, 400);
       countdownRef.current = timer;
     };
 
@@ -2564,7 +2689,7 @@ Is the student correct? Reply only YES or NO.`
               <div style={{ display: "inline-flex", alignItems: "center", gap: 10, background: "#f5f3ff", border: `2px solid ${accent}33`, borderRadius: 12, padding: "10px 20px" }}>
                 <div style={{ width: 36, height: 36, borderRadius: "50%", background: accent, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 800 }}>{voiceCountdown}</div>
                 <div>
-                  <p style={{ fontSize: 13, fontWeight: 700, color: accent }}>Submitting in {voiceCountdown}s…</p>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: accent }}>Submitting in {voiceCountdown}… tap mic to redo</p>
                   <p style={{ fontSize: 11, color: "#6b7280" }}>Not right? tap Try again below</p>
                 </div>
               </div>
