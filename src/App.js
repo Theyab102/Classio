@@ -321,57 +321,57 @@ export default function App() {
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(FOLDER_COLORS[0]);
 
-  // ── Refs that always hold the latest values (no stale closure issues) ────────
-  const foldersRef  = useRef([]);
-  const userRef     = useRef(null);
-  const isGuestRef  = useRef(false);
-  useEffect(() => { foldersRef.current  = folders;  }, [folders]);
-  useEffect(() => { userRef.current     = user;     }, [user]);
-  useEffect(() => { isGuestRef.current  = isGuest;  }, [isGuest]);
+  // ── Refs ──────────────────────────────────────────────────────────────────
+  const foldersRef = useRef([]);
+  const userRef    = useRef(null);
+  const saveTimer  = useRef(null);
+  useEffect(() => { foldersRef.current = folders; }, [folders]);
+  useEffect(() => { userRef.current    = user;    }, [user]);
 
-  // ── Save status ────────────────────────────────────────────────────────────
-  const [saveStatus, setSaveStatus] = useState("idle"); // idle | saving | saved | error
-  const saveTimer = useRef(null);
+  const [saveStatus, setSaveStatus] = useState("idle");
 
-  // ── Strip blobs before saving ──────────────────────────────────────────────
-  const cleanFolders = (flds) => flds.map(folder => ({
-    ...folder,
-    files: (folder.files || []).map(f => {
-      const { _fileObj, ...rest } = f;
-      return { ...rest, linkedFiles: (rest.linkedFiles || []).map(lf => { const { _fileObj: _, ...lr } = lf; return lr; }) };
-    }),
+  // ── Strip blobs so we only save plain JSON ─────────────────────────────────
+  const toClean = (flds) => flds.map(folder => ({
+    id: folder.id, name: folder.name, color: folder.color,
+    files: (folder.files || []).map(f => ({
+      id: f.id, name: f.name, type: f.type, size: f.size,
+      colorIndex: f.colorIndex || 0,
+      notes: f.notes || "",
+      studyCards: f.studyCards || [],
+      uploadedAt: f.uploadedAt || "",
+    })),
   }));
 
-  // ── Core save — always reads from ref so it is never stale ────────────────
-  const doSave = useCallback(async () => {
-    const flds    = foldersRef.current;
-    const u       = userRef.current;
-    const guest   = isGuestRef.current;
-    const clean   = cleanFolders(flds);
-    setSaveStatus("saving");
-    try {
-      if (u && !guest) {
-        await setDoc(doc(db, "users", u.uid), { folders: clean }, { merge: true });
-      } else {
-        localStorage.setItem("classio_guest_folders", JSON.stringify(clean));
-      }
+  // ── Save: localStorage first (instant), then Firebase (background) ─────────
+  const doSave = () => {
+    const flds  = foldersRef.current;
+    const u     = userRef.current;
+    const clean = toClean(flds);
+    const json  = JSON.stringify(clean);
+
+    // 1. Always save to localStorage immediately — this NEVER fails
+    try { localStorage.setItem("classio_data", json); } catch {}
+
+    // 2. If logged in, also push to Firebase in the background
+    if (u) {
+      setSaveStatus("saving");
+      setDoc(doc(db, "users", u.uid), { folders: clean }, { merge: true })
+        .then(() => { setSaveStatus("saved"); setTimeout(() => setSaveStatus("idle"), 2000); })
+        .catch((e) => { console.error("Firebase:", e); setSaveStatus("idle"); });
+    } else {
       setSaveStatus("saved");
-      setTimeout(() => setSaveStatus("idle"), 2000);
-    } catch(e) {
-      console.error("Save error:", e);
-      setSaveStatus("error");
-      setTimeout(() => setSaveStatus("idle"), 3000);
+      setTimeout(() => setSaveStatus("idle"), 1500);
     }
-  }, []);
+  };
 
-  // ── Debounced auto-save: fires 1.5s after last change ─────────────────────
-  const scheduleSave = useCallback(() => {
+  // ── Debounce: save 1s after last change ────────────────────────────────────
+  const scheduleSave = () => {
     clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(doSave, 1500);
-  }, [doSave]);
+    saveTimer.current = setTimeout(doSave, 1000);
+  };
 
-  // ── Restore file blobs from IDB ────────────────────────────────────────────
-  const restoreFileBlobs = async (rawFolders) => {
+  // ── Restore blobs from IndexedDB ───────────────────────────────────────────
+  const attachBlobs = async (rawFolders) => {
     const stored = await idbGetAll();
     return rawFolders.map(folder => ({
       ...folder,
@@ -383,36 +383,40 @@ export default function App() {
     }));
   };
 
-  // ── Auth + load ────────────────────────────────────────────────────────────
+  // ── Load on startup ────────────────────────────────────────────────────────
   useEffect(() => {
-    // Try restoring guest data immediately
-    (async () => {
-      const raw = localStorage.getItem("classio_guest_folders");
-      if (raw) {
-        try {
-          const restored = await restoreFileBlobs(JSON.parse(raw));
+    // Load from localStorage immediately so UI is instant
+    const local = localStorage.getItem("classio_data");
+    if (local) {
+      try {
+        const parsed = JSON.parse(local);
+        attachBlobs(parsed).then(restored => {
           setFolders(prev => prev.length === 0 ? restored : prev);
-        } catch {}
-      }
-    })();
+        });
+      } catch {}
+    }
 
+    // Then check Firebase for logged-in users (may have newer data from another device)
     return onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u) {
         setIsGuest(false);
-        const snap = await getDoc(doc(db, "users", u.uid)).catch(() => null);
-        const raw  = snap?.exists() ? (snap.data().folders || []) : [];
-        const restored = await restoreFileBlobs(raw);
-        setFolders(restored);
+        try {
+          const snap = await getDoc(doc(db, "users", u.uid));
+          const raw  = snap?.exists() ? (snap.data().folders || []) : [];
+          if (raw.length > 0) {
+            const restored = await attachBlobs(raw);
+            setFolders(restored);
+            // Keep localStorage in sync
+            localStorage.setItem("classio_data", JSON.stringify(toClean(restored)));
+          }
+        } catch(e) { console.warn("Firebase load failed, using local data:", e); }
       }
     });
   }, []);
 
-  // ── setFolders + schedule save in one call ─────────────────────────────────
-  const setFoldersSave = (flds) => {
-    setFolders(flds);
-    scheduleSave();
-  };
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  const setFoldersSave = (flds) => { setFolders(flds); scheduleSave(); };
 
   const updateFolder = (updated) => {
     const next = foldersRef.current.map(f => f.id === updated.id ? updated : f);
