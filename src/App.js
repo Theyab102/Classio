@@ -476,7 +476,7 @@ function SignIn({ onSignIn, onGuest }) {
           <span style={{ fontSize:32 }}>👤</span>
         </div>
         <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:28, fontWeight:700, color:C.text, marginBottom:8 }}>Continue as Guest</h2>
-        <p style={{ fontSize:14, color:C.muted, marginBottom:28, lineHeight:1.6 }}>Your folders won't be saved when you leave.<br/>Sign in with Google to keep your data.</p>
+        <p style={{ fontSize:14, color:C.muted, marginBottom:28, lineHeight:1.6 }}>Your folders will not be saved when you leave.<br/>Sign in with Google to keep your data.</p>
         <input autoFocus value={name} onChange={e => setName(e.target.value)}
           onKeyDown={e => { if(e.key==="Enter" && name.trim()) onGuest(name.trim()); }}
           placeholder="Enter your name…"
@@ -521,7 +521,7 @@ function SignIn({ onSignIn, onGuest }) {
           style={{ width:"100%", background:"transparent", border:`1.5px solid ${C.border}`, borderRadius:14, padding:"13px 20px", fontSize:15, fontWeight:600, cursor:"pointer", color:C.muted }}>
           Continue as Guest
         </button>
-        <p style={{ fontSize:12, color:C.muted, marginTop:16, lineHeight:1.5 }}>Guest mode doesn't save your data between sessions.</p>
+        <p style={{ fontSize:12, color:C.muted, marginTop:16, lineHeight:1.5 }}>Guest mode does not save your data between sessions.</p>
       </div>
     </div>
   );
