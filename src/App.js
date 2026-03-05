@@ -321,117 +321,136 @@ export default function App() {
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(FOLDER_COLORS[0]);
 
-  // ── Refs ──────────────────────────────────────────────────────────────────
-  const foldersRef = useRef([]);
-  const userRef    = useRef(null);
-  const saveTimer  = useRef(null);
-  useEffect(() => { foldersRef.current = folders; }, [folders]);
-  useEffect(() => { userRef.current    = user;    }, [user]);
-
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SAVE SYSTEM
+  // Strategy: write to localStorage instantly on every change (never fails).
+  // Also write to Firebase in the background when logged in.
+  // On load: read localStorage first (instant), then Firebase (sync).
+  // Everything goes through saveRef so there are ZERO stale closures.
+  // ═══════════════════════════════════════════════════════════════════════════
   const [saveStatus, setSaveStatus] = useState("idle");
+  const saveRef = useRef({ folders:[], user:null, timer:null, statusTimer:null });
 
-  // ── Strip blobs so we only save plain JSON ─────────────────────────────────
-  const toClean = (flds) => flds.map(folder => ({
-    id: folder.id, name: folder.name, color: folder.color,
-    files: (folder.files || []).map(f => ({
-      id: f.id, name: f.name, type: f.type, size: f.size,
-      colorIndex: f.colorIndex || 0,
-      notes: f.notes || "",
-      studyCards: f.studyCards || [],
-      uploadedAt: f.uploadedAt || "",
-    })),
-  }));
+  // Keep saveRef in sync — this is the only place we touch state
+  useEffect(() => { saveRef.current.folders = folders; }, [folders]);
+  useEffect(() => { saveRef.current.user    = user;    }, [user]);
 
-  // ── Save: localStorage first (instant), then Firebase (background) ─────────
-  const doSave = () => {
-    const flds  = foldersRef.current;
-    const u     = userRef.current;
-    const clean = toClean(flds);
-    const json  = JSON.stringify(clean);
+  // Strip file blobs — only plain serialisable data
+  function stripBlobs(flds) {
+    return flds.map(fo => ({
+      id: fo.id, name: fo.name, color: fo.color,
+      files: (fo.files || []).map(fi => ({
+        id: fi.id, name: fi.name, type: fi.type || "",
+        size: fi.size || 0, colorIndex: fi.colorIndex || 0,
+        notes: fi.notes || "", studyCards: fi.studyCards || [],
+        uploadedAt: fi.uploadedAt || "",
+      })),
+    }));
+  }
 
-    // 1. Always save to localStorage immediately — this NEVER fails
-    try { localStorage.setItem("classio_data", json); } catch {}
-
-    // 2. If logged in, also push to Firebase in the background
+  // The actual write — called from the debounce timer
+  function persist(flds, u) {
+    const clean = stripBlobs(flds);
+    // 1. localStorage — synchronous, always works
+    try { localStorage.setItem("classio_v2", JSON.stringify(clean)); } catch(e) { console.error("LS write:", e); }
+    // 2. Firebase — async, best effort
     if (u) {
-      setSaveStatus("saving");
-      setDoc(doc(db, "users", u.uid), { folders: clean }, { merge: true })
-        .then(() => { setSaveStatus("saved"); setTimeout(() => setSaveStatus("idle"), 2000); })
-        .catch((e) => { console.error("Firebase:", e); setSaveStatus("idle"); });
+      setDoc(doc(db, "users", u.uid), { v2: clean }, { merge: true })
+        .then(() => {
+          clearTimeout(saveRef.current.statusTimer);
+          setSaveStatus("saved");
+          saveRef.current.statusTimer = setTimeout(() => setSaveStatus("idle"), 2000);
+        })
+        .catch(e => { console.error("FB write:", e); setSaveStatus("idle"); });
     } else {
+      clearTimeout(saveRef.current.statusTimer);
       setSaveStatus("saved");
-      setTimeout(() => setSaveStatus("idle"), 1500);
+      saveRef.current.statusTimer = setTimeout(() => setSaveStatus("idle"), 1500);
     }
-  };
+  }
 
-  // ── Debounce: save 1s after last change ────────────────────────────────────
-  const scheduleSave = () => {
-    clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(doSave, 1000);
-  };
+  // Debounced save — waits 800ms after last change then writes
+  function scheduleSave(flds) {
+    setSaveStatus("saving");
+    clearTimeout(saveRef.current.timer);
+    saveRef.current.timer = setTimeout(() => {
+      persist(flds, saveRef.current.user);
+    }, 800);
+  }
 
-  // ── Restore blobs from IndexedDB ───────────────────────────────────────────
-  const attachBlobs = async (rawFolders) => {
+  // Attach file blobs from IndexedDB to raw folder data
+  async function attachBlobs(rawFolders) {
     const stored = await idbGetAll();
-    return rawFolders.map(folder => ({
-      ...folder,
-      files: (folder.files || []).map(file => {
-        const blob = stored[file.id] || FILE_STORE.get(file.id) || null;
-        if (blob) FILE_STORE.set(file.id, blob);
-        return { ...file, _fileObj: blob };
+    return rawFolders.map(fo => ({
+      ...fo,
+      files: (fo.files || []).map(fi => {
+        const blob = stored[fi.id] || FILE_STORE.get(fi.id) || null;
+        if (blob) FILE_STORE.set(fi.id, blob);
+        return { ...fi, _fileObj: blob };
       }),
     }));
-  };
+  }
 
-  // ── Load on startup ────────────────────────────────────────────────────────
+  // Load on startup
   useEffect(() => {
-    // Load from localStorage immediately so UI is instant
-    const local = localStorage.getItem("classio_data");
+    // Step 1: load localStorage immediately so app feels instant
+    const local = localStorage.getItem("classio_v2");
     if (local) {
       try {
-        const parsed = JSON.parse(local);
-        attachBlobs(parsed).then(restored => {
-          setFolders(prev => prev.length === 0 ? restored : prev);
-        });
+        attachBlobs(JSON.parse(local)).then(r => setFolders(p => p.length === 0 ? r : p));
       } catch {}
     }
 
-    // Then check Firebase for logged-in users (may have newer data from another device)
-    return onAuthStateChanged(auth, async (u) => {
+    // Step 2: auth listener — if logged in, also load from Firebase
+    const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u) {
         setIsGuest(false);
         try {
           const snap = await getDoc(doc(db, "users", u.uid));
-          const raw  = snap?.exists() ? (snap.data().folders || []) : [];
+          const raw  = snap?.exists() ? (snap.data().v2 || snap.data().folders || []) : [];
           if (raw.length > 0) {
-            const restored = await attachBlobs(raw);
-            setFolders(restored);
-            // Keep localStorage in sync
-            localStorage.setItem("classio_data", JSON.stringify(toClean(restored)));
+            const r = await attachBlobs(raw);
+            setFolders(r);
+            // Mirror to localStorage so next load is instant
+            try { localStorage.setItem("classio_v2", JSON.stringify(stripBlobs(r))); } catch {}
           }
-        } catch(e) { console.warn("Firebase load failed, using local data:", e); }
+        } catch(e) { console.warn("FB load failed, using local:", e); }
       }
     });
+    return unsub;
   }, []);
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
-  const setFoldersSave = (flds) => { setFolders(flds); scheduleSave(); };
+  // Single entry point for all folder mutations
+  function setFoldersSave(flds) {
+    setFolders(flds);
+    scheduleSave(flds);          // pass flds directly — no closure needed
+  }
 
   const updateFolder = (updated) => {
-    const next = foldersRef.current.map(f => f.id === updated.id ? updated : f);
+    const next = saveRef.current.folders.map(f => f.id === updated.id ? updated : f);
     setFoldersSave(next);
     if (activeFolder?.id === updated.id) setActiveFolder(updated);
   };
 
   const updateFile = (folderId, updated) => {
     const withObj = { ...updated, _fileObj: updated._fileObj || FILE_STORE.get(updated.id) || null };
-    const next = foldersRef.current.map(f => f.id === folderId
+    const next = saveRef.current.folders.map(f => f.id === folderId
       ? { ...f, files: f.files.map(fi => fi.id === withObj.id ? withObj : fi) }
       : f);
     setFoldersSave(next);
     setActiveFile(withObj);
     setActiveFolder(prev => prev ? { ...prev, files: prev.files.map(fi => fi.id === withObj.id ? withObj : fi) } : prev);
+  };
+
+  const deleteFolder = (folderId) => {
+    // Delete all file blobs inside the folder from IDB + FILE_STORE
+    const folder = saveRef.current.folders.find(f => f.id === folderId);
+    if (folder) {
+      (folder.files || []).forEach(f => { idbDelete(f.id); FILE_STORE.delete(f.id); });
+    }
+    const next = saveRef.current.folders.filter(f => f.id !== folderId);
+    setFoldersSave(next);
   };
 
   const handleGuest = (name) => { setGuestName(name); setIsGuest(true); setFolders([]); };
@@ -495,7 +514,19 @@ export default function App() {
           {folders.map(folder => (
             <div key={folder.id} className="card-hov"
               onClick={() => { setActiveFolder(folder); setScreen("folder"); }}
-              style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:16, padding:20, cursor:"pointer", boxShadow:"0 2px 8px rgba(0,0,0,.05)" }}>
+              style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:16, padding:20, cursor:"pointer", boxShadow:"0 2px 8px rgba(0,0,0,.05)", position:"relative" }}>
+              {/* Delete folder button */}
+              <button
+                onClick={e => {
+                  e.stopPropagation();
+                  if (window.confirm(`Delete "${folder.name}" and all its files?`)) deleteFolder(folder.id);
+                }}
+                style={{ position:"absolute", top:10, right:10, width:26, height:26, borderRadius:"50%", background:"transparent", border:"none", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", opacity:0.4, fontSize:16, color:C.muted, lineHeight:1 }}
+                onMouseEnter={e => e.currentTarget.style.opacity=1}
+                onMouseLeave={e => e.currentTarget.style.opacity=0.4}
+                title="Delete folder">
+                ×
+              </button>
               <div style={{ width:44, height:44, background:folder.color+"22", borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", marginBottom:14 }}>
                 <Icon d={I.folder} size={22} color={folder.color} />
               </div>
