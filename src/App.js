@@ -2567,20 +2567,24 @@ function VoiceAnswer({ cards, onBack }) {
       isListeningRef.current = false;
       setListening(false);
       if (!lastFinal.trim()) return;
-      // Start 3 second countdown at 400ms ticks (feels snappy)
-      let countdown = 3;
-      setVoiceCountdown(countdown);
-      const timer = setInterval(() => {
-        countdown -= 1;
+      // Wait 5 seconds, then start the 3-second countdown
+      const waitTimer = setTimeout(() => {
+        let countdown = 3;
         setVoiceCountdown(countdown);
-        if (countdown <= 0) {
-          clearInterval(timer);
-          countdownRef.current = null;
-          setVoiceCountdown(null);
-          checkAnswer(lastFinal.trim());
-        }
-      }, 400);
-      countdownRef.current = timer;
+        const timer = setInterval(() => {
+          countdown -= 1;
+          setVoiceCountdown(countdown);
+          if (countdown <= 0) {
+            clearInterval(timer);
+            countdownRef.current = null;
+            setVoiceCountdown(null);
+            checkAnswer(lastFinal.trim());
+          }
+        }, 400);
+        countdownRef.current = timer;
+      }, 5000);
+      // Store wait timer so it can be cancelled if user taps mic again
+      countdownRef.current = waitTimer;
     };
 
     rec.start();
