@@ -256,6 +256,64 @@ const GS = `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@3
 // Global file object store — survives navigation within the session
 const FILE_STORE = new Map();
 
+// ─── INDEXEDDB FILE PERSISTENCE ──────────────────────────────────────────────
+// Stores actual file blobs in the browser so they survive page refreshes
+const IDB_NAME = "classio_files";
+const IDB_STORE = "files";
+
+function openIDB() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore(IDB_STORE);
+    req.onsuccess = e => res(e.target.result);
+    req.onerror = () => rej(req.error);
+  });
+}
+
+async function idbSave(id, file) {
+  try {
+    const db = await openIDB();
+    const tx = db.transaction(IDB_STORE, "readwrite");
+    tx.objectStore(IDB_STORE).put(file, id);
+    await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
+  } catch(e) { console.warn("IDB save failed", e); }
+}
+
+async function idbGet(id) {
+  try {
+    const db = await openIDB();
+    return new Promise((res, rej) => {
+      const req = db.transaction(IDB_STORE, "readonly").objectStore(IDB_STORE).get(id);
+      req.onsuccess = () => res(req.result || null);
+      req.onerror = () => res(null);
+    });
+  } catch(e) { return null; }
+}
+
+async function idbDelete(id) {
+  try {
+    const db = await openIDB();
+    const tx = db.transaction(IDB_STORE, "readwrite");
+    tx.objectStore(IDB_STORE).delete(id);
+  } catch(e) {}
+}
+
+async function idbGetAll() {
+  try {
+    const db = await openIDB();
+    return new Promise((res, rej) => {
+      const result = {};
+      const req = db.transaction(IDB_STORE, "readonly").objectStore(IDB_STORE).openCursor();
+      req.onsuccess = e => {
+        const cursor = e.target.result;
+        if (cursor) { result[cursor.key] = cursor.value; cursor.continue(); }
+        else res(result);
+      };
+      req.onerror = () => res({});
+    });
+  } catch(e) { return {}; }
+}
+
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [user, setUser] = useState(undefined);
@@ -277,8 +335,18 @@ export default function App() {
       if (u) {
         setIsGuest(false);
         const snap = await getDoc(doc(db, "users", u.uid)).catch(() => null);
-        if (snap?.exists()) setFolders(snap.data().folders || []);
-        else setFolders([]);
+        const rawFolders = snap?.exists() ? (snap.data().folders || []) : [];
+        // Restore file blobs from IndexedDB
+        const storedFiles = await idbGetAll();
+        const restored = rawFolders.map(folder => ({
+          ...folder,
+          files: (folder.files || []).map(file => {
+            const blob = storedFiles[file.id] || FILE_STORE.get(file.id) || null;
+            if (blob) FILE_STORE.set(file.id, blob);
+            return { ...file, _fileObj: blob };
+          }),
+        }));
+        setFolders(restored);
       }
     });
   }, []);
@@ -562,7 +630,8 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
   const addFiles = (list) => {
     const added = Array.from(list).map(f => {
       const id = `fi${Date.now()}-${Math.random()}`;
-      FILE_STORE.set(id, f); // persist file object globally
+      FILE_STORE.set(id, f);
+      idbSave(id, f); // persist to IndexedDB so it survives page close
       return {
         id, name: f.name, type: f.type, size: f.size,
         colorIndex: 0, notes: "", studyCards: [], uploadedAt: new Date().toLocaleDateString(),
@@ -653,7 +722,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
                             style={{ display:"flex", alignItems:"center", gap:6, background:C.accentL, color:C.accent, border:"none", borderRadius:8, padding:"7px 14px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
                             <Icon d={I.edit} size={13} color={C.accent} /> Open
                           </button>
-                          <button onClick={() => onUpdate({...folder,files:folder.files.filter(f=>f.id!==file.id)})} className="hov"
+                          <button onClick={() => { idbDelete(file.id); FILE_STORE.delete(file.id); onUpdate({...folder,files:folder.files.filter(f=>f.id!==file.id)}); }} className="hov"
                             style={{ background:"none", border:"none", cursor:"pointer", padding:4 }}>
                             <Icon d={I.trash} size={16} color={C.muted} />
                           </button>
@@ -720,115 +789,119 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
 function ViewTab({ file, onUpdate }) {
   const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
   const [objectUrl, setObjectUrl] = useState(null);
-  const [explaining, setExplaining] = useState(false);
-  const [explanation, setExplanation] = useState("");
-  const [showExplain, setShowExplain] = useState(false);
+  const [pdfDoc, setPdfDoc] = useState(null);
   const [pageNum, setPageNum] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
   const [tool, setTool] = useState("pen");
   const [color, setColor] = useState("#E53E3E");
   const [brushSize, setBrushSize] = useState(3);
-  const canvasRef = useRef(null);
-  const drawCanvasRef = useRef(null);
-  const pdfDocRef = useRef(null);
-  const renderTaskRef = useRef(null);
-  const [totalPages, setTotalPages] = useState(0);
-  const [pdfLoaded, setPdfLoaded] = useState(false);
-  const [annotations, setAnnotations] = useState({});
   const [drawing, setDrawing] = useState(false);
   const [lastPos, setLastPos] = useState(null);
+  const [annotations, setAnnotations] = useState({});
+  const [explaining, setExplaining] = useState(false);
+  const [explanation, setExplanation] = useState("");
+  const [showExplain, setShowExplain] = useState(false);
+  const canvasRef = useRef(null);
+  const drawRef = useRef(null);
+  const renderRef = useRef(null);
+  const pdfDocRef = useRef(null);
 
-  const isPDF = fileObj && (fileObj.type === "application/pdf" || fileObj.name?.toLowerCase().endsWith(".pdf"));
-  const isImage = fileObj && fileObj.type?.startsWith("image/");
-  const isOfficeOrText = fileObj && !isPDF && !isImage;
+  const ext = fileObj?.name?.split(".").pop().toLowerCase() || "";
+  const isPDF = ext === "pdf" || fileObj?.type === "application/pdf";
+  const isImage = fileObj?.type?.startsWith("image/");
+  const isText = ["txt","md","csv","json","js","py","html","css"].includes(ext);
+  const isWord = ["doc","docx"].includes(ext);
+  const isPPT = ["ppt","pptx"].includes(ext);
+  const isExcel = ["xls","xlsx"].includes(ext);
 
-  // Create a blob URL for the file so browser renders it natively
+  // Blob URL for images and text
   useEffect(() => {
-    if (!fileObj) return;
+    if (!fileObj || isPDF) return;
     const url = URL.createObjectURL(fileObj);
     setObjectUrl(url);
     return () => URL.revokeObjectURL(url);
   }, [fileObj]);
 
-  // Load PDF using pdf.js for annotation support
+  // Load PDF.js
   useEffect(() => {
     if (!isPDF || !fileObj) return;
     (async () => {
-      if (!window.pdfjsLib) {
-        await new Promise((res, rej) => {
-          const s = document.createElement("script");
-          s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
-          s.onload = res; s.onerror = rej; document.head.appendChild(s);
-        });
-        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-          "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-      }
-      const ab = await fileObj.arrayBuffer();
-      const doc = await window.pdfjsLib.getDocument({ data: ab }).promise;
-      pdfDocRef.current = doc;
-      setTotalPages(doc.numPages);
-      setPdfLoaded(true);
+      try {
+        if (!window.pdfjsLib) {
+          await new Promise((res, rej) => {
+            const s = document.createElement("script");
+            s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+            s.onload = res; s.onerror = rej; document.head.appendChild(s);
+          });
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+            "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+        }
+        const buf = await fileObj.arrayBuffer();
+        const doc = await window.pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+        pdfDocRef.current = doc;
+        setPdfDoc(doc);
+        setTotalPages(doc.numPages);
+      } catch(e) { console.error("PDF load error:", e); }
     })();
   }, [fileObj]);
 
-  // Render PDF page cleanly
-  const renderPDFPage = async (pg) => {
-    if (!pdfDocRef.current || !canvasRef.current) return;
-    if (renderTaskRef.current) { try { renderTaskRef.current.cancel(); } catch {} }
-    try {
-      const pdfPage = await pdfDocRef.current.getPage(pg);
-      const containerW = canvasRef.current.parentElement?.clientWidth || 780;
-      const baseVp = pdfPage.getViewport({ scale: 1 });
-      const scale = Math.min(2.0, (containerW - 32) / baseVp.width);
-      const vp = pdfPage.getViewport({ scale });
-      const c = canvasRef.current;
-      c.width = vp.width; c.height = vp.height;
-      const ctx = c.getContext("2d");
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(0, 0, c.width, c.height);
-      const task = pdfPage.render({ canvasContext: ctx, viewport: vp, intent: "display" });
-      renderTaskRef.current = task;
-      await task.promise;
-      renderTaskRef.current = null;
-      // Sync draw canvas
-      if (drawCanvasRef.current) {
-        const dc = drawCanvasRef.current;
-        dc.width = vp.width; dc.height = vp.height;
-        dc.getContext("2d").clearRect(0, 0, dc.width, dc.height);
-        if (annotations[pg]) {
-          const img = new Image();
-          img.onload = () => dc.getContext("2d").drawImage(img, 0, 0);
-          img.src = annotations[pg];
+  // Render PDF page
+  useEffect(() => {
+    if (!pdfDoc || !canvasRef.current) return;
+    (async () => {
+      if (renderRef.current) { try { renderRef.current.cancel(); } catch {} renderRef.current = null; }
+      try {
+        const pg = await pdfDoc.getPage(pageNum);
+        const containerW = canvasRef.current?.parentElement?.offsetWidth || 800;
+        const base = pg.getViewport({ scale: 1 });
+        const scale = Math.min(2.2, (containerW - 40) / base.width);
+        const vp = pg.getViewport({ scale });
+        const c = canvasRef.current;
+        if (!c) return;
+        c.width = vp.width; c.height = vp.height;
+        const ctx = c.getContext("2d");
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, c.width, c.height);
+        const task = pg.render({ canvasContext: ctx, viewport: vp });
+        renderRef.current = task;
+        await task.promise;
+        renderRef.current = null;
+        // Restore annotation layer
+        if (drawRef.current) {
+          drawRef.current.width = vp.width;
+          drawRef.current.height = vp.height;
+          drawRef.current.getContext("2d").clearRect(0, 0, vp.width, vp.height);
+          if (annotations[pageNum]) {
+            const img = new Image();
+            img.onload = () => drawRef.current?.getContext("2d").drawImage(img, 0, 0);
+            img.src = annotations[pageNum];
+          }
         }
-      }
-    } catch(e) { if (e.name !== "RenderingCancelledException") console.error(e); }
-  };
-
-  useEffect(() => { if (pdfLoaded) renderPDFPage(pageNum); }, [pdfLoaded, pageNum]);
+      } catch(e) { if (e?.name !== "RenderingCancelledException") console.error("Render:", e); }
+    })();
+  }, [pdfDoc, pageNum]);
 
   const saveAnnotation = () => {
-    if (drawCanvasRef.current)
-      setAnnotations(prev => ({ ...prev, [pageNum]: drawCanvasRef.current.toDataURL() }));
+    if (drawRef.current) setAnnotations(p => ({ ...p, [pageNum]: drawRef.current.toDataURL() }));
   };
   const changePage = (n) => { saveAnnotation(); setPageNum(n); };
 
-  // Drawing
-  const getPos = (e, canvas) => {
+  const getPos = (e) => {
+    const canvas = drawRef.current;
     const r = canvas.getBoundingClientRect();
     const sx = canvas.width / r.width, sy = canvas.height / r.height;
-    const cx = e.touches ? e.touches[0].clientX : e.clientX;
-    const cy = e.touches ? e.touches[0].clientY : e.clientY;
-    return { x: (cx - r.left) * sx, y: (cy - r.top) * sy };
+    const src = e.touches?.[0] || e;
+    return { x: (src.clientX - r.left) * sx, y: (src.clientY - r.top) * sy };
   };
-  const startDraw = (e) => { e.preventDefault(); if (!drawCanvasRef.current) return; setDrawing(true); setLastPos(getPos(e, drawCanvasRef.current)); };
+  const startDraw = (e) => { e.preventDefault(); setDrawing(true); setLastPos(getPos(e)); };
   const doDraw = (e) => {
     e.preventDefault();
-    if (!drawing || !drawCanvasRef.current || !lastPos) return;
-    const canvas = drawCanvasRef.current;
-    const ctx = canvas.getContext("2d");
-    const pos = getPos(e, canvas);
+    if (!drawing || !lastPos || !drawRef.current) return;
+    const ctx = drawRef.current.getContext("2d");
+    const pos = getPos(e);
     ctx.beginPath(); ctx.moveTo(lastPos.x, lastPos.y); ctx.lineTo(pos.x, pos.y);
-    if (tool === "eraser") { ctx.globalCompositeOperation = "destination-out"; ctx.lineWidth = brushSize * 6; }
-    else if (tool === "highlight") { ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 0.35; ctx.lineWidth = brushSize * 8; ctx.strokeStyle = color; }
+    if (tool === "eraser") { ctx.globalCompositeOperation = "destination-out"; ctx.lineWidth = brushSize * 5; }
+    else if (tool === "highlight") { ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 0.3; ctx.lineWidth = brushSize * 7; ctx.strokeStyle = color; }
     else { ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 1; ctx.lineWidth = brushSize; ctx.strokeStyle = color; }
     ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.stroke();
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = "source-over";
@@ -836,69 +909,68 @@ function ViewTab({ file, onUpdate }) {
   };
   const stopDraw = () => { if (drawing) { setDrawing(false); saveAnnotation(); } };
   const clearDraw = () => {
-    if (drawCanvasRef.current) drawCanvasRef.current.getContext("2d").clearRect(0, 0, drawCanvasRef.current.width, drawCanvasRef.current.height);
-    setAnnotations(prev => { const n={...prev}; delete n[pageNum]; return n; });
+    drawRef.current?.getContext("2d").clearRect(0, 0, drawRef.current.width, drawRef.current.height);
+    setAnnotations(p => { const n = {...p}; delete n[pageNum]; return n; });
   };
 
   const doExplain = async () => {
     setExplaining(true); setShowExplain(true); setExplanation("");
     try {
-      let pageText = "";
-      if (pdfDocRef.current) {
-        // Only get text from the CURRENT page
-        const p = await pdfDocRef.current.getPage(pageNum);
-        const tc = await p.getTextContent();
-        pageText = tc.items.map(i => i.str).join(" ").trim();
-      } else {
-        const t = await extractFileText(fileObj).catch(() => "");
-        pageText = (t || "").slice(0, 4000);
+      let text = "";
+      if (pdfDoc) {
+        const pg = await pdfDoc.getPage(pageNum);
+        const tc = await pg.getTextContent();
+        text = tc.items.map(i => i.str).join(" ").trim();
+      } else if (fileObj) {
+        text = await extractFileText(fileObj).catch(() => "");
+        text = (text || "").slice(0, 3000);
       }
-      const txt = await callClaude(
-        "You are a helpful study tutor. Explain the content clearly and simply for a student. Use plain text only — no asterisks, no markdown symbols.",
-        pageText
-          ? `Explain ONLY this content from page ${pageNum} of "${file.name}". Do not add outside information:
+      const result = await callClaude(
+        "You are a helpful study tutor. Explain this content clearly and simply for a student. Use plain text only — no asterisks, no markdown, no symbols.",
+        text
+          ? `Explain ONLY the content on page ${pageNum} of "${file.name}". Do not add outside information:
 
-${pageText.slice(0, 3000)}`
-          : `Briefly explain the topic of "${file.name}" page ${pageNum} to a student.`
+${text.slice(0, 3000)}`
+          : `Briefly explain the topic of "${file.name}" to a student.`
       );
-      setExplanation(txt);
+      setExplanation(result);
     } catch(e) { setExplanation("Error: " + e.message); }
     setExplaining(false);
   };
 
-  const COLORS = ["#E53E3E","#FF8C00","#ECC94B","#38A169","#3182CE","#805AD5","#1a1a1a","#fff"];
-  const TOOLS = [{ id:"pen", label:"✏️", title:"Pen" }, { id:"highlight", label:"🖊️", title:"Highlight" }, { id:"eraser", label:"🧹", title:"Eraser" }];
+  const COLORS = ["#E53E3E","#FF8C00","#ECC94B","#38A169","#3182CE","#805AD5","#1a1a1a","#ffffff"];
+  const TOOLS = [{ id:"pen", icon:"✏️" }, { id:"highlight", icon:"🖊️" }, { id:"eraser", icon:"🧹" }];
 
   if (!fileObj) return (
     <div style={{ textAlign:"center", padding:"60px 24px" }}>
       <div style={{ fontSize:48, marginBottom:12 }}>📂</div>
-      <p style={{ fontSize:16, fontWeight:600, color:C.text, marginBottom:6 }}>Open file to view it</p>
-      <p style={{ fontSize:13, color:C.muted, marginBottom:16 }}>Re-open this file from the folder to view it here.</p>
-      <label style={{ display:"inline-flex", alignItems:"center", gap:8, background:C.accent, color:"#fff", borderRadius:10, padding:"10px 20px", cursor:"pointer", fontSize:14, fontWeight:600 }}>
+      <p style={{ fontSize:16, fontWeight:600, color:C.text, marginBottom:8 }}>File not loaded</p>
+      <p style={{ fontSize:13, color:C.muted, marginBottom:20 }}>The file needs to be re-opened once after a page refresh.</p>
+      <label style={{ display:"inline-flex", alignItems:"center", gap:8, background:C.accent, color:"#fff", borderRadius:10, padding:"11px 22px", cursor:"pointer", fontSize:14, fontWeight:600 }}>
         📁 Open File
         <input type="file" style={{ display:"none" }} onChange={e => {
-          const f = e.target.files?.[0];
-          if (f) { FILE_STORE.set(file.id, f); onUpdate({...file, _fileObj: f}); }
+          const f = e.target.files?.[0]; if (!f) return;
+          FILE_STORE.set(file.id, f); idbSave(file.id, f); onUpdate({...file, _fileObj: f});
         }} />
       </label>
     </div>
   );
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 108px)" }}>
-      {/* Toolbar — only for PDF */}
-      {isPDF && (
-        <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"7px 14px", display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+    <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 112px)" }}>
+      {/* Toolbar */}
+      <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"6px 14px", display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+        {isPDF && <>
           {TOOLS.map(t => (
-            <button key={t.id} onClick={() => setTool(t.id)} title={t.title}
+            <button key={t.id} onClick={() => setTool(t.id)}
               style={{ width:32, height:32, borderRadius:7, border:`1.5px solid ${tool===t.id?C.accent:C.border}`, background:tool===t.id?C.accentL:"#fff", cursor:"pointer", fontSize:14 }}>
-              {t.label}
+              {t.icon}
             </button>
           ))}
           <div style={{ width:1, height:20, background:C.border }} />
           {COLORS.map(col => (
             <button key={col} onClick={() => setColor(col)}
-              style={{ width:18, height:18, borderRadius:"50%", background:col, border:color===col?`3px solid ${C.accent}`:`1px solid ${C.border}`, cursor:"pointer", flexShrink:0 }} />
+              style={{ width:18, height:18, borderRadius:"50%", background:col, border:color===col?`3px solid ${C.accent}`:`1.5px solid ${C.border}`, cursor:"pointer", flexShrink:0 }} />
           ))}
           <div style={{ width:1, height:20, background:C.border }} />
           <input type="range" min="1" max="20" value={brushSize} onChange={e => setBrushSize(+e.target.value)} style={{ width:60 }} />
@@ -906,70 +978,79 @@ ${pageText.slice(0, 3000)}`
           <div style={{ flex:1 }} />
           <div style={{ display:"flex", alignItems:"center", gap:5 }}>
             <button onClick={() => changePage(Math.max(1, pageNum-1))} disabled={pageNum===1}
-              style={{ width:28, height:28, borderRadius:6, border:`1px solid ${C.border}`, background:"#fff", cursor:pageNum===1?"not-allowed":"pointer", opacity:pageNum===1?.4:1 }}>‹</button>
+              style={{ width:28, height:28, borderRadius:6, border:`1px solid ${C.border}`, background:"#fff", cursor:pageNum===1?"default":"pointer", opacity:pageNum===1?.4:1 }}>‹</button>
             <input type="number" min="1" max={totalPages} value={pageNum}
-              onChange={e => { const v=parseInt(e.target.value); if(v>=1&&v<=totalPages) changePage(v); }}
-              style={{ width:40, textAlign:"center", border:`1px solid ${C.border}`, borderRadius:6, padding:"3px 2px", fontSize:13, outline:"none" }} />
-            <span style={{ fontSize:12, color:C.muted }}>/{totalPages}</span>
+              onChange={e => { const v=parseInt(e.target.value)||1; if(v>=1&&v<=totalPages) changePage(v); }}
+              style={{ width:40, textAlign:"center", border:`1px solid ${C.border}`, borderRadius:6, padding:"3px 4px", fontSize:13, outline:"none" }} />
+            <span style={{ fontSize:12, color:C.muted }}>/ {totalPages}</span>
             <button onClick={() => changePage(Math.min(totalPages, pageNum+1))} disabled={pageNum===totalPages}
-              style={{ width:28, height:28, borderRadius:6, border:`1px solid ${C.border}`, background:"#fff", cursor:pageNum===totalPages?"not-allowed":"pointer", opacity:pageNum===totalPages?.4:1 }}>›</button>
+              style={{ width:28, height:28, borderRadius:6, border:`1px solid ${C.border}`, background:"#fff", cursor:pageNum===totalPages?"default":"pointer", opacity:pageNum===totalPages?.4:1 }}>›</button>
           </div>
           <button onClick={doExplain} disabled={explaining}
-            style={{ display:"flex", alignItems:"center", gap:5, background:C.accent, color:"#fff", border:"none", borderRadius:7, padding:"6px 14px", fontSize:13, fontWeight:600, cursor:explaining?"not-allowed":"pointer" }}>
-            <Icon d={I.sparkle} size={12} color="#fff" sw={2} />{explaining ? "Explaining…" : `Explain Page ${pageNum}`}
+            style={{ display:"flex", alignItems:"center", gap:5, background:C.accent, color:"#fff", border:"none", borderRadius:7, padding:"6px 14px", fontSize:13, fontWeight:600, cursor:explaining?"default":"pointer" }}>
+            <Icon d={I.sparkle} size={12} color="#fff" sw={2} />{explaining ? "…" : `Explain Page ${pageNum}`}
           </button>
-        </div>
-      )}
-      {/* Non-PDF toolbar */}
-      {!isPDF && (
-        <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"7px 14px", display:"flex", alignItems:"center", gap:8 }}>
-          <span style={{ fontSize:13, color:C.muted }}>Viewing: <strong style={{ color:C.text }}>{file.name}</strong></span>
+        </>}
+        {!isPDF && <>
+          <span style={{ fontSize:13, color:C.muted }}>📄 <strong style={{ color:C.text }}>{file.name}</strong></span>
           <div style={{ flex:1 }} />
           <button onClick={doExplain} disabled={explaining}
-            style={{ display:"flex", alignItems:"center", gap:5, background:C.accent, color:"#fff", border:"none", borderRadius:7, padding:"6px 14px", fontSize:13, fontWeight:600, cursor:explaining?"not-allowed":"pointer" }}>
+            style={{ display:"flex", alignItems:"center", gap:5, background:C.accent, color:"#fff", border:"none", borderRadius:7, padding:"6px 14px", fontSize:13, fontWeight:600, cursor:explaining?"default":"pointer" }}>
             <Icon d={I.sparkle} size={12} color="#fff" sw={2} />{explaining ? "Explaining…" : "AI Explain"}
           </button>
-        </div>
-      )}
+        </>}
+      </div>
 
-      {/* Viewer + Explain panel */}
+      {/* Main area */}
       <div style={{ flex:1, display:"flex", overflow:"hidden" }}>
-        <div style={{ flex:1, overflow:"auto", background:"#404040", display:"flex", justifyContent:"center", alignItems:"flex-start", padding:"20px" }}>
-          {/* PDF: canvas render with drawing layer */}
+        <div style={{ flex:1, overflow:"auto", background:"#404040", padding:"20px", display:"flex", justifyContent:"center", alignItems:"flex-start" }}>
+
+          {/* PDF viewer with drawing layer */}
           {isPDF && (
-            <div style={{ position:"relative", display:"inline-block", lineHeight:0, boxShadow:"0 4px 24px rgba(0,0,0,.5)" }}>
-              <canvas ref={canvasRef} style={{ display:"block" }} />
-              <canvas ref={drawCanvasRef}
+            <div style={{ position:"relative", display:"inline-block", lineHeight:0, boxShadow:"0 4px 32px rgba(0,0,0,.6)" }}>
+              <canvas ref={canvasRef} style={{ display:"block", maxWidth:"100%" }} />
+              <canvas ref={drawRef}
                 style={{ position:"absolute", top:0, left:0, width:"100%", height:"100%", cursor:tool==="eraser"?"cell":"crosshair", touchAction:"none" }}
                 onMouseDown={startDraw} onMouseMove={doDraw} onMouseUp={stopDraw} onMouseLeave={stopDraw}
                 onTouchStart={startDraw} onTouchMove={doDraw} onTouchEnd={stopDraw} />
             </div>
           )}
-          {/* Images: show directly */}
+
+          {/* Image viewer */}
           {isImage && objectUrl && (
-            <img src={objectUrl} alt={file.name} style={{ maxWidth:"100%", maxHeight:"calc(100vh - 200px)", boxShadow:"0 4px 24px rgba(0,0,0,.5)", borderRadius:4 }} />
+            <img src={objectUrl} alt={file.name}
+              style={{ maxWidth:"100%", maxHeight:"calc(100vh - 200px)", boxShadow:"0 4px 32px rgba(0,0,0,.5)", borderRadius:4 }} />
           )}
-          {/* Office/Text files: use browser native iframe viewer */}
-          {isOfficeOrText && objectUrl && (
-            <div style={{ width:"100%", height:"calc(100vh - 200px)", background:"#fff", borderRadius:4, overflow:"hidden", boxShadow:"0 4px 24px rgba(0,0,0,.5)" }}>
-              <iframe
-                src={objectUrl}
-                title={file.name}
-                style={{ width:"100%", height:"100%", border:"none" }}
-                sandbox="allow-same-origin allow-scripts"
-              />
+
+          {/* Text files */}
+          {isText && <TextViewer fileObj={fileObj} />}
+
+          {/* Word documents */}
+          {isWord && <WordViewer fileObj={fileObj} />}
+
+          {/* PowerPoint */}
+          {isPPT && <PPTViewer fileObj={fileObj} page={pageNum} onTotalPages={setTotalPages} />}
+
+          {/* Excel */}
+          {isExcel && <ExcelViewer fileObj={fileObj} />}
+
+          {/* Unsupported */}
+          {!isPDF && !isImage && !isText && !isWord && !isPPT && !isExcel && (
+            <div style={{ textAlign:"center", color:"#fff", padding:"60px 20px" }}>
+              <div style={{ fontSize:56, marginBottom:14 }}>📎</div>
+              <p style={{ fontSize:16, fontWeight:600, marginBottom:8 }}>{file.name}</p>
+              <p style={{ opacity:.6, fontSize:13 }}>This file type cannot be previewed. Use the AI Assistant tab to ask questions about it.</p>
             </div>
           )}
         </div>
 
         {/* AI Explain panel */}
         {showExplain && (
-          <div style={{ width:320, background:C.surface, borderLeft:`1px solid ${C.border}`, display:"flex", flexDirection:"column", overflow:"hidden" }}>
+          <div style={{ width:300, background:C.surface, borderLeft:`1px solid ${C.border}`, display:"flex", flexDirection:"column" }}>
             <div style={{ padding:"12px 16px", borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:7 }}>
-                <Icon d={I.sparkle} size={14} color={C.accent} sw={2} />
-                <span style={{ fontSize:13, fontWeight:700, color:C.text }}>{isPDF ? `Page ${pageNum} Explanation` : "AI Explanation"}</span>
-              </div>
+              <span style={{ fontSize:13, fontWeight:700, color:C.text }}>
+                {isPDF ? `Page ${pageNum} — Explanation` : "AI Explanation"}
+              </span>
               <button onClick={() => setShowExplain(false)} style={{ background:"none", border:"none", cursor:"pointer" }}>
                 <Icon d={I.x} size={14} color={C.muted} />
               </button>
@@ -987,206 +1068,6 @@ ${pageText.slice(0, 3000)}`
   );
 }
 
-
-function TextViewer({ fileObj }) {
-  const [text, setText] = useState("");
-  useEffect(() => {
-    readFileAsText(fileObj).then(t => setText(t || "File appears to be empty.")).catch(() => setText("Could not read file."));
-  }, [fileObj]);
-  return (
-    <div style={{ background:"#fff", padding:"24px 28px", borderRadius:4, maxWidth:800, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,.4)", whiteSpace:"pre-wrap", fontFamily:"monospace", fontSize:13, lineHeight:1.7, color:"#1a1a1a", minHeight:400, wordBreak:"break-word", overflowWrap:"break-word", overflowX:"hidden" }}>
-      {text || "Loading…"}
-    </div>
-  );
-}
-
-function WordViewer({ fileObj }) {
-  const [html, setHtml] = useState("");
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    (async () => {
-      try {
-        if (!window.mammoth) {
-          await new Promise((res, rej) => {
-            const s = document.createElement("script");
-            s.src = "https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js";
-            s.onload = res; s.onerror = rej;
-            document.head.appendChild(s);
-          });
-        }
-        const ab = await fileObj.arrayBuffer();
-        const result = await window.mammoth.convertToHtml({ arrayBuffer: ab });
-        setHtml(result.value);
-      } catch(e) { setHtml(`<p style="color:red">Could not render: ${e.message}</p>`); }
-      setLoading(false);
-    })();
-  }, [fileObj]);
-  return (
-    <div style={{ background:"#fff", padding:"40px 56px", borderRadius:4, maxWidth:850, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,.4)", minHeight:500, lineHeight:1.8, color:"#1a1a1a", fontSize:14 }}>
-      {loading ? <p style={{ color:"#888" }}>Loading Word document…</p> : <div dangerouslySetInnerHTML={{ __html: html }} />}
-    </div>
-  );
-}
-
-function PPTViewer({ fileObj, page, onTotalPages }) {
-  const [slides, setSlides] = useState([]);
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    (async () => {
-      try {
-        if (!window.JSZip) {
-          await new Promise((res, rej) => {
-            const s = document.createElement("script");
-            s.src = "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";
-            s.onload = res; s.onerror = rej;
-            document.head.appendChild(s);
-          });
-        }
-        const ab = await fileObj.arrayBuffer();
-        const zip = await window.JSZip.loadAsync(ab);
-        const slideFiles = Object.keys(zip.files)
-          .filter(f => /^ppt[/\\]slides[/\\]slide[0-9]+\.xml$/.test(f))
-          .sort((a,b) => parseInt(a.match(/\d+/)?.[0]||0) - parseInt(b.match(/\d+/)?.[0]||0));
-        onTotalPages(slideFiles.length);
-        const parsed = [];
-        for (const sf of slideFiles) {
-          const xml = await zip.files[sf].async("string");
-          const allT = [...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map(m => m[1]).filter(t => t.trim());
-          const bgMatch = xml.match(/solidFill[\s\S]*?<a:srgbClr val="([^"]+)"/);
-          parsed.push({ texts: allT, bg: bgMatch ? "#" + bgMatch[1] : "#ffffff" });
-        }
-        setSlides(parsed);
-      } catch(e) { setSlides([{ texts: [`Error loading: ${e.message}`], bg:"#fff" }]); }
-      setLoading(false);
-    })();
-  }, [fileObj]);
-
-  if (loading) return <div style={{ color:"#fff", fontSize:15 }}>Loading presentation…</div>;
-  const slide = slides[Math.min(page-1, slides.length-1)];
-  if (!slide) return null;
-  const isDark = slide.bg !== "#ffffff" && slide.bg !== "#fff" && slide.bg !== "#FFFFFF";
-  return (
-    <div style={{ width:720, minHeight:405, background:slide.bg, borderRadius:8, boxShadow:"0 8px 40px rgba(0,0,0,.5)", padding:"48px 56px", display:"flex", flexDirection:"column", gap:14 }}>
-      {slide.texts.length === 0
-        ? <p style={{ color:"#aaa", textAlign:"center", margin:"auto", fontSize:14 }}>Empty slide</p>
-        : slide.texts.map((t,i) => (
-          <p key={i} style={{ fontSize:i===0?26:15, fontWeight:i===0?700:400, color:isDark?"#fff":"#1a1a1a", lineHeight:1.5, fontFamily:"'DM Sans',sans-serif",
-            borderBottom:i===0&&slide.texts.length>1?"1px solid rgba(128,128,128,.2)":"none", paddingBottom:i===0&&slide.texts.length>1?16:0 }}>
-            {i>0?"• ":""}{t}
-          </p>
-        ))
-      }
-    </div>
-  );
-}
-
-function ExcelViewer({ fileObj }) {
-  const [sheets, setSheets] = useState([]);
-  const [activeSheet, setActiveSheet] = useState(0);
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    (async () => {
-      try {
-        if (!window.XLSX) {
-          await new Promise((res, rej) => {
-            const s = document.createElement("script");
-            s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-            s.onload = res; s.onerror = rej;
-            document.head.appendChild(s);
-          });
-        }
-        const ab = await fileObj.arrayBuffer();
-        const wb = window.XLSX.read(ab, { type:"array" });
-        const parsed = wb.SheetNames.map(name => ({
-          name,
-          html: window.XLSX.utils.sheet_to_html(wb.Sheets[name], { editable:false }),
-        }));
-        setSheets(parsed);
-      } catch(e) { setSheets([{ name:"Error", html:`<p style="color:red">${e.message}</p>` }]); }
-      setLoading(false);
-    })();
-  }, [fileObj]);
-  return (
-    <div style={{ background:"#fff", borderRadius:4, maxWidth:"95%", width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,.4)", overflow:"hidden" }}>
-      {sheets.length > 1 && (
-        <div style={{ display:"flex", borderBottom:"1.5px solid #e2e8f0", background:"#f7f7f7" }}>
-          {sheets.map((s,i) => (
-            <button key={i} onClick={() => setActiveSheet(i)}
-              style={{ padding:"10px 20px", border:"none", borderBottom:activeSheet===i?"2px solid #3D5A80":"2px solid transparent", background:"none", cursor:"pointer", fontSize:13, fontWeight:activeSheet===i?700:400, color:activeSheet===i?"#3D5A80":"#666" }}>
-              {s.name}
-            </button>
-          ))}
-        </div>
-      )}
-      <div style={{ overflow:"auto", maxHeight:"calc(100vh - 280px)", padding:16 }}>
-        {loading ? <p style={{ color:"#666", padding:24 }}>Loading spreadsheet…</p>
-          : sheets[activeSheet] && <div dangerouslySetInnerHTML={{ __html: sheets[activeSheet].html }} />}
-      </div>
-      <style>{`table{border-collapse:collapse;width:100%}td,th{border:1px solid #e2e8f0;padding:6px 10px;min-width:80px;white-space:nowrap}th{background:#f0f4f8;font-weight:600}`}</style>
-    </div>
-  );
-}
-
-
-// ─── NOTES TAB ────────────────────────────────────────────────────────────────
-// ─── AI TAB ───────────────────────────────────────────────────────────────────
-function AITab({ file, allFiles, folder, onUpdate }) {
-  const [msgs, setMsgs] = useState([]);
-  const [inp, setInp] = useState("");
-  const [loading, setLoading] = useState(false);
-  const bottomRef = useRef(null);
-
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:"smooth" }); }, [msgs]);
-
-  const send = async () => {
-    const text = inp.trim();
-    if (!text || loading) return;
-    const userMsg = { role:"user", content: text };
-    const newMsgs = [...msgs, userMsg];
-    setMsgs(newMsgs); setInp(""); setLoading(true);
-    try {
-      const fileContext = file ? `You are helping a student with the file "${file.name}".` : `You are helping a student with the folder "${folder?.name}".`;
-      const reply = await callClaudeChat(
-        fileContext + " Answer clearly and helpfully. Use bullet points and bold for key info.",
-        newMsgs.map(m => ({ role: m.role, content: m.content }))
-      );
-      setMsgs([...newMsgs, { role:"assistant", content: reply }]);
-    } catch(e) { setMsgs([...newMsgs, { role:"assistant", content:"Error: " + e.message }]); }
-    setLoading(false);
-  };
-
-  return (
-    <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 200px)", minHeight:400 }}>
-      <div style={{ flex:1, overflowY:"auto", padding:"16px 0", display:"flex", flexDirection:"column", gap:12 }}>
-        {msgs.length === 0 && (
-          <div style={{ textAlign:"center", padding:"40px 20px", color:C.muted }}>
-            <div style={{ fontSize:40, marginBottom:12 }}>🤖</div>
-            <p style={{ fontSize:15, fontWeight:600, color:C.text, marginBottom:6 }}>AI Assistant</p>
-            <p style={{ fontSize:13 }}>Ask anything about {file ? `"${file.name}"` : "your files"}.</p>
-          </div>
-        )}
-        {msgs.map((m,i) => (
-          <div key={i} style={{ display:"flex", justifyContent:m.role==="user"?"flex-end":"flex-start" }}>
-            <div style={{ maxWidth:"80%", padding:"10px 14px", borderRadius:14, background:m.role==="user"?C.accent:C.surface, color:m.role==="user"?"#fff":C.text, fontSize:14, lineHeight:1.6, border:m.role==="user"?"none":`1px solid ${C.border}` }}>
-              <Fmt text={m.content} />
-            </div>
-          </div>
-        ))}
-        {loading && <div style={{ display:"flex", gap:5, padding:"10px 14px" }}>{[0,1,2].map(j=><div key={j} style={{ width:7,height:7,borderRadius:"50%",background:C.accent,animation:"bounce 1.2s infinite",animationDelay:`${j*.2}s` }}/>)}</div>}
-        <div ref={bottomRef} />
-      </div>
-      <div style={{ display:"flex", gap:10, paddingTop:12, borderTop:`1px solid ${C.border}` }}>
-        <input value={inp} onChange={e=>setInp(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}}
-          placeholder="Ask a question…"
-          style={{ flex:1, border:`1.5px solid ${C.border}`, borderRadius:12, padding:"11px 16px", fontSize:14, outline:"none", background:C.bg, color:C.text }} />
-        <button onClick={send} disabled={!inp.trim()||loading}
-          style={{ background:inp.trim()&&!loading?C.accent:"#ccc", color:"#fff", border:"none", borderRadius:12, padding:"11px 20px", fontSize:14, fontWeight:600, cursor:inp.trim()&&!loading?"pointer":"not-allowed" }}>
-          Send
-        </button>
-      </div>
-    </div>
-  );
-}
 
 function NotesTab({ file, onUpdate, user, isGuest }) {
   const [notes, setNotes] = useState(file.notes||"");
@@ -1305,18 +1186,26 @@ STRICT FORMATTING RULES - you MUST follow these exactly:
     setProcessing(true);
     setVoiceStatus("✨ Organising your notes…");
     try {
+      // Get context from existing notes and file name to fix pronunciation errors
+      const context = `File: "${file.name}". Existing notes context: ${(notes || "").slice(0, 400) || "none"}`;
+
       const result = await callClaude(
         `You are an expert note-taker. A student recorded a voice note from a lecture or study session.
+You have context about the topic to help fix pronunciation and speech recognition errors.
+
 STRICT RULES:
-1. ONLY use what was said — never add outside information
-2. Fix grammar, remove all filler words (um, uh, like, you know, sort of)
-3. Write section headings in ALL CAPS on their own line (example: INTRODUCTION)
-4. Use a dash (-) for every bullet point
-5. NEVER use asterisks (*) or double asterisks (**) anywhere in your response
-6. NEVER use pound signs (#) or any markdown formatting
-7. Plain text only — no symbols except dashes and dots
-8. Make notes clear and useful for exam revision`,
-        `Turn this raw speech into clean organised study notes. No asterisks, no markdown:
+1. Use the topic context to fix likely speech recognition errors (e.g. "Assam" near science context likely means "atom", mispronounced subject terms should be corrected to their proper spelling)
+2. Fix grammar, remove all filler words (um, uh, like, you know, sort of, kind of)
+3. ONLY use what was said — never add outside information beyond fixing errors
+4. Write section headings in ALL CAPS on their own line
+5. Use a dash (-) for every bullet point
+6. NEVER use asterisks (*) or double asterisks (**) anywhere
+7. NEVER use pound signs (#) or any markdown formatting
+8. Plain text only — no symbols except dashes
+9. Make notes clear and useful for exam revision
+
+Topic context: ${context}`,
+        `Fix pronunciation errors using the topic context, then turn this into clean study notes:
 
 "${raw}"`
       );
@@ -2293,8 +2182,10 @@ function VoiceAnswer({ cards, onBack }) {
   const [transcript, setTranscript] = useState("");
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState(null); // { ok, heard, correct }
+  const [voiceCountdown, setVoiceCountdown] = useState(null);
   const recognitionRef = useRef(null);
   const isListeningRef = useRef(false);
+  const countdownRef = useRef(null);
 
   const card = deck[curr];
 
@@ -2350,7 +2241,19 @@ function VoiceAnswer({ cards, onBack }) {
       isListeningRef.current = false;
       setListening(false);
       if (lastFinal.trim()) {
-        checkAnswer(lastFinal.trim());
+        // Give user 5 seconds to see what was heard before submitting
+        let countdown = 5;
+        setVoiceCountdown(countdown);
+        const timer = setInterval(() => {
+          countdown -= 1;
+          setVoiceCountdown(countdown);
+          if (countdown <= 0) {
+            clearInterval(timer);
+            setVoiceCountdown(null);
+            checkAnswer(lastFinal.trim());
+          }
+        }, 1000);
+        countdownRef.current = timer;
       }
     };
 
@@ -2431,7 +2334,7 @@ Is the student correct? Reply only YES or NO.`
           <p style={{ marginTop: 14, fontSize: 13, color: listening ? "#dc2626" : "#6b7280", fontWeight: 600 }}>
             {listening ? "Listening… tap to stop" : "Tap to speak your answer"}
           </p>
-          {transcript && !listening && (
+          {transcript && !listening && !voiceCountdown && (
             <p style={{ marginTop: 8, fontSize: 13, color: "#6b7280", fontStyle: "italic" }}>
               Heard: "{transcript}"
             </p>
@@ -2440,6 +2343,24 @@ Is the student correct? Reply only YES or NO.`
             <p style={{ marginTop: 8, fontSize: 13, color: accent, fontStyle: "italic" }}>
               "{transcript}"
             </p>
+          )}
+          {voiceCountdown !== null && (
+            <div style={{ marginTop: 16, textAlign: "center" }}>
+              <p style={{ fontSize: 13, color: "#6b7280", marginBottom: 6, fontStyle: "italic" }}>Heard: "{transcript}"</p>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 10, background: "#f5f3ff", border: `2px solid ${accent}33`, borderRadius: 12, padding: "10px 20px" }}>
+                <div style={{ width: 36, height: 36, borderRadius: "50%", background: accent, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 800 }}>{voiceCountdown}</div>
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: accent }}>Submitting in {voiceCountdown}s…</p>
+                  <p style={{ fontSize: 11, color: "#6b7280" }}>Not right? tap Try again below</p>
+                </div>
+              </div>
+              <div style={{ marginTop: 12 }}>
+                <button onClick={() => { clearInterval(countdownRef.current); setVoiceCountdown(null); setTranscript(""); }}
+                  style={{ background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 10, padding: "8px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                  🔄 Redo answer
+                </button>
+              </div>
+            </div>
           )}
         </div>
       )}
@@ -2472,7 +2393,7 @@ Is the student correct? Reply only YES or NO.`
             )}
           </div>
           <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-            <button onClick={() => { setResult(null); setTranscript(""); }}
+            <button onClick={() => { clearInterval(countdownRef.current); setVoiceCountdown(null); setResult(null); setTranscript(""); }}
               style={{ background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 12, padding: "11px 22px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
               🔄 Try again
             </button>
