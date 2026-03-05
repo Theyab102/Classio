@@ -205,14 +205,23 @@ const I = {
 // ─── TEXT FORMATTER ───────────────────────────────────────────────────────────
 const Fmt = ({ text }) => (
   <div>{(text||"").split('\n').map((line, i) => {
-    const clean = line.replace(/^#+\s*/, "").replace(/\*\*/g, "");
+    // Strip ALL markdown symbols
+    const clean = line.replace(/^#+\s*/, "").replace(/\*\*/g, "").replace(/\*/g, "").trim();
     if (!line.trim()) return <br key={i} />;
-    if (line.startsWith('# ') || line.startsWith('## ') || line.startsWith('### ')) return <p key={i} style={{ fontWeight:700, fontSize:15, marginBottom:6, marginTop:10, color:"#1a202c" }}>{clean}</p>;
-    if (/^\*\*[^*]+\*\*$/.test(line.trim())) return <p key={i} style={{ fontWeight:700, fontSize:14, marginBottom:5, marginTop:8, color:"#2d3748" }}>{clean}</p>;
-    if (line.startsWith('• ') || line.startsWith('- ') || line.startsWith('* ')) return <p key={i} style={{ paddingLeft:16, marginBottom:3, display:"flex", gap:6 }}><span style={{flexShrink:0}}>•</span><span>{line.slice(2).replace(/\*\*/g,"")}</span></p>;
-    if (/^\d+\.\s/.test(line)) return <p key={i} style={{ paddingLeft:16, marginBottom:3 }}>{clean}</p>;
-    const parts = line.split(/(\*\*[^*]+\*\*)/g);
-    return <p key={i} style={{ marginBottom:3, lineHeight:1.6 }}>{parts.map((p,j) => p.startsWith('**') ? <strong key={j}>{p.slice(2,-2)}</strong> : p)}</p>;
+    // ALL CAPS heading line
+    if (/^[A-Z][A-Z\s]{3,}$/.test(clean) || line.startsWith('# ') || line.startsWith('## ')) 
+      return <p key={i} style={{ fontWeight:700, fontSize:14, marginBottom:4, marginTop:12, color:"#1a202c", letterSpacing:.3 }}>{clean}</p>;
+    // Bold heading (** wrapped)
+    if (/^\*\*[^*]+\*\*$/.test(line.trim())) 
+      return <p key={i} style={{ fontWeight:700, fontSize:14, marginBottom:4, marginTop:10, color:"#2d3748" }}>{clean}</p>;
+    // Bullet point
+    if (line.startsWith('• ') || line.startsWith('- ') || line.startsWith('* ') || line.startsWith('· ')) 
+      return <p key={i} style={{ paddingLeft:14, marginBottom:3, display:"flex", gap:6, lineHeight:1.6 }}><span style={{flexShrink:0, color:"#666"}}>•</span><span>{clean.replace(/^[•\-\*·]\s*/,"")}</span></p>;
+    // Numbered list
+    if (/^\d+\.\s/.test(line)) 
+      return <p key={i} style={{ paddingLeft:14, marginBottom:3, lineHeight:1.6 }}>{clean}</p>;
+    // Normal text - strip any remaining * 
+    return <p key={i} style={{ marginBottom:3, lineHeight:1.6 }}>{clean}</p>;
   })}</div>
 );
 
@@ -768,48 +777,56 @@ function ViewTab({ file, onUpdate }) {
     }
   };
 
-  // Render PDF page onto canvas - with render task cancellation to prevent white/colored pages
+  // Render PDF page - clean render of exactly what the user uploaded
   const renderTaskRef = useRef(null);
-  useEffect(() => {
-    if (!pdfDoc || !canvasRef.current) return;
-    // Cancel any in-progress render
+  const renderPage = async (doc, pageNum) => {
+    if (!canvasRef.current) return;
+    // Cancel any existing render first
     if (renderTaskRef.current) {
-      renderTaskRef.current.cancel();
+      try { renderTaskRef.current.cancel(); } catch {}
       renderTaskRef.current = null;
     }
-    (async () => {
-      try {
-        const pg = await pdfDoc.getPage(page);
-        const vp = pg.getViewport({ scale: 1.5 });
-        const c = canvasRef.current;
-        if (!c) return;
-        c.width = vp.width;
-        c.height = vp.height;
-        const ctx = c.getContext("2d");
-        // Fill white background first so page always looks correct
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, c.width, c.height);
-        const task = pg.render({ canvasContext: ctx, viewport: vp });
-        renderTaskRef.current = task;
-        await task.promise;
-        renderTaskRef.current = null;
-        // Sync draw canvas
-        if (drawCanvasRef.current) {
-          const dc = drawCanvasRef.current;
-          dc.width = vp.width;
-          dc.height = vp.height;
-          const dctx = dc.getContext("2d");
-          dctx.clearRect(0, 0, dc.width, dc.height);
-          if (annotations[page]) {
-            const img = new Image();
-            img.onload = () => dctx.drawImage(img, 0, 0);
-            img.src = annotations[page];
-          }
+    try {
+      const pdfPage = await doc.getPage(pageNum);
+      // Use scale based on container width for best fit
+      const containerWidth = canvasRef.current.parentElement?.clientWidth || 800;
+      const baseVp = pdfPage.getViewport({ scale: 1 });
+      const scale = Math.min(1.8, (containerWidth - 40) / baseVp.width);
+      const vp = pdfPage.getViewport({ scale });
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      // Set canvas to exact PDF page dimensions
+      canvas.width = vp.width;
+      canvas.height = vp.height;
+      const ctx = canvas.getContext("2d");
+      // White background - renders the PDF exactly as it is
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // Render the actual PDF page pixels
+      const task = pdfPage.render({ canvasContext: ctx, viewport: vp });
+      renderTaskRef.current = task;
+      await task.promise;
+      renderTaskRef.current = null;
+      // Set up drawing layer on top - same size
+      if (drawCanvasRef.current) {
+        const dc = drawCanvasRef.current;
+        dc.width = vp.width;
+        dc.height = vp.height;
+        dc.getContext("2d").clearRect(0, 0, dc.width, dc.height);
+        // Restore any annotations for this page
+        if (annotations[pageNum]) {
+          const img = new Image();
+          img.onload = () => { if (dc) dc.getContext("2d").drawImage(img, 0, 0); };
+          img.src = annotations[pageNum];
         }
-      } catch(e) {
-        if (e.name !== "RenderingCancelledException") console.error("PDF render error", e);
       }
-    })();
+    } catch(e) {
+      if (e.name !== "RenderingCancelledException") console.error("PDF render:", e);
+    }
+  };
+
+  useEffect(() => {
+    if (pdfDoc) renderPage(pdfDoc, page);
   }, [pdfDoc, page]);
 
   const changePage = (n) => { saveAnnotation(); setPage(n); };
@@ -985,10 +1002,10 @@ ${pageText.slice(0, 4000)}`
           )}
           {/* PDF */}
           {isPDF && (
-            <div style={{ position:"relative", boxShadow:"0 8px 40px rgba(0,0,0,.5)", display:"inline-block" }}>
-              <canvas ref={canvasRef} style={{ display:"block", maxWidth:"100%" }} />
+            <div style={{ position:"relative", boxShadow:"0 8px 40px rgba(0,0,0,.5)", display:"inline-block", lineHeight:0 }}>
+              <canvas ref={canvasRef} style={{ display:"block" }} />
               <canvas ref={drawCanvasRef}
-                style={{ position:"absolute", top:0, left:0, width:"100%", height:"100%", cursor:tool==="eraser"?"cell":"crosshair", touchAction:"none" }}
+                style={{ position:"absolute", top:0, left:0, width:"100%", height:"100%", cursor:tool==="eraser"?"cell":"crosshair", touchAction:"none", opacity:1 }}
                 onMouseDown={startDraw} onMouseMove={doDraw} onMouseUp={stopDraw} onMouseLeave={stopDraw}
                 onTouchStart={startDraw} onTouchMove={doDraw} onTouchEnd={stopDraw} />
             </div>
@@ -1260,14 +1277,22 @@ function NotesTab({ file, onUpdate, user, isGuest }) {
         simple: "Write very simple short notes. Use plain language like explaining to a 14-year-old. Short sentences. No jargon.",
         exam: "Write exam-focused notes. Include: likely exam questions, key terms to memorise, formulas, dates, and a quick revision checklist at the end.",
       };
+      const styleGuide = {
+        detailed: "Write detailed notes split into sections. Each section has a heading in ALL CAPS followed by bullet points.",
+        bullet: "Write ONLY bullet points grouped under ALL CAPS headings. One fact per line.",
+        simple: "Write very simple short notes in plain English. Short sentences. No complex words.",
+        exam: "Write exam revision notes. Include key terms, definitions, possible exam questions, and a checklist at the end.",
+      };
       const txt = await callClaude(
-        `You are an expert study notes writer. ${styleInstructions[noteStyle] || styleInstructions.detailed}
-Rules:
-- Do NOT use asterisks (*) anywhere in your output
-- Use UPPERCASE HEADINGS instead of bold markdown
-- Use • for bullet points
-- Write clean readable text with no markdown symbols
-- ONLY use information from the provided file content if given`,
+        `You are a study notes writer. ${styleGuide[noteStyle] || styleGuide.detailed}
+
+STRICT FORMATTING RULES - you MUST follow these exactly:
+1. NEVER use asterisks (*) or double asterisks (**) anywhere - not even once
+2. NEVER use pound signs (#) for headings
+3. Write section headings in ALL CAPS on their own line like: INTRODUCTION
+4. Use a dash (-) for bullet points
+5. Use plain text only - no markdown, no symbols except dashes and dots
+6. ONLY use content from the file if provided - do not add outside facts`,
         userMsg
       );
       setNotes(txt); onUpdate({...file,notes:txt});
@@ -1288,21 +1313,32 @@ Rules:
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = "en-US";
-    recognition.maxAlternatives = 1;
+    recognition.maxAlternatives = 3;
+    let interimText = "";
     recognition.onresult = (e) => {
-      let interim = "";
+      interimText = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         if (e.results[i].isFinal) {
-          transcriptRef.current += e.results[i][0].transcript + " ";
+          // Pick the most confident result
+          let best = e.results[i][0].transcript;
+          let bestConf = e.results[i][0].confidence || 0;
+          for (let a = 1; a < e.results[i].length; a++) {
+            if ((e.results[i][a].confidence || 0) > bestConf) {
+              best = e.results[i][a].transcript;
+              bestConf = e.results[i][a].confidence || 0;
+            }
+          }
+          transcriptRef.current += best + " ";
         } else {
-          interim += e.results[i][0].transcript;
+          interimText += e.results[i][0].transcript;
         }
       }
-      const display = transcriptRef.current + (interim ? interim : "");
-      if (display.trim()) setVoiceStatus("🎙️ Hearing: " + display.slice(-60));
+      const preview = (transcriptRef.current + interimText).trim();
+      setVoiceStatus("🎙️ " + (preview ? preview.slice(-80) + "…" : "Listening… speak now"));
     };
     recognition.onerror = (e) => {
-      if (e.error === "not-allowed") setVoiceStatus("Microphone access denied. Please allow mic access.");
+      if (e.error === "not-allowed") setVoiceStatus("❌ Microphone access denied. Please allow mic in browser settings.");
+      else if (e.error === "audio-capture") setVoiceStatus("❌ No microphone found.");
       else if (e.error !== "no-speech") setVoiceStatus("Mic error: " + e.error);
     };
     recognition.onend = () => {
@@ -1313,7 +1349,7 @@ Rules:
     recognition.start();
     recognitionRef.current = recognition;
     setRecording(true);
-    setVoiceStatus("🎙️ Recording… speak now. Click Stop when done.");
+    setVoiceStatus("🎙️ Listening… speak now. Click Stop when done.");
   };
 
   const stopVoice = async () => {
