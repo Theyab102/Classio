@@ -1533,7 +1533,7 @@ function CardsTab({ file, onUpdate }) {
           <div style={{ display:"flex", gap:10, alignItems:"center" }}>
             <div style={{ display:"flex", alignItems:"center", gap:8, flex:1 }}>
               <span style={{ fontSize:13, color:C.muted }}>Custom:</span>
-              <input type="number" min="0" max="50" value={cardCount} onChange={e => setCardCount(Math.min(50, Math.max(0, parseInt(e.target.value)||0))})}
+              <input type="number" min="0" max="50" value={cardCount} onChange={e => setCardCount(Math.min(50, Math.max(0, parseInt(e.target.value)||0)))}
                 style={{ width:70, border:`1.5px solid ${C.border}`, borderRadius:8, padding:"7px 10px", fontSize:14, outline:"none", color:C.text, background:"#fff" }} />
             </div>
             <button onClick={() => generate(cardCount)} disabled={gen}
