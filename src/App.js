@@ -204,12 +204,15 @@ const I = {
 
 // ─── TEXT FORMATTER ───────────────────────────────────────────────────────────
 const Fmt = ({ text }) => (
-  <div>{text.split('\n').map((line, i) => {
-    if (line.startsWith('**') && line.endsWith('**')) return <p key={i} style={{ fontWeight: 700, marginBottom: 4 }}>{line.slice(2,-2)}</p>;
-    if (line.startsWith('• ') || line.startsWith('- ')) return <p key={i} style={{ paddingLeft: 12, marginBottom: 2 }}>• {line.slice(2)}</p>;
-    if (!line) return <br key={i} />;
+  <div>{(text||"").split('\n').map((line, i) => {
+    const clean = line.replace(/^#+\s*/, "").replace(/\*\*/g, "");
+    if (!line.trim()) return <br key={i} />;
+    if (line.startsWith('# ') || line.startsWith('## ') || line.startsWith('### ')) return <p key={i} style={{ fontWeight:700, fontSize:15, marginBottom:6, marginTop:10, color:"#1a202c" }}>{clean}</p>;
+    if (/^\*\*[^*]+\*\*$/.test(line.trim())) return <p key={i} style={{ fontWeight:700, fontSize:14, marginBottom:5, marginTop:8, color:"#2d3748" }}>{clean}</p>;
+    if (line.startsWith('• ') || line.startsWith('- ') || line.startsWith('* ')) return <p key={i} style={{ paddingLeft:16, marginBottom:3, display:"flex", gap:6 }}><span style={{flexShrink:0}}>•</span><span>{line.slice(2).replace(/\*\*/g,"")}</span></p>;
+    if (/^\d+\.\s/.test(line)) return <p key={i} style={{ paddingLeft:16, marginBottom:3 }}>{clean}</p>;
     const parts = line.split(/(\*\*[^*]+\*\*)/g);
-    return <p key={i} style={{ marginBottom: 3 }}>{parts.map((p,j) => p.startsWith('**') ? <strong key={j}>{p.slice(2,-2)}</strong> : p)}</p>;
+    return <p key={i} style={{ marginBottom:3, lineHeight:1.6 }}>{parts.map((p,j) => p.startsWith('**') ? <strong key={j}>{p.slice(2,-2)}</strong> : p)}</p>;
   })}</div>
 );
 
@@ -233,6 +236,9 @@ const GS = `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@3
 @keyframes bounce{0%,80%,100%{transform:scale(.8);opacity:.5}40%{transform:scale(1.1);opacity:1}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
 `; 
+
+// Global file object store — survives navigation within the session
+const FILE_STORE = new Map();
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
@@ -287,12 +293,14 @@ export default function App() {
   };
 
   const updateFile = (folderId, updated) => {
+    // Always carry _fileObj forward so viewer never loses it
+    const withObj = { ...updated, _fileObj: updated._fileObj || FILE_STORE.get(updated.id) || null };
     const next = folders.map(f => f.id === folderId
-      ? { ...f, files: f.files.map(fi => fi.id === updated.id ? updated : fi) }
+      ? { ...f, files: f.files.map(fi => fi.id === withObj.id ? withObj : fi) }
       : f);
     setFoldersSave(next);
-    setActiveFile(updated);
-    setActiveFolder(prev => prev ? { ...prev, files: prev.files.map(fi => fi.id === updated.id ? updated : fi) } : prev);
+    setActiveFile(withObj);
+    setActiveFolder(prev => prev ? { ...prev, files: prev.files.map(fi => fi.id === withObj.id ? withObj : fi) } : prev);
   };
 
   const handleGuest = (name) => { setGuestName(name); setIsGuest(true); setFolders([]); };
@@ -317,7 +325,7 @@ export default function App() {
   if (screen === "folder" && activeFolder) {
     const folder = folders.find(f => f.id === activeFolder.id) || activeFolder;
     return <FolderView folder={folder} onBack={() => { setScreen("home"); setActiveFolder(null); }}
-      onOpenFile={(f) => { setActiveFile(f); setScreen("file"); }}
+      onOpenFile={(f) => { const restored = {...f, _fileObj: f._fileObj || FILE_STORE.get(f.id) || null}; setActiveFile(restored); setScreen("file"); }}
       onUpdate={updateFolder} />;
   }
 
@@ -536,11 +544,15 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
   const fileInput = useRef();
 
   const addFiles = (list) => {
-    const added = Array.from(list).map(f => ({
-      id: `fi${Date.now()}-${Math.random()}`, name: f.name, type: f.type, size: f.size,
-      colorIndex: 0, notes: "", studyCards: [], uploadedAt: new Date().toLocaleDateString(),
-      linkedFiles: [], _fileObj: f,
-    }));
+    const added = Array.from(list).map(f => {
+      const id = `fi${Date.now()}-${Math.random()}`;
+      FILE_STORE.set(id, f); // persist file object globally
+      return {
+        id, name: f.name, type: f.type, size: f.size,
+        colorIndex: 0, notes: "", studyCards: [], uploadedAt: new Date().toLocaleDateString(),
+        linkedFiles: [], _fileObj: f,
+      };
+    });
     onUpdate({ ...folder, files: [...folder.files, ...added] });
   };
 
@@ -707,7 +719,8 @@ function ViewTab({ file, onUpdate }) {
   const [explainPageNum, setExplainPageNum] = useState(1);
   const [imgSrc, setImgSrc] = useState(null);
   const [annotations, setAnnotations] = useState({});
-  const fileObj = file._fileObj;
+  // Resolve file object — check live reference first, then fall back to FILE_STORE
+  const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
 
   const isPDF = fileObj && (fileObj.type === "application/pdf" || fileObj.name.toLowerCase().endsWith(".pdf"));
   const isImage = fileObj && fileObj.type.startsWith("image/");
@@ -755,27 +768,46 @@ function ViewTab({ file, onUpdate }) {
     }
   };
 
-  // Render PDF page onto canvas
+  // Render PDF page onto canvas - with render task cancellation to prevent white/colored pages
+  const renderTaskRef = useRef(null);
   useEffect(() => {
     if (!pdfDoc || !canvasRef.current) return;
+    // Cancel any in-progress render
+    if (renderTaskRef.current) {
+      renderTaskRef.current.cancel();
+      renderTaskRef.current = null;
+    }
     (async () => {
-      const pg = await pdfDoc.getPage(page);
-      const vp = pg.getViewport({ scale: 1.6 });
-      const c = canvasRef.current;
-      c.width = vp.width; c.height = vp.height;
-      const ctx = c.getContext("2d");
-      ctx.clearRect(0, 0, c.width, c.height);
-      await pg.render({ canvasContext: ctx, viewport: vp }).promise;
-      // Sync draw canvas and restore saved annotations
-      if (drawCanvasRef.current) {
-        const dc = drawCanvasRef.current;
-        dc.width = vp.width; dc.height = vp.height;
-        dc.getContext("2d").clearRect(0, 0, dc.width, dc.height);
-        if (annotations[page]) {
-          const img = new Image();
-          img.onload = () => dc.getContext("2d").drawImage(img, 0, 0);
-          img.src = annotations[page];
+      try {
+        const pg = await pdfDoc.getPage(page);
+        const vp = pg.getViewport({ scale: 1.5 });
+        const c = canvasRef.current;
+        if (!c) return;
+        c.width = vp.width;
+        c.height = vp.height;
+        const ctx = c.getContext("2d");
+        // Fill white background first so page always looks correct
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, c.width, c.height);
+        const task = pg.render({ canvasContext: ctx, viewport: vp });
+        renderTaskRef.current = task;
+        await task.promise;
+        renderTaskRef.current = null;
+        // Sync draw canvas
+        if (drawCanvasRef.current) {
+          const dc = drawCanvasRef.current;
+          dc.width = vp.width;
+          dc.height = vp.height;
+          const dctx = dc.getContext("2d");
+          dctx.clearRect(0, 0, dc.width, dc.height);
+          if (annotations[page]) {
+            const img = new Image();
+            img.onload = () => dctx.drawImage(img, 0, 0);
+            img.src = annotations[page];
+          }
         }
+      } catch(e) {
+        if (e.name !== "RenderingCancelledException") console.error("PDF render error", e);
       }
     })();
   }, [pdfDoc, page]);
@@ -866,9 +898,16 @@ ${pageText.slice(0, 4000)}`
 
   if (!fileObj) return (
     <div style={{ textAlign:"center", padding:"60px 24px" }}>
-      <div style={{ fontSize:48, marginBottom:12 }}>📎</div>
-      <p style={{ fontSize:16, fontWeight:600, color:C.text, marginBottom:6 }}>File needs to be re-uploaded</p>
-      <p style={{ fontSize:13, color:C.muted }}>Go back to the folder and re-upload this file to view it.</p>
+      <div style={{ fontSize:48, marginBottom:12 }}>📂</div>
+      <p style={{ fontSize:16, fontWeight:600, color:C.text, marginBottom:6 }}>Open file to view it</p>
+      <p style={{ fontSize:13, color:C.muted, marginBottom:16 }}>This file needs to be opened from your device to display here.</p>
+      <label style={{ display:"inline-flex", alignItems:"center", gap:8, background:C.accent, color:"#fff", borderRadius:10, padding:"10px 20px", cursor:"pointer", fontSize:14, fontWeight:600 }}>
+        📁 Open File
+        <input type="file" style={{ display:"none" }} onChange={e => {
+          const f = e.target.files?.[0];
+          if (f) { FILE_STORE.set(file.id, f); onUpdate({...file, _fileObj: f}); }
+        }} />
+      </label>
     </div>
   );
 
@@ -949,7 +988,7 @@ ${pageText.slice(0, 4000)}`
             <div style={{ position:"relative", boxShadow:"0 8px 40px rgba(0,0,0,.5)", display:"inline-block" }}>
               <canvas ref={canvasRef} style={{ display:"block", maxWidth:"100%" }} />
               <canvas ref={drawCanvasRef}
-                style={{ position:"absolute", inset:0, cursor:tool==="eraser"?"cell":"crosshair", touchAction:"none", maxWidth:"100%" }}
+                style={{ position:"absolute", top:0, left:0, width:"100%", height:"100%", cursor:tool==="eraser"?"cell":"crosshair", touchAction:"none" }}
                 onMouseDown={startDraw} onMouseMove={doDraw} onMouseUp={stopDraw} onMouseLeave={stopDraw}
                 onTouchStart={startDraw} onTouchMove={doDraw} onTouchEnd={stopDraw} />
             </div>
@@ -996,10 +1035,10 @@ ${pageText.slice(0, 4000)}`
 function TextViewer({ fileObj }) {
   const [text, setText] = useState("");
   useEffect(() => {
-    readFileAsText(fileObj).then(setText).catch(() => setText("Could not read file."));
+    readFileAsText(fileObj).then(t => setText(t || "File appears to be empty.")).catch(() => setText("Could not read file."));
   }, [fileObj]);
   return (
-    <div style={{ background:"#fff", padding:"32px 40px", borderRadius:4, maxWidth:800, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,.4)", whiteSpace:"pre-wrap", fontFamily:"monospace", fontSize:14, lineHeight:1.8, color:"#1a1a1a", minHeight:400 }}>
+    <div style={{ background:"#fff", padding:"24px 28px", borderRadius:4, maxWidth:800, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,.4)", whiteSpace:"pre-wrap", fontFamily:"monospace", fontSize:13, lineHeight:1.7, color:"#1a1a1a", minHeight:400, wordBreak:"break-word", overflowWrap:"break-word", overflowX:"hidden" }}>
       {text || "Loading…"}
     </div>
   );
@@ -1208,24 +1247,27 @@ function NotesTab({ file, onUpdate, user, isGuest }) {
   const generate = async () => {
     setGen(true);
     try {
-      const fileObj = file._fileObj;
+      const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
       const fileText = fileObj ? await extractFileText(fileObj) : null;
 
       const userMsg = fileText
         ? `Here is the content from the file "${file.name}":\n\n${fileText.slice(0, 6000)}\n\nNow create detailed study notes based ONLY on this content.`
         : `Create comprehensive study notes for a subject/topic named "${file.name}". Make them detailed and useful for exam revision.`;
 
+      const styleInstructions = {
+        detailed: "Write detailed comprehensive notes with headings, subpoints, definitions and examples. Aim for 25-35 lines.",
+        bullet: "Write ONLY bullet points. No paragraphs. Every fact on its own bullet line. Group under short bold headings.",
+        simple: "Write very simple short notes. Use plain language like explaining to a 14-year-old. Short sentences. No jargon.",
+        exam: "Write exam-focused notes. Include: likely exam questions, key terms to memorise, formulas, dates, and a quick revision checklist at the end.",
+      };
       const txt = await callClaude(
-        `You are an expert study notes writer. Create the BEST possible study notes a student can use to revise. Follow these rules:
-1. Start with a 1-2 sentence summary of the topic
-2. Break content into clear sections with **BOLD HEADINGS**
-3. Use bullet points (•) for key facts under each heading
-4. Highlight important terms in **bold**
-5. Include formulas, definitions, or key dates if present
-6. End with a "**Key Takeaways**" section with the 3-5 most important points
-7. Write in simple clear language
-8. Be thorough — aim for 20-30 lines of useful content
-9. ONLY use information from the provided file content if given — do not add outside information`,
+        `You are an expert study notes writer. ${styleInstructions[noteStyle] || styleInstructions.detailed}
+Rules:
+- Do NOT use asterisks (*) anywhere in your output
+- Use UPPERCASE HEADINGS instead of bold markdown
+- Use • for bullet points
+- Write clean readable text with no markdown symbols
+- ONLY use information from the provided file content if given`,
         userMsg
       );
       setNotes(txt); onUpdate({...file,notes:txt});
@@ -1235,32 +1277,56 @@ function NotesTab({ file, onUpdate, user, isGuest }) {
 
   const save = () => { onUpdate({...file,notes}); setSaved(true); setTimeout(()=>setSaved(false),2000); };
 
+  const isRecordingRef = useRef(false);
+
   const startVoice = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { setVoiceStatus("Not supported in this browser. Use Chrome."); return; }
+    if (!SR) { setVoiceStatus("Speech recognition is not supported. Please use Chrome or Edge."); return; }
+    transcriptRef.current = "";
+    isRecordingRef.current = true;
     const recognition = new SR();
     recognition.continuous = true;
-    recognition.interimResults = false;
+    recognition.interimResults = true;
     recognition.lang = "en-US";
-    transcriptRef.current = "";
+    recognition.maxAlternatives = 1;
     recognition.onresult = (e) => {
+      let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) transcriptRef.current += e.results[i][0].transcript + " ";
+        if (e.results[i].isFinal) {
+          transcriptRef.current += e.results[i][0].transcript + " ";
+        } else {
+          interim += e.results[i][0].transcript;
+        }
+      }
+      const display = transcriptRef.current + (interim ? interim : "");
+      if (display.trim()) setVoiceStatus("🎙️ Hearing: " + display.slice(-60));
+    };
+    recognition.onerror = (e) => {
+      if (e.error === "not-allowed") setVoiceStatus("Microphone access denied. Please allow mic access.");
+      else if (e.error !== "no-speech") setVoiceStatus("Mic error: " + e.error);
+    };
+    recognition.onend = () => {
+      if (isRecordingRef.current) {
+        try { recognition.start(); } catch(err) {}
       }
     };
-    recognition.onerror = (e) => { if (e.error !== "no-speech") setVoiceStatus("Mic error: " + e.error); };
-    recognition.onend = () => { if (recognitionRef.current && recording) try { recognition.start(); } catch {} };
     recognition.start();
     recognitionRef.current = recognition;
     setRecording(true);
-    setVoiceStatus("🎙️ Recording… speak now");
+    setVoiceStatus("🎙️ Recording… speak now. Click Stop when done.");
   };
 
   const stopVoice = async () => {
+    isRecordingRef.current = false;
     setRecording(false);
-    if (recognitionRef.current) { recognitionRef.current.onend = null; try { recognitionRef.current.stop(); } catch {} recognitionRef.current = null; }
+    if (recognitionRef.current) {
+      recognitionRef.current.onend = null;
+      try { recognitionRef.current.stop(); } catch {}
+      recognitionRef.current = null;
+    }
+    await new Promise(r => setTimeout(r, 300));
     const raw = transcriptRef.current.trim();
-    if (!raw) { setVoiceStatus("Nothing was recorded."); setTimeout(() => setVoiceStatus(""), 3000); return; }
+    if (!raw) { setVoiceStatus("Nothing was recorded. Make sure your microphone is working and try again."); setTimeout(() => setVoiceStatus(""), 4000); return; }
     setProcessing(true);
     setVoiceStatus("✨ Organising your notes…");
     try {
@@ -1290,7 +1356,7 @@ Rules:
     setGen(true);
     setShowTopicInput(false);
     try {
-      const fileObj = file._fileObj;
+      const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
       const fileText = fileObj ? await extractFileText(fileObj) : null;
 
       const userMsg = fileText
@@ -1314,6 +1380,14 @@ Rules:
     } catch(e){ setNotes(`Error: ${e.message}`); }
     setGen(false);
   };
+
+  const [noteStyle, setNoteStyle] = useState("detailed");
+  const NOTE_STYLES = [
+    {id:"detailed", label:"Detailed"},
+    {id:"bullet", label:"Bullet Points"},
+    {id:"simple", label:"Simple"},
+    {id:"exam", label:"Exam Focused"},
+  ];
 
   return (
     <div>
@@ -1346,6 +1420,16 @@ Rules:
             <Icon d={saved?I.check:I.edit} size={14} color={saved?C.green:"#fff"} />{saved?"Saved!":"Save"}
           </button>
         </div>
+      </div>
+      {/* Note style selector */}
+      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12, flexWrap:"wrap" }}>
+        <span style={{ fontSize:12, color:C.muted, fontWeight:600 }}>Style:</span>
+        {NOTE_STYLES.map(s => (
+          <button key={s.id} onClick={() => setNoteStyle(s.id)}
+            style={{ fontSize:12, padding:"4px 10px", borderRadius:20, border:`1.5px solid ${noteStyle===s.id?C.accent:C.border}`, background:noteStyle===s.id?C.accentL:"#fff", color:noteStyle===s.id?C.accent:C.muted, cursor:"pointer", fontWeight:noteStyle===s.id?700:400 }}>
+            {s.label}
+          </button>
+        ))}
       </div>
       {voiceStatus && (
         <div style={{ background: voiceStatus.startsWith("✅") ? C.greenL : voiceStatus.startsWith("🎙️") ? "#FFF5F5" : voiceStatus.startsWith("✨") ? C.accentL : C.redL,
@@ -1399,7 +1483,7 @@ function CardsTab({ file, onUpdate }) {
     setGen(true);
     setShowCountPicker(false);
     try {
-      const fileObj = file._fileObj;
+      const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
       const fileText = fileObj ? await extractFileText(fileObj) : null;
       const userMsg = fileText
         ? `Here is the content from "${file.name}":\n\n${fileText.slice(0, 5000)}\n\nCreate exactly ${count} study flashcards based ONLY on this content. Return JSON array: [{"question":"…","answer":"…"}]`
@@ -1449,7 +1533,7 @@ function CardsTab({ file, onUpdate }) {
           <div style={{ display:"flex", gap:10, alignItems:"center" }}>
             <div style={{ display:"flex", alignItems:"center", gap:8, flex:1 }}>
               <span style={{ fontSize:13, color:C.muted }}>Custom:</span>
-              <input type="number" min="1" max="50" value={cardCount} onChange={e => setCardCount(Math.min(50, Math.max(1, parseInt(e.target.value)||1)))}
+              <input type="number" min="0" max="50" value={cardCount} onChange={e => setCardCount(Math.min(50, Math.max(0, parseInt(e.target.value)||0))})}
                 style={{ width:70, border:`1.5px solid ${C.border}`, borderRadius:8, padding:"7px 10px", fontSize:14, outline:"none", color:C.text, background:"#fff" }} />
             </div>
             <button onClick={() => generate(cardCount)} disabled={gen}
