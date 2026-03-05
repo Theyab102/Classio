@@ -307,9 +307,10 @@ export default function App() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'DM Sans', sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'DM Sans', sans-serif", paddingBottom: 50 }}>
       <style>{GS}</style>
       <Header user={isGuest ? { displayName: guestName, photoURL: null } : user} saving={saving} isGuest={isGuest} onSignOut={isGuest ? handleGuestSignOut : () => signOut(auth)} />
+      <AdBanner />
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px" }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: 32 }}>
           <div>
@@ -374,6 +375,32 @@ export default function App() {
           </div>
         </Modal>
       )}
+    </div>
+  );
+}
+
+// ─── AD BANNER ───────────────────────────────────────────────────────────────
+function AdBanner() {
+  useEffect(() => {
+    // Load AdSense script once
+    if (!document.querySelector('script[src*="adsbygoogle"]')) {
+      const script = document.createElement("script");
+      script.src = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5802600279565250";
+      script.async = true;
+      script.crossOrigin = "anonymous";
+      document.head.appendChild(script);
+    }
+    try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch(e) {}
+  }, []);
+
+  return (
+    <div style={{ position:"fixed", bottom:0, left:0, right:0, zIndex:999, background:C.surface, borderTop:`1px solid ${C.border}`, display:"flex", alignItems:"center", justifyContent:"center", padding:"4px 0" }}>
+      <ins className="adsbygoogle"
+        style={{ display:"block", width:"100%", maxWidth:728, height:50 }}
+        data-ad-client="ca-pub-5802600279565250"
+        data-ad-slot="7527000448"
+        data-ad-format="auto"
+        data-full-width-responsive="true" />
     </div>
   );
 }
