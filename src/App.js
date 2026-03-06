@@ -495,7 +495,7 @@ export default function App() {
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(FOLDER_COLORS[0]);
   const [showCharacter, setShowCharacter] = useState(false);
-  const DEFAULT_CHAR = { skin:"#FDDBB4", hair:"#3D2B1F", hairStyle:0, eyes:"#2980B9", top:"#2C3E50", bg:"#dce8ff", mouth:0, eyebrow:0, eyeShape:0, accessory:0, topStyle:0, blush:false, lips:false, freckles:false, lipColor:"#d06060", name:"" };
+  const DEFAULT_CHAR = { skin:"#FDDBB4", hair:"#3D2B1F", hairStyle:0, eyes:"#2980B9", top:"#2C3E50", bg:"#dce8ff", mouth:0, eyebrow:0, eyeShape:0, accessory:0, topStyle:0, blush:false, lips:false, freckles:false, lipColor:"#d06060", hat:0, hatColor:"#E74C3C", glasses:0, glassesColor:"#333333", facialHair:0, necklace:0, necklaceColor:"#f0c040", earring:0, earringColor:"#f0c040", name:"" };
   const [character, setCharacter] = useState(() => {
     try { return { ...DEFAULT_CHAR, ...(JSON.parse(localStorage.getItem("classio_char") || "null") || {}) }; }
     catch { return { skin:"#FDDBB4", hair:"#3D2B1F", hairStyle:0, eyes:"#3D5A80", top:"#3D5A80", name:"" }; }
@@ -823,7 +823,7 @@ function avatarGid(ch, size) {
 }
 
 // ─── AVATAR ───────────────────────────────────────────────────────────────────
-function MiniAvatar({ character: ch, size = 40 }) {
+function MiniAvatar({ character: ch, size = 40, uid = "" }) {
   const s   = size;
   const cx  = s * 0.5;
   const sd  = shadeHex(ch.skin,  -30);
@@ -833,7 +833,7 @@ function MiniAvatar({ character: ch, size = 40 }) {
   const td  = shadeHex(ch.top,   -28);
   const tl  = shadeHex(ch.top,    28);
   const bg  = ch.bg || "#dce8ff";
-  const gid = avatarGid(ch, s);
+  const gid = avatarGid(ch, s) + uid;
 
   // ── Hair ──────────────────────────────────────────────────────────────────
   const H = {
@@ -1403,16 +1403,115 @@ function CharacterModal({ character, onChange, onClose }) {
 
           {/* EXTRA */}
           {tab==="extra" && <>
-            <Row label="EXTRAS">
-              <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
-                <Toggle label="Blush"     field="blush"    emoji="🌸"/>
-                <Toggle label="Lip gloss" field="lips"     emoji="💋"/>
-                <Toggle label="Freckles"  field="freckles" emoji="🟤"/>
+
+            <Row label="BLUSH — tap to toggle">
+              <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+                {[false, true].map(val => {
+                  const preview = { ...ch, blush: val };
+                  const sel = !!ch.blush === val;
+                  return (
+                    <button key={String(val)} onClick={() => onChange({...ch, blush: val})}
+                      style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4,
+                        padding:"7px 5px 5px", borderRadius:14, border:"none", cursor:"pointer",
+                        background: sel ? "#eef1ff" : "#f7f8fa",
+                        outline: sel ? "2.5px solid #4361ee" : "2px solid transparent",
+                        outlineOffset:1, transition:"all .13s",
+                        transform: sel ? "scale(1.07)" : "scale(1)",
+                        boxShadow: sel ? "0 3px 12px rgba(67,97,238,.28)" : "0 1px 3px rgba(0,0,0,.07)" }}>
+                      <div style={{ width:70, height:70, borderRadius:"50%", overflow:"hidden",
+                        boxShadow: sel ? "0 2px 10px rgba(67,97,238,.35)" : "0 1px 4px rgba(0,0,0,.14)" }}>
+                        <MiniAvatar character={preview} size={70} uid={"blush"+String(val)}/>
+                      </div>
+                      <span style={{ fontSize:10, fontWeight:700, color: sel ? "#4361ee" : "#777" }}>
+                        {val ? "🌸 On" : "Off"}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </Row>
-            {ch.lips && <Row label="LIP COLOUR"><Swatches vals={LIP_C} field="lipColor" sz={24}/></Row>}
+
+            <Row label="LIP GLOSS — tap to toggle">
+              <div style={{ display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
+                {[false, true].map(val => {
+                  const preview = { ...ch, lips: val };
+                  const sel = !!ch.lips === val;
+                  return (
+                    <button key={String(val)} onClick={() => onChange({...ch, lips: val})}
+                      style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4,
+                        padding:"7px 5px 5px", borderRadius:14, border:"none", cursor:"pointer",
+                        background: sel ? "#eef1ff" : "#f7f8fa",
+                        outline: sel ? "2.5px solid #4361ee" : "2px solid transparent",
+                        outlineOffset:1, transition:"all .13s",
+                        transform: sel ? "scale(1.07)" : "scale(1)",
+                        boxShadow: sel ? "0 3px 12px rgba(67,97,238,.28)" : "0 1px 3px rgba(0,0,0,.07)" }}>
+                      <div style={{ width:70, height:70, borderRadius:"50%", overflow:"hidden",
+                        boxShadow: sel ? "0 2px 10px rgba(67,97,238,.35)" : "0 1px 4px rgba(0,0,0,.14)" }}>
+                        <MiniAvatar character={preview} size={70} uid={"lips"+String(val)}/>
+                      </div>
+                      <span style={{ fontSize:10, fontWeight:700, color: sel ? "#4361ee" : "#777" }}>
+                        {val ? "💋 On" : "Off"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              {ch.lips && (
+                <div style={{ marginTop:10 }}>
+                  <p style={{ fontSize:10, fontWeight:800, color:"#999", letterSpacing:1, marginBottom:7 }}>LIP COLOUR</p>
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:7 }}>
+                    {LIP_C.map(v => {
+                      const preview = { ...ch, lipColor: v };
+                      const sel = ch.lipColor === v;
+                      return (
+                        <button key={v} onClick={() => onChange({...ch, lipColor: v})}
+                          style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3,
+                            padding:"5px 4px 4px", borderRadius:10, border:"none", cursor:"pointer",
+                            background: sel ? "#eef1ff" : "#f7f8fa",
+                            outline: sel ? "2.5px solid #4361ee" : "2px solid transparent", outlineOffset:1,
+                            transform: sel ? "scale(1.07)" : "scale(1)", transition:"all .13s" }}>
+                          <div style={{ width:52, height:52, borderRadius:"50%", overflow:"hidden",
+                            boxShadow: sel ? "0 2px 8px rgba(67,97,238,.3)" : "0 1px 3px rgba(0,0,0,.12)" }}>
+                            <MiniAvatar character={preview} size={52} uid={"lipc"+v}/>
+                          </div>
+                          <div style={{ width:14, height:14, borderRadius:"50%", background:v, border:"1.5px solid #ccc" }}/>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </Row>
+
+            <Row label="FRECKLES — tap to toggle">
+              <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+                {[false, true].map(val => {
+                  const preview = { ...ch, freckles: val };
+                  const sel = !!ch.freckles === val;
+                  return (
+                    <button key={String(val)} onClick={() => onChange({...ch, freckles: val})}
+                      style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4,
+                        padding:"7px 5px 5px", borderRadius:14, border:"none", cursor:"pointer",
+                        background: sel ? "#eef1ff" : "#f7f8fa",
+                        outline: sel ? "2.5px solid #4361ee" : "2px solid transparent",
+                        outlineOffset:1, transition:"all .13s",
+                        transform: sel ? "scale(1.07)" : "scale(1)",
+                        boxShadow: sel ? "0 3px 12px rgba(67,97,238,.28)" : "0 1px 3px rgba(0,0,0,.07)" }}>
+                      <div style={{ width:70, height:70, borderRadius:"50%", overflow:"hidden",
+                        boxShadow: sel ? "0 2px 10px rgba(67,97,238,.35)" : "0 1px 4px rgba(0,0,0,.14)" }}>
+                        <MiniAvatar character={preview} size={70} uid={"freckles"+String(val)}/>
+                      </div>
+                      <span style={{ fontSize:10, fontWeight:700, color: sel ? "#4361ee" : "#777" }}>
+                        {val ? "🟤 On" : "Off"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </Row>
+
             <button
-              onClick={() => onChange({skin:"#FDDBB4",hair:"#3D2B1F",hairStyle:0,eyes:"#2980B9",top:"#2C3E50",bg:"#dce8ff",mouth:0,eyebrow:0,eyeShape:0,accessory:0,topStyle:0,blush:false,lips:false,freckles:false,lipColor:"#d06060",name:ch.name})}
+              onClick={() => onChange({skin:"#FDDBB4",hair:"#3D2B1F",hairStyle:0,eyes:"#2980B9",top:"#2C3E50",bg:"#dce8ff",mouth:0,eyebrow:0,eyeShape:0,accessory:0,topStyle:0,blush:false,lips:false,freckles:false,lipColor:"#d06060",hat:0,hatColor:"#E74C3C",glasses:0,glassesColor:"#333333",facialHair:0,necklace:0,necklaceColor:"#f0c040",earring:0,earringColor:"#f0c040",name:ch.name})}
               style={{ padding:"8px 18px", background:"#eee", border:"none", borderRadius:20, fontSize:12, fontWeight:700, cursor:"pointer", color:"#555", alignSelf:"flex-start" }}>
               🔄 Reset
             </button>
@@ -4567,49 +4666,109 @@ Return ONLY this JSON: {"word":"THEWORD","sentence":"The answer with _____ where
 // The question is read aloud (TTS). Student can't see it — must listen.
 // They answer by typing. AI judges correctness.
 function ListeningGame({ cards, onBack }) {
-  const accent = "#059669";
+  const accent  = "#059669";
   const accentL = "#f0fdf4";
-  const [deck] = useState(() => [...cards].sort(() => Math.random() - .5).slice(0, 15));
-  const [curr, setCurr] = useState(0);
-  const [inp, setInp] = useState("");
-  const [result, setResult] = useState(null);
-  const [score, setScore] = useState(0);
-  const [done, setDone] = useState(false);
-  const [checking, setChecking] = useState(false);
-  const [speaking, setSpeaking] = useState(false);
-  const [hasPlayed, setHasPlayed] = useState(false);
-  const [revealed, setRevealed] = useState(false);
-  const inputRef = useRef(null);
 
-  const speak = (text) => {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(text);
-    utter.rate = 0.88;
-    utter.pitch = 1;
-    utter.onstart = () => setSpeaking(true);
-    utter.onend = () => { setSpeaking(false); setHasPlayed(true); inputRef.current?.focus(); };
-    utter.onerror = () => setSpeaking(false);
-    window.speechSynthesis.speak(utter);
+  // ── Named voices ──────────────────────────────────────────────────────────
+  // We map browser TTS voices to friendly gendered names like ChatGPT
+  const VOICE_PERSONAS = [
+    { id:"alloy",   label:"Alloy",   gender:"female", pitch:1.0,  rate:0.9,  pref:["zira","samantha","victoria","karen","moira","fiona"] },
+    { id:"echo",    label:"Echo",    gender:"male",   pitch:0.95, rate:0.88, pref:["david","mark","daniel","alex","fred","lee"] },
+    { id:"nova",    label:"Nova",    gender:"female", pitch:1.05, rate:0.92, pref:["aria","jenny","michelle","ava","siri"] },
+    { id:"onyx",    label:"Onyx",    gender:"male",   pitch:0.9,  rate:0.85, pref:["guy","james","tom","reed","liam"] },
+    { id:"shimmer", label:"Shimmer", gender:"female", pitch:1.08, rate:0.9,  pref:["emma","amelie","claire","grace","helen"] },
+    { id:"fable",   label:"Fable",   gender:"male",   pitch:1.0,  rate:0.93, pref:["oliver","aaron","ryan","aaron","george"] },
+  ];
+
+  const [allVoices,    setAllVoices]    = useState([]);
+  const [personaIdx,   setPersonaIdx]   = useState(0);
+  const [showVoicePick,setShowVoicePick]= useState(false);
+
+  useEffect(() => {
+    const load = () => {
+      const v = window.speechSynthesis.getVoices();
+      setAllVoices(v);
+    };
+    load();
+    window.speechSynthesis.onvoiceschanged = load;
+  }, []);
+
+  // Pick best browser voice for a persona
+  const getVoiceForPersona = (persona) => {
+    if (!allVoices.length) return null;
+    // Try preferred name matches
+    for (const pref of persona.pref) {
+      const v = allVoices.find(v => v.name.toLowerCase().includes(pref));
+      if (v) return v;
+    }
+    // Fall back: female → any female-sounding, male → any male-sounding
+    // Heuristic: common female voice name fragments
+    if (persona.gender === "female") {
+      const v = allVoices.find(v => /zira|samantha|victoria|karen|aria|jenny|emma|ava|alice|amelie|claire|moira|fiona/i.test(v.name));
+      if (v) return v;
+    } else {
+      const v = allVoices.find(v => /david|mark|daniel|guy|james|tom|reed|liam|oliver|aaron|ryan|george/i.test(v.name));
+      if (v) return v;
+    }
+    // Final fallback: first English voice
+    return allVoices.find(v => v.lang.startsWith("en")) || allVoices[0] || null;
   };
 
-  // Auto-play when card changes
+  // ── Game state ─────────────────────────────────────────────────────────────
+  const [deck] = useState(() => [...cards].sort(() => Math.random() - .5).slice(0, 15));
+  const [curr,     setCurr]     = useState(0);
+  const [choices,  setChoices]  = useState([]);
+  const [selected, setSelected] = useState(null); // index 0-3
+  const [result,   setResult]   = useState(null);  // "correct"|"wrong"
+  const [score,    setScore]    = useState(0);
+  const [done,     setDone]     = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const [hasPlayed,setHasPlayed]= useState(false);
+  const [revealed, setRevealed] = useState(false);
+
+  // Build 4 choices: 1 correct + 3 random wrong
+  const buildChoices = (cardIdx) => {
+    const card = deck[cardIdx];
+    const others = deck.filter((_, i) => i !== cardIdx);
+    const wrongs = [...others].sort(() => Math.random() - .5).slice(0, 3).map(c => c.answer);
+    const all = [card.answer, ...wrongs].sort(() => Math.random() - .5);
+    return all;
+  };
+
   useEffect(() => {
-    setHasPlayed(false);
-    setRevealed(false);
+    setChoices(buildChoices(curr));
+    setSelected(null); setResult(null); setHasPlayed(false); setRevealed(false);
     setTimeout(() => {
-      const card = deck[curr];
-      if (card) speak(card.question);
+      if (deck[curr]) speak(deck[curr].question);
     }, 400);
     return () => window.speechSynthesis?.cancel();
   }, [curr]);
 
-  const check = async () => {
-    if (!inp.trim() || checking || result) return;
-    setChecking(true);
+  const personaRef = useRef(VOICE_PERSONAS[0]);
+  useEffect(() => { personaRef.current = VOICE_PERSONAS[personaIdx]; }, [personaIdx]);
+  const persona = VOICE_PERSONAS[personaIdx];
+
+  const speak = (text) => {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const p = personaRef.current;
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate  = p.rate;
+    u.pitch = p.pitch;
+    u.lang  = "en-US";
+    const v = getVoiceForPersona(p);
+    if (v) u.voice = v;
+    u.onstart = () => setSpeaking(true);
+    u.onend   = () => { setSpeaking(false); setHasPlayed(true); };
+    u.onerror = () => setSpeaking(false);
+    window.speechSynthesis.speak(u);
+  };
+
+  const choose = (idx) => {
+    if (result || !hasPlayed) return;
+    setSelected(idx);
     const card = deck[curr];
-    const ok = await aiCheckAnswer(card.question, card.answer, inp);
-    setChecking(false);
+    const ok = choices[idx] === card.answer;
     setResult(ok ? "correct" : "wrong");
     if (ok) setScore(s => s + 1);
   };
@@ -4617,73 +4776,116 @@ function ListeningGame({ cards, onBack }) {
   const next = () => {
     if (curr + 1 >= deck.length) { setDone(true); return; }
     setCurr(c => c + 1);
-    setInp("");
-    setResult(null);
-    setRevealed(false);
   };
 
   if (done) return <GResults score={score} total={deck.length} onBack={onBack} />;
   const card = deck[curr];
+  const LABELS = ["A", "B", "C", "D"];
 
   return (
-    <div style={{ maxWidth: 520, margin: "0 auto" }}>
-      <GHeader title="Listening Quiz" score={score} curr={curr} total={deck.length} onBack={onBack} accent={accent} />
+    <div style={{ maxWidth:520, margin:"0 auto" }}>
+      <GHeader title="Listening Quiz" score={score} curr={curr} total={deck.length} onBack={onBack} accent={accent}/>
+
+      {/* Voice picker */}
+      <div style={{ marginBottom:14 }}>
+        <button onClick={() => setShowVoicePick(v => !v)}
+          style={{ display:"flex", alignItems:"center", gap:7, background:"#fff", border:`1.5px solid ${showVoicePick?accent:"#e5e7eb"}`, borderRadius:20, padding:"6px 14px", fontSize:12, fontWeight:700, cursor:"pointer", color:showVoicePick?accent:"#6b7280" }}>
+          🎤 Voice: {persona.label} {persona.gender === "female" ? "♀" : "♂"} ▾
+        </button>
+        {showVoicePick && (
+          <div style={{ marginTop:8, background:"#fff", border:"1.5px solid #e5e7eb", borderRadius:14, padding:"10px 12px", display:"flex", flexWrap:"wrap", gap:8 }}>
+            {VOICE_PERSONAS.map((p, i) => (
+              <button key={p.id} onClick={() => { setPersonaIdx(i); setShowVoicePick(false); }}
+                style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", borderRadius:20, border:"none", cursor:"pointer", fontSize:12, fontWeight:700,
+                  background: personaIdx===i ? accent : "#f3f4f6",
+                  color: personaIdx===i ? "#fff" : "#374151",
+                  boxShadow: personaIdx===i ? `0 2px 10px ${accent}44` : "none" }}>
+                {p.gender === "female" ? "♀" : "♂"} {p.label}
+              </button>
+            ))}
+            <p style={{ width:"100%", fontSize:10, color:"#9ca3af", marginTop:4 }}>♀ = Female voice · ♂ = Male voice</p>
+          </div>
+        )}
+      </div>
 
       {/* Audio card */}
-      <div style={{ background: speaking ? "#ecfdf5" : accentL, border: `2px solid ${speaking ? accent : accent + "33"}`, borderRadius: 20, padding: "30px 24px", marginBottom: 18, textAlign: "center", transition: "all .3s" }}>
-        <div style={{ fontSize: 48, marginBottom: 14 }}>{speaking ? "🔊" : "🎧"}</div>
-        <p style={{ fontSize: 14, color: speaking ? accent : "#6b7280", fontWeight: 600, marginBottom: 18 }}>
-          {speaking ? "Listen carefully…" : hasPlayed ? "Heard it? Type your answer below" : "Press play to hear the question"}
+      <div style={{ background: speaking?"#ecfdf5":accentL, border:`2px solid ${speaking?accent:accent+"33"}`, borderRadius:20, padding:"28px 24px", marginBottom:18, textAlign:"center", transition:"all .3s" }}>
+        <div style={{ fontSize:46, marginBottom:12 }}>{speaking ? "🔊" : "🎧"}</div>
+        <p style={{ fontSize:14, color:speaking?accent:"#6b7280", fontWeight:600, marginBottom:16 }}>
+          {speaking ? "Listen carefully…" : hasPlayed ? "Choose the correct answer below" : "Press play to hear the question"}
         </p>
-        <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+        <div style={{ display:"flex", gap:10, justifyContent:"center", flexWrap:"wrap" }}>
           <button onClick={() => speak(card.question)} disabled={speaking}
-            style={{ background: accent, color: "#fff", border: "none", borderRadius: 12, padding: "11px 24px", fontSize: 14, fontWeight: 700, cursor: speaking ? "not-allowed" : "pointer", opacity: speaking ? 0.6 : 1, display: "flex", alignItems: "center", gap: 8 }}>
+            style={{ background:accent, color:"#fff", border:"none", borderRadius:12, padding:"10px 22px", fontSize:14, fontWeight:700, cursor:speaking?"not-allowed":"pointer", opacity:speaking?.6:1, display:"flex", alignItems:"center", gap:7 }}>
             {speaking ? "🔊 Playing…" : "▶ Play Question"}
           </button>
           {hasPlayed && !result && (
             <button onClick={() => setRevealed(r => !r)}
-              style={{ background: "#fff", color: "#6b7280", border: "1.5px solid #e5e7eb", borderRadius: 12, padding: "11px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+              style={{ background:"#fff", color:"#6b7280", border:"1.5px solid #e5e7eb", borderRadius:12, padding:"10px 16px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
               {revealed ? "🙈 Hide" : "👁 Peek"}
             </button>
           )}
         </div>
         {revealed && !result && (
-          <p style={{ marginTop: 14, fontSize: 15, color: "#374151", fontStyle: "italic", background: "#fff", borderRadius: 10, padding: "10px 14px", border: "1px solid #e5e7eb" }}>
+          <p style={{ marginTop:12, fontSize:15, color:"#374151", fontStyle:"italic", background:"#fff", borderRadius:10, padding:"10px 14px", border:"1px solid #e5e7eb" }}>
             "{card.question}"
           </p>
         )}
       </div>
 
-      {/* Answer */}
-      {result ? (
-        <div style={{ textAlign: "center", background: result === "correct" ? "#f0fdf4" : "#fff1f1", border: `1.5px solid ${result === "correct" ? "#16a34a" : "#dc2626"}33`, borderRadius: 16, padding: "20px 24px", marginBottom: 14 }}>
-          <div style={{ fontSize: 48, marginBottom: 10 }}>{result === "correct" ? "✅" : "❌"}</div>
-          <p style={{ fontSize: 16, fontWeight: 700, color: result === "correct" ? "#16a34a" : "#dc2626", marginBottom: 8 }}>
-            {result === "correct" ? "Correct!" : "Not quite"}
-          </p>
-          <p style={{ fontSize: 13, color: "#6b7280", marginBottom: 4 }}>Question was:</p>
-          <p style={{ fontSize: 14, color: "#374151", fontStyle: "italic", marginBottom: result === "correct" ? 0 : 10 }}>"{card.question}"</p>
-          {result !== "correct" && <>
-            <p style={{ fontSize: 13, color: "#6b7280", marginBottom: 4 }}>Correct answer:</p>
-            <p style={{ fontSize: 15, fontWeight: 700, color: "#374151" }}>{card.answer}</p>
-          </>}
+      {/* A/B/C/D choices */}
+      {!hasPlayed ? (
+        <div style={{ textAlign:"center", padding:"18px", background:"#f9fafb", borderRadius:16, color:"#9ca3af", fontSize:14, fontWeight:600 }}>
+          🎧 Listen to the question first, then choose your answer
         </div>
       ) : (
-        <div style={{ display: "flex", gap: 10 }}>
-          <input ref={inputRef} value={inp} onChange={e => setInp(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && check()}
-            placeholder={hasPlayed ? "Type your answer…" : "Listen first, then type here"}
-            disabled={!hasPlayed || checking}
-            style={{ flex: 1, border: `2px solid ${!hasPlayed ? "#e5e7eb" : C.border}`, borderRadius: 12, padding: "12px 16px", fontSize: 15, outline: "none", color: C.text, background: !hasPlayed ? "#f9fafb" : "#fff", transition: "border .2s" }} />
-          <button onClick={check} disabled={!inp.trim() || checking || !hasPlayed}
-            style={{ background: inp.trim() && hasPlayed ? accent : "#ccc", color: "#fff", border: "none", borderRadius: 12, padding: "12px 22px", fontSize: 14, fontWeight: 700, cursor: inp.trim() && hasPlayed ? "pointer" : "not-allowed" }}>
-            {checking ? "…" : "✓"}
-          </button>
+        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+          {choices.map((choice, idx) => {
+            const isCorrect = choice === card.answer;
+            const isSelected = selected === idx;
+            let bg = "#fff", border = "#e5e7eb", col = "#374151";
+            if (result) {
+              if (isCorrect) { bg="#f0fdf4"; border="#16a34a"; col="#16a34a"; }
+              else if (isSelected && !isCorrect) { bg="#fff1f1"; border="#dc2626"; col="#dc2626"; }
+            } else if (isSelected) {
+              bg="#eff6ff"; border="#3b82f6"; col="#1d4ed8";
+            }
+            return (
+              <button key={idx} onClick={() => choose(idx)} disabled={!!result || !hasPlayed}
+                style={{ display:"flex", alignItems:"center", gap:14, width:"100%", padding:"14px 16px",
+                  background:bg, border:`2px solid ${border}`, borderRadius:14, cursor:result?"default":"pointer",
+                  textAlign:"left", transition:"all .18s", boxShadow: isSelected && !result?"0 2px 12px rgba(59,130,246,.2)":"none" }}>
+                <span style={{ width:34, height:34, borderRadius:"50%", background:result?(isCorrect?"#16a34a":isSelected?"#dc2626":"#e5e7eb"):"#4361ee",
+                  color:result?(isCorrect||isSelected?"#fff":"#9ca3af"):"#fff", display:"flex", alignItems:"center", justifyContent:"center",
+                  fontSize:14, fontWeight:900, flexShrink:0, transition:"all .18s" }}>
+                  {LABELS[idx]}
+                </span>
+                <span style={{ fontSize:14, fontWeight:600, color:col, flex:1 }}>{choice}</span>
+                {result && isCorrect && <span style={{ fontSize:18 }}>✅</span>}
+                {result && isSelected && !isCorrect && <span style={{ fontSize:18 }}>❌</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Result feedback */}
+      {result && (
+        <div style={{ marginTop:14, background:result==="correct"?"#f0fdf4":"#fff1f1", border:`1.5px solid ${result==="correct"?"#16a34a":"#dc2626"}33`, borderRadius:14, padding:"16px 18px", textAlign:"center" }}>
+          <p style={{ fontSize:16, fontWeight:700, color:result==="correct"?"#16a34a":"#dc2626", marginBottom:result==="correct"?0:8 }}>
+            {result === "correct" ? "✅ Correct!" : "❌ Not quite"}
+          </p>
+          {result !== "correct" && (
+            <>
+              <p style={{ fontSize:12, color:"#6b7280", marginBottom:4 }}>Correct answer:</p>
+              <p style={{ fontSize:14, fontWeight:700, color:"#374151" }}>{card.answer}</p>
+            </>
+          )}
         </div>
       )}
 
       {result && (
-        <button onClick={next} style={{ marginTop: 12, width: "100%", background: accent, color: "#fff", border: "none", borderRadius: 12, padding: "13px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
+        <button onClick={next} style={{ marginTop:12, width:"100%", background:accent, color:"#fff", border:"none", borderRadius:12, padding:"13px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
           {curr + 1 >= deck.length ? "See Results 🎉" : "Next →"}
         </button>
       )}
@@ -4693,102 +4895,193 @@ function ListeningGame({ cards, onBack }) {
 
 
 // ─── ENHANCED PODCAST PLAYER ─────────────────────────────────────────────────
-// Natural-sounding voices, multi-language, accent selector, good pacing
+// ChatGPT-style named voices: Alloy, Echo, Nova, Onyx, Shimmer, Fable
 function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose }) {
-  const [playing,  setPlaying]  = useState(false);
-  const [paused,   setPaused]   = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [speed,    setSpeed]    = useState(0.88);  // slightly slower = more natural, human-like
+  const [playing,   setPlaying]   = useState(false);
+  const [paused,    setPaused]    = useState(false);
+  const [progress,  setProgress]  = useState(0);
+  const [speed,     setSpeed]     = useState(0.9);
   const [allVoices, setAllVoices] = useState([]);
-  const [selVoice,  setSelVoice]  = useState(null);
-  const [showVoicePicker, setShowVoicePicker] = useState(false);
-  const totalChars = useRef(1);
-  const SPEEDS = [0.75, 0.9, 1, 1.1, 1.25, 1.5];
+  const [personaIdx,setPersonaIdx]= useState(0);
+  const [showPicker,setShowPicker]= useState(false);
+  const totalChars  = useRef(1);
+  const personaRef  = useRef(null);
 
-  // ── Voice loading ─────────────────────────────────────────────────────────
-  // Prefer natural/premium voices; fall back to standard ones
-  const rankVoice = (v) => {
-    const n = v.name.toLowerCase();
-    // Highest quality: wavenet, neural, natural, premium voices
-    if (n.includes('wavenet') || n.includes('neural') || n.includes('premium')) return 4;
-    if (n.includes('natural') || n.includes('enhanced') || n.includes('high quality')) return 3;
-    if (n.includes('google') || n.includes('microsoft') || n.includes('apple')) return 2;
-    if (v.localService) return 1;
-    return 0;
-  };
+  // ── 6 ChatGPT-style personas ──────────────────────────────────────────────
+  // Each persona lists exact voice name fragments to search for, ranked best→worst.
+  // We target Microsoft Online (Edge/Windows) and Google (Chrome) which are the
+  // only genuinely natural-sounding voices available in browsers.
+  const PERSONAS = [
+    {
+      id:"alloy", label:"Alloy", gender:"female", emoji:"🟤", desc:"Warm & natural",
+      pitch:1.0,
+      // Best natural voices by platform — checked in order
+      targets: [
+        "microsoft aria online",    // Edge/Windows — very natural
+        "microsoft jenny online",   // Edge/Windows
+        "google us english",        // Chrome on Android/Mac
+        "google uk english female", // Chrome
+        "samantha",                 // macOS
+        "zira",                     // Windows offline
+        "victoria",                 // macOS offline
+        "karen",                    // macOS
+      ]
+    },
+    {
+      id:"echo", label:"Echo", gender:"male", emoji:"🔵", desc:"Clear & steady",
+      pitch:1.0,
+      targets: [
+        "microsoft guy online",
+        "microsoft davis online",
+        "microsoft eric online",
+        "google us english",
+        "google uk english male",
+        "daniel",
+        "alex",
+        "david",
+        "mark",
+      ]
+    },
+    {
+      id:"nova", label:"Nova", gender:"female", emoji:"🟣", desc:"Bright & expressive",
+      pitch:1.0,
+      targets: [
+        "microsoft michelle online",
+        "microsoft amber online",
+        "microsoft ashley online",
+        "microsoft ava online",
+        "google us english",
+        "google uk english female",
+        "ava",
+        "karen",
+        "moira",
+      ]
+    },
+    {
+      id:"onyx", label:"Onyx", gender:"male", emoji:"⚫", desc:"Deep & authoritative",
+      pitch:1.0,
+      targets: [
+        "microsoft christopher online",
+        "microsoft roger online",
+        "microsoft steffan online",
+        "google us english",
+        "google uk english male",
+        "lee",
+        "alex",
+        "fred",
+      ]
+    },
+    {
+      id:"shimmer", label:"Shimmer", gender:"female", emoji:"🟡", desc:"Gentle & soothing",
+      pitch:1.0,
+      targets: [
+        "microsoft emma online",
+        "microsoft jane online",
+        "microsoft sara online",
+        "google uk english female",
+        "google us english",
+        "fiona",
+        "kate",
+        "tessa",
+      ]
+    },
+    {
+      id:"fable", label:"Fable", gender:"male", emoji:"🟢", desc:"Friendly & casual",
+      pitch:1.0,
+      targets: [
+        "microsoft brian online",
+        "microsoft liam online",
+        "microsoft noah online",
+        "microsoft ryan online",
+        "google uk english male",
+        "google us english",
+        "oliver",
+        "thomas",
+        "rishi",
+      ]
+    },
+  ];
 
-  const getLangVoices = (langCode, allV) => {
-    const base = langCode.slice(0, 2).toLowerCase();
-    // First try exact match, then language family
-    let matched = allV.filter(v => v.lang.toLowerCase() === langCode.toLowerCase());
-    if (matched.length === 0) matched = allV.filter(v => v.lang.toLowerCase().startsWith(base));
-    // Sort by quality rank descending
-    return matched.sort((a, b) => rankVoice(b) - rankVoice(a));
-  };
+  const SPEEDS = [0.75, 0.9, 1.0, 1.1, 1.25, 1.5];
 
   useEffect(() => {
-    const load = () => {
-      const all = window.speechSynthesis.getVoices();
-      setAllVoices(all);
-      const langVoices = getLangVoices(lang, all);
-      if (langVoices.length > 0) {
-        // Pick best natural voice
-        setSelVoice(langVoices[0]);
-      } else if (all.length > 0) {
-        setSelVoice(all[0]);
-      }
-    };
+    const load = () => { setAllVoices(window.speechSynthesis.getVoices()); };
     load();
     window.speechSynthesis.onvoiceschanged = load;
     return () => { window.speechSynthesis.cancel(); };
-  }, [lang]);
+  }, []);
 
-  // Voices available for current language
-  const langVoices = getLangVoices(lang, allVoices);
-  // If no lang-specific voices, show all (fallback)
-  const voiceList = langVoices.length > 0 ? langVoices : allVoices;
+  // Set personaRef whenever personaIdx changes
+  useEffect(() => { personaRef.current = PERSONAS[personaIdx]; }, [personaIdx]);
+  if (!personaRef.current) personaRef.current = PERSONAS[0];
 
-  const stop = () => {
-    window.speechSynthesis.cancel();
-    setPlaying(false); setPaused(false); setProgress(0);
+  // ── Best-voice finder ──────────────────────────────────────────────────────
+  // Strategy: try exact target fragments in order, preferring voices matching
+  // the selected language. Falls back to any English voice.
+  const getVoice = (persona, voices) => {
+    if (!voices || !voices.length) return null;
+
+    // Filter to current language first, fallback to all voices
+    const langCode = lang.slice(0, 2).toLowerCase();
+    const langPool = voices.filter(v => v.lang.toLowerCase().startsWith(langCode));
+    const pool = langPool.length > 0 ? langPool : voices;
+
+    // 1. Try each target fragment in order (case-insensitive)
+    for (const tgt of persona.targets) {
+      const v = pool.find(v => v.name.toLowerCase().includes(tgt.toLowerCase()));
+      if (v) return v;
+    }
+
+    // 2. Try any Microsoft Online or Google voice (natural quality)
+    const online = pool.find(v => /microsoft.*online|google/i.test(v.name));
+    if (online) return online;
+
+    // 3. Try macOS/iOS natural voices
+    const apple = pool.find(v => /samantha|ava|karen|moira|tessa|fiona|daniel|alex/i.test(v.name));
+    if (apple) return apple;
+
+    // 4. Any voice in pool
+    return pool[0] || voices[0] || null;
   };
+
+  // ── What voice will actually be used for each persona (for display) ────────
+  const getVoiceName = (idx) => {
+    const v = getVoice(PERSONAS[idx], allVoices);
+    if (!v) return "Loading…";
+    // Shorten: strip "Microsoft" / "Google" / "- language" suffix
+    return v.name.replace(/microsoft\s*/i, "").replace(/\s*online.*$/i, "").replace(/\s*-.*$/, "").trim();
+  };
+
+  const stop = () => { window.speechSynthesis.cancel(); setPlaying(false); setPaused(false); setProgress(0); };
 
   const play = () => {
     if (!script || loading) return;
-    if (paused) {
-      window.speechSynthesis.resume();
-      setPlaying(true); setPaused(false);
-      return;
-    }
+    if (paused) { window.speechSynthesis.resume(); setPlaying(true); setPaused(false); return; }
     window.speechSynthesis.cancel();
     totalChars.current = script.length || 1;
 
-    // Pre-process script for more natural TTS:
-    // 1. Add pauses after paragraph breaks
-    // 2. Replace "..." with pause markers
-    // 3. Split into natural sentence chunks
+    const p = personaRef.current || PERSONAS[0];
+    const voice = getVoice(p, allVoices);
+
+    // Pre-process for natural rhythm: paragraph breaks → pause, clean spacing
     const processed = script
-      .replace(/[\r\n]{2,}/g, ' ... ')   // paragraph breaks → pause
-      .replace(/\.\s+([A-Z])/g, '. $1') // ensure space after period
+      .replace(/[\r\n]{2,}/g, "  ")
+      .replace(/\.\s+([A-Z])/g, ". $1")
       .trim();
 
-    // Split on sentence boundaries — include punctuation
+    // Split into sentence-length chunks for smoother progress tracking
     const rawSents = processed.match(/[^.!?]+[.!?]+(\s|$)/g) || [processed];
-    // Further split on "..." for natural pauses
-    const sentences = rawSents.flatMap(s => s.split(' ... ')).filter(s => s.trim().length > 0);
+    const sentences = rawSents.filter(s => s.trim().length > 0);
 
     let charPos = 0;
     const utterances = sentences.map((sen, idx) => {
-      const cleanSen = sen.trim();
-      const u = new SpeechSynthesisUtterance(cleanSen);
-      u.rate  = speed;
-      u.pitch = 1.0;    // exactly 1.0 = most natural, avoid robotic 1.05+
+      const u = new SpeechSynthesisUtterance(sen.trim());
+      u.rate   = speed;
+      u.pitch  = p.pitch;
       u.volume = 1.0;
-      u.lang  = lang;
-      if (selVoice) u.voice = selVoice;
-      const myStart = charPos;
-      charPos += sen.length;
-      const myEnd = charPos;
+      u.lang   = lang;
+      if (voice) u.voice = voice;
+      const myStart = charPos; charPos += sen.length; const myEnd = charPos;
       u.onstart = () => { setPlaying(true); setPaused(false); setProgress(Math.round((myStart / totalChars.current) * 100)); };
       u.onend   = () => {
         setProgress(Math.round((myEnd / totalChars.current) * 100));
@@ -4802,25 +5095,19 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
   };
 
   const pause = () => {
-    if (window.speechSynthesis.speaking) {
-      window.speechSynthesis.pause();
-      setPaused(true); setPlaying(false);
-    }
+    if (window.speechSynthesis.speaking) { window.speechSynthesis.pause(); setPaused(true); setPlaying(false); }
   };
 
   const changeSpeed = (s) => { setSpeed(s); if (playing || paused) stop(); };
 
   const wordCount = script ? script.trim().split(/\s+/).length : 0;
   const estMins   = Math.max(1, Math.round((wordCount / 150) / speed));
-
-  const voiceName = selVoice
-    ? selVoice.name.replace(/Google |Microsoft |Apple /gi,'').replace(/ Online \(Natural\)/i,'').replace(/ \(Enhanced\)/i,'★').slice(0, 26)
-    : 'Default';
+  const persona   = PERSONAS[personaIdx];
 
   return (
-    <div style={{ background:"linear-gradient(135deg,#1e1b4b,#312e81)", borderRadius:22, overflow:"hidden", boxShadow:"0 20px 60px rgba(30,27,75,.5)" }}>
+    <div style={{ background:"linear-gradient(135deg,#0f0c29,#302b63,#24243e)", borderRadius:22, overflow:"hidden", boxShadow:"0 20px 60px rgba(15,12,41,.6)" }}>
 
-      {/* ── Header ── */}
+      {/* Header */}
       <div style={{ padding:"18px 22px 14px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
           <div style={{ width:44, height:44, borderRadius:14, background:"linear-gradient(135deg,#7c3aed,#a855f7)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, boxShadow:"0 4px 14px rgba(124,58,237,.55)", flexShrink:0 }}>
@@ -4828,7 +5115,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
           </div>
           <div>
             <p style={{ fontSize:11, color:"#a5b4fc", fontWeight:700, letterSpacing:1, textTransform:"uppercase", marginBottom:2 }}>Study Podcast</p>
-            <p style={{ fontSize:14, color:"#fff", fontWeight:700, margin:0, maxWidth:220, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{topic}</p>
+            <p style={{ fontSize:14, color:"#fff", fontWeight:700, margin:0, maxWidth:200, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{topic}</p>
           </div>
         </div>
         <button onClick={onClose} style={{ background:"rgba(255,255,255,.1)", border:"none", borderRadius:8, width:30, height:30, color:"#a5b4fc", cursor:"pointer", fontSize:18, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
@@ -4842,13 +5129,13 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
             ))}
           </div>
           <style>{`@keyframes ppbar{0%,100%{transform:scaleY(.4);opacity:.5}50%{transform:scaleY(1);opacity:1}}`}</style>
-          <p style={{ color:"#a5b4fc", fontSize:14 }}>Crafting your podcast script…</p>
+          <p style={{ color:"#a5b4fc", fontSize:14 }}>Crafting your podcast…</p>
         </div>
       ) : (
         <>
-          {/* ── Progress bar ── */}
-          <div style={{ padding:"0 22px 6px" }}>
-            <div style={{ height:5, background:"rgba(255,255,255,.12)", borderRadius:3, cursor:"pointer" }}>
+          {/* Progress bar */}
+          <div style={{ padding:"0 22px 8px" }}>
+            <div style={{ height:5, background:"rgba(255,255,255,.12)", borderRadius:3 }}>
               <div style={{ height:"100%", width:`${progress}%`, background:"linear-gradient(90deg,#6366f1,#a855f7)", borderRadius:3, transition:"width .35s" }}/>
             </div>
             <div style={{ display:"flex", justifyContent:"space-between", marginTop:5 }}>
@@ -4857,80 +5144,79 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
             </div>
           </div>
 
-          {/* ── Playback controls ── */}
-          <div style={{ padding:"10px 22px 18px" }}>
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:16, marginBottom:18 }}>
-              {/* Stop */}
+          {/* Transport controls */}
+          <div style={{ padding:"8px 22px 14px" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:18, marginBottom:14 }}>
               <button onClick={stop} title="Stop"
-                style={{ width:42, height:42, borderRadius:"50%", background:"rgba(255,255,255,.1)", border:"none", color:"#a5b4fc", fontSize:18, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", opacity:(!playing&&!paused)?.4:1, transition:"opacity .2s" }}>
+                style={{ width:40, height:40, borderRadius:"50%", background:"rgba(255,255,255,.08)", border:"none", color:"#a5b4fc", fontSize:18, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", opacity:(!playing&&!paused)?.4:1 }}>
                 ⏹
               </button>
-
-              {/* Play / Pause */}
               {!playing ? (
                 <button onClick={play} disabled={!script}
-                  style={{ width:64, height:64, borderRadius:"50%", background:"linear-gradient(135deg,#6366f1,#a855f7)", border:"none", color:"#fff", fontSize:26, cursor:script?"pointer":"not-allowed", boxShadow:"0 6px 24px rgba(99,102,241,.6)", display:"flex", alignItems:"center", justifyContent:"center", transition:"transform .15s, box-shadow .15s" }}
-                  onMouseEnter={e=>{e.currentTarget.style.transform="scale(1.09)";e.currentTarget.style.boxShadow="0 8px 30px rgba(99,102,241,.75)"}}
-                  onMouseLeave={e=>{e.currentTarget.style.transform="scale(1)";e.currentTarget.style.boxShadow="0 6px 24px rgba(99,102,241,.6)"}}>
-                  {progress===100 ? "↺" : paused ? "▶" : "▶"}
+                  style={{ width:64, height:64, borderRadius:"50%", background:"linear-gradient(135deg,#6366f1,#a855f7)", border:"none", color:"#fff", fontSize:28, cursor:script?"pointer":"not-allowed", boxShadow:"0 6px 24px rgba(99,102,241,.6)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  {progress===100 ? "↺" : "▶"}
                 </button>
               ) : (
                 <button onClick={pause}
-                  style={{ width:64, height:64, borderRadius:"50%", background:"linear-gradient(135deg,#6366f1,#a855f7)", border:"none", color:"#fff", fontSize:24, cursor:"pointer", boxShadow:"0 6px 24px rgba(99,102,241,.6)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  style={{ width:64, height:64, borderRadius:"50%", background:"linear-gradient(135deg,#6366f1,#a855f7)", border:"none", color:"#fff", fontSize:26, cursor:"pointer", boxShadow:"0 6px 24px rgba(99,102,241,.6)", display:"flex", alignItems:"center", justifyContent:"center" }}>
                   ⏸
                 </button>
               )}
-
-              {/* Voice picker button */}
-              <button onClick={() => setShowVoicePicker(v => !v)} title="Choose voice"
-                style={{ width:42, height:42, borderRadius:"50%", background:showVoicePicker?"rgba(99,102,241,.4)":"rgba(255,255,255,.1)", border:`1.5px solid ${showVoicePicker?"#6366f1":"rgba(255,255,255,.15)"}`, color:"#a5b4fc", fontSize:17, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", transition:"all .18s" }}>
+              <button onClick={() => setShowPicker(v => !v)} title="Choose voice"
+                style={{ width:40, height:40, borderRadius:"50%", background:showPicker?"rgba(99,102,241,.5)":"rgba(255,255,255,.08)", border:`1.5px solid ${showPicker?"#6366f1":"rgba(255,255,255,.15)"}`, color:"#a5b4fc", fontSize:18, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
                 🎤
               </button>
             </div>
 
-            {/* Voice picker panel */}
-            {showVoicePicker && (
-              <div style={{ background:"rgba(0,0,0,.35)", borderRadius:14, padding:"12px 14px", marginBottom:14, border:"1px solid rgba(255,255,255,.1)" }}>
-                <p style={{ fontSize:10, fontWeight:800, color:"#818cf8", letterSpacing:1, marginBottom:8, textTransform:"uppercase" }}>
-                  Voice — {voiceList.length} available {langVoices.length > 0 ? `for ${lang}` : "(all voices — no exact match for this language)"}
-                </p>
-                <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-                  {voiceList.slice(0, 12).map(v => {
-                    const short = v.name.replace(/Google |Microsoft |Apple /gi,'').replace(/ Online \(Natural\)/i,'★').replace(/ \(Enhanced\)/i,'★').slice(0,22);
-                    const sel = selVoice?.name === v.name;
-                    const natural = rankVoice(v) >= 3;
+            {/* Voice picker grid */}
+            {showPicker && (
+              <div style={{ background:"rgba(0,0,0,.4)", borderRadius:18, padding:"14px 12px", marginBottom:12, border:"1px solid rgba(255,255,255,.08)" }}>
+                <p style={{ fontSize:10, fontWeight:800, color:"#818cf8", letterSpacing:1.2, marginBottom:11, textTransform:"uppercase", textAlign:"center" }}>Choose a Voice</p>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
+                  {PERSONAS.map((p, i) => {
+                    const sel = personaIdx === i;
+                    const vName = getVoiceName(i);
                     return (
-                      <button key={v.name} onClick={() => { setSelVoice(v); if(playing||paused) stop(); }}
-                        style={{ padding:"5px 10px", borderRadius:20, fontSize:11, fontWeight:700, cursor:"pointer", border:`1.5px solid ${sel?"#6366f1":"rgba(255,255,255,.15)"}`, background:sel?"#6366f1":"rgba(255,255,255,.07)", color:sel?"#fff":"#c7d2fe", transition:"all .13s" }}>
-                        {natural ? "✨" : ""}{short}
+                      <button key={p.id} onClick={() => { setPersonaIdx(i); if(playing||paused) stop(); }}
+                        style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3, padding:"10px 6px", borderRadius:14, border:"none", cursor:"pointer",
+                          background: sel ? "rgba(99,102,241,.55)" : "rgba(255,255,255,.06)",
+                          outline: sel ? "2px solid #6366f1" : "2px solid transparent", transition:"all .15s" }}>
+                        <span style={{ fontSize:22 }}>{p.emoji}</span>
+                        <span style={{ fontSize:13, fontWeight:800, color:"#fff" }}>{p.label}</span>
+                        <span style={{ fontSize:10, color:"#a5b4fc" }}>{p.gender==="female"?"♀":"♂"} {p.desc}</span>
+                        <span style={{ fontSize:9, color:"#6366f1", background:"rgba(99,102,241,.2)", borderRadius:6, padding:"2px 6px", marginTop:2, maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{vName}</span>
                       </button>
                     );
                   })}
                 </div>
-                <p style={{ fontSize:10, color:"#6366f1", marginTop:7 }}>✨ = high-quality natural voice</p>
+                <p style={{ fontSize:10, color:"#4b5563", textAlign:"center", marginTop:10 }}>
+                  Best voices: Microsoft Online (Edge) · Google (Chrome) · macOS voices
+                </p>
               </div>
             )}
 
-            {/* Speed selector */}
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
-              <span style={{ fontSize:10, fontWeight:800, color:"#6366f1", marginRight:2, letterSpacing:1 }}>SPEED</span>
+            {/* Current voice badge */}
+            {!showPicker && (
+              <p style={{ fontSize:11, color:"#818cf8", textAlign:"center", marginBottom:10 }}>
+                {persona.emoji} <strong style={{color:"#c7d2fe"}}>{persona.label}</strong> · {persona.gender==="female"?"♀ Female":"♂ Male"} · {persona.desc} · <span style={{color:"#6366f1"}}>{getVoiceName(personaIdx)}</span>
+              </p>
+            )}
+
+            {/* Speed controls */}
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+              <span style={{ fontSize:10, fontWeight:800, color:"#4b5563", marginRight:3, letterSpacing:1 }}>SPEED</span>
               {SPEEDS.map(s => (
                 <button key={s} onClick={() => changeSpeed(s)}
-                  style={{ padding:"4px 9px", borderRadius:20, border:`1.5px solid ${speed===s?"#6366f1":"rgba(255,255,255,.15)"}`, background:speed===s?"#6366f1":"transparent", color:speed===s?"#fff":"#a5b4fc", fontSize:11, fontWeight:700, cursor:"pointer", transition:"all .15s" }}>
+                  style={{ padding:"4px 9px", borderRadius:20, border:`1.5px solid ${speed===s?"#6366f1":"rgba(255,255,255,.12)"}`, background:speed===s?"#6366f1":"transparent", color:speed===s?"#fff":"#818cf8", fontSize:11, fontWeight:700, cursor:"pointer", transition:"all .15s" }}>
                   {s}×
                 </button>
               ))}
             </div>
-
-            {/* Current voice badge */}
-            <p style={{ fontSize:11, color:"#6366f1", textAlign:"center", marginTop:10 }}>
-              🎤 {voiceName}
-            </p>
           </div>
 
-          {/* ── Script viewer ── */}
-          <details style={{ borderTop:"1px solid rgba(255,255,255,.07)" }}>
-            <summary style={{ padding:"10px 22px", color:"#6366f1", fontSize:12, fontWeight:700, cursor:"pointer", letterSpacing:.5, listStyle:"none", userSelect:"none" }}>
+          {/* Script viewer */}
+          <details style={{ borderTop:"1px solid rgba(255,255,255,.06)" }}>
+            <summary style={{ padding:"10px 22px", color:"#6366f1", fontSize:12, fontWeight:700, cursor:"pointer", userSelect:"none", letterSpacing:.5 }}>
               📄 READ SCRIPT
             </summary>
             <div style={{ padding:"0 22px 20px", maxHeight:240, overflowY:"auto" }}>
@@ -4942,6 +5228,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
     </div>
   );
 }
+
 
 // Keep PodcastPlayer as an alias for backward compatibility
 const PodcastPlayer = EnhancedPodcastPlayer;
