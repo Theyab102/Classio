@@ -106,7 +106,7 @@ async function extractFileText(fileObj) {
 
       const pdf = await window.pdfjsLib.getDocument({ data: bytes }).promise;
       let text = "";
-      for (let i = 1; i <= Math.min(pdf.numPages, 20); i++) {
+      for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const content = await page.getTextContent();
         text += content.items.map(item => item.str).join(" ") + "\n";
@@ -145,14 +145,14 @@ async function extractFileText(fileObj) {
         )
       );
 
-      for (const xmlFile of xmlFiles.slice(0, 30)) {
+      for (const xmlFile of xmlFiles) {
         const xmlContent = await zip.files[xmlFile].async("string");
         // Strip XML tags and get just the text
         const stripped = xmlContent.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
         if (stripped.length > 20) text += stripped + "\n";
       }
 
-      return text.slice(0, 8000) || null;
+      return text || null;
     } catch(e) { console.error("Office file read error", e); return null; }
   }
 
@@ -342,8 +342,9 @@ export default function App() {
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(FOLDER_COLORS[0]);
   const [showCharacter, setShowCharacter] = useState(false);
+  const DEFAULT_CHAR = { skin:"#FDDBB4", hair:"#3D2B1F", hairStyle:0, eyes:"#2980B9", top:"#2C3E50", bg:"#dce8ff", mouth:0, eyebrow:0, eyeShape:0, accessory:0, topStyle:0, blush:false, lips:false, freckles:false, lipColor:"#d06060", name:"" };
   const [character, setCharacter] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("classio_char") || "null") || { skin:"#FDDBB4", hair:"#3D2B1F", hairStyle:0, eyes:"#3D5A80", top:"#3D5A80", name:"" }; }
+    try { return { ...DEFAULT_CHAR, ...(JSON.parse(localStorage.getItem("classio_char") || "null") || {}) }; }
     catch { return { skin:"#FDDBB4", hair:"#3D2B1F", hairStyle:0, eyes:"#3D5A80", top:"#3D5A80", name:"" }; }
   });
 
@@ -653,12 +654,18 @@ function shadeHex(hex, amt) {
   const clamp = v => Math.min(255, Math.max(0, v));
   return `rgb(${clamp((n>>16&255)+amt)},${clamp((n>>8&255)+amt)},${clamp((n&255)+amt)})`;
 }
-// Make gradient IDs unique per colour combination — fixes all stale-gradient bugs
+// Unique ID per every field that can affect SVG rendering
 function avatarGid(ch) {
-  const str = [ch.skin,ch.hair,ch.top,ch.bg||"#dce8ff"].join("");
-  let h = 0;
-  for (let i = 0; i < str.length; i++) { h = (h * 31 + str.charCodeAt(i)) >>> 0; }
-  return "av" + (h % 99999).toString(36);
+  const str = [
+    ch.skin, ch.hair, ch.top, ch.eyes,
+    ch.bg||"#dce8ff", ch.lipColor||"#d06060",
+    ch.hairStyle||0, ch.topStyle||0, ch.eyeShape||0,
+    ch.accessory||0, ch.eyebrow||0, ch.mouth||0,
+    ch.blush?1:0, ch.lips?1:0, ch.freckles?1:0
+  ].join("|");
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) { h = ((h << 5) + h) ^ str.charCodeAt(i); h = h >>> 0; }
+  return "av" + h.toString(36);
 }
 
 // ─── AVATAR ───────────────────────────────────────────────────────────────────
@@ -1585,7 +1592,7 @@ function ViewTab({ file, onUpdate }) {
         const slide = pptSlidesRef.current[pptPage - 1];
         text = slide ? slide.texts.join(" ").slice(0, 3000) : "";
       } else if (fileObj) {
-        text = (await extractFileText(fileObj).catch(() => "")).slice(0, 3000);
+        text = (await extractFileText(fileObj).catch(() => "")).slice(0, 6000);
       }
       const pageLabel = isPPT ? `slide ${pptPage}` : `page ${pageNum}`;
       const res = await callClaude(
@@ -1998,7 +2005,7 @@ function AITab({ file, allFiles, folder, onUpdate }) {
       let fileContext = "";
       const safeText = async (fObj) => {
         if (!fObj) return "";
-        try { const t = await extractFileText(fObj); return (t || "").slice(0, 2000); } catch { return ""; }
+        try { const t = await extractFileText(fObj); return (t || "").slice(0, 6000); } catch { return ""; }
       };
       if (selectedFileIds.length > 0) {
         // Folder AI — use whichever files the user selected from dropdown
@@ -2155,9 +2162,11 @@ function NotesTab({ file, onUpdate, user, isGuest }) {
     try {
       const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
       const fileText = fileObj ? await extractFileText(fileObj) : null;
+      // Send full text — truncate only if extremely large (>12000 chars) to stay within token limits
+      const safeText = fileText ? fileText.slice(0, 12000) : null;
 
-      const userMsg = fileText
-        ? `Here is the content from the file "${file.name}":\n\n${fileText.slice(0, 6000)}\n\nNow create detailed study notes based ONLY on this content.`
+      const userMsg = safeText
+        ? `Here is the COMPLETE content from the file "${file.name}":\n\n${safeText}\n\nAnalyze ALL of the above content thoroughly, then create detailed study notes covering the ENTIRE document — every section, every key concept, every important detail.`
         : `Create comprehensive study notes for a subject/topic named "${file.name}". Make them detailed and useful for exam revision.`;
 
       const styleInstructions = {
@@ -2293,8 +2302,9 @@ Topic context: ${context}`,
       const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
       const fileText = fileObj ? await extractFileText(fileObj) : null;
 
-      const userMsg = fileText
-        ? `Here is the content from the file "${file.name}":\n\n${fileText.slice(0, 6000)}\n\nNow create detailed study notes specifically about "${topic}" based on this content.`
+      const safeText2 = fileText ? fileText.slice(0, 12000) : null;
+      const userMsg = safeText2
+        ? `Here is the COMPLETE content from the file "${file.name}":\n\n${safeText2}\n\nAnalyze ALL of the above content, then create detailed study notes specifically about "${topic}" based on EVERYTHING in this document.`
         : `Create comprehensive study notes specifically about: "${topic}". Make them detailed and useful for exam revision.`;
 
       const txt = await callClaude(
@@ -2420,7 +2430,7 @@ function CardsTab({ file, onUpdate }) {
       const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
       const fileText = fileObj ? await extractFileText(fileObj) : null;
       const userMsg = fileText
-        ? `Here is the content from "${file.name}":\n\n${fileText.slice(0, 5000)}\n\nCreate exactly ${count} study flashcards based ONLY on this content. Return JSON array: [{"question":"…","answer":"…"}]`
+        ? `Here is the COMPLETE content from "${file.name}":\n\n${fileText.slice(0, 12000)}\n\nAnalyze ALL of this content thoroughly, then create exactly ${count} study flashcards covering the most important concepts from the ENTIRE document. Return JSON array: [{"question":"…","answer":"…"}]`
         : `Create exactly ${count} study flashcards for the topic "${file.name}". Return JSON array: [{"question":"…","answer":"…"}]`;
       const txt = await callClaude("Return ONLY valid JSON array. No markdown, no explanation, no extra text.", userMsg);
       const parsed = JSON.parse(txt.replace(/```json|```/g,"").trim());
@@ -2659,126 +2669,190 @@ function MCQ({ cards, onBack }) {
 }
 
 function Scramble({ cards, onBack }) {
-  // Pick short words only (≤12 chars), max 8 cards
-  const [deck] = useState(() => [...cards]
-    .filter(c => c.answer && c.answer.trim().length <= 12 && c.answer.trim().length >= 2)
-    .sort(() => Math.random() - .5)
-    .slice(0, Math.min(cards.length, 8)));
+  // Only use answers that are single words or short phrases (≤ 10 letters, letters only)
+  const [deck] = useState(() => {
+    const good = cards.filter(c => {
+      const a = (c.answer || "").trim();
+      // allow letters and single spaces, max 10 letters total (ignore spaces for length)
+      return a.length >= 2 && a.replace(/\s/g,"").length <= 10 && /^[a-zA-Z\s]+$/.test(a);
+    });
+    return [...good].sort(() => Math.random() - .5).slice(0, 10);
+  });
 
-  const [curr,   setCurr]   = useState(0);
-  const [chosen, setChosen] = useState([]);   // indices into shuffled array that user picked
-  const [res,    setRes]    = useState(null); // null | "correct" | "wrong"
-  const [score,  setScore]  = useState(0);
-  const [done,   setDone]   = useState(false);
-  const [checking, setChecking] = useState(false);
+  const [curr,     setCurr]    = useState(0);
+  const [answer,   setAnswer]  = useState([]); // {id, letter} placed in answer row
+  const [pool,     setPool]    = useState([]); // {id, letter, used} scrambled source tiles
+  const [result,   setResult]  = useState(null); // null | "correct" | "wrong"
+  const [score,    setScore]   = useState(0);
+  const [done,     setDone]    = useState(false);
+  const [checking, setChecking]= useState(false);
 
-  // Shuffle answer letters for each card (no spaces, clean letters only)
-  const [shuffled] = useState(() => deck.map(c => {
-    const letters = c.answer.replace(/\s+/g, '').split('');
-    let arr = [...letters];
+  // Build tile pool for current card
+  const buildPool = (cardIdx) => {
+    const word = (deck[cardIdx]?.answer || "").trim();
+    const letters = word.split("").filter(l => l !== " ");
+    // Shuffle
+    let arr = letters.map((l, i) => ({ id: `t${cardIdx}_${i}`, letter: l, used: false }));
     let tries = 0;
-    while (arr.join('') === letters.join('') && tries++ < 20)
-      arr = [...letters].sort(() => Math.random() - .5);
+    while (arr.map(x=>x.letter).join("") === letters.join("") && tries++ < 30)
+      arr = [...arr].sort(() => Math.random() - .5);
     return arr;
-  }));
+  };
+
+  // Init pool for card 0
+  useState(() => { setPool(buildPool(0)); });
+  // Re-init when curr changes
+  const prevCurrRef = React.useRef(0);
+  if (prevCurrRef.current !== curr) {
+    prevCurrRef.current = curr;
+    // We'll do this via effect below
+  }
+
+  React.useEffect(() => {
+    setPool(buildPool(curr));
+    setAnswer([]);
+    setResult(null);
+  // eslint-disable-next-line
+  }, [curr]);
 
   const card = deck[curr];
-  if (!card) return <GResults score={score} total={deck.length} onBack={onBack} />;
+  if (!card || deck.length === 0) return (
+    <div style={{ textAlign:"center", padding:"60px 20px" }}>
+      <p style={{ fontSize:18, fontWeight:700, color:C.text, marginBottom:8 }}>Not enough short-word cards</p>
+      <p style={{ fontSize:14, color:C.muted, marginBottom:24 }}>Word Scramble works best with single-word answers under 10 letters.</p>
+      <button onClick={onBack} style={{ background:C.warm, color:"#fff", border:"none", borderRadius:12, padding:"12px 28px", fontSize:15, fontWeight:700, cursor:"pointer" }}>← Back</button>
+    </div>
+  );
 
-  const letters = shuffled[curr]; // e.g. ['n','o','t','e']
-  // Which tile indices are still available (not yet chosen)
-  const usedIdxs = new Set(chosen);
-  const composed = chosen.map(i => letters[i]).join('');
-
-  const pickTile = (idx) => {
-    if (res || usedIdxs.has(idx)) return;
-    setChosen(prev => [...prev, idx]);
+  // Move tile from pool → answer
+  const pickTile = (tile) => {
+    if (result || tile.used) return;
+    setPool(prev => prev.map(t => t.id === tile.id ? {...t, used:true} : t));
+    setAnswer(prev => [...prev, {id: tile.id, letter: tile.letter}]);
   };
 
-  const removeLast = () => {
-    if (res || chosen.length === 0) return;
-    setChosen(prev => prev.slice(0, -1));
+  // Remove last tile from answer → back to pool
+  const unpick = (tileId) => {
+    if (result) return;
+    setAnswer(prev => prev.filter(t => t.id !== tileId));
+    setPool(prev => prev.map(t => t.id === tileId ? {...t, used:false} : t));
   };
 
-  const clearAll = () => {
-    if (!res) setChosen([]);
+  const clearAnswer = () => {
+    if (result) return;
+    setAnswer([]);
+    setPool(prev => prev.map(t => ({...t, used:false})));
   };
 
   const check = async () => {
-    if (res || chosen.length === 0 || checking) return;
+    if (result || answer.length === 0 || checking) return;
+    const composed = answer.map(t => t.letter).join("");
     setChecking(true);
     const ok = await aiCheckAnswer(card.question, card.answer, composed);
     setChecking(false);
-    setRes(ok ? "correct" : "wrong");
+    setResult(ok ? "correct" : "wrong");
     if (ok) setScore(s => s + 1);
   };
 
   const next = () => {
     if (curr + 1 >= deck.length) { setDone(true); return; }
     setCurr(c => c + 1);
-    setChosen([]);
-    setRes(null);
   };
 
   if (done) return <GResults score={score} total={deck.length} onBack={onBack} />;
 
+  const composed = answer.map(t => t.letter).join("");
+  const isComplete = answer.length === pool.length;
+
   return (
-    <div style={{ maxWidth:500, margin:"0 auto" }}>
+    <div style={{ maxWidth:520, margin:"0 auto" }}>
       <GHeader title="Word Scramble" score={score} curr={curr} total={deck.length} onBack={onBack} accent={C.warm} />
 
-      {/* Question */}
-      <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:20, padding:"22px 24px", marginBottom:14 }}>
-        <p style={{ fontSize:12, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:"uppercase", marginBottom:8 }}>Question</p>
-        <p style={{ fontSize:16, color:C.text, lineHeight:1.5 }}>{card.question}</p>
+      {/* Question card */}
+      <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:18, padding:"20px 22px", marginBottom:16 }}>
+        <p style={{ fontSize:11, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:"uppercase", marginBottom:7 }}>Unscramble the answer</p>
+        <p style={{ fontSize:17, color:C.text, lineHeight:1.55, fontWeight:600 }}>{card.question}</p>
       </div>
 
-      {/* Answer line — composed letters */}
-      <div style={{ background:res==="correct"?C.greenL:res==="wrong"?C.redL:C.accentL, border:`2px solid ${res==="correct"?C.green:res==="wrong"?C.red:C.accentS}`, borderRadius:14, minHeight:56, padding:"10px 14px", display:"flex", flexWrap:"wrap", gap:6, alignItems:"center", marginBottom:12 }}>
-        {chosen.length === 0
-          ? <span style={{ color:C.muted, fontSize:14 }}>Tap letters to build your answer…</span>
-          : chosen.map((tileIdx, pos) => (
-            <button key={pos} onClick={removeLast} disabled={!!res}
-              style={{ width:40, height:44, background:res==="correct"?"#4A7C59":res==="wrong"?"#C45C5C":C.accent, color:"#fff", border:"none", borderRadius:10, fontSize:20, fontWeight:800, cursor:res?"default":"pointer", boxShadow:"0 2px 6px rgba(0,0,0,.18)" }}>
-              {letters[tileIdx]}
-            </button>
-          ))
-        }
+      {/* Answer drop zone */}
+      <div style={{
+        minHeight:62, padding:"10px 12px", marginBottom:10,
+        background: result==="correct" ? "#f0fdf4" : result==="wrong" ? "#fff1f1" : "#f8f9ff",
+        border: `2.5px ${result ? "solid" : "dashed"} ${result==="correct" ? "#16a34a" : result==="wrong" ? C.red : C.accentS}`,
+        borderRadius:14, display:"flex", flexWrap:"wrap", gap:7, alignItems:"center",
+        transition:"all .2s"
+      }}>
+        {answer.length === 0 && !result && (
+          <span style={{ color:C.muted, fontSize:13, fontStyle:"italic" }}>Tap letters below to build your answer…</span>
+        )}
+        {answer.map((tile, pos) => (
+          <button key={tile.id} onClick={() => unpick(tile.id)} disabled={!!result}
+            title="Tap to remove"
+            style={{
+              width:42, height:46,
+              background: result==="correct" ? "#16a34a" : result==="wrong" ? C.red : C.accent,
+              color:"#fff", border:"none", borderRadius:10,
+              fontSize:20, fontWeight:800,
+              cursor: result ? "default" : "pointer",
+              boxShadow:"0 2px 8px rgba(0,0,0,.18)",
+              transition:"all .15s",
+              transform: result ? "none" : "translateY(-1px)"
+            }}>
+            {tile.letter.toUpperCase()}
+          </button>
+        ))}
       </div>
 
-      {/* Feedback */}
-      {res && <p style={{ textAlign:"center", fontSize:15, fontWeight:700, color:res==="correct"?C.green:C.red, marginBottom:10 }}>
-        {res==="correct" ? "✓ Correct!" : `✗ Answer: ${card.answer}`}
-      </p>}
-
-      {/* Scrambled letter tiles */}
-      {!res && (
-        <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"center", marginBottom:16 }}>
-          {letters.map((letter, idx) => {
-            const used = usedIdxs.has(idx);
-            return (
-              <button key={idx} onClick={() => pickTile(idx)} disabled={used}
-                style={{ width:46, height:52, background:used?"#ddd":C.warmL, color:used?C.muted:C.warm, border:`2.5px solid ${used?C.border:C.warm}`, borderRadius:12, fontSize:22, fontWeight:800, cursor:used?"default":"pointer", transition:"all .12s", transform:used?"scale(0.9)":"scale(1)", boxShadow:used?"none":"0 3px 8px rgba(0,0,0,.15)" }}>
-                {letter.toUpperCase()}
-              </button>
-            );
-          })}
+      {/* Result message */}
+      {result && (
+        <div style={{ textAlign:"center", marginBottom:10 }}>
+          <span style={{ fontSize:15, fontWeight:700, color: result==="correct" ? "#16a34a" : C.red }}>
+            {result==="correct" ? "✓ Correct!" : `✗ Answer: ${card.answer}`}
+          </span>
         </div>
       )}
 
-      {/* Controls */}
-      <div style={{ display:"flex", gap:8 }}>
-        {!res ? <>
-          <button onClick={clearAll} style={{ flex:1, background:C.border, color:C.muted, border:"none", borderRadius:12, padding:"12px", fontSize:14, fontWeight:700, cursor:"pointer" }}>Clear</button>
-          <button onClick={check} disabled={chosen.length===0||checking}
-            style={{ flex:2, background:chosen.length>0?C.warm:"#ccc", color:"#fff", border:"none", borderRadius:12, padding:"12px", fontSize:15, fontWeight:700, cursor:chosen.length>0?"pointer":"not-allowed" }}>
-            {checking ? "Checking…" : "Check ✓"}
+      {/* Scrambled source tiles */}
+      {!result && (
+        <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"center", padding:"8px 0 16px" }}>
+          {pool.map(tile => (
+            <button key={tile.id} onClick={() => pickTile(tile)}
+              disabled={tile.used}
+              style={{
+                width:48, height:54,
+                background: tile.used ? "#e8e8e8" : C.warmL,
+                color: tile.used ? "#bbb" : C.warm,
+                border: `2.5px solid ${tile.used ? "#ddd" : C.warm}`,
+                borderRadius:12, fontSize:22, fontWeight:800,
+                cursor: tile.used ? "default" : "pointer",
+                transition:"all .14s",
+                transform: tile.used ? "scale(0.88)" : "scale(1)",
+                boxShadow: tile.used ? "none" : "0 3px 10px rgba(0,0,0,.14)",
+                opacity: tile.used ? 0.45 : 1
+              }}>
+              {tile.letter.toUpperCase()}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Action buttons */}
+      {!result ? (
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={clearAnswer} disabled={answer.length === 0}
+            style={{ flex:1, background:"#eee", color:answer.length>0?"#555":"#bbb", border:"none", borderRadius:12, padding:"12px", fontSize:14, fontWeight:700, cursor:answer.length>0?"pointer":"not-allowed" }}>
+            Clear
           </button>
-        </> : (
-          <button onClick={next} style={{ width:"100%", background:C.warm, color:"#fff", border:"none", borderRadius:12, padding:"13px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
-            {curr+1>=deck.length ? "See Results" : "Next →"}
+          <button onClick={check} disabled={answer.length === 0 || checking}
+            style={{ flex:2, background:answer.length>0 ? C.warm : "#ccc", color:"#fff", border:"none", borderRadius:12, padding:"12px", fontSize:15, fontWeight:700, cursor:answer.length>0?"pointer":"not-allowed", transition:"background .15s" }}>
+            {checking ? "Checking…" : isComplete ? "Check ✓" : `Check (${answer.length}/${pool.length})`}
           </button>
-        )}
-      </div>
+        </div>
+      ) : (
+        <button onClick={next} style={{ width:"100%", background:C.warm, color:"#fff", border:"none", borderRadius:12, padding:"13px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
+          {curr + 1 >= deck.length ? "See Results 🎉" : "Next →"}
+        </button>
+      )}
     </div>
   );
 }
@@ -3314,9 +3388,13 @@ function RapidFire({ cards, onBack }) {
 
   useEffect(() => { if (inputRef.current) inputRef.current.focus(); }, [curr]);
 
-  const submit = () => {
+  const [rfChecking, setRfChecking] = useState(false);
+  const submit = async () => {
+    if (rfChecking || !inp.trim()) return;
+    setRfChecking(true);
     const card = deck[curr % deck.length];
-    const ok = inp.trim().toLowerCase() === (card.answer || "").trim().toLowerCase();
+    const ok = await aiCheckAnswer(card.question, card.answer, inp);
+    setRfChecking(false);
     setFlash(ok ? "correct" : "wrong");
     if (ok) setScore(s => s + 1);
     setTimeout(() => { setFlash(null); setCurr(c => c + 1); setInp(""); }, 400);
