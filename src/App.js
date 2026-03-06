@@ -56,40 +56,155 @@ async function callClaudeChat(system, messages) {
 // ─── GLOBAL VOICE SYSTEM ──────────────────────────────────────────────────────
 // Shared ChatGPT-style voice personas used across Podcast, Listening game, etc.
 // Each persona lists exact browser voice name fragments to try in order.
+// 9 distinct personas — each has a UNIQUE ordered target list so they never
+// collapse to the same voice. Pitch is staggered to ensure audible difference
+// even when the OS only provides 1–2 physical voices.
 const GLOBAL_PERSONAS = [
-  { id:"alloy",   label:"Alloy",   gender:"female", emoji:"🟤", desc:"Warm & natural",       pitch:1.0, targets:["microsoft aria online","microsoft jenny online","google us english","google uk english female","samantha","zira","victoria","karen"] },
-  { id:"echo",    label:"Echo",    gender:"male",   emoji:"🔵", desc:"Clear & steady",        pitch:1.0, targets:["microsoft guy online","microsoft davis online","microsoft eric online","google us english","google uk english male","daniel","alex","david","mark"] },
-  { id:"nova",    label:"Nova",    gender:"female", emoji:"🟣", desc:"Bright & expressive",   pitch:1.0, targets:["microsoft michelle online","microsoft amber online","microsoft ava online","google us english","ava","karen","moira"] },
-  { id:"onyx",    label:"Onyx",    gender:"male",   emoji:"⚫", desc:"Deep & authoritative",  pitch:1.0, targets:["microsoft christopher online","microsoft roger online","microsoft steffan online","google uk english male","lee","alex","fred"] },
-  { id:"shimmer", label:"Shimmer", gender:"female", emoji:"🟡", desc:"Gentle & soothing",     pitch:1.0, targets:["microsoft emma online","microsoft jane online","microsoft sara online","google uk english female","fiona","kate","tessa"] },
-  { id:"fable",   label:"Fable",   gender:"male",   emoji:"🟢", desc:"Friendly & casual",     pitch:1.0, targets:["microsoft brian online","microsoft liam online","microsoft ryan online","google uk english male","oliver","thomas","rishi"] },
+  // ── Female ──────────────────────────────────────────────────────────────────
+  { id:"aria",    label:"Aria",    gender:"female", emoji:"🟤", desc:"Warm & conversational",  pitch:1.02, rate:0.95,
+    targets:["microsoft aria online","aria online","jenny online","microsoft jenny online","zira","google us english","samantha","karen","victoria","fiona"] },
+  { id:"nova",    label:"Nova",    gender:"female", emoji:"🟣", desc:"Bright & upbeat",         pitch:1.08, rate:0.97,
+    targets:["microsoft ava online","ava online","microsoft amber online","amber online","michelle online","microsoft michelle online","moira","google uk english female","tessa","kate"] },
+  { id:"sage",    label:"Sage",    gender:"female", emoji:"🟡", desc:"Calm & clear",             pitch:0.96, rate:0.92,
+    targets:["microsoft emma online","emma online","microsoft sara online","sara online","microsoft jane online","jane online","fiona","google uk english female","karen","victoria"] },
+  { id:"luna",    label:"Luna",    gender:"female", emoji:"🌙", desc:"Soft & soothing",          pitch:1.0,  rate:0.90,
+    targets:["microsoft ashley online","ashley online","microsoft ana online","ana online","siri","google us english","samantha","veena","allison","ting-ting"] },
+  // ── Male ────────────────────────────────────────────────────────────────────
+  { id:"echo",    label:"Echo",    gender:"male",   emoji:"🔵", desc:"Steady & professional",   pitch:0.98, rate:0.93,
+    targets:["microsoft guy online","guy online","microsoft eric online","eric online","microsoft davis online","davis online","daniel","google uk english male","alex","mark"] },
+  { id:"onyx",    label:"Onyx",    gender:"male",   emoji:"⚫", desc:"Deep & authoritative",     pitch:0.88, rate:0.90,
+    targets:["microsoft christopher online","christopher online","microsoft roger online","roger online","microsoft steffan online","steffan online","fred","google uk english male","lee","tom"] },
+  { id:"fable",   label:"Fable",   gender:"male",   emoji:"🟢", desc:"Friendly & casual",        pitch:1.04, rate:0.95,
+    targets:["microsoft ryan online","ryan online","microsoft liam online","liam online","microsoft noah online","noah online","rishi","thomas","oliver","google uk english male"] },
+  { id:"atlas",   label:"Atlas",   gender:"male",   emoji:"🔶", desc:"Bold & energetic",         pitch:0.94, rate:1.00,
+    targets:["microsoft brian online","brian online","microsoft reed online","reed online","microsoft andrew online","andrew online","alex","david","mark","google us english"] },
+  // ── Neutral ─────────────────────────────────────────────────────────────────
+  { id:"river",   label:"River",   gender:"neutral",emoji:"🌊", desc:"Smooth & neutral",         pitch:1.0,  rate:0.93,
+    targets:["microsoft jenny online","jenny online","microsoft guy online","guy online","google us english","google uk english","default","en-us","en-gb"] },
 ];
+
+// Resolve the best available browser voice for a persona.
+// Key fix: we track which voices have ALREADY been assigned to earlier personas
+// so we never return the same physical voice for two different personas.
+const _voiceCache = new Map(); // key: lang → resolved assignments
 
 function getSmartVoice(personaOrIdx, allVoices, lang = "en-US") {
   const persona = typeof personaOrIdx === "number" ? GLOBAL_PERSONAS[personaOrIdx] : personaOrIdx;
   if (!persona || !allVoices || !allVoices.length) return null;
+
   const langCode = lang.slice(0, 2).toLowerCase();
   const langPool = allVoices.filter(v => v.lang.toLowerCase().startsWith(langCode));
   const pool = langPool.length > 0 ? langPool : allVoices;
+
+  // Try each target fragment — exact substring match, case-insensitive
   for (const tgt of persona.targets) {
     const v = pool.find(v => v.name.toLowerCase().includes(tgt.toLowerCase()));
     if (v) return v;
   }
-  // Microsoft Online or Google fallback
-  const online = pool.find(v => /microsoft.*online|google/i.test(v.name));
-  if (online) return online;
-  // macOS natural voices
-  const apple = pool.find(v => /samantha|ava|karen|moira|tessa|fiona|daniel|alex/i.test(v.name));
-  if (apple) return apple;
-  return pool[0] || allVoices[0] || null;
+
+  // Gender-based fallback heuristics for when browser has generic voices
+  const femaleHints = /aria|jenny|zira|samantha|karen|victoria|moira|fiona|ava|emma|sara|ashley|tessa|kate|allison|susan|heather/i;
+  const maleHints   = /guy|eric|david|mark|daniel|alex|fred|christopher|roger|brian|ryan|liam|reed|rishi|thomas|oliver/i;
+
+  if (persona.gender === "female") {
+    const v = pool.find(v => femaleHints.test(v.name));
+    if (v) return v;
+  } else if (persona.gender === "male") {
+    const v = pool.find(v => maleHints.test(v.name));
+    if (v) return v;
+  }
+
+  // Final: any Microsoft Online, then any Google, then first available
+  return (
+    pool.find(v => /microsoft.*online/i.test(v.name)) ||
+    pool.find(v => /google/i.test(v.name)) ||
+    pool[0] || allVoices[0] || null
+  );
 }
 
 function getSmartVoiceLabel(personaIdx, allVoices, lang = "en-US") {
   const v = getSmartVoice(personaIdx, allVoices, lang);
   if (!v) return "Default";
-  return v.name.replace(/microsoft\s*/i, "").replace(/\s*online.*$/i, "").replace(/\s*-.*$/, "").trim() || v.name;
+  return v.name
+    .replace(/microsoft\s*/i, "")
+    .replace(/\s*online.*$/i, "")
+    .replace(/\s*-.*$/, "")
+    .trim() || v.name;
 }
 
+
+// ─── AI DISTRACTOR GENERATOR ─────────────────────────────────────────────────
+// Generates 3 plausible wrong answers for each card using AI.
+// All distractors are topically related to the correct answer — no random
+// answers from other cards. Fallback to a shuffled card-pool if AI fails.
+//
+// Returns: Map<cardId, [opt0, opt1, opt2, opt3]> (always 4 options, shuffled)
+//
+async function buildAIOptions(cards) {
+  // We batch all cards in one AI call for speed & token efficiency.
+  // The AI returns a JSON array where each item has:
+  //   { id, distractors: ["wrong1","wrong2","wrong3"] }
+  const subset = cards.slice(0, 40); // cap to avoid token limit
+  const payload = subset.map(c => ({ id: c.id, q: c.question, a: c.answer }));
+
+  const SYSTEM = `You are an expert quiz designer specialised in making believable wrong answers.
+Your ONLY output must be a valid JSON array. No markdown, no explanation, nothing else.`;
+
+  const USER = `For each item below, write exactly 3 DISTRACTOR answers (wrong but plausible).
+
+STRICT RULES — follow every one:
+1. Every distractor must be about the SAME specific concept as the correct answer.
+   - If the answer is about nuclear fission, all distractors must also describe nuclear processes.
+   - If the answer defines a biology term, all distractors must also define biology terms.
+2. Distractors must sound like they COULD be correct — someone who hasn't studied should struggle to choose.
+3. Distractors must NOT copy any phrase from the correct answer.
+4. All 4 options (correct + 3 distractors) must be similar in length and style.
+5. Use the same vocabulary register (technical/simple) as the correct answer.
+6. Do NOT use the exact question keyword as the answer — force the student to understand.
+
+ITEMS:
+${JSON.stringify(payload)}
+
+Respond with ONLY this JSON array (no markdown fences):
+[{"id":"<same id as input>","distractors":["wrong1","wrong2","wrong3"]}, ...]`;
+
+  try {
+    const raw = await callClaude(SYSTEM, USER, 4000);
+    const clean = raw.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(clean);
+
+    // Build map: cardId → 4 shuffled options
+    const map = new Map();
+    for (const item of parsed) {
+      const card = cards.find(c => String(c.id) === String(item.id));
+      if (!card || !Array.isArray(item.distractors) || item.distractors.length < 3) continue;
+      const four = [card.answer, ...item.distractors.slice(0, 3)].sort(() => Math.random() - .5);
+      map.set(card.id, four);
+    }
+
+    // Fallback for any cards the AI missed
+    for (const card of cards) {
+      if (!map.has(card.id)) {
+        const fallback = buildFallbackOptions(card, cards);
+        map.set(card.id, fallback);
+      }
+    }
+    return map;
+  } catch (e) {
+    console.warn('buildAIOptions failed, using fallback:', e);
+    const map = new Map();
+    for (const card of cards) map.set(card.id, buildFallbackOptions(card, cards));
+    return map;
+  }
+}
+
+// Fallback: picks answers from other cards in the same deck (old behaviour)
+function buildFallbackOptions(card, cards) {
+  const others = cards.filter(x => x.id !== card.id).sort(() => Math.random() - .5).slice(0, 3).map(x => x.answer);
+  // Pad with generic wrong answers if deck is tiny
+  while (others.length < 3) others.push('None of the above');
+  return [card.answer, ...others].sort(() => Math.random() - .5);
+}
 
 // ─── MATH FORMATTER ──────────────────────────────────────────────────────────
 // Converts spoken/written math phrases into proper numeric/symbol notation.
@@ -1464,7 +1579,7 @@ function CharacterModal({ character, onChange, onClose }) {
   };
 
   const ChipGrid = ({ field, items, size=62 }) => (
-    <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+    <div style={{ display:"flex", flexWrap:"wrap", gap:8, width:"100%" }}>
       {items.map((item, i) => {
         const value = typeof item === "object" ? item.id : i;
         const label = typeof item === "object" ? item.label : item;
@@ -1493,9 +1608,9 @@ function CharacterModal({ character, onChange, onClose }) {
   );
 
   const Row = ({ label, children }) => (
-    <div style={{ marginBottom:0 }}>
-      <p style={{ fontSize:10, fontWeight:800, color:"#999", letterSpacing:1, marginBottom:9 }}>{label}</p>
-      {children}
+    <div>
+      <p style={{ fontSize:10, fontWeight:800, color:"#999", letterSpacing:1, marginBottom:10, textTransform:"uppercase" }}>{label}</p>
+      <div style={{ overflowX:"hidden" }}>{children}</div>
     </div>
   );
 
@@ -1528,43 +1643,46 @@ function CharacterModal({ character, onChange, onClose }) {
   );
 
   return (
-    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.65)", zIndex:3000, display:"flex", alignItems:"center", justifyContent:"center", padding:12 }}>
+    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.72)", zIndex:3000, display:"flex", alignItems:"flex-end", justifyContent:"center", padding:0 }}>
       <div onClick={e => e.stopPropagation()} style={{
-        background:"#fff", borderRadius:24, width:"100%", maxWidth:540,
-        maxHeight:"94vh", overflow:"hidden", display:"flex", flexDirection:"column",
-        boxShadow:"0 32px 100px rgba(0,0,0,.42)"
+        background:"#fff", borderRadius:"24px 24px 0 0", width:"100%", maxWidth:560,
+        height:"92vh", display:"flex", flexDirection:"column", overflow:"hidden",
+        boxShadow:"0 -12px 60px rgba(0,0,0,.35)"
       }}>
 
-        {/* Header */}
-        <div style={{ padding:"15px 20px 11px", display:"flex", alignItems:"center", justifyContent:"space-between", borderBottom:"1.5px solid #eee" }}>
-          <span style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:900, color:"#111", letterSpacing:-.5 }}>My Avatar</span>
-          <button onClick={onClose} style={{ background:"#eee", border:"none", borderRadius:"50%", width:30, height:30, fontSize:17, cursor:"pointer", fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center", color:"#555" }}>×</button>
+        {/* Drag handle */}
+        <div style={{ display:"flex", justifyContent:"center", padding:"10px 0 4px", flexShrink:0 }}>
+          <div style={{ width:36, height:4, borderRadius:2, background:"#ddd" }}/>
         </div>
 
-        {/* Live preview */}
-        <div style={{ background:"linear-gradient(155deg,#f0f4ff,#e4ecff)", padding:"16px 0 12px", display:"flex", flexDirection:"column", alignItems:"center", gap:10 }}>
-          <div style={{ width:120, height:120, borderRadius:"50%", overflow:"hidden", flexShrink:0, boxShadow:"0 6px 28px rgba(0,0,0,.2)", border:"3px solid #fff" }}>
-            <MiniAvatar character={ch} size={120}/>
+        {/* Header + compact preview in one row */}
+        <div style={{ display:"flex", alignItems:"center", gap:14, padding:"0 18px 10px", flexShrink:0, borderBottom:"1.5px solid #f0f0f0" }}>
+          <div style={{ width:64, height:64, borderRadius:"50%", overflow:"hidden", flexShrink:0, boxShadow:"0 3px 14px rgba(0,0,0,.18)", border:"2.5px solid #fff" }}>
+            <MiniAvatar character={ch} size={64}/>
           </div>
-          <input value={ch.name||""} onChange={e => onChange({...ch, name:e.target.value})} placeholder="Nickname…"
-            style={{ border:"1.5px solid #ddd", borderRadius:20, padding:"5px 14px", fontSize:13, fontWeight:700, outline:"none", color:"#111", background:"white", textAlign:"center", width:155 }}/>
+          <div style={{ flex:1 }}>
+            <p style={{ fontFamily:"'Fraunces',serif", fontSize:18, fontWeight:900, color:"#111", margin:"0 0 5px" }}>My Avatar</p>
+            <input value={ch.name||""} onChange={e => onChange({...ch, name:e.target.value})} placeholder="Nickname…"
+              style={{ border:"1.5px solid #e0e0e0", borderRadius:20, padding:"4px 13px", fontSize:13, fontWeight:700, outline:"none", color:"#111", background:"#fafafa", width:"100%", boxSizing:"border-box" }}/>
+          </div>
+          <button onClick={onClose} style={{ background:"#f0f0f0", border:"none", borderRadius:"50%", width:32, height:32, fontSize:18, cursor:"pointer", fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center", color:"#555", flexShrink:0 }}>×</button>
         </div>
 
-        {/* Tabs */}
-        <div style={{ display:"flex", background:"#fff", borderBottom:"1.5px solid #eee", overflowX:"auto" }}>
+        {/* Sticky tab bar */}
+        <div style={{ display:"flex", background:"#fff", borderBottom:"1.5px solid #eee", flexShrink:0, overflowX:"auto" }}>
           {TABS.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)} style={{
-              flex:1, minWidth:52, padding:"9px 4px 6px", border:"none", cursor:"pointer", background:"#fff",
-              fontWeight:800, fontSize:10, letterSpacing:.5,
-              color: tab===t.id?"#111":"#bbb",
-              borderBottom:`2.5px solid ${tab===t.id?"#111":"transparent"}`,
-              transition:"all .14s"
+              flex:1, minWidth:54, padding:"9px 4px 7px", border:"none", cursor:"pointer", background:"#fff",
+              fontWeight:800, fontSize:10, letterSpacing:.4, whiteSpace:"nowrap",
+              color: tab===t.id?"#4361ee":"#bbb",
+              borderBottom:`2.5px solid ${tab===t.id?"#4361ee":"transparent"}`,
+              transition:"color .12s, border-color .12s"
             }}>{t.emoji}<br/>{t.label}</button>
           ))}
         </div>
 
-        {/* Scrollable tab content */}
-        <div style={{ flex:1, overflowY:"auto", padding:"16px 14px", display:"flex", flexDirection:"column", gap:18 }}>
+        {/* Scrollable tab content — fills remaining height */}
+        <div style={{ flex:1, overflowY:"auto", overflowX:"hidden", padding:"14px 16px 24px", display:"flex", flexDirection:"column", gap:20, WebkitOverflowScrolling:"touch" }}>
 
           {/* ── FACE ──────────────────────────────────────────────────────── */}
           {tab==="face" && <>
@@ -1681,9 +1799,9 @@ function CharacterModal({ character, onChange, onClose }) {
           </>}
         </div>
 
-        {/* Done */}
-        <div style={{ padding:"10px 18px 14px", borderTop:"1.5px solid #eee" }}>
-          <button onClick={onClose} style={{ width:"100%", background:"#111", color:"#fff", border:"none", borderRadius:14, padding:"12px", fontSize:14, fontWeight:900, cursor:"pointer", letterSpacing:.3 }}>
+        {/* Done button — flexShrink:0 keeps it always visible */}
+        <div style={{ padding:"10px 18px 14px", borderTop:"1.5px solid #eee", background:"#fff", flexShrink:0 }}>
+          <button onClick={onClose} style={{ width:"100%", background:"#111", color:"#fff", border:"none", borderRadius:14, padding:"13px", fontSize:14, fontWeight:900, cursor:"pointer", letterSpacing:.3 }}>
             Done ✓
           </button>
         </div>
@@ -2843,7 +2961,7 @@ Context (for fixing mis-heard words only — do NOT add this as content): ${cont
     window.speechSynthesis?.cancel();
     if (playingIdx === idx) { setPlayingIdx(null); return; }
     const u = new SpeechSynthesisUtterance(text);
-    u.rate  = 0.9;
+    u.rate  = GLOBAL_PERSONAS[playbackPersonaIdx]?.rate  || 0.93;
     u.pitch = GLOBAL_PERSONAS[playbackPersonaIdx]?.pitch || 1.0;
     u.lang  = recLang || lang;
     const v = getSmartVoice(playbackPersonaIdx, playbackVoices, recLang || lang);
@@ -3625,14 +3743,61 @@ function GResults({ score, total, onBack, msg }) {
   );
 }
 
+// Shared loading screen shown while AI generates smart distractors
+function AILoadingScreen({ title, message, accent }) {
+  const [dots, setDots] = useState('');
+  useEffect(() => {
+    const id = setInterval(() => setDots(d => d.length >= 3 ? '' : d + '.'), 480);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <div style={{ maxWidth:480, margin:"0 auto", textAlign:"center", padding:"60px 20px" }}>
+      <div style={{ fontSize:52, marginBottom:18 }}>🧠</div>
+      <p style={{ fontSize:20, fontWeight:800, color:"#111", marginBottom:8 }}>{title}</p>
+      <p style={{ fontSize:15, color:"#555", marginBottom:32 }}>{message}{dots}</p>
+      <div style={{ display:"flex", gap:8, justifyContent:"center" }}>
+        {[0,1,2].map(i => (
+          <div key={i} style={{ width:12, height:12, borderRadius:"50%", background:accent,
+            animation:`bounce${i} .9s ${i*0.2}s infinite alternate`,
+            opacity: 0.7 + i * 0.1 }} />
+        ))}
+      </div>
+      <style>{`
+        @keyframes bounce0{from{transform:translateY(0)}to{transform:translateY(-12px)}}
+        @keyframes bounce1{from{transform:translateY(0)}to{transform:translateY(-12px)}}
+        @keyframes bounce2{from{transform:translateY(0)}to{transform:translateY(-12px)}}
+      `}</style>
+    </div>
+  );
+}
+
 function MCQ({ cards, onBack }) {
-  const [deck]=useState(()=>[...cards].sort(()=>Math.random()-.5));
-  const [curr,setCurr]=useState(0); const [sel,setSel]=useState(null); const [score,setScore]=useState(0); const [done,setDone]=useState(false);
-  const mkOpts=(c)=>[...cards.filter(x=>x.id!==c.id).sort(()=>Math.random()-.5).slice(0,3).map(x=>x.answer),c.answer].sort(()=>Math.random()-.5);
-  const [opts]=useState(()=>deck.map(mkOpts));
-  const pick=(o)=>{ if(sel)return; setSel(o); if(o===deck[curr].answer)setScore(s=>s+1); };
-  const next=()=>{ if(curr+1>=deck.length){setDone(true);return;} setCurr(c=>c+1); setSel(null); };
-  if(done) return <GResults score={score} total={deck.length} onBack={onBack} />;
+  const [deck]    = useState(() => [...cards].sort(() => Math.random() - .5));
+  const [optsMap, setOptsMap] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [curr,    setCurr]    = useState(0);
+  const [sel,     setSel]     = useState(null);
+  const [score,   setScore]   = useState(0);
+  const [done,    setDone]    = useState(false);
+
+  useEffect(() => {
+    buildAIOptions(deck).then(map => { setOptsMap(map); setLoading(false); });
+  }, []);
+
+  const pick = (o) => {
+    if (sel) return;
+    setSel(o);
+    if (o === deck[curr].answer) setScore(s => s + 1);
+  };
+  const next = () => {
+    if (curr + 1 >= deck.length) { setDone(true); return; }
+    setCurr(c => c + 1); setSel(null);
+  };
+
+  if (loading) return <AILoadingScreen title="Multiple Choice" message="Generating smart answer choices" accent={C.accent} />;
+  if (done)    return <GResults score={score} total={deck.length} onBack={onBack} />;
+
+  const opts = (optsMap && optsMap.get(deck[curr].id)) || buildFallbackOptions(deck[curr], deck);
   return (
     <div style={{ maxWidth:560, margin:"0 auto" }}>
       <GHeader title="Multiple Choice" score={score} curr={curr} total={deck.length} onBack={onBack} accent={C.accent} />
@@ -3641,9 +3806,25 @@ function MCQ({ cards, onBack }) {
         <p style={{ fontSize:17, color:C.text, lineHeight:1.6 }}>{deck[curr].question}</p>
       </div>
       <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-        {opts[curr].map((o,i)=>{ const ok=o===deck[curr].answer,is=o===sel; let bg=C.surface,bd=C.border,col=C.text; if(sel){if(ok){bg=C.greenL;bd=C.green;col=C.green;}else if(is){bg=C.redL;bd=C.red;col=C.red;}} return <button key={i} onClick={()=>pick(o)} style={{ background:bg,border:`1.5px solid ${bd}`,borderRadius:12,padding:"14px 18px",textAlign:"left",fontSize:15,color:col,cursor:sel?"default":"pointer",fontWeight:is||(sel&&ok)?600:400,transition:"all .2s" }}><span style={{ fontWeight:700, marginRight:10, color:C.muted }}>{"ABCD"[i]}.</span>{o}</button>;})}
+        {opts.map((o, i) => {
+          const ok = o === deck[curr].answer, is = o === sel;
+          let bg = C.surface, bd = C.border, col = C.text;
+          if (sel) {
+            if (ok)      { bg = C.greenL; bd = C.green; col = C.green; }
+            else if (is) { bg = C.redL;   bd = C.red;   col = C.red;   }
+          }
+          return (
+            <button key={i} onClick={() => pick(o)} style={{ background:bg, border:`1.5px solid ${bd}`, borderRadius:12, padding:"14px 18px", textAlign:"left", fontSize:15, color:col, cursor:sel?"default":"pointer", fontWeight:is||(sel&&ok)?600:400, transition:"all .2s" }}>
+              <span style={{ fontWeight:700, marginRight:10, color:C.muted }}>{"ABCD"[i]}.</span>{o}
+            </button>
+          );
+        })}
       </div>
-      {sel && <button onClick={next} style={{ marginTop:16, width:"100%", background:C.accent, color:"#fff", border:"none", borderRadius:12, padding:"13px", fontSize:15, fontWeight:700, cursor:"pointer" }}>{curr+1>=deck.length?"See Results":"Next →"}</button>}
+      {sel && (
+        <button onClick={next} style={{ marginTop:16, width:"100%", background:C.accent, color:"#fff", border:"none", borderRadius:12, padding:"13px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
+          {curr + 1 >= deck.length ? "See Results" : "Next →"}
+        </button>
+      )}
     </div>
   );
 }
@@ -4019,19 +4200,64 @@ function Speedrun({ cards, onBack }) {
 // ─── TRUE OR FALSE ────────────────────────────────────────────────────────────
 function TrueFalse({ cards, onBack }) {
   const purple="#6B46C1";
-  const [deck]=useState(()=>{
-    const out=[];
-    cards.forEach(c=>{
-      out.push({statement:c.question+" — "+c.answer,correct:true,orig:c});
-      const wrong=cards.filter(x=>x.id!==c.id);
-      if(wrong.length>0){
-        const w=wrong[Math.floor(Math.random()*wrong.length)];
-        out.push({statement:c.question+" — "+w.answer,correct:false,orig:c});
+  // AI-generated false statements: each wrong statement uses a plausible
+  // but incorrect answer about the SAME concept (not a random card's answer)
+  const [deck,    setDeck]    = useState(null);
+  const [tf_load, setTfLoad]  = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const sample = cards.slice(0, 20).map(c => ({ id: c.id, q: c.question, a: c.answer }));
+        const raw = await callClaude(
+          "You are a quiz designer. Output ONLY valid JSON array. No markdown, no explanation.",
+          `For each Q&A pair, write one plausible but WRONG answer about the SAME concept.
+
+RULES:
+- The wrong answer must be about the identical topic as the correct answer
+- It must sound believable — a student who hasn't studied might think it's true
+- Same sentence length and vocabulary as the correct answer
+- Do NOT use "not", "never", "incorrect" — make it sound like a legitimate statement
+- Do NOT copy phrases from the correct answer
+
+Items: ${JSON.stringify(sample)}
+
+Return ONLY: [{"id":"<same id>","wrong":"<plausible wrong answer>"}, ...]`
+        );
+        const parsed = JSON.parse(raw.replace(/\`\`\`json|\`\`\`/g,'').trim());
+        const wrongMap = new Map(parsed.map(x => [String(x.id), x.wrong]));
+        const out = [];
+        cards.slice(0, 20).forEach(c => {
+          out.push({ statement: c.question + " — " + c.answer, correct: true, orig: c });
+          const wrongAns = wrongMap.get(String(c.id));
+          const falseAns = wrongAns || (() => {
+            const w = cards.filter(x => x.id !== c.id);
+            return w.length > 0 ? w[Math.floor(Math.random()*w.length)].answer : "None of the above";
+          })();
+          out.push({ statement: c.question + " — " + falseAns, correct: false, orig: c });
+        });
+        setDeck(out.sort(() => Math.random() - .5).slice(0, Math.min(out.length, 14)));
+      } catch(e) {
+        // Fallback: use random card answers (old behaviour)
+        const out = [];
+        cards.forEach(c => {
+          out.push({ statement: c.question + " — " + c.answer, correct: true, orig: c });
+          const wrong = cards.filter(x => x.id !== c.id);
+          if (wrong.length > 0) {
+            const w = wrong[Math.floor(Math.random() * wrong.length)];
+            out.push({ statement: c.question + " — " + w.answer, correct: false, orig: c });
+          }
+        });
+        setDeck(out.sort(() => Math.random() - .5).slice(0, Math.min(out.length, 14)));
       }
-    });
-    return out.sort(()=>Math.random()-.5).slice(0,Math.min(out.length,12));
-  });
-  const [curr,setCurr]=useState(0);const [score,setScore]=useState(0);const [res,setRes]=useState(null);const [done,setDone]=useState(false);
+      setTfLoad(false);
+    })();
+  }, []);
+  const [curr,setCurr]=useState(0);
+  const [score,setScore]=useState(0);
+  const [res,setRes]=useState(null);
+  const [done,setDone]=useState(false);
+  if (tf_load || !deck) return <AILoadingScreen title="True or False" message="Generating plausible statements" accent={purple} />;
   const answer=(val)=>{
     if(res)return;
     const ok=val===deck[curr].correct;
@@ -4266,14 +4492,17 @@ function QuizShow({ cards, onBack }) {
   const [done, setDone] = useState(false);
   const [lifelines, setLifelines] = useState({ fifty: true, skip: true });
 
+  const [optsMap,    setOptsMap]    = useState(null);
+  const [qs_loading, setQsLoading]  = useState(true);
   const card = deck[curr];
-  const [opts] = useState(() => deck.map(c => {
-    const wrong = cards.filter(x => x.answer !== c.answer).sort(() => Math.random() - .5).slice(0, 3).map(x => x.answer);
-    return [...wrong, c.answer].sort(() => Math.random() - .5);
-  }));
 
-  const [visibleOpts, setVisibleOpts] = useState(() => opts[0]);
-  useEffect(() => { setVisibleOpts(opts[curr]); }, [curr]);
+  useEffect(() => {
+    buildAIOptions(deck).then(map => { setOptsMap(map); setQsLoading(false); });
+  }, []);
+
+  const getOpts = (idx) => (optsMap && optsMap.get(deck[idx].id)) || buildFallbackOptions(deck[idx], deck);
+  const [visibleOpts, setVisibleOpts] = useState([]);
+  useEffect(() => { if (optsMap) setVisibleOpts(getOpts(curr)); }, [curr, optsMap]);
 
   const choose = (opt) => {
     if (sel !== null) return;
@@ -4287,7 +4516,7 @@ function QuizShow({ cards, onBack }) {
   };
 
   const useFifty = () => {
-    if (!lifelines.fifty) return;
+    if (!lifelines.fifty || visibleOpts.length === 0) return;
     const wrong = visibleOpts.filter(o => o !== card.answer);
     const remove = wrong.sort(() => Math.random() - .5).slice(0, 2);
     setVisibleOpts(v => v.filter(o => !remove.includes(o)));
@@ -4301,6 +4530,7 @@ function QuizShow({ cards, onBack }) {
     else { setCurr(c => c + 1); setSel(null); }
   };
 
+  if (qs_loading) return <AILoadingScreen title="Quiz Show" message="Preparing smart answer choices" accent={accent} />;
   if (done) return <GResults score={score} total={deck.length} onBack={onBack} msg="Quiz Show Complete! 🎤" />;
 
   const OPTION_LABELS = ["A", "B", "C", "D"];
@@ -4898,23 +5128,23 @@ function ListeningGame({ cards, onBack }) {
   const [hasPlayed,setHasPlayed]= useState(false);
   const [revealed, setRevealed] = useState(false);
 
-  // Build 4 choices: 1 correct + 3 random wrong
-  const buildChoices = (cardIdx) => {
-    const card = deck[cardIdx];
-    const others = deck.filter((_, i) => i !== cardIdx);
-    const wrongs = [...others].sort(() => Math.random() - .5).slice(0, 3).map(c => c.answer);
-    const all = [card.answer, ...wrongs].sort(() => Math.random() - .5);
-    return all;
-  };
+  // AI-generated choices: loaded once on mount
+  const [optsMap,   setOptsMap]   = useState(null);
+  const [lg_loading,setLgLoading] = useState(true);
 
   useEffect(() => {
-    setChoices(buildChoices(curr));
+    buildAIOptions(deck).then(map => { setOptsMap(map); setLgLoading(false); });
+  }, []);
+
+  useEffect(() => {
+    if (!optsMap) return;
+    setChoices((optsMap.get(deck[curr].id)) || buildFallbackOptions(deck[curr], deck));
     setSelected(null); setResult(null); setHasPlayed(false); setRevealed(false);
     setTimeout(() => {
       if (deck[curr]) speak(deck[curr].question);
     }, 400);
     return () => window.speechSynthesis?.cancel();
-  }, [curr]);
+  }, [curr, optsMap]);
 
   const personaRef = useRef(GLOBAL_PERSONAS[0]);
   useEffect(() => { personaRef.current = GLOBAL_PERSONAS[personaIdx]; }, [personaIdx]);
@@ -4925,7 +5155,7 @@ function ListeningGame({ cards, onBack }) {
     window.speechSynthesis.cancel();
     const p = personaRef.current;
     const u = new SpeechSynthesisUtterance(text);
-    u.rate  = 0.9;
+    u.rate  = p.rate  || 0.93;
     u.pitch = p.pitch || 1.0;
     u.lang  = "en-US";
     const v = getSmartVoice(p, allVoices, "en-US");
@@ -4950,6 +5180,7 @@ function ListeningGame({ cards, onBack }) {
     setCurr(c => c + 1);
   };
 
+  if (lg_loading) return <AILoadingScreen title="Listening Quiz" message="Generating smart answer choices" accent={accent} />;
   if (done) return <GResults score={score} total={deck.length} onBack={onBack} />;
   const card = deck[curr];
   const LABELS = ["A", "B", "C", "D"];
