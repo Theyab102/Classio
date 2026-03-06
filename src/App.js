@@ -53,6 +53,159 @@ async function callClaudeChat(system, messages) {
   return data.choices?.[0]?.message?.content || "";
 }
 
+// ─── MATH FORMATTER ──────────────────────────────────────────────────────────
+// Converts spoken/written math phrases into proper numeric/symbol notation.
+// Works on AI-generated notes and voice transcriptions.
+function fixMath(text) {
+  if (!text) return text;
+  let t = text;
+
+  // Superscript digits map
+  const sup = { '0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹','-':'⁻','+':'⁺' };
+  const toSup = (s) => String(s).split('').map(c => sup[c] || c).join('');
+
+  // Written words → digits (for exponents and bases)
+  const wordNum = {
+    'zero':0,'one':1,'two':2,'three':3,'four':4,'five':5,'six':6,'seven':7,'eight':8,'nine':9,
+    'ten':10,'eleven':11,'twelve':12,'thirteen':13,'fourteen':14,'fifteen':15,'sixteen':16,
+    'seventeen':17,'eighteen':18,'nineteen':19,'twenty':20,'thirty':30,'forty':40,
+    'fifty':50,'sixty':60,'seventy':70,'eighty':80,'ninety':90,'hundred':100,
+    'negative':'-','minus':'-','plus':'+'
+  };
+
+  const parseWordNum = (s) => {
+    s = s.toLowerCase().trim();
+    if (!isNaN(s)) return s;
+    if (wordNum[s] !== undefined) return String(wordNum[s]);
+    // Handle "negative X" / "minus X"
+    const parts = s.split(/\s+/);
+    if (parts.length === 2 && (parts[0]==='negative'||parts[0]==='minus')) {
+      const n = wordNum[parts[1]];
+      if (n !== undefined) return String(-n);
+    }
+    if (parts.length === 2 && parts[0]==='positive') {
+      const n = wordNum[parts[1]];
+      if (n !== undefined) return String(n);
+    }
+    return null;
+  };
+
+  // Multiplication words → ×
+  t = t.replace(/\btimes\b/gi, '×');
+  t = t.replace(/\bmultiplied by\b/gi, '×');
+
+  // "to the power of [word/num]" → superscript
+  t = t.replace(/\bto the power of\s+(negative|minus|positive)?\s*([\w]+)/gi, (m, sign, num) => {
+    const s = sign ? (sign[0]==='p'?'+':'-') : '';
+    const n = parseWordNum(num) ?? num;
+    return toSup(s + n);
+  });
+  t = t.replace(/\bto the\s+(negative|minus)?\s*([\w]+)\s*power/gi, (m, sign, num) => {
+    const s = sign ? '-' : '';
+    const n = parseWordNum(num) ?? num;
+    return toSup(s + n);
+  });
+  t = t.replace(/\braised to\s+(negative|minus|positive)?\s*([\w]+)/gi, (m, sign, num) => {
+    const s = sign ? (sign[0]==='p'?'+':'-') : '';
+    const n = parseWordNum(num) ?? num;
+    return toSup(s + n);
+  });
+  // e.g. "10^-10" or "10^−10"
+  t = t.replace(/\^([+-]?\d+)/g, (m, exp) => toSup(exp));
+
+  // "x times ten to the ..." handled by above but also catch "E notation" 1e-10 → 1 × 10⁻¹⁰
+  t = t.replace(/(\d+(?:\.\d+)?)[eE]([+-]?\d+)/g, (m, base, exp) => `${base} × 10${toSup(exp)}`);
+
+  // Written number bases for scientific notation:
+  // "one times ten..." already handled via "times" → × above + toSup above
+  // But also handle "one times ten to the power of negative ten"
+  const numWords = Object.keys(wordNum).join('|');
+  // "X point Y" → decimal  e.g. "three point five" → 3.5
+  t = t.replace(
+    new RegExp(`\\b(${numWords})\\s+point\\s+(${numWords})\\b`, 'gi'),
+    (m, a, b) => {
+      const av = wordNum[a.toLowerCase()];
+      const bv = wordNum[b.toLowerCase()];
+      if (av !== undefined && bv !== undefined) return `${av}.${bv}`;
+      return m;
+    }
+  );
+
+  // Single word numbers in scientific/math context → digits
+  // Only replace when followed by ×, ^, or a unit
+  const unitPat = /\b(cm|mm|m|km|kg|g|mg|nm|pm|fm|s|ms|μs|ns|Hz|kHz|MHz|GHz|J|kJ|MJ|eV|keV|MeV|N|Pa|kPa|W|kW|V|A|mol|K|°C|°F|L|mL)\b/;
+  // Replace leading word number before ×
+  t = t.replace(
+    new RegExp(`\\b(${numWords})\\s+(×)`, 'gi'),
+    (m, num, op) => {
+      const v = wordNum[num.toLowerCase()];
+      return v !== undefined ? `${v} ${op}` : m;
+    }
+  );
+
+  // Unit shorthands: "metres" → m, "centimetres" → cm, etc. in scientific context
+  t = t.replace(/\b(\d[\d.,]*)\s*centimetre[s]?\b/gi, '$1 cm');
+  t = t.replace(/\b(\d[\d.,]*)\s*metre[s]?\b/gi, '$1 m');
+  t = t.replace(/\b(\d[\d.,]*)\s*kilometre[s]?\b/gi, '$1 km');
+  t = t.replace(/\b(\d[\d.,]*)\s*millimetre[s]?\b/gi, '$1 mm');
+  t = t.replace(/\b(\d[\d.,]*)\s*nanometre[s]?\b/gi, '$1 nm');
+  t = t.replace(/\b(\d[\d.,]*)\s*kilogram[s]?\b/gi, '$1 kg');
+  t = t.replace(/\b(\d[\d.,]*)\s*gram[s]?\b/gi, '$1 g');
+  t = t.replace(/\b(\d[\d.,]*)\s*milligram[s]?\b/gi, '$1 mg');
+  t = t.replace(/\b(\d[\d.,]*)\s*second[s]?\b/gi, (m,n) => `${n} s`);
+  t = t.replace(/\b(\d[\d.,]*)\s*millisecond[s]?\b/gi, '$1 ms');
+  t = t.replace(/\b(\d[\d.,]*)\s*joule[s]?\b/gi, '$1 J');
+  t = t.replace(/\b(\d[\d.,]*)\s*newton[s]?\b/gi, '$1 N');
+  t = t.replace(/\b(\d[\d.,]*)\s*watt[s]?\b/gi, '$1 W');
+  t = t.replace(/\b(\d[\d.,]*)\s*volt[s]?\b/gi, '$1 V');
+  t = t.replace(/\b(\d[\d.,]*)\s*ampere[s]?|amp[s]?\b/gi, '$1 A');
+  t = t.replace(/\b(\d[\d.,]*)\s*pascal[s]?\b/gi, '$1 Pa');
+  t = t.replace(/\b(\d[\d.,]*)\s*kelvin[s]?\b/gi, '$1 K');
+
+  // Fractions: "one half" → 1/2, "three quarters" → 3/4
+  t = t.replace(/\bone half\b/gi, '1/2');
+  t = t.replace(/\bone third\b/gi, '1/3');
+  t = t.replace(/\bone quarter\b/gi, '1/4');
+  t = t.replace(/\bthree quarter[s]?\b/gi, '3/4');
+  t = t.replace(/\btwo third[s]?\b/gi, '2/3');
+
+  // Squared / cubed
+  t = t.replace(/\bsquared\b/gi, '²');
+  t = t.replace(/\bcubed\b/gi, '³');
+  t = t.replace(/\bsquare root of\b/gi, '√');
+
+  // Division
+  t = t.replace(/\bdivided by\b/gi, '÷');
+  t = t.replace(/\bover\b(?=\s+[\d(])/gi, '/');
+
+  // Approx / equals
+  t = t.replace(/\bapproximately equal[s]?\s+to\b/gi, '≈');
+  t = t.replace(/\bapproximately\b/gi, '≈');
+  t = t.replace(/\bgreater than or equal[s]?\s+to\b/gi, '≥');
+  t = t.replace(/\bless than or equal[s]?\s+to\b/gi, '≤');
+  t = t.replace(/\bgreater than\b/gi, '>');
+  t = t.replace(/\bless than\b/gi, '<');
+  t = t.replace(/\bnot equal[s]?\s+to\b/gi, '≠');
+  t = t.replace(/\bplus or minus\b/gi, '±');
+
+  // Degree symbol
+  t = t.replace(/\bdegree[s]?\b(?!\s*[CF])/gi, '°');
+  t = t.replace(/\bdegree[s]?\s+Celsius\b/gi, '°C');
+  t = t.replace(/\bdegree[s]?\s+Fahrenheit\b/gi, '°F');
+  t = t.replace(/\bdegree[s]?\s+Kelvin\b/gi, 'K');
+
+  // Greek letters
+  t = t.replace(/\balpha\b/gi, 'α'); t = t.replace(/\bbeta\b/gi, 'β');
+  t = t.replace(/\bgamma\b/gi, 'γ'); t = t.replace(/\bdelta\b/gi, 'Δ');
+  t = t.replace(/\blambda\b/gi, 'λ'); t = t.replace(/\bmu\b/gi, 'μ');
+  t = t.replace(/\bpi\b(?!\s*[a-z])/gi, 'π'); t = t.replace(/\bsigma\b/gi, 'σ');
+  t = t.replace(/\bomega\b/gi, 'ω'); t = t.replace(/\btheta\b/gi, 'θ');
+  t = t.replace(/\bepsilon\b/gi, 'ε'); t = t.replace(/\bphi\b/gi, 'φ');
+  t = t.replace(/\binfinity\b/gi, '∞');
+
+  return t;
+}
+
 // Read a file as base64
 function readFileAsBase64(file) {
   return new Promise((resolve, reject) => {
@@ -1528,11 +1681,12 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
 function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
   const [tab, setTab] = useState("view");
   const TABS = [
-    {id:"view",label:"View File",icon:I.file},
-    {id:"notes",label:"Notes",icon:I.notes},
-    {id:"cards",label:"Study Cards",icon:I.cards},
-    {id:"ai",label:"AI Assistant",icon:I.ai},
-    {id:"game",label:"Game Mode",icon:I.game},
+    {id:"view",  label:"View File",       icon:I.file},
+    {id:"notes", label:"Notes",           icon:I.notes},
+    {id:"voice", label:"Voice & Podcast", icon:I.cards},
+    {id:"cards", label:"Study Cards",     icon:I.cards},
+    {id:"ai",    label:"AI Assistant",    icon:I.ai},
+    {id:"game",  label:"Game Mode",       icon:I.game},
   ];
   const fc = FILE_COLORS[file.colorIndex||0];
 
@@ -1561,6 +1715,7 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
         ? <ViewTab file={file} onUpdate={onUpdate} />
         : <div style={{ maxWidth:900, margin:"0 auto", padding:"32px 24px" }}>
             {tab==="notes" && <NotesTab file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} />}
+            {tab==="voice" && <VoicePodcastTab file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} />}
             {tab==="cards" && <CardsTab file={file} onUpdate={onUpdate} />}
             {tab==="ai" && <AITab file={file} allFiles={allFiles} folder={folder} onUpdate={onUpdate} />}
             {tab==="game" && <GameTab file={file} />}
@@ -2267,237 +2422,44 @@ ${fileContext}`
 }
 
 
-// ─── VOICE NOTES TAB ─────────────────────────────────────────────────────────
-function VoiceNotesTab({ file, user, isGuest, notes, onNotesUpdate,
-    voiceRecordings, onSaveRecording, onDeleteRecording,
-    startVoice, stopVoice, recording, processing, voiceStatus }) {
+// ─── LANGUAGE OPTIONS ─────────────────────────────────────────────────────────
+const LANG_OPTIONS = [["en-US","🇺🇸 English (US)"],["en-GB","🇬🇧 English (UK)"],["ar-SA","🇸🇦 Arabic"],["ar-EG","🇪🇬 Arabic (Egypt)"],["es-ES","🇪🇸 Spanish"],["es-MX","🇲🇽 Spanish (Mexico)"],["fr-FR","🇫🇷 French"],["de-DE","🇩🇪 German"],["it-IT","🇮🇹 Italian"],["pt-BR","🇧🇷 Portuguese"],["zh-CN","🇨🇳 Chinese"],["ja-JP","🇯🇵 Japanese"],["ko-KR","🇰🇷 Korean"],["hi-IN","🇮🇳 Hindi"],["ru-RU","🇷🇺 Russian"],["tr-TR","🇹🇷 Turkish"]];
 
-  const [playingIdx, setPlayingIdx] = useState(null);
-  const synthRef = useRef(null);
+// ─── VOICE & PODCAST TAB ─────────────────────────────────────────────────────
+// All audio features: Voice Notes recording + Podcast player
+function VoicePodcastTab({ file, user, isGuest, onUpdate }) {
+  const [subTab, setSubTab] = useState("record"); // "record" | "podcast"
+  const [lang, setLang] = useState("en-US");
 
-  const playRecording = (idx, text) => {
-    window.speechSynthesis?.cancel();
-    if (playingIdx === idx) { setPlayingIdx(null); return; }
-    const u = new SpeechSynthesisUtterance(text);
-    u.rate = 0.92;
-    const v = window.speechSynthesis.getVoices().find(x => x.lang.startsWith("en"));
-    if (v) u.voice = v;
-    u.onend = () => setPlayingIdx(null);
-    u.onerror = () => setPlayingIdx(null);
-    window.speechSynthesis.speak(u);
-    setPlayingIdx(idx);
-    synthRef.current = u;
-  };
+  // ── Shared notes state for pushing voice → written notes ──────────────────
+  const [notes, setNotes] = useState(file.notes || "");
 
-  const stopPlay = () => { window.speechSynthesis?.cancel(); setPlayingIdx(null); };
-
-  return (
-    <div>
-      {/* Header */}
-      <div style={{ marginBottom:20 }}>
-        <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:700, color:C.text, marginBottom:4 }}>Voice Notes</h2>
-        <p style={{ fontSize:13, color:C.muted }}>Record your voice — AI cleans it up into notes automatically</p>
-      </div>
-
-      {/* Guest / no-user banner */}
-      {(isGuest || !user) && (
-        <div style={{ background:C.warmL, border:`1.5px solid ${C.warm}33`, borderRadius:12, padding:"14px 18px", marginBottom:20, fontSize:13, color:C.warm, fontWeight:500 }}>
-          🎙️ Voice Notes is available for Google account users only — sign in with Google to use this feature.
-        </div>
-      )}
-
-      {/* Record button area */}
-      {!isGuest && user && (
-        <div style={{ background: recording ? "#fff0f0" : C.surface, border:`2px solid ${recording ? C.red+"55" : C.border}`, borderRadius:18, padding:"24px", marginBottom:20, textAlign:"center", transition:"all .3s" }}>
-          {recording && <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}`}</style>}
-
-          <div style={{ fontSize:52, marginBottom:12, animation: recording ? "pulse 1.4s infinite" : "none" }}>
-            {recording ? "🔴" : "🎙️"}
-          </div>
-          <p style={{ fontSize:15, fontWeight:700, color: recording ? C.red : C.text, marginBottom:6 }}>
-            {recording ? "Recording…" : processing ? "Processing…" : "Tap to start recording"}
-          </p>
-          <p style={{ fontSize:13, color:C.muted, marginBottom:20 }}>
-            {recording
-              ? "Speak naturally. AI will clean up filler words and format as notes."
-              : "Lecture, study session, or revision spoken aloud"}
-          </p>
-
-          {/* Status bar */}
-          {voiceStatus && (
-            <div style={{ background: voiceStatus.startsWith("✅") ? C.greenL : voiceStatus.startsWith("🎙️") ? "#fff0f0" : voiceStatus.startsWith("✨") ? C.accentL : C.redL,
-              border:`1px solid ${voiceStatus.startsWith("✅") ? C.green : voiceStatus.startsWith("🎙️") ? C.red : voiceStatus.startsWith("✨") ? C.accentS : C.red}44`,
-              borderRadius:10, padding:"8px 14px", marginBottom:16, fontSize:13, fontWeight:500, textAlign:"left",
-              color: voiceStatus.startsWith("✅") ? C.green : voiceStatus.startsWith("🎙️") ? C.red : C.text }}>
-              {voiceStatus}
-            </div>
-          )}
-
-          {!recording ? (
-            <button onClick={startVoice} disabled={processing}
-              style={{ background: processing ? "#ccc" : C.red, color:"#fff", border:"none", borderRadius:14, padding:"13px 36px", fontSize:15, fontWeight:700, cursor:processing?"not-allowed":"pointer", boxShadow:`0 4px 16px ${C.red}44` }}>
-              {processing ? "⏳ Processing…" : "🎙️ Start Recording"}
-            </button>
-          ) : (
-            <button onClick={stopVoice} disabled={processing}
-              style={{ background:"#fff", color:C.red, border:`2px solid ${C.red}`, borderRadius:14, padding:"13px 36px", fontSize:15, fontWeight:700, cursor:"pointer", boxShadow:`0 4px 16px ${C.red}22` }}>
-              ⏹ Stop & Save
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Saved recordings list */}
-      {voiceRecordings.length > 0 && (
-        <div>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-            <p style={{ fontSize:13, fontWeight:700, color:C.muted, letterSpacing:.5 }}>SAVED RECORDINGS ({voiceRecordings.length})</p>
-            {playingIdx !== null && (
-              <button onClick={stopPlay} style={{ fontSize:12, color:C.red, background:"#fff0f0", border:`1px solid ${C.red}33`, borderRadius:8, padding:"4px 10px", cursor:"pointer", fontWeight:600 }}>⏹ Stop</button>
-            )}
-          </div>
-
-          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-            {voiceRecordings.map((rec, idx) => (
-              <div key={idx} style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"14px 16px" }}>
-                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                    <div style={{ width:32, height:32, borderRadius:"50%", background: playingIdx===idx ? C.accentL : "#f0f4ff", display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, cursor:"pointer", border:`1.5px solid ${playingIdx===idx ? C.accent : C.border}`, flexShrink:0 }}
-                      onClick={() => playRecording(idx, rec.text)}>
-                      {playingIdx===idx ? "⏸" : "▶"}
-                    </div>
-                    <div>
-                      <p style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:1 }}>Recording {voiceRecordings.length - idx}</p>
-                      <p style={{ fontSize:11, color:C.muted }}>{rec.date} · {rec.words} words</p>
-                    </div>
-                  </div>
-                  <div style={{ display:"flex", gap:6 }}>
-                    <button onClick={() => {
-                      const newNotes = notes ? notes + "\n\n---\n\n" + rec.text : rec.text;
-                      onNotesUpdate(newNotes);
-                    }} title="Add to written notes"
-                      style={{ fontSize:11, fontWeight:700, padding:"5px 10px", borderRadius:8, border:`1px solid ${C.accentS}`, background:C.accentL, color:C.accent, cursor:"pointer" }}>
-                      + Notes
-                    </button>
-                    <button onClick={() => onDeleteRecording(idx)} title="Delete"
-                      style={{ fontSize:12, padding:"5px 10px", borderRadius:8, border:`1px solid ${C.border}`, background:"#fff", color:C.muted, cursor:"pointer" }}>
-                      🗑
-                    </button>
-                  </div>
-                </div>
-                {/* Preview */}
-                <p style={{ fontSize:13, color:C.text, lineHeight:1.55, background:"#f9fafb", borderRadius:8, padding:"8px 10px", maxHeight:80, overflowY:"auto", margin:0 }}>
-                  {rec.text.slice(0, 200)}{rec.text.length > 200 ? "…" : ""}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {voiceRecordings.length === 0 && !isGuest && user && (
-        <div style={{ textAlign:"center", padding:"40px 0", color:C.muted }}>
-          <div style={{ fontSize:40, marginBottom:12 }}>🎤</div>
-          <p style={{ fontSize:14, fontWeight:600 }}>No recordings yet</p>
-          <p style={{ fontSize:13 }}>Start recording above — your saved notes will appear here</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-
-function NotesTab({ file, onUpdate, user, isGuest }) {
-  const [notes, setNotes] = useState(file.notes||"");
-  const [gen, setGen] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [showTopicInput, setShowTopicInput] = useState(false);
-  const [customTopic, setCustomTopic] = useState("");
-  const [recording, setRecording] = useState(false);
-  const [processing, setProcessing] = useState(false);
+  // ── Voice recording state ─────────────────────────────────────────────────
+  const [recording,   setRecording]   = useState(false);
+  const [processing,  setProcessing]  = useState(false);
   const [voiceStatus, setVoiceStatus] = useState("");
+  const [voiceRecordings, setVoiceRecordings] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("vr_" + file.id) || "[]"); } catch { return []; }
+  });
   const recognitionRef = useRef(null);
-  const transcriptRef = useRef("");
-
-  // ── Podcast state ─────────────────────────────────────────────
-  const [showPodcast,   setShowPodcast]   = useState(false);
-  const [podcastScript, setPodcastScript] = useState("");
-  const [podcastLoading,setPodcastLoading]= useState(false);
-
-  const generate = async () => {
-    setGen(true);
-    try {
-      const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
-      const fileText = fileObj ? await extractFileText(fileObj) : null;
-      // Send full text — truncate only if extremely large (>12000 chars) to stay within token limits
-      const safeText = fileText ? fileText.slice(0, 12000) : null;
-
-      const userMsg = safeText
-        ? `Here is the COMPLETE content from the file "${file.name}":\n\n${safeText}\n\nAnalyze ALL of the above content thoroughly, then create detailed study notes covering the ENTIRE document — every section, every key concept, every important detail.`
-        : `Create comprehensive study notes for a subject/topic named "${file.name}". Make them detailed and useful for exam revision.`;
-
-      const styleInstructions = {
-        detailed: "Write detailed comprehensive notes with headings, subpoints, definitions and examples. Aim for 25-35 lines.",
-        bullet: "Write ONLY bullet points. No paragraphs. Every fact on its own bullet line. Group under short bold headings.",
-        simple: "Write very simple short notes. Use plain language like explaining to a 14-year-old. Short sentences. No jargon.",
-        exam: "Write exam-focused notes. Include: likely exam questions, key terms to memorise, formulas, dates, and a quick revision checklist at the end.",
-      };
-      const styleGuide = {
-        detailed: "Write detailed notes split into sections. Each section has a heading in ALL CAPS followed by bullet points.",
-        bullet: "Write ONLY bullet points grouped under ALL CAPS headings. One fact per line.",
-        simple: "Write very simple short notes in plain English. Short sentences. No complex words.",
-        exam: "Write exam revision notes. Include key terms, definitions, possible exam questions, and a checklist at the end.",
-      };
-      // Determine effective style instruction
-      const effectiveStyle = useCustomStyle && customStyle.trim()
-        ? `You are a study notes writer. The student wants notes in this specific style: "${customStyle.trim()}". Follow their instructions precisely.`
-        : `You are a study notes writer. ${styleGuide[noteStyle] || styleGuide.detailed}`;
-
-      const txt = await callClaude(
-        `${effectiveStyle}
-
-STRICT FORMATTING RULES - you MUST follow these exactly:
-1. NEVER use asterisks (*) or double asterisks (**) anywhere - not even once
-2. NEVER use pound signs (#) for headings
-3. Write section headings in ALL CAPS on their own line like: INTRODUCTION
-4. Use a dash (-) for bullet points
-5. Use plain text only - no markdown, no symbols except dashes and dots
-6. ONLY use content from the file if provided - do not add outside facts`,
-        userMsg
-      );
-      setNotes(txt); onUpdate({...file,notes:txt});
-    } catch(e){ setNotes(`Error: ${e.message}`); }
-    setGen(false);
-  };
-
-  const save = () => { onUpdate({...file,notes}); setSaved(true); setTimeout(()=>setSaved(false),2000); };
-
-  const generatePodcast = async () => {
-    if (!notes.trim()) return;
-    setPodcastLoading(true);
-    setShowPodcast(true);
-    setPodcastScript("");
-    try {
-      const script = await callClaude(
-        `You are a friendly podcast host turning study notes into a spoken audio summary.
-Write an engaging, conversational podcast script that:
-1. Starts with a warm 1-sentence intro ("Hey there! Today we're covering…")
-2. Explains every key concept clearly in simple spoken English
-3. Uses natural transitions like "Now, moving on to…", "Here's an interesting point…", "Let's talk about…"
-4. Ends with a quick 2-3 bullet recap ("So to wrap up…")
-5. Is 3-5 minutes when spoken aloud (roughly 400-600 words)
-6. Uses NO markdown, NO asterisks, NO bullet symbols — plain text only for clean TTS
-7. Sounds natural when read aloud, not like written text`,
-        `Turn these notes into a podcast script:
-
-${notes.slice(0, 8000)}`
-      );
-      setPodcastScript(script);
-    } catch(e) { setPodcastScript("Error generating podcast: " + e.message); }
-    setPodcastLoading(false);
-  };
-
+  const transcriptRef  = useRef("");
   const isRecordingRef = useRef(false);
+  const [playingIdx,  setPlayingIdx]  = useState(null);
+
+  const saveRec = (rec) => {
+    setVoiceRecordings(prev => {
+      const u = [rec, ...prev];
+      try { localStorage.setItem("vr_" + file.id, JSON.stringify(u.slice(0, 20))); } catch {}
+      return u;
+    });
+  };
+  const deleteRec = (idx) => {
+    setVoiceRecordings(prev => {
+      const u = prev.filter((_,i) => i !== idx);
+      try { localStorage.setItem("vr_" + file.id, JSON.stringify(u)); } catch {}
+      return u;
+    });
+  };
 
   const startVoice = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -2507,14 +2469,13 @@ ${notes.slice(0, 8000)}`
     const recognition = new SR();
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = "en-US";
+    recognition.lang = lang;
     recognition.maxAlternatives = 3;
     let interimText = "";
     recognition.onresult = (e) => {
       interimText = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         if (e.results[i].isFinal) {
-          // Pick the most confident result
           let best = e.results[i][0].transcript;
           let bestConf = e.results[i][0].confidence || 0;
           for (let a = 1; a < e.results[i].length; a++) {
@@ -2529,17 +2490,15 @@ ${notes.slice(0, 8000)}`
         }
       }
       const preview = (transcriptRef.current + interimText).trim();
-      setVoiceStatus("🎙️ " + (preview ? preview.slice(-80) + "…" : "Listening… speak now"));
+      setVoiceStatus("🎙️ " + (preview ? preview.slice(-90) + "…" : "Listening… speak now"));
     };
     recognition.onerror = (e) => {
-      if (e.error === "not-allowed") setVoiceStatus("❌ Microphone access denied. Please allow mic in browser settings.");
+      if (e.error === "not-allowed") setVoiceStatus("❌ Microphone access denied. Allow mic in browser settings.");
       else if (e.error === "audio-capture") setVoiceStatus("❌ No microphone found.");
       else if (e.error !== "no-speech") setVoiceStatus("Mic error: " + e.error);
     };
     recognition.onend = () => {
-      if (isRecordingRef.current) {
-        try { recognition.start(); } catch(err) {}
-      }
+      if (isRecordingRef.current) { try { recognition.start(); } catch {} }
     };
     recognition.start();
     recognitionRef.current = recognition;
@@ -2557,41 +2516,39 @@ ${notes.slice(0, 8000)}`
     }
     await new Promise(r => setTimeout(r, 300));
     const raw = transcriptRef.current.trim();
-    if (!raw) { setVoiceStatus("Nothing was recorded. Make sure your microphone is working and try again."); setTimeout(() => setVoiceStatus(""), 4000); return; }
+    if (!raw) { setVoiceStatus("Nothing was recorded. Make sure your mic is working and try again."); setTimeout(() => setVoiceStatus(""), 4000); return; }
     setProcessing(true);
     setVoiceStatus("✨ Organising your notes…");
     try {
-      // Get context from existing notes and file name to fix pronunciation errors
-      const context = `File: "${file.name}". Existing notes context: ${(notes || "").slice(0, 400) || "none"}`;
-
+      const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[🇺🇸🇬🇧🇸🇦🇪🇬🇪🇸🇲🇽🇫🇷🇩🇪🇮🇹🇧🇷🇨🇳🇯🇵🇰🇷🇮🇳🇷🇺🇹🇷]\s*/g,'') || lang;
+      const context = `File: "${file.name}". Topic context (for fixing speech recognition errors): ${(file.notes || "").slice(0, 300) || "none"}.`;
       const result = await callClaude(
-        `You are an expert note-taker. A student recorded a voice note from a lecture or study session.
-You have context about the topic to help fix pronunciation and speech recognition errors.
+        `You are an expert note-taker and science/math transcription specialist. Language: ${langLabel}.
+A student recorded a voice note. Fix all speech recognition errors using topic context.
 
-STRICT RULES:
-1. Use the topic context to fix likely speech recognition errors (e.g. "Assam" near science context likely means "atom", mispronounced subject terms should be corrected to their proper spelling)
-2. Fix grammar, remove all filler words (um, uh, like, you know, sort of, kind of)
-3. ONLY use what was said — never add outside information beyond fixing errors
-4. Write section headings in ALL CAPS on their own line
-5. Use a dash (-) for every bullet point
-6. NEVER use asterisks (*) or double asterisks (**) anywhere
-7. NEVER use pound signs (#) or any markdown formatting
-8. Plain text only — no symbols except dashes
-9. Make notes clear and useful for exam revision
+CRITICAL RULES:
+1. Fix science/math terminology using context (e.g. "atom" not "Adam", "velocity" not "velocity")
+2. Convert spoken math to proper notation: "ten to the power of negative ten" → 10⁻¹⁰, "times" → ×, "squared" → ², "pi" → π
+3. Convert spoken units: "metres" → m, "kilograms" → kg, "centimetres" → cm, etc.
+4. Remove ALL filler words (um, uh, like, you know, sort of, kind of, basically)
+5. Fix grammar and punctuation
+6. Write section headings in ALL CAPS on their own line
+7. Use a dash (-) for bullet points
+8. NEVER use asterisks, pound signs, or markdown
+9. Respond ONLY in ${langLabel} — do not mix languages
+10. Make notes clear and structured for exam revision
 
 Topic context: ${context}`,
-        `Fix pronunciation errors using the topic context, then turn this into clean study notes:
-
-"${raw}"`
+        `Transcribe and convert to clean study notes:\n\n"${raw}"`
       );
-      const combined = notes ? notes + "\n\n---\n\n" + result : result;
-      setNotes(combined); onUpdate({...file, notes: combined});
-      // Save to voice recordings list so it appears in Voice tab
-      saveRecording({
-        text: result,
-        raw: raw,
+      const fixedResult = fixMath(result);
+      const newNotes = notes ? notes + "\n\n---\n\n" + fixedResult : fixedResult;
+      setNotes(newNotes);
+      onUpdate({ ...file, notes: newNotes });
+      saveRec({
+        text: fixedResult, raw,
         date: new Date().toLocaleDateString("en-GB", {day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}),
-        words: result.trim().split(/\s+/).length
+        words: fixedResult.trim().split(/\s+/).length, lang
       });
       setVoiceStatus("✅ Notes saved!");
       setTimeout(() => setVoiceStatus(""), 3000);
@@ -2599,184 +2556,493 @@ Topic context: ${context}`,
     setProcessing(false);
   };
 
-  const generateWithTopic = async (topic) => {
-    setGen(true);
-    setShowTopicInput(false);
+  const playRecording = (idx, text, recLang) => {
+    window.speechSynthesis?.cancel();
+    if (playingIdx === idx) { setPlayingIdx(null); return; }
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 0.92; u.pitch = 1;
+    u.lang = recLang || lang;
+    const allVoices = window.speechSynthesis.getVoices();
+    const v = allVoices.find(x => x.lang === u.lang) || allVoices.find(x => x.lang.startsWith(u.lang.slice(0,2)));
+    if (v) u.voice = v;
+    u.onend = () => setPlayingIdx(null);
+    u.onerror = () => setPlayingIdx(null);
+    window.speechSynthesis.speak(u);
+    setPlayingIdx(idx);
+  };
+
+  // ── Podcast state ─────────────────────────────────────────────────────────
+  const [podcastScript,  setPodcastScript]  = useState("");
+  const [podcastLoading, setPodcastLoading] = useState(false);
+  const [showPodcast,    setShowPodcast]    = useState(false);
+
+  const generatePodcast = async () => {
+    const notesText = file.notes || notes;
+    if (!notesText.trim()) { setVoiceStatus("⚠️ Generate some notes first, then create a podcast from them."); return; }
+    setPodcastLoading(true);
+    setShowPodcast(true);
+    setPodcastScript("");
+    const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[🇺🇸🇬🇧🇸🇦🇪🇬🇪🇸🇲🇽🇫🇷🇩🇪🇮🇹🇧🇷🇨🇳🇯🇵🇰🇷🇮🇳🇷🇺🇹🇷]\s*/g,'') || lang;
     try {
-      const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
-      const fileText = fileObj ? await extractFileText(fileObj) : null;
+      const script = await callClaude(
+        `You are a friendly, engaging podcast host turning study notes into a spoken audio lesson.
+Language: ${langLabel}. Write ENTIRELY in ${langLabel} — do not mix languages.
 
-      const safeText2 = fileText ? fileText.slice(0, 12000) : null;
-      const userMsg = safeText2
-        ? `Here is the COMPLETE content from the file "${file.name}":\n\n${safeText2}\n\nAnalyze ALL of the above content, then create detailed study notes specifically about "${topic}" based on EVERYTHING in this document.`
-        : `Create comprehensive study notes specifically about: "${topic}". Make them detailed and useful for exam revision.`;
-
-      const txt = await callClaude(
-        `You are an expert study notes writer. Create the BEST possible study notes a student can use to revise. Follow these rules:
-1. Start with a 1-2 sentence summary of the topic
-2. Break content into clear sections with **BOLD HEADINGS**
-3. Use bullet points (•) for key facts under each heading
-4. Highlight important terms in **bold**
-5. Include formulas, definitions, or key dates if present
-6. End with a "**Key Takeaways**" section with the 3-5 most important points
-7. Write in simple clear language
-8. Be thorough — aim for 20-30 lines of useful content
-9. ONLY use information from the provided file content if given — do not add outside information`,
-        userMsg
+Write a natural, conversational podcast script that:
+1. Starts warmly: "Hey! Today we're covering [topic]…"
+2. Explains every key concept clearly in simple spoken ${langLabel}
+3. Uses natural transitions: "Now let's talk about…", "Here's something really interesting…", "Moving on…"
+4. Ends with a short recap: "So to wrap up…" then 3-4 key points
+5. Is 3-5 min when spoken (≈ 450-600 words)
+6. Uses NO markdown, NO asterisks, NO bullet symbols — plain text only
+7. Sounds like a real person talking, not reading — include natural pauses like "…" and "Now,"
+8. Convert any math symbols BACK to spoken words so TTS reads them correctly (e.g. 10⁻¹⁰ → "ten to the power of negative ten")`,
+        `Create a podcast script from these notes:\n\n${notesText.slice(0, 8000)}`
       );
-      setNotes(txt); onUpdate({...file,notes:txt});
-    } catch(e){ setNotes(`Error: ${e.message}`); }
-    setGen(false);
+      setPodcastScript(script);
+    } catch(e) { setPodcastScript("Error: " + e.message); }
+    setPodcastLoading(false);
   };
 
-  const [notesSubTab, setNotesSubTab] = useState("written"); // "written" | "voice"
-  const [noteStyle, setNoteStyle] = useState("detailed");
-  const [customStyle, setCustomStyle] = useState("");       // user-typed style instruction
-  const [useCustomStyle, setUseCustomStyle] = useState(false);
-  const NOTE_STYLES = [
-    {id:"detailed", label:"📋 Detailed", desc:"Full notes with headings & examples"},
-    {id:"bullet",   label:"• Bullets",   desc:"Bullet points only, grouped by topic"},
-    {id:"simple",   label:"🧒 Simple",    desc:"Plain English, easy to understand"},
-    {id:"exam",     label:"📝 Exam",      desc:"Key terms, likely questions & checklist"},
-  ];
-
-  // Stored voice recordings for the Voice tab
-  const [voiceRecordings, setVoiceRecordings] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("vr_" + file.id) || "[]"); } catch { return []; }
-  });
-  const saveRecording = (rec) => {
-    const updated = [rec, ...voiceRecordings];
-    setVoiceRecordings(updated);
-    try { localStorage.setItem("vr_" + file.id, JSON.stringify(updated.slice(0, 20))); } catch {}
-  };
-  const deleteRecording = (idx) => {
-    const updated = voiceRecordings.filter((_,i) => i !== idx);
-    setVoiceRecordings(updated);
-    try { localStorage.setItem("vr_" + file.id, JSON.stringify(updated)); } catch {}
-  };
-
-  const SUB_TABS = [
-    {id:"written", label:"📝 Written Notes"},
-    {id:"voice",   label:"🎙️ Voice Notes"},
-  ];
+  const isRTL = lang.startsWith("ar");
 
   return (
     <div>
-      {/* ── Sub-tab pills ── */}
-      <div style={{ display:"flex", gap:6, marginBottom:20, borderBottom:`1.5px solid ${C.border}`, paddingBottom:12 }}>
-        {SUB_TABS.map(t => (
-          <button key={t.id} onClick={() => setNotesSubTab(t.id)} style={{
-            padding:"8px 18px", borderRadius:20, border:"none", cursor:"pointer",
+      {/* Header row with language selector */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18, flexWrap:"wrap", gap:10 }}>
+        <div>
+          <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:700, color:C.text, marginBottom:3 }}>Voice & Podcast</h2>
+          <p style={{ fontSize:13, color:C.muted }}>Record voice notes or generate a study podcast from your notes</p>
+        </div>
+        {/* Language selector */}
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <span style={{ fontSize:12, fontWeight:600, color:C.muted }}>🌍 Language:</span>
+          <select value={lang} onChange={e => setLang(e.target.value)}
+            style={{ border:`1.5px solid ${C.border}`, borderRadius:10, padding:"6px 10px", fontSize:13, outline:"none", color:C.text, background:"#fff", cursor:"pointer" }}>
+            {LANG_OPTIONS.map(([code, label]) => (
+              <option key={code} value={code}>{label}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Sub-tabs */}
+      <div style={{ display:"flex", gap:8, marginBottom:22, borderBottom:`1.5px solid ${C.border}`, paddingBottom:12 }}>
+        {[{id:"record",label:"🎙️ Voice Notes"},{id:"podcast",label:"🎧 Study Podcast"}].map(t => (
+          <button key={t.id} onClick={() => setSubTab(t.id)} style={{
+            padding:"8px 20px", borderRadius:20, border:"none", cursor:"pointer",
             fontWeight:700, fontSize:13,
-            background: notesSubTab===t.id ? C.accent : C.surface,
-            color:       notesSubTab===t.id ? "#fff"    : C.muted,
-            boxShadow:   notesSubTab===t.id ? `0 2px 10px ${C.accentS}55` : "none",
+            background: subTab===t.id ? C.accent : C.surface,
+            color:       subTab===t.id ? "#fff"    : C.muted,
+            boxShadow:   subTab===t.id ? `0 2px 10px ${C.accentS}55` : "none",
             transition:"all .15s"
           }}>{t.label}</button>
         ))}
       </div>
 
-      {/* ════════════════════════════════════════
-          WRITTEN NOTES TAB
-          ════════════════════════════════════════ */}
-      {notesSubTab === "written" && <>
-        {/* Action buttons row */}
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14, flexWrap:"wrap", gap:10 }}>
-          <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:700, color:C.text, margin:0 }}>Notes</h2>
-          <div style={{ display:"flex", gap:7, flexWrap:"wrap" }}>
-            <button onClick={generate} disabled={gen} className="hov"
-              style={{ display:"flex", alignItems:"center", gap:6, background:C.accentL, color:C.accent, border:"none", borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:600, cursor:gen?"not-allowed":"pointer" }}>
-              <Icon d={gen?I.refresh:I.sparkle} size={14} color={C.accent} />{gen?"Generating…":"AI Generate"}
-            </button>
-            <button onClick={() => setShowTopicInput(t => !t)} disabled={gen} className="hov"
-              style={{ display:"flex", alignItems:"center", gap:6, background:C.surface, color:C.text, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
-              <Icon d={I.edit} size={13} color={C.text} /> Topic
-            </button>
-            <button onClick={save} className="hov"
-              style={{ display:"flex", alignItems:"center", gap:6, background:saved?C.greenL:C.accent, color:saved?C.green:"#fff", border:"none", borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
-              <Icon d={saved?I.check:I.edit} size={13} color={saved?C.green:"#fff"} />{saved?"Saved!":"Save"}
-            </button>
-            <button onClick={generatePodcast} disabled={!notes.trim() || podcastLoading} className="hov"
-              style={{ display:"flex", alignItems:"center", gap:6, background:"#fdf4ff", color:"#7c3aed", border:"1.5px solid #7c3aed33", borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:600, cursor:notes.trim()?"pointer":"not-allowed", opacity:notes.trim()?1:0.5 }}>
-              🎧 {podcastLoading ? "…" : "Podcast"}
-            </button>
-          </div>
-        </div>
-
-        {/* ── Style selector ── */}
-        <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"12px 14px", marginBottom:14 }}>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
-            <span style={{ fontSize:11, fontWeight:800, color:C.muted, letterSpacing:1 }}>NOTE STYLE</span>
-            <button onClick={() => setUseCustomStyle(u => !u)}
-              style={{ fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:20, border:`1.5px solid ${useCustomStyle?C.accent:C.border}`, background:useCustomStyle?C.accentL:"transparent", color:useCustomStyle?C.accent:C.muted, cursor:"pointer" }}>
-              {useCustomStyle ? "✏️ Custom (on)" : "✏️ Custom style"}
-            </button>
-          </div>
-          {!useCustomStyle ? (
-            <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-              {NOTE_STYLES.map(s => (
-                <button key={s.id} onClick={() => setNoteStyle(s.id)} title={s.desc}
-                  style={{ padding:"6px 12px", borderRadius:20, border:`1.5px solid ${noteStyle===s.id?C.accent:C.border}`, background:noteStyle===s.id?C.accentL:"#fff", color:noteStyle===s.id?C.accent:C.muted, cursor:"pointer", fontWeight:noteStyle===s.id?700:500, fontSize:12, transition:"all .12s" }}>
-                  {s.label}
-                </button>
-              ))}
+      {/* ─── VOICE NOTES ─── */}
+      {subTab === "record" && (
+        <div dir={isRTL ? "rtl" : "ltr"}>
+          {(isGuest || !user) && (
+            <div style={{ background:C.warmL, border:`1.5px solid ${C.warm}33`, borderRadius:12, padding:"14px 18px", marginBottom:20, fontSize:13, color:C.warm, fontWeight:500 }}>
+              🎙️ Voice Notes requires a Google account — sign in to use this feature.
             </div>
-          ) : (
+          )}
+
+          {!isGuest && user && (
+            <div style={{ background: recording?"#fff0f0":C.surface, border:`2px solid ${recording?C.red+"55":C.border}`, borderRadius:18, padding:"26px 24px", marginBottom:20, textAlign:"center", transition:"all .3s" }}>
+              {recording && <style>{`@keyframes vpulse{0%,100%{opacity:1}50%{opacity:.5}}`}</style>}
+              <div style={{ fontSize:54, marginBottom:12, animation:recording?"vpulse 1.4s infinite":"none" }}>
+                {recording?"🔴":"🎙️"}
+              </div>
+              <p style={{ fontSize:15, fontWeight:700, color:recording?C.red:C.text, marginBottom:5 }}>
+                {recording?"Recording…":processing?"Processing…":"Tap to start recording"}
+              </p>
+              <p style={{ fontSize:13, color:C.muted, marginBottom:16 }}>
+                {recording ? `Speaking in ${LANG_OPTIONS.find(l=>l[0]===lang)?.[1] || lang} — AI will clean up and format as notes` : "Lecture, study session, or revision — record it and AI converts it to notes"}
+              </p>
+              {voiceStatus && (
+                <div style={{ background:voiceStatus.startsWith("✅")?C.greenL:voiceStatus.startsWith("🎙️")?"#fff0f0":voiceStatus.startsWith("✨")?C.accentL:C.redL,
+                  border:`1px solid ${voiceStatus.startsWith("✅")?C.green:voiceStatus.startsWith("🎙️")?C.red:voiceStatus.startsWith("✨")?C.accentS:C.red}44`,
+                  borderRadius:10, padding:"8px 14px", marginBottom:16, fontSize:13, fontWeight:500, textAlign:"left",
+                  color:voiceStatus.startsWith("✅")?C.green:voiceStatus.startsWith("🎙️")?C.red:C.text }}>
+                  {voiceStatus}
+                </div>
+              )}
+              {!recording ? (
+                <button onClick={startVoice} disabled={processing} style={{ background:processing?"#ccc":C.red, color:"#fff", border:"none", borderRadius:14, padding:"13px 38px", fontSize:15, fontWeight:700, cursor:processing?"not-allowed":"pointer", boxShadow:`0 4px 16px ${C.red}44` }}>
+                  {processing ? "⏳ Processing…" : "🎙️ Start Recording"}
+                </button>
+              ) : (
+                <button onClick={stopVoice} disabled={processing} style={{ background:"#fff", color:C.red, border:`2px solid ${C.red}`, borderRadius:14, padding:"13px 38px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
+                  ⏹ Stop & Save
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Recordings list */}
+          {voiceRecordings.length > 0 && (
             <div>
-              <textarea value={customStyle} onChange={e => setCustomStyle(e.target.value)}
-                placeholder="Describe exactly how you want your notes… e.g. 'Short bullet points with key definitions', 'Explain simply for a beginner', 'Focus only on what might appear in an exam'"
-                style={{ width:"100%", minHeight:70, border:`1.5px solid ${C.accentS}`, borderRadius:10, padding:"10px 12px", fontSize:13, outline:"none", resize:"vertical", color:C.text, background:"#fff", lineHeight:1.5, fontFamily:"'DM Sans',sans-serif" }}/>
-              <p style={{ fontSize:11, color:C.muted, marginTop:5 }}>The AI will follow your instructions exactly when generating notes.</p>
+              <p style={{ fontSize:11, fontWeight:800, color:C.muted, letterSpacing:.8, marginBottom:12 }}>SAVED RECORDINGS ({voiceRecordings.length})</p>
+              <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                {voiceRecordings.map((rec, idx) => (
+                  <div key={idx} style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"13px 15px" }}>
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:7 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                        <div onClick={() => playRecording(idx, rec.text, rec.lang)}
+                          style={{ width:34, height:34, borderRadius:"50%", background:playingIdx===idx?C.accentL:"#f0f4ff", display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, cursor:"pointer", border:`1.5px solid ${playingIdx===idx?C.accent:C.border}`, flexShrink:0 }}>
+                          {playingIdx===idx?"⏸":"▶"}
+                        </div>
+                        <div>
+                          <p style={{ fontSize:13, fontWeight:700, color:C.text }}>Recording {voiceRecordings.length - idx}</p>
+                          <p style={{ fontSize:11, color:C.muted }}>{rec.date} · {rec.words} words · {rec.lang || "en-US"}</p>
+                        </div>
+                      </div>
+                      <div style={{ display:"flex", gap:6 }}>
+                        <button onClick={() => { const n=notes?notes+"\n\n---\n\n"+rec.text:rec.text; setNotes(n); onUpdate({...file,notes:n}); }}
+                          style={{ fontSize:11, fontWeight:700, padding:"5px 10px", borderRadius:8, border:`1px solid ${C.accentS}`, background:C.accentL, color:C.accent, cursor:"pointer" }}>+ Notes</button>
+                        <button onClick={() => deleteRec(idx)}
+                          style={{ fontSize:12, padding:"5px 10px", borderRadius:8, border:`1px solid ${C.border}`, background:"#fff", color:C.muted, cursor:"pointer" }}>🗑</button>
+                      </div>
+                    </div>
+                    <p style={{ fontSize:13, color:C.text, lineHeight:1.55, background:"#f9fafb", borderRadius:8, padding:"8px 10px", maxHeight:80, overflowY:"auto", margin:0, direction:rec.lang?.startsWith("ar")?"rtl":"ltr" }}>
+                      {rec.text.slice(0,200)}{rec.text.length>200?"…":""}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {voiceRecordings.length === 0 && !isGuest && user && (
+            <div style={{ textAlign:"center", padding:"40px 0", color:C.muted }}>
+              <div style={{ fontSize:40, marginBottom:12 }}>🎤</div>
+              <p style={{ fontSize:14, fontWeight:600 }}>No recordings yet</p>
+              <p style={{ fontSize:13 }}>Start recording above — your saved voice notes will appear here</p>
             </div>
           )}
         </div>
+      )}
 
-        {/* Custom Topic input */}
-        {showTopicInput && (
-          <div style={{ background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:12, padding:14, marginBottom:14, display:"flex", gap:10, alignItems:"center" }}>
-            <input autoFocus value={customTopic} onChange={e => setCustomTopic(e.target.value)}
-              onKeyDown={e => { if(e.key==="Enter" && customTopic.trim()) generateWithTopic(customTopic.trim()); }}
-              placeholder="e.g. Photosynthesis, World War 2, Quadratic equations…"
-              style={{ flex:1, border:`1.5px solid ${C.accentS}`, borderRadius:8, padding:"9px 12px", fontSize:14, outline:"none", color:C.text, background:C.surface }} />
-            <button onClick={() => customTopic.trim() && generateWithTopic(customTopic.trim())} disabled={!customTopic.trim()}
-              style={{ background:C.accent, color:"#fff", border:"none", borderRadius:8, padding:"9px 14px", fontSize:14, fontWeight:600, cursor:customTopic.trim()?"pointer":"not-allowed" }}>Go</button>
-            <button onClick={() => setShowTopicInput(false)} style={{ background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:18 }}>✕</button>
+      {/* ─── PODCAST ─── */}
+      {subTab === "podcast" && (
+        <div>
+          <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:16, padding:"20px 22px", marginBottom:18 }}>
+            <p style={{ fontSize:14, fontWeight:700, color:C.text, marginBottom:6 }}>Generate Study Podcast</p>
+            <p style={{ fontSize:13, color:C.muted, marginBottom:16 }}>
+              AI converts your notes into a natural, conversational podcast in {LANG_OPTIONS.find(l=>l[0]===lang)?.[1] || lang}. Go to the Notes tab first to generate notes, then come back here to create the podcast.
+            </p>
+            <button onClick={generatePodcast} disabled={podcastLoading}
+              style={{ background:podcastLoading?"#ccc":"#7c3aed", color:"#fff", border:"none", borderRadius:12, padding:"11px 28px", fontSize:14, fontWeight:700, cursor:podcastLoading?"not-allowed":"pointer", boxShadow:podcastLoading?"none":"0 4px 16px rgba(124,58,237,.4)" }}>
+              {podcastLoading ? "⏳ Generating…" : "🎧 Generate Podcast"}
+            </button>
           </div>
-        )}
 
-        <textarea value={notes} onChange={e=>setNotes(e.target.value)}
-          placeholder="Write notes here, or click AI Generate to create them automatically…"
-          style={{ width:"100%", minHeight:400, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"18px", fontSize:15, lineHeight:1.7, outline:"none", resize:"vertical", color:C.text, background:C.surface, fontFamily:"'DM Sans',sans-serif" }} />
-
-        {showPodcast && (
-          <PodcastPlayer script={podcastScript} loading={podcastLoading} topic={file.name}
-            onClose={() => { setShowPodcast(false); window.speechSynthesis?.cancel(); }} />
-        )}
-      </>}
-
-      {/* ════════════════════════════════════════
-          VOICE NOTES TAB
-          ════════════════════════════════════════ */}
-      {notesSubTab === "voice" && (
-        <VoiceNotesTab
-          file={file}
-          user={user}
-          isGuest={isGuest}
-          notes={notes}
-          onNotesUpdate={(newNotes) => { setNotes(newNotes); onUpdate({...file, notes: newNotes}); }}
-          voiceRecordings={voiceRecordings}
-          onSaveRecording={saveRecording}
-          onDeleteRecording={deleteRecording}
-          startVoice={startVoice}
-          stopVoice={stopVoice}
-          recording={recording}
-          processing={processing}
-          voiceStatus={voiceStatus}
-        />
+          {showPodcast && (
+            <EnhancedPodcastPlayer
+              script={podcastScript}
+              loading={podcastLoading}
+              topic={file.name}
+              lang={lang}
+              onClose={() => { setShowPodcast(false); window.speechSynthesis?.cancel(); }}
+            />
+          )}
+        </div>
       )}
     </div>
   );
 }
+
+// ─── VOICE NOTES TAB (legacy — kept for Notes sub-tab if needed) ──────────────
+function VoiceNotesTab({ file, user, isGuest, notes, onNotesUpdate,
+    voiceRecordings, onSaveRecording, onDeleteRecording,
+    startVoice, stopVoice, recording, processing, voiceStatus }) {
+  // Redirect: this is now handled by VoicePodcastTab
+  return (
+    <div style={{ textAlign:"center", padding:"40px 20px", color:C.muted }}>
+      <div style={{ fontSize:36, marginBottom:12 }}>🎙️</div>
+      <p style={{ fontSize:14, fontWeight:600, marginBottom:6 }}>Voice Notes has moved!</p>
+      <p style={{ fontSize:13 }}>Use the <strong>Voice & Podcast</strong> tab at the top of this page.</p>
+    </div>
+  );
+}
+
+
+// ─── NOTES TAB ───────────────────────────────────────────────────────────────
+function NotesTab({ file, onUpdate, user, isGuest }) {
+  const [notes,    setNotes]   = useState(file.notes || "");
+  const [gen,      setGen]     = useState(false);
+  const [showTopicInput, setShowTopicInput] = useState(false);
+  const [customTopic,    setCustomTopic]    = useState("");
+  const [lang,     setLang]    = useState("en-US");
+
+  // ── Named notes save/load system ──────────────────────────────────────────
+  const SAVED_KEY = "saved_notes_" + file.id;
+  const [savedNotes,   setSavedNotes]   = useState(() => {
+    try { return JSON.parse(localStorage.getItem(SAVED_KEY) || "[]"); } catch { return []; }
+  });
+  const [showSaveModal,  setShowSaveModal]  = useState(false);
+  const [newNoteName,    setNewNoteName]    = useState("");
+  const [showDropdown,   setShowDropdown]   = useState(false);
+  const [dropSearch,     setDropSearch]     = useState("");
+  const [savedFeedback,  setSavedFeedback]  = useState("");
+
+  const persistSaved = (arr) => {
+    setSavedNotes(arr);
+    try { localStorage.setItem(SAVED_KEY, JSON.stringify(arr)); } catch {}
+  };
+  const doSave = () => {
+    if (!newNoteName.trim()) return;
+    const entry = {
+      name: newNoteName.trim(),
+      text: notes,
+      date: new Date().toLocaleDateString("en-GB", {day:"numeric", month:"short", year:"numeric"})
+    };
+    persistSaved([entry, ...savedNotes.filter(n => n.name !== entry.name)]);
+    setNewNoteName(""); setShowSaveModal(false);
+    setSavedFeedback("✅ Saved as "" + entry.name + """);
+    setTimeout(() => setSavedFeedback(""), 2500);
+  };
+  const loadNote  = (entry) => { setNotes(entry.text); setShowDropdown(false); };
+  const delSaved  = (name)  => persistSaved(savedNotes.filter(n => n.name !== name));
+  const filtered  = savedNotes.filter(n => n.name.toLowerCase().includes(dropSearch.toLowerCase()));
+
+  // Also save to file object for immediate persistence
+  const saveToFile = () => onUpdate({ ...file, notes });
+
+  // ── Note style ────────────────────────────────────────────────────────────
+  const [noteStyle,      setNoteStyle]      = useState("detailed");
+  const [customStyle,    setCustomStyle]    = useState("");
+  const [useCustomStyle, setUseCustomStyle] = useState(false);
+  const NOTE_STYLES = [
+    { id:"detailed", label:"📋 Detailed",    desc:"Full notes with headings & examples" },
+    { id:"bullet",   label:"• Bullets",      desc:"Bullet points only, grouped by topic" },
+    { id:"simple",   label:"🧒 Simple",       desc:"Plain English, easy to understand" },
+    { id:"exam",     label:"📝 Exam Focused", desc:"Key terms, questions & checklist" },
+  ];
+
+  // ── AI generate ───────────────────────────────────────────────────────────
+  const generate = async () => {
+    setGen(true);
+    try {
+      const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
+      const fileText = fileObj ? await extractFileText(fileObj) : null;
+      const safeText = fileText ? fileText.slice(0, 12000) : null;
+      const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[\u{1F1E0}-\u{1F1FF}]{2}\s*/gu, '') || lang;
+
+      const userMsg = safeText
+        ? `Here is the COMPLETE content from the file "${file.name}":\n\n${safeText}\n\nAnalyze ALL of this content and create detailed study notes covering EVERY section, concept, and detail.`
+        : `Create comprehensive study notes for: "${file.name}". Make them detailed and useful for exam revision.`;
+
+      const styleGuide = {
+        detailed: "Write detailed notes split into sections. Each section has a heading in ALL CAPS followed by bullet points.",
+        bullet:   "Write ONLY bullet points grouped under ALL CAPS headings. One fact per line.",
+        simple:   "Write very simple short notes in plain language. Short sentences. No jargon.",
+        exam:     "Write exam revision notes. Include key terms, definitions, possible exam questions, and a checklist.",
+      };
+      const effectiveStyle = useCustomStyle && customStyle.trim()
+        ? `You are a study notes writer. The student's style instruction: "${customStyle.trim()}". Follow exactly.`
+        : `You are a study notes writer. ${styleGuide[noteStyle] || styleGuide.detailed}`;
+
+      const txt = await callClaude(
+        `${effectiveStyle}
+Language: ${langLabel}. Write ALL notes entirely in ${langLabel} — never mix languages.
+
+STRICT FORMATTING RULES — follow exactly:
+1. NEVER use asterisks (*) or double asterisks (**) anywhere
+2. NEVER use pound signs (#) for headings
+3. Section headings: ALL CAPS on their own line (e.g., ATOMIC STRUCTURE)
+4. Bullet points: use a dash (-)
+5. Plain text only — no markdown symbols
+6. Math & science notation: use proper symbols, never words
+   - Write: 1 × 10⁻¹⁰ m  NOT "one times ten to the power of negative ten metres"
+   - Write: 9.81 m/s²  NOT "nine point eight one metres per second squared"
+   - Write: H₂O, CO₂, O₂  NOT "H 2 O" or "H two O"
+   - Write: F = ma, E = mc²  NOT words
+   - Write: π, α, β, λ, Δ, μ  NOT "pi", "alpha", "beta"
+   - Write: ×, ÷, ≈, ≥, ≤, ≠, ±  NOT words
+7. Units: always use standard abbreviations (m, km, kg, g, s, J, N, W, V, A, K, °C, mol, Hz)
+8. ONLY use content from the provided file — do not invent facts`,
+        userMsg
+      );
+      const fixedTxt = fixMath(txt);
+      setNotes(fixedTxt);
+      onUpdate({ ...file, notes: fixedTxt });
+    } catch(e) { setNotes(`Error: ${e.message}`); }
+    setGen(false);
+  };
+
+  const generateWithTopic = async (topic) => {
+    setGen(true); setShowTopicInput(false);
+    try {
+      const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
+      const fileText = fileObj ? await extractFileText(fileObj) : null;
+      const safeText2 = fileText ? fileText.slice(0, 12000) : null;
+      const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[\u{1F1E0}-\u{1F1FF}]{2}\s*/gu, '') || lang;
+      const userMsg = safeText2
+        ? `File "${file.name}":\n\n${safeText2}\n\nCreate detailed study notes specifically about "${topic}" from this document.`
+        : `Create comprehensive study notes about: "${topic}". Make them detailed and useful for exam revision.`;
+      const txt = await callClaude(
+        `You are an expert study notes writer. Language: ${langLabel}. Write ONLY in ${langLabel}.
+RULES: No asterisks, no #, ALL CAPS headings, dashes for bullets, plain text.
+Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "metres", π not "pi", etc.`,
+        userMsg
+      );
+      const fixedTxt2 = fixMath(txt);
+      setNotes(fixedTxt2); onUpdate({ ...file, notes: fixedTxt2 });
+    } catch(e) { setNotes(`Error: ${e.message}`); }
+    setGen(false);
+  };
+
+  const isRTL = lang.startsWith("ar");
+
+  return (
+    <div dir={isRTL ? "rtl" : "ltr"}>
+
+      {/* ── Top toolbar ─────────────────────────────────────────────────── */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:10 }}>
+        <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:700, color:C.text, margin:0 }}>Notes</h2>
+
+        <div style={{ display:"flex", gap:7, flexWrap:"wrap", alignItems:"center" }}>
+
+          {/* Language */}
+          <select value={lang} onChange={e => setLang(e.target.value)}
+            style={{ border:`1.5px solid ${C.border}`, borderRadius:10, padding:"6px 9px", fontSize:12, outline:"none", color:C.text, background:"#fff", cursor:"pointer" }}>
+            {LANG_OPTIONS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
+          </select>
+
+          {/* AI Generate */}
+          <button onClick={generate} disabled={gen} className="hov"
+            style={{ display:"flex", alignItems:"center", gap:6, background:C.accentL, color:C.accent, border:"none", borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:600, cursor:gen?"not-allowed":"pointer" }}>
+            <Icon d={gen?I.refresh:I.sparkle} size={14} color={C.accent}/>{gen?"Generating…":"AI Generate"}
+          </button>
+
+          {/* Custom Topic */}
+          <button onClick={() => setShowTopicInput(t => !t)} disabled={gen} className="hov"
+            style={{ display:"flex", alignItems:"center", gap:6, background:C.surface, color:C.text, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+            <Icon d={I.edit} size={13} color={C.text}/> Topic
+          </button>
+
+          {/* Saved notes dropdown */}
+          {savedNotes.length > 0 && (
+            <div style={{ position:"relative" }}>
+              <button onClick={() => setShowDropdown(d => !d)} className="hov"
+                style={{ display:"flex", alignItems:"center", gap:5, background:C.greenL, color:C.green, border:`1px solid ${C.green}44`, borderRadius:10, padding:"8px 13px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+                📂 Saved ({savedNotes.length}) ▾
+              </button>
+              {showDropdown && (
+                <div style={{ position:"absolute", top:"110%", right:0, zIndex:300, background:"#fff", border:`1.5px solid ${C.border}`, borderRadius:14, width:290, boxShadow:"0 10px 36px rgba(0,0,0,.17)", overflow:"hidden" }}>
+                  <div style={{ padding:"10px 12px", borderBottom:`1px solid ${C.border}` }}>
+                    <input value={dropSearch} onChange={e => setDropSearch(e.target.value)} placeholder="Search saved notes…"
+                      style={{ width:"100%", border:`1px solid ${C.border}`, borderRadius:8, padding:"6px 10px", fontSize:12, outline:"none", color:C.text }}/>
+                  </div>
+                  <div style={{ maxHeight:280, overflowY:"auto" }}>
+                    {filtered.length === 0 && <p style={{ padding:"14px", fontSize:12, color:C.muted, textAlign:"center" }}>No matches</p>}
+                    {filtered.map(n => (
+                      <div key={n.name} style={{ display:"flex", alignItems:"center", padding:"10px 12px", borderBottom:`1px solid ${C.border}33`, cursor:"pointer" }}
+                        onMouseEnter={e => e.currentTarget.style.background="#f5f7fa"}
+                        onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+                        <div onClick={() => loadNote(n)} style={{ flex:1, minWidth:0 }}>
+                          <p style={{ fontSize:13, fontWeight:600, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{n.name}</p>
+                          <p style={{ fontSize:11, color:C.muted }}>{n.date} · {n.text.trim().split(/\s+/).length} words</p>
+                        </div>
+                        <button onClick={e => { e.stopPropagation(); delSaved(n.name); }}
+                          style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", fontSize:15, padding:"2px 5px", flexShrink:0 }}>🗑</button>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ padding:"7px 12px", borderTop:`1px solid ${C.border}`, fontSize:10, color:C.muted, fontStyle:"italic" }}>Click to load · 🗑 to delete</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Save — always rightmost */}
+          <button onClick={() => { setNewNoteName(""); setShowSaveModal(true); }} className="hov"
+            style={{ display:"flex", alignItems:"center", gap:6, background:C.accent, color:"#fff", border:"none", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:"pointer" }}>
+            <Icon d={I.check} size={13} color="#fff"/> Save
+          </button>
+        </div>
+      </div>
+
+      {/* Save feedback toast */}
+      {savedFeedback && (
+        <div style={{ background:C.greenL, border:`1px solid ${C.green}44`, borderRadius:10, padding:"8px 14px", marginBottom:12, fontSize:13, color:C.green, fontWeight:600 }}>
+          {savedFeedback}
+        </div>
+      )}
+
+      {/* Save-as modal */}
+      {showSaveModal && (
+        <div onClick={() => setShowSaveModal(false)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.4)", zIndex:600, display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background:"#fff", borderRadius:18, padding:"26px 28px", width:"100%", maxWidth:380, boxShadow:"0 16px 50px rgba(0,0,0,.22)" }}>
+            <p style={{ fontSize:16, fontWeight:700, color:C.text, marginBottom:16 }}>Save Note As…</p>
+            <input autoFocus value={newNoteName} onChange={e => setNewNoteName(e.target.value)}
+              onKeyDown={e => e.key==="Enter" && doSave()}
+              placeholder="e.g. Atomic Structure, Chapter 3, Exam Prep…"
+              style={{ width:"100%", border:`1.5px solid ${C.accentS}`, borderRadius:10, padding:"10px 12px", fontSize:14, outline:"none", color:C.text, marginBottom:14 }}/>
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={doSave} disabled={!newNoteName.trim()}
+                style={{ flex:2, background:newNoteName.trim()?C.accent:"#ccc", color:"#fff", border:"none", borderRadius:10, padding:"11px", fontSize:14, fontWeight:700, cursor:newNoteName.trim()?"pointer":"not-allowed" }}>Save</button>
+              <button onClick={() => setShowSaveModal(false)}
+                style={{ flex:1, background:"#eee", color:"#555", border:"none", borderRadius:10, padding:"11px", fontSize:14, fontWeight:600, cursor:"pointer" }}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Style selector ────────────────────────────────────────────────── */}
+      <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"12px 14px", marginBottom:14 }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+          <span style={{ fontSize:11, fontWeight:800, color:C.muted, letterSpacing:1 }}>NOTE STYLE</span>
+          <button onClick={() => setUseCustomStyle(u => !u)}
+            style={{ fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:20, border:`1.5px solid ${useCustomStyle?C.accent:C.border}`, background:useCustomStyle?C.accentL:"transparent", color:useCustomStyle?C.accent:C.muted, cursor:"pointer" }}>
+            {useCustomStyle ? "✏️ Custom (on)" : "✏️ Custom style"}
+          </button>
+        </div>
+        {!useCustomStyle ? (
+          <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+            {NOTE_STYLES.map(s => (
+              <button key={s.id} onClick={() => setNoteStyle(s.id)} title={s.desc}
+                style={{ padding:"6px 12px", borderRadius:20, border:`1.5px solid ${noteStyle===s.id?C.accent:C.border}`, background:noteStyle===s.id?C.accentL:"#fff", color:noteStyle===s.id?C.accent:C.muted, cursor:"pointer", fontWeight:noteStyle===s.id?700:500, fontSize:12, transition:"all .12s" }}>
+                {s.label}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div>
+            <textarea value={customStyle} onChange={e => setCustomStyle(e.target.value)}
+              placeholder="e.g. 'Short bullet points with key definitions', 'Explain simply for a beginner', 'Focus only on exam topics'"
+              style={{ width:"100%", minHeight:68, border:`1.5px solid ${C.accentS}`, borderRadius:10, padding:"10px 12px", fontSize:13, outline:"none", resize:"vertical", color:C.text, background:"#fff", lineHeight:1.5, fontFamily:"'DM Sans',sans-serif" }}/>
+            <p style={{ fontSize:11, color:C.muted, marginTop:5 }}>The AI will follow your instructions exactly when generating notes.</p>
+          </div>
+        )}
+      </div>
+
+      {/* ── Custom topic input ─────────────────────────────────────────────── */}
+      {showTopicInput && (
+        <div style={{ background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:12, padding:14, marginBottom:14, display:"flex", gap:10, alignItems:"center" }}>
+          <input autoFocus value={customTopic} onChange={e => setCustomTopic(e.target.value)}
+            onKeyDown={e => { if(e.key==="Enter" && customTopic.trim()) generateWithTopic(customTopic.trim()); }}
+            placeholder="e.g. Photosynthesis, World War 2, Quadratic equations…"
+            style={{ flex:1, border:`1.5px solid ${C.accentS}`, borderRadius:8, padding:"9px 12px", fontSize:14, outline:"none", color:C.text, background:C.surface }}/>
+          <button onClick={() => customTopic.trim() && generateWithTopic(customTopic.trim())} disabled={!customTopic.trim()}
+            style={{ background:C.accent, color:"#fff", border:"none", borderRadius:8, padding:"9px 14px", fontSize:14, fontWeight:600, cursor:customTopic.trim()?"pointer":"not-allowed" }}>Go</button>
+          <button onClick={() => setShowTopicInput(false)} style={{ background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:18 }}>✕</button>
+        </div>
+      )}
+
+      {/* ── Notes textarea ──────────────────────────────────────────────────── */}
+      <textarea value={notes} onChange={e => { setNotes(e.target.value); onUpdate({...file, notes: e.target.value}); }}
+        dir={isRTL ? "rtl" : "ltr"}
+        placeholder="Write notes here, or click AI Generate to create them automatically…"
+        style={{ width:"100%", minHeight:440, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"18px 20px", fontSize:15, lineHeight:1.85, outline:"none", resize:"vertical", color:C.text, background:C.surface, fontFamily:"'DM Sans',sans-serif", direction:isRTL?"rtl":"ltr" }}/>
+
+    </div>
+  );
+}
+
 
 // ─── STUDY CARDS TAB ──────────────────────────────────────────────────────────
 function CardsTab({ file, onUpdate }) {
@@ -4387,197 +4653,235 @@ function ListeningGame({ cards, onBack }) {
 }
 
 
-// ─── PODCAST PLAYER ───────────────────────────────────────────────────────────
-function PodcastPlayer({ script, loading, topic, onClose }) {
-  const [playing,   setPlaying]   = useState(false);
-  const [paused,    setPaused]    = useState(false);
-  const [progress,  setProgress]  = useState(0);   // 0-100
-  const [speed,     setSpeed]     = useState(1);
-  const [voice,     setVoice]     = useState(null);
-  const [voices,    setVoices]    = useState([]);
-  const utterRef    = useRef(null);
-  const charsSpoken = useRef(0);
-  const totalChars  = useRef(1);
+// ─── ENHANCED PODCAST PLAYER ─────────────────────────────────────────────────
+// Natural-sounding voices, multi-language, accent selector, good pacing
+function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose }) {
+  const [playing,  setPlaying]  = useState(false);
+  const [paused,   setPaused]   = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [speed,    setSpeed]    = useState(0.92);  // slightly slower = more natural
+  const [allVoices, setAllVoices] = useState([]);
+  const [selVoice,  setSelVoice]  = useState(null);
+  const [showVoicePicker, setShowVoicePicker] = useState(false);
+  const totalChars = useRef(1);
+  const SPEEDS = [0.75, 0.9, 1, 1.1, 1.25, 1.5];
 
-  // Load available voices
+  // ── Voice loading ─────────────────────────────────────────────────────────
+  // Prefer natural/premium voices; fall back to standard ones
+  const rankVoice = (v) => {
+    const n = v.name.toLowerCase();
+    // Highest quality: wavenet, neural, natural, premium voices
+    if (n.includes('wavenet') || n.includes('neural') || n.includes('premium')) return 4;
+    if (n.includes('natural') || n.includes('enhanced') || n.includes('high quality')) return 3;
+    if (n.includes('google') || n.includes('microsoft') || n.includes('apple')) return 2;
+    if (v.localService) return 1;
+    return 0;
+  };
+
+  const getLangVoices = (langCode, allV) => {
+    const base = langCode.slice(0, 2).toLowerCase();
+    // First try exact match, then language family
+    let matched = allV.filter(v => v.lang.toLowerCase() === langCode.toLowerCase());
+    if (matched.length === 0) matched = allV.filter(v => v.lang.toLowerCase().startsWith(base));
+    // Sort by quality rank descending
+    return matched.sort((a, b) => rankVoice(b) - rankVoice(a));
+  };
+
   useEffect(() => {
     const load = () => {
-      const v = window.speechSynthesis.getVoices().filter(v => v.lang.startsWith("en"));
-      setVoices(v);
-      if (v.length > 0) setVoice(v.find(x => x.name.toLowerCase().includes("google")) || v[0]);
+      const all = window.speechSynthesis.getVoices();
+      setAllVoices(all);
+      const langVoices = getLangVoices(lang, all);
+      if (langVoices.length > 0) {
+        // Pick best natural voice
+        setSelVoice(langVoices[0]);
+      } else if (all.length > 0) {
+        setSelVoice(all[0]);
+      }
     };
     load();
     window.speechSynthesis.onvoiceschanged = load;
     return () => { window.speechSynthesis.cancel(); };
-  }, []);
+  }, [lang]);
+
+  // Voices available for current language
+  const langVoices = getLangVoices(lang, allVoices);
+  // If no lang-specific voices, show all (fallback)
+  const voiceList = langVoices.length > 0 ? langVoices : allVoices;
 
   const stop = () => {
     window.speechSynthesis.cancel();
-    setPlaying(false);
-    setPaused(false);
-    setProgress(0);
-    charsSpoken.current = 0;
+    setPlaying(false); setPaused(false); setProgress(0);
   };
 
   const play = () => {
     if (!script || loading) return;
     if (paused) {
       window.speechSynthesis.resume();
-      setPlaying(true);
-      setPaused(false);
+      setPlaying(true); setPaused(false);
       return;
     }
     window.speechSynthesis.cancel();
-    charsSpoken.current = 0;
     totalChars.current = script.length || 1;
 
-    // Split into ~200-char sentences for progress tracking
-    const sentences = script.match(/[^.!?]+[.!?]+/g) || [script];
+    // Split on sentence boundaries for smoother progress
+    const sentences = script.match(/[^.!?…]+[.!?…]+/g) || [script];
     let charPos = 0;
     const utterances = sentences.map((sen, idx) => {
       const u = new SpeechSynthesisUtterance(sen.trim());
       u.rate  = speed;
-      u.pitch = 1.05;
-      u.lang  = "en-US";
-      if (voice) u.voice = voice;
+      u.pitch = 1.0;           // natural pitch (1.05 sounds robotic)
+      u.lang  = lang;
+      if (selVoice) u.voice = selVoice;
       const myStart = charPos;
       charPos += sen.length;
       const myEnd = charPos;
-      u.onstart = () => {
-        setPlaying(true);
-        setPaused(false);
-        setProgress(Math.round((myStart / totalChars.current) * 100));
-      };
-      u.onend = () => {
+      u.onstart = () => { setPlaying(true); setPaused(false); setProgress(Math.round((myStart / totalChars.current) * 100)); };
+      u.onend   = () => {
         setProgress(Math.round((myEnd / totalChars.current) * 100));
-        if (idx === utterances.length - 1) {
-          setPlaying(false);
-          setPaused(false);
-          setProgress(100);
-        }
+        if (idx === utterances.length - 1) { setPlaying(false); setPaused(false); setProgress(100); }
       };
       u.onerror = () => { setPlaying(false); setPaused(false); };
       return u;
     });
-
-    utterRef.current = utterances;
     utterances.forEach(u => window.speechSynthesis.speak(u));
-    setPlaying(true);
-    setPaused(false);
+    setPlaying(true); setPaused(false);
   };
 
   const pause = () => {
     if (window.speechSynthesis.speaking) {
       window.speechSynthesis.pause();
-      setPaused(true);
-      setPlaying(false);
+      setPaused(true); setPlaying(false);
     }
   };
 
-  // When speed changes mid-play, restart
-  const changeSpeed = (s) => {
-    setSpeed(s);
-    if (playing || paused) { stop(); }
-  };
+  const changeSpeed = (s) => { setSpeed(s); if (playing || paused) stop(); };
 
-  const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75];
-
-  // Estimate read time
   const wordCount = script ? script.trim().split(/\s+/).length : 0;
-  const estMins   = Math.round((wordCount / 150) / speed * 10) / 10;
+  const estMins   = Math.max(1, Math.round((wordCount / 150) / speed));
+
+  const voiceName = selVoice
+    ? selVoice.name.replace(/Google |Microsoft |Apple /gi,'').replace(/ Online \(Natural\)/i,'').replace(/ \(Enhanced\)/i,'★').slice(0, 26)
+    : 'Default';
 
   return (
-    <div style={{
-      marginTop:24, background:"linear-gradient(135deg,#1e1b4b,#312e81)",
-      borderRadius:20, overflow:"hidden",
-      boxShadow:"0 20px 60px rgba(30,27,75,.45)"
-    }}>
-      {/* Header */}
+    <div style={{ background:"linear-gradient(135deg,#1e1b4b,#312e81)", borderRadius:22, overflow:"hidden", boxShadow:"0 20px 60px rgba(30,27,75,.5)" }}>
+
+      {/* ── Header ── */}
       <div style={{ padding:"18px 22px 14px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-          <div style={{ width:42, height:42, borderRadius:12, background:"linear-gradient(135deg,#7c3aed,#a855f7)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0, boxShadow:"0 4px 12px rgba(124,58,237,.5)" }}>
+          <div style={{ width:44, height:44, borderRadius:14, background:"linear-gradient(135deg,#7c3aed,#a855f7)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, boxShadow:"0 4px 14px rgba(124,58,237,.55)", flexShrink:0 }}>
             🎙️
           </div>
           <div>
-            <p style={{ fontSize:11, color:"#a5b4fc", fontWeight:700, letterSpacing:1, textTransform:"uppercase", marginBottom:1 }}>Study Podcast</p>
-            <p style={{ fontSize:15, color:"#fff", fontWeight:700, margin:0 }}>{topic}</p>
+            <p style={{ fontSize:11, color:"#a5b4fc", fontWeight:700, letterSpacing:1, textTransform:"uppercase", marginBottom:2 }}>Study Podcast</p>
+            <p style={{ fontSize:14, color:"#fff", fontWeight:700, margin:0, maxWidth:220, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{topic}</p>
           </div>
         </div>
-        <button onClick={onClose} style={{ background:"rgba(255,255,255,.1)", border:"none", borderRadius:8, width:30, height:30, color:"#a5b4fc", cursor:"pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
+        <button onClick={onClose} style={{ background:"rgba(255,255,255,.1)", border:"none", borderRadius:8, width:30, height:30, color:"#a5b4fc", cursor:"pointer", fontSize:18, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
       </div>
 
       {loading ? (
-        <div style={{ padding:"30px 22px", textAlign:"center" }}>
-          <div style={{ display:"flex", gap:6, justifyContent:"center", marginBottom:12 }}>
-            {[0,1,2].map(i => (
-              <div key={i} style={{ width:10, height:10, borderRadius:"50%", background:"#7c3aed",
-                animation:"bounce 1.2s infinite", animationDelay:`${i*.2}s` }} />
+        <div style={{ padding:"36px 22px", textAlign:"center" }}>
+          <div style={{ display:"flex", gap:7, justifyContent:"center", marginBottom:14 }}>
+            {[0,1,2,3].map(i => (
+              <div key={i} style={{ width:8, height:24, borderRadius:4, background:"#7c3aed", animation:"ppbar 1.1s infinite ease-in-out", animationDelay:`${i*.15}s` }}/>
             ))}
           </div>
-          <p style={{ color:"#a5b4fc", fontSize:14 }}>Writing your podcast script…</p>
+          <style>{`@keyframes ppbar{0%,100%{transform:scaleY(.4);opacity:.5}50%{transform:scaleY(1);opacity:1}}`}</style>
+          <p style={{ color:"#a5b4fc", fontSize:14 }}>Crafting your podcast script…</p>
         </div>
       ) : (
         <>
-          {/* Progress bar */}
-          <div style={{ padding:"0 22px 4px" }}>
-            <div style={{ height:4, background:"rgba(255,255,255,.15)", borderRadius:2 }}>
-              <div style={{ height:"100%", width:`${progress}%`, background:"linear-gradient(90deg,#7c3aed,#a855f7)", borderRadius:2, transition:"width .4s" }} />
+          {/* ── Progress bar ── */}
+          <div style={{ padding:"0 22px 6px" }}>
+            <div style={{ height:5, background:"rgba(255,255,255,.12)", borderRadius:3, cursor:"pointer" }}>
+              <div style={{ height:"100%", width:`${progress}%`, background:"linear-gradient(90deg,#6366f1,#a855f7)", borderRadius:3, transition:"width .35s" }}/>
             </div>
-            <div style={{ display:"flex", justifyContent:"space-between", marginTop:4 }}>
-              <span style={{ fontSize:11, color:"#6366f1" }}>{progress}%</span>
-              <span style={{ fontSize:11, color:"#6366f1" }}>~{estMins} min</span>
+            <div style={{ display:"flex", justifyContent:"space-between", marginTop:5 }}>
+              <span style={{ fontSize:11, color:"#818cf8" }}>{progress}%</span>
+              <span style={{ fontSize:11, color:"#818cf8" }}>~{estMins} min · {wordCount} words</span>
             </div>
           </div>
 
-          {/* Controls */}
-          <div style={{ padding:"12px 22px 18px" }}>
-            {/* Main playback buttons */}
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:14, marginBottom:16 }}>
-              <button onClick={stop} disabled={!playing && !paused && progress === 0}
-                style={{ width:40, height:40, borderRadius:"50%", background:"rgba(255,255,255,.1)", border:"none", color:"#a5b4fc", fontSize:18, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", opacity:(!playing&&!paused&&progress===0)?.4:1 }}>
+          {/* ── Playback controls ── */}
+          <div style={{ padding:"10px 22px 18px" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:16, marginBottom:18 }}>
+              {/* Stop */}
+              <button onClick={stop} title="Stop"
+                style={{ width:42, height:42, borderRadius:"50%", background:"rgba(255,255,255,.1)", border:"none", color:"#a5b4fc", fontSize:18, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", opacity:(!playing&&!paused)?.4:1, transition:"opacity .2s" }}>
                 ⏹
               </button>
+
+              {/* Play / Pause */}
               {!playing ? (
                 <button onClick={play} disabled={!script}
-                  style={{ width:60, height:60, borderRadius:"50%", background:"linear-gradient(135deg,#7c3aed,#a855f7)", border:"none", color:"#fff", fontSize:24, cursor:"pointer", boxShadow:"0 6px 20px rgba(124,58,237,.6)", display:"flex", alignItems:"center", justifyContent:"center", transition:"transform .15s" }}
-                  onMouseEnter={e=>e.currentTarget.style.transform="scale(1.08)"}
-                  onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
-                  {paused ? "▶" : progress===100 ? "↺" : "▶"}
+                  style={{ width:64, height:64, borderRadius:"50%", background:"linear-gradient(135deg,#6366f1,#a855f7)", border:"none", color:"#fff", fontSize:26, cursor:script?"pointer":"not-allowed", boxShadow:"0 6px 24px rgba(99,102,241,.6)", display:"flex", alignItems:"center", justifyContent:"center", transition:"transform .15s, box-shadow .15s" }}
+                  onMouseEnter={e=>{e.currentTarget.style.transform="scale(1.09)";e.currentTarget.style.boxShadow="0 8px 30px rgba(99,102,241,.75)"}}
+                  onMouseLeave={e=>{e.currentTarget.style.transform="scale(1)";e.currentTarget.style.boxShadow="0 6px 24px rgba(99,102,241,.6)"}}>
+                  {progress===100 ? "↺" : paused ? "▶" : "▶"}
                 </button>
               ) : (
                 <button onClick={pause}
-                  style={{ width:60, height:60, borderRadius:"50%", background:"linear-gradient(135deg,#7c3aed,#a855f7)", border:"none", color:"#fff", fontSize:22, cursor:"pointer", boxShadow:"0 6px 20px rgba(124,58,237,.6)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  style={{ width:64, height:64, borderRadius:"50%", background:"linear-gradient(135deg,#6366f1,#a855f7)", border:"none", color:"#fff", fontSize:24, cursor:"pointer", boxShadow:"0 6px 24px rgba(99,102,241,.6)", display:"flex", alignItems:"center", justifyContent:"center" }}>
                   ⏸
                 </button>
               )}
-              {/* Voice selector */}
-              {voices.length > 1 && (
-                <select value={voice?.name||""} onChange={e => { const v = voices.find(x=>x.name===e.target.value); setVoice(v); if(playing||paused)stop(); }}
-                  style={{ background:"rgba(255,255,255,.1)", border:"1px solid rgba(255,255,255,.2)", borderRadius:10, color:"#e0e7ff", fontSize:12, padding:"6px 10px", outline:"none", maxWidth:130, cursor:"pointer" }}>
-                  {voices.map(v => <option key={v.name} value={v.name} style={{background:"#1e1b4b"}}>{v.name.replace("Google ","").replace(" Online (Natural)","").slice(0,20)}</option>)}
-                </select>
-              )}
+
+              {/* Voice picker button */}
+              <button onClick={() => setShowVoicePicker(v => !v)} title="Choose voice"
+                style={{ width:42, height:42, borderRadius:"50%", background:showVoicePicker?"rgba(99,102,241,.4)":"rgba(255,255,255,.1)", border:`1.5px solid ${showVoicePicker?"#6366f1":"rgba(255,255,255,.15)"}`, color:"#a5b4fc", fontSize:17, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", transition:"all .18s" }}>
+                🎤
+              </button>
             </div>
 
-            {/* Speed buttons */}
+            {/* Voice picker panel */}
+            {showVoicePicker && (
+              <div style={{ background:"rgba(0,0,0,.35)", borderRadius:14, padding:"12px 14px", marginBottom:14, border:"1px solid rgba(255,255,255,.1)" }}>
+                <p style={{ fontSize:10, fontWeight:800, color:"#818cf8", letterSpacing:1, marginBottom:8, textTransform:"uppercase" }}>
+                  Voice — {voiceList.length} available {langVoices.length > 0 ? `for ${lang}` : "(all voices — no exact match for this language)"}
+                </p>
+                <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                  {voiceList.slice(0, 12).map(v => {
+                    const short = v.name.replace(/Google |Microsoft |Apple /gi,'').replace(/ Online \(Natural\)/i,'★').replace(/ \(Enhanced\)/i,'★').slice(0,22);
+                    const sel = selVoice?.name === v.name;
+                    const natural = rankVoice(v) >= 3;
+                    return (
+                      <button key={v.name} onClick={() => { setSelVoice(v); if(playing||paused) stop(); }}
+                        style={{ padding:"5px 10px", borderRadius:20, fontSize:11, fontWeight:700, cursor:"pointer", border:`1.5px solid ${sel?"#6366f1":"rgba(255,255,255,.15)"}`, background:sel?"#6366f1":"rgba(255,255,255,.07)", color:sel?"#fff":"#c7d2fe", transition:"all .13s" }}>
+                        {natural ? "✨" : ""}{short}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p style={{ fontSize:10, color:"#6366f1", marginTop:7 }}>✨ = high-quality natural voice</p>
+              </div>
+            )}
+
+            {/* Speed selector */}
             <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
-              <span style={{ fontSize:11, color:"#6366f1", marginRight:4, fontWeight:600 }}>SPEED</span>
+              <span style={{ fontSize:10, fontWeight:800, color:"#6366f1", marginRight:2, letterSpacing:1 }}>SPEED</span>
               {SPEEDS.map(s => (
                 <button key={s} onClick={() => changeSpeed(s)}
-                  style={{ padding:"4px 10px", borderRadius:20, border:`1.5px solid ${speed===s?"#7c3aed":"rgba(255,255,255,.15)"}`, background:speed===s?"#7c3aed":"transparent", color:speed===s?"#fff":"#a5b4fc", fontSize:12, fontWeight:700, cursor:"pointer", transition:"all .15s" }}>
+                  style={{ padding:"4px 9px", borderRadius:20, border:`1.5px solid ${speed===s?"#6366f1":"rgba(255,255,255,.15)"}`, background:speed===s?"#6366f1":"transparent", color:speed===s?"#fff":"#a5b4fc", fontSize:11, fontWeight:700, cursor:"pointer", transition:"all .15s" }}>
                   {s}×
                 </button>
               ))}
             </div>
+
+            {/* Current voice badge */}
+            <p style={{ fontSize:11, color:"#6366f1", textAlign:"center", marginTop:10 }}>
+              🎤 {voiceName}
+            </p>
           </div>
 
-          {/* Script preview - collapsible */}
-          <details style={{ borderTop:"1px solid rgba(255,255,255,.08)" }}>
+          {/* ── Script viewer ── */}
+          <details style={{ borderTop:"1px solid rgba(255,255,255,.07)" }}>
             <summary style={{ padding:"10px 22px", color:"#6366f1", fontSize:12, fontWeight:700, cursor:"pointer", letterSpacing:.5, listStyle:"none", userSelect:"none" }}>
-              📄 VIEW SCRIPT
+              📄 READ SCRIPT
             </summary>
-            <div style={{ padding:"0 22px 18px", maxHeight:220, overflowY:"auto" }}>
-              <p style={{ fontSize:13, color:"#c7d2fe", lineHeight:1.8, whiteSpace:"pre-wrap" }}>{script}</p>
+            <div style={{ padding:"0 22px 20px", maxHeight:240, overflowY:"auto" }}>
+              <p style={{ fontSize:13, color:"#c7d2fe", lineHeight:1.9, whiteSpace:"pre-wrap" }}>{script}</p>
             </div>
           </details>
         </>
@@ -4585,6 +4889,9 @@ function PodcastPlayer({ script, loading, topic, onClose }) {
     </div>
   );
 }
+
+// Keep PodcastPlayer as an alias for backward compatibility
+const PodcastPlayer = EnhancedPodcastPlayer;
 
 
 // ─── MODAL ────────────────────────────────────────────────────────────────────
