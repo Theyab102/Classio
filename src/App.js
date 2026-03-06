@@ -878,39 +878,83 @@ function MiniAvatar({ character: ch, size = 40 }) {
     </>,
   };
 
-  // ── Body / outfit — topStyle changes the actual shape ─────────────────────
+  // ── Body / outfit — topStyle 0-11 ────────────────────────────────────────
   const ts = ch.topStyle || 0;
   const bodyPath = `M${s*.04} ${s*1.04} C${s*.1} ${s*.82} ${s*.25} ${s*.7} ${s*.36} ${s*.66} Q${cx} ${s*.63} ${s*.64} ${s*.66} C${s*.75} ${s*.7} ${s*.9} ${s*.82} ${s*.96} ${s*1.04} Z`;
+  const tankPath = `M${s*.04} ${s*1.04} C${s*.06} ${s*.84} ${s*.18} ${s*.72} ${s*.28} ${s*.67} Q${cx} ${s*.64} ${s*.72} ${s*.67} C${s*.82} ${s*.72} ${s*.94} ${s*.84} ${s*.96} ${s*1.04} Z`;
   const body = <>
-    {/* Base shape — always uses top colour */}
-    <path d={bodyPath} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
-    {/* Style details */}
-    {ts===1 && /* Hoodie — pocket + drawstrings */ <>
-      <ellipse cx={cx} cy={s*.88} rx={s*.09} ry={s*.06} fill={td} clipPath={`url(#c${gid})`}/>
-      <line x1={s*.47} y1={s*.66} x2={s*.45} y2={s*.92} stroke={td} strokeWidth={s*.018} clipPath={`url(#c${gid})`}/>
-      <line x1={s*.53} y1={s*.66} x2={s*.55} y2={s*.92} stroke={td} strokeWidth={s*.018} clipPath={`url(#c${gid})`}/>
+    {/* Base body shape */}
+    {ts!==3 && ts!==9 && <path d={bodyPath} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>}
+    {/* ts 0 = T-Shirt (plain) — just collar stripe */}
+    {ts===1 && /* Hoodie */ <>
+      <ellipse cx={cx} cy={s*.88} rx={s*.09} ry={s*.055} fill={td} clipPath={`url(#c${gid})`}/>
+      <line x1={s*.47} y1={s*.66} x2={s*.455} y2={s*.91} stroke={td} strokeWidth={s*.017} clipPath={`url(#c${gid})`}/>
+      <line x1={s*.53} y1={s*.66} x2={s*.545} y2={s*.91} stroke={td} strokeWidth={s*.017} clipPath={`url(#c${gid})`}/>
+      {/* Hood outline */}
+      <path d={`M${s*.34} ${s*.66} Q${cx} ${s*.58} ${s*.66} ${s*.66}`} stroke={td} strokeWidth={s*.022} fill="none" clipPath={`url(#c${gid})`}/>
     </>}
-    {ts===2 && /* Jacket — lapels + buttons */ <>
+    {ts===2 && /* Jacket */ <>
       <path d={`M${s*.5} ${s*.63} L${s*.41} ${s*.72} L${s*.36} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
       <path d={`M${s*.5} ${s*.63} L${s*.59} ${s*.72} L${s*.64} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
-      {[0,1,2].map(i=><circle key={i} cx={cx} cy={s*(.72+i*.09)} r={s*.014} fill={tl} clipPath={`url(#c${gid})`}/>)}
+      {[0,1,2].map(i=><circle key={i} cx={cx} cy={s*(.72+i*.09)} r={s*.013} fill={tl} clipPath={`url(#c${gid})`}/>)}
     </>}
-    {ts===3 && /* Tank — bare shoulders */ <>
-      <path d={`M${s*.04} ${s*1.04} C${s*.06} ${s*.84} ${s*.18} ${s*.72} ${s*.28} ${s*.67} Q${cx} ${s*.64} ${s*.72} ${s*.67} C${s*.82} ${s*.72} ${s*.94} ${s*.84} ${s*.96} ${s*1.04} Z`}
-        fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
-      <path d={bodyPath} fill="none" clipPath={`url(#c${gid})`}/>
+    {ts===3 && /* Tank top — narrow straps */ <>
+      <path d={tankPath} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
+      {/* straps */}
+      <rect x={s*.41} y={s*.57} width={s*.06} height={s*.1} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
+      <rect x={s*.53} y={s*.57} width={s*.06} height={s*.1} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
     </>}
-    {ts===4 && /* Suit — tie + lapels */ <>
+    {ts===4 && /* Suit + tie */ <>
       <path d={`M${s*.5} ${s*.63} L${s*.42} ${s*.73} L${s*.37} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
       <path d={`M${s*.5} ${s*.63} L${s*.58} ${s*.73} L${s*.63} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
       <path d={`M${s*.48} ${s*.66} L${s*.5} ${s*.76} L${s*.52} ${s*.66}`} fill="#c0392b" clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.5} ${s*.76} L${s*.49} ${s*.93} L${s*.5} ${s*.97} L${s*.51} ${s*.93} Z`} fill="#c0392b" clipPath={`url(#c${gid})`}/>
+      <path d={`M${s*.5} ${s*.76} L${s*.49} ${s*.94} L${s*.5} ${s*.975} L${s*.51} ${s*.94} Z`} fill="#c0392b" clipPath={`url(#c${gid})`}/>
     </>}
-    {ts===5 && /* Crop — shorter body */ <>
-      <rect x={s*.1} y={s*.77} width={s*.8} height={s*.3} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
+    {ts===5 && /* Crop top */ <>
+      <rect x={s*.1} y={s*.76} width={s*.8} height={s*.3} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
     </>}
-    {/* Collar highlight on all styles */}
-    <path d={`M${s*.38} ${s*.645} Q${cx} ${s*.605} ${s*.62} ${s*.645}`} stroke={tl} strokeWidth={s*.018} fill="none" opacity={.48} clipPath={`url(#c${gid})`}/>
+    {ts===6 && /* Polo / school shirt — collar + buttons */ <>
+      {/* collar points */}
+      <path d={`M${s*.46} ${s*.645} L${s*.43} ${s*.70} L${s*.5} ${s*.685}`} fill={tl} clipPath={`url(#c${gid})`}/>
+      <path d={`M${s*.54} ${s*.645} L${s*.57} ${s*.70} L${s*.5} ${s*.685}`} fill={tl} clipPath={`url(#c${gid})`}/>
+      {[0,1].map(i=><circle key={i} cx={cx} cy={s*(.73+i*.08)} r={s*.011} fill={td} clipPath={`url(#c${gid})`}/>)}
+    </>}
+    {ts===7 && /* Sport jersey — side stripes */ <>
+      <rect x={s*.04} y={s*.66} width={s*.08} height={s*.38} fill={tl} opacity={.7} clipPath={`url(#c${gid})`}/>
+      <rect x={s*.88} y={s*.66} width={s*.08} height={s*.38} fill={tl} opacity={.7} clipPath={`url(#c${gid})`}/>
+      {/* number badge */}
+      <rect x={s*.41} y={s*.73} width={s*.18} height={s*.14} rx={s*.02} fill={td} clipPath={`url(#c${gid})`}/>
+      <text x={cx} y={s*.845} textAnchor="middle" fontSize={s*.09} fill={tl} fontWeight="900" fontFamily="sans-serif" clipPath={`url(#c${gid})`}>10</text>
+    </>}
+    {ts===8 && /* Streetwear hoodie — oversized, zip */ <>
+      {/* wider body for oversized look */}
+      <path d={`M${s*.00} ${s*1.04} C${s*.04} ${s*.80} ${s*.22} ${s*.68} ${s*.34} ${s*.65} Q${cx} ${s*.62} ${s*.66} ${s*.65} C${s*.78} ${s*.68} ${s*.96} ${s*.80} ${s*1.0} ${s*1.04} Z`} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
+      {/* zip */}
+      <line x1={cx} y1={s*.63} x2={cx} y2={s*.98} stroke={td} strokeWidth={s*.014} clipPath={`url(#c${gid})`}/>
+      {[0,1,2,3].map(i=><line key={i} x1={s*.495} y1={s*(.68+i*.07)} x2={s*.505} y2={s*(.68+i*.07)} stroke={tl} strokeWidth={s*.016} clipPath={`url(#c${gid})`}/>)}
+      {/* kangaroo pocket */}
+      <path d={`M${s*.36} ${s*.85} Q${cx} ${s*.82} ${s*.64} ${s*.85} L${s*.64} ${s*1.0} Q${cx} ${s*1.02} ${s*.36} ${s*1.0} Z`} fill={td} clipPath={`url(#c${gid})`}/>
+    </>}
+    {ts===9 && /* Dress / casual */ <>
+      <path d={`M${s*.3} ${s*.64} Q${cx} ${s*.61} ${s*.7} ${s*.64} L${s*.82} ${s*1.04} Q${cx} ${s*1.06} ${s*.18} ${s*1.04} Z`} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
+      {/* waist band */}
+      <path d={`M${s*.32} ${s*.72} Q${cx} ${s*.70} ${s*.68} ${s*.72}`} stroke={td} strokeWidth={s*.018} fill="none" clipPath={`url(#c${gid})`}/>
+    </>}
+    {ts===10 && /* Blazer (school/smart) */ <>
+      {/* lapels */}
+      <path d={`M${s*.5} ${s*.63} L${s*.40} ${s*.74} L${s*.36} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
+      <path d={`M${s*.5} ${s*.63} L${s*.60} ${s*.74} L${s*.64} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
+      {/* pocket square */}
+      <rect x={s*.38} y={s*.77} width={s*.07} height={s*.055} rx={s*.01} fill={tl} clipPath={`url(#c${gid})`}/>
+      {/* 2 buttons */}
+      {[0,1].map(i=><circle key={i} cx={cx} cy={s*(.77+i*.1)} r={s*.013} fill={tl} clipPath={`url(#c${gid})`}/>)}
+    </>}
+    {ts===11 && /* Graphic tee — print on chest */ <>
+      <rect x={s*.38} y={s*.70} width={s*.24} height={s*.18} rx={s*.025} fill={td} clipPath={`url(#c${gid})`}/>
+      <circle cx={cx} cy={s*.79} r={s*.06} fill={tl} opacity={.7} clipPath={`url(#c${gid})`}/>
+    </>}
+    {/* Collar highlight on all non-tank styles */}
+    {ts!==3 && ts!==5 && ts!==9 && <path d={`M${s*.38} ${s*.645} Q${cx} ${s*.605} ${s*.62} ${s*.645}`} stroke={tl} strokeWidth={s*.017} fill="none" opacity={.44} clipPath={`url(#c${gid})`}/>}
   </>;
 
   return (
@@ -986,24 +1030,38 @@ function MiniAvatar({ character: ch, size = 40 }) {
 }
 
 // ─── CHARACTER MODAL ─────────────────────────────────────────────────────────
+// Visual preview: every selector shows mini SVG avatars with the option applied
 function CharacterModal({ character, onChange, onClose }) {
   const [tab, setTab] = useState("face");
   const ch = character;
 
-  const SKINS   = ["#FDDBB4","#F5C89A","#FFCBA4","#E8A87C","#D4956A","#C68642","#A0693A","#8D5524","#6B3A1F","#F4D6C8"];
-  const HAIRS   = ["#0d0d0d","#1a0a00","#2C1810","#4A2912","#7B4F2C","#B5651D","#C9A96E","#EDD9A3","#F2E6C8",
-                   "#C0392B","#E74C3C","#F39C12","#8E44AD","#2980B9","#27AE60","#1ABC9C","#fd79a8","#00CED1","#FF6347","#808080"];
-  const EYES    = ["#1a3a5c","#2980B9","#74b9ff","#27AE60","#52BE80","#2d6a4f","#8B6914","#C8A84B","#2C2C2C","#6B4226","#C0392B","#8E44AD","#00b894"];
-  const TOPS    = ["#1a1a2e","#2C3E50","#34495E","#7f8c8d","#E74C3C","#C0392B","#E67E22","#F39C12","#27AE60","#16A085","#2980B9","#1abc9c","#8E44AD","#fd79a8","#FFFFFF","#ECF0F1"];
-  const LIP_C   = ["#C0392B","#E74C3C","#c0706a","#fd79a8","#8E44AD","#D35400","#FF1493","#DC143C"];
-  const BG      = ["#dce8ff","#e8f4ff","#dfe6e9","#ffeaa7","#d5f5e3","#f8d7e3","#e8daef","#ffddd2","#c8e6c9","#fff3e0","#1a1a2e","#2d3436","#6c5ce7","#00b894"];
+  const SKINS = ["#FDDBB4","#F5C89A","#FFCBA4","#E8A87C","#D4956A","#C68642","#A0693A","#8D5524","#6B3A1F","#F4D6C8"];
+  const HAIRS = ["#0d0d0d","#1a0a00","#2C1810","#4A2912","#7B4F2C","#B5651D","#C9A96E","#EDD9A3","#F2E6C8",
+                 "#C0392B","#E74C3C","#F39C12","#8E44AD","#2980B9","#27AE60","#1ABC9C","#fd79a8","#00CED1","#FF6347","#808080"];
+  const EYES  = ["#1a3a5c","#2980B9","#74b9ff","#27AE60","#52BE80","#2d6a4f","#8B6914","#C8A84B","#2C2C2C","#6B4226","#C0392B","#8E44AD","#00b894"];
+  const TOPS  = ["#1a1a2e","#2C3E50","#34495E","#7f8c8d","#E74C3C","#C0392B","#E67E22","#F39C12","#27AE60","#16A085","#2980B9","#1abc9c","#8E44AD","#fd79a8","#FFFFFF","#ECF0F1"];
+  const LIP_C = ["#C0392B","#E74C3C","#c0706a","#fd79a8","#8E44AD","#D35400","#FF1493","#DC143C"];
+  const BG    = ["#dce8ff","#e8f4ff","#dfe6e9","#ffeaa7","#d5f5e3","#f8d7e3","#e8daef","#ffddd2","#c8e6c9","#fff3e0","#1a1a2e","#2d3436","#6c5ce7","#00b894"];
 
   const HAIR_NAMES = ["Buzz","Side-part","Fringe","Textured","Long","Wavy","Ponytail","Bun","Afro","Box braids","Curly","Locs","Faux hawk","Space buns"];
-  const EYE_S   = ["Round","Almond","Cat-eye"];
-  const BROWS   = ["Arched","Straight","Thick","Sad"];
-  const MOUTHS  = ["Smile","Frown","Open","Smirk","Neutral"];
-  const ACCS    = ["None","Glasses","Beanie","Cap","Headband","Earrings"];
-  const TOPS_S  = ["T-Shirt","Hoodie","Jacket","Tank","Suit","Crop"];
+  const EYE_S  = ["Round","Almond","Cat-eye"];
+  const BROWS  = ["Arched","Straight","Thick","Sad"];
+  const MOUTHS = ["Smile","Frown","Open","Smirk","Neutral"];
+  const ACCS   = ["None","Glasses","Beanie","Cap","Headband","Earrings"];
+  const TOPS_S = [
+    {id:0, label:"T-Shirt",     cat:"Casual"},
+    {id:1, label:"Hoodie",      cat:"Streetwear"},
+    {id:2, label:"Jacket",      cat:"Casual"},
+    {id:3, label:"Tank Top",    cat:"Casual"},
+    {id:4, label:"Suit & Tie",  cat:"Formal"},
+    {id:5, label:"Crop Top",    cat:"Casual"},
+    {id:6, label:"Polo / School",cat:"School"},
+    {id:7, label:"Sport Jersey",cat:"Sport"},
+    {id:8, label:"Streetwear",  cat:"Streetwear"},
+    {id:9, label:"Dress",       cat:"Casual"},
+    {id:10,label:"Blazer",      cat:"Formal"},
+    {id:11,label:"Graphic Tee", cat:"Casual"},
+  ];
 
   const TABS = [
     {id:"face", emoji:"😊", label:"FACE"},
@@ -1012,145 +1070,208 @@ function CharacterModal({ character, onChange, onClose }) {
     {id:"extra",emoji:"✨", label:"EXTRA"},
   ];
 
-  const Swatch = ({val, field, sz=26}) => {
+  // ── Avatar preview chip ────────────────────────────────────────────────────
+  // Renders a small version of the avatar with ONE field swapped to 'value'
+  const AvatarChip = ({ field, value, label, selected, size=62 }) => {
+    const preview = { ...ch, [field]: value };
+    return (
+      <button
+        onClick={() => onChange({ ...ch, [field]: value })}
+        title={label}
+        style={{
+          display:"flex", flexDirection:"column", alignItems:"center", gap:4,
+          padding:"7px 5px 5px", borderRadius:14, border:"none", cursor:"pointer",
+          background: selected ? "#eef1ff" : "#f7f8fa",
+          outline: selected ? "2.5px solid #4361ee" : "2px solid transparent",
+          outlineOffset:1,
+          transition:"all .13s",
+          transform: selected ? "scale(1.07)" : "scale(1)",
+          boxShadow: selected ? "0 3px 12px rgba(67,97,238,.28)" : "0 1px 3px rgba(0,0,0,.07)",
+        }}
+      >
+        <div style={{
+          width:size, height:size, borderRadius:"50%", overflow:"hidden", flexShrink:0,
+          boxShadow: selected ? "0 2px 10px rgba(67,97,238,.35)" : "0 1px 4px rgba(0,0,0,.14)",
+        }}>
+          <MiniAvatar character={preview} size={size}/>
+        </div>
+        <span style={{
+          fontSize:9, fontWeight:700, letterSpacing:.2, textAlign:"center",
+          lineHeight:1.3, maxWidth:size+8, wordBreak:"break-word",
+          color: selected ? "#4361ee" : "#777",
+        }}>
+          {label}
+        </span>
+      </button>
+    );
+  };
+
+  // Grid of avatar preview chips
+  const ChipGrid = ({ field, items, size=62 }) => (
+    <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+      {items.map((item, i) => {
+        const value = typeof item === "object" ? item.id : i;
+        const label = typeof item === "object" ? item.label : item;
+        return (
+          <AvatarChip key={i} field={field} value={value} label={label}
+            selected={ch[field] === value} size={size}/>
+        );
+      })}
+    </div>
+  );
+
+  // Colour swatch button
+  const Swatch = ({ val, field, sz=26 }) => {
     const sel = ch[field] === val;
     return (
       <button onClick={() => onChange({...ch, [field]: val})} style={{
         width:sz, height:sz, borderRadius:"50%", background:val, cursor:"pointer", flexShrink:0,
-        border:`3px solid ${sel ? "#000" : "transparent"}`,
-        outline:`2px solid ${sel ? "#fff" : "transparent"}`,
-        outlineOffset:"-1px",
-        transform: sel ? "scale(1.22)" : "scale(1)",
-        transition:"transform .12s",
+        border:`3px solid ${sel?"#000":"transparent"}`,
+        outline:`2px solid ${sel?"#fff":"transparent"}`, outlineOffset:"-1px",
+        transform: sel?"scale(1.22)":"scale(1)", transition:"transform .12s",
         boxShadow:`0 2px 5px rgba(0,0,0,${sel?".35":".18"})`
       }}/>
     );
   };
-
-  const Swatches = ({vals, field, sz=26}) => (
-    <div style={{display:"flex", flexWrap:"wrap", gap:5}}>
+  const Swatches = ({ vals, field, sz=26 }) => (
+    <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
       {vals.map(v => <Swatch key={v} val={v} field={field} sz={sz}/>)}
     </div>
   );
 
-  const Pills = ({vals, field}) => (
-    <div style={{display:"flex", flexWrap:"wrap", gap:5}}>
-      {vals.map((v,i) => (
-        <button key={i} onClick={() => onChange({...ch, [field]: i})} style={{
-          padding:"5px 12px", fontSize:11, fontWeight:700, borderRadius:20, cursor:"pointer",
-          border:"none", transition:"all .12s",
-          background: ch[field]===i ? "#111" : "#eee",
-          color:       ch[field]===i ? "#fff" : "#666",
-          boxShadow:   ch[field]===i ? "0 2px 8px rgba(0,0,0,.28)" : "none",
-          transform:   ch[field]===i ? "scale(1.06)" : "scale(1)"
-        }}>{v}</button>
-      ))}
-    </div>
-  );
-
-  const Toggle = ({label, field, emoji}) => (
+  const Toggle = ({ label, field, emoji }) => (
     <button onClick={() => onChange({...ch, [field]: !ch[field]})} style={{
       display:"flex", alignItems:"center", gap:7, padding:"7px 14px",
       borderRadius:20, border:"none", cursor:"pointer", fontWeight:700, fontSize:12,
-      background: ch[field] ? "#111" : "#eee",
-      color:      ch[field] ? "#fff" : "#666",
-      transition:"all .14s",
-      boxShadow:  ch[field] ? "0 2px 8px rgba(0,0,0,.22)" : "none"
+      background: ch[field]?"#111":"#eee", color:ch[field]?"#fff":"#666",
+      transition:"all .14s", boxShadow:ch[field]?"0 2px 8px rgba(0,0,0,.22)":"none"
     }}>{emoji} {label}</button>
   );
 
-  const Row = ({label, children}) => (
-    <div style={{marginBottom:0}}>
-      <p style={{fontSize:10, fontWeight:800, color:"#999", letterSpacing:1, marginBottom:7}}>{label}</p>
+  const Row = ({ label, children }) => (
+    <div style={{ marginBottom:0 }}>
+      <p style={{ fontSize:10, fontWeight:800, color:"#999", letterSpacing:1, marginBottom:9 }}>{label}</p>
       {children}
     </div>
   );
 
   return (
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.65)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:12}}>
-      <div onClick={e=>e.stopPropagation()} style={{
-        background:"#fff", borderRadius:24, width:"100%", maxWidth:490,
+    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.65)", zIndex:3000, display:"flex", alignItems:"center", justifyContent:"center", padding:12 }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background:"#fff", borderRadius:24, width:"100%", maxWidth:520,
         maxHeight:"94vh", overflow:"hidden", display:"flex", flexDirection:"column",
         boxShadow:"0 32px 100px rgba(0,0,0,.42)"
       }}>
 
         {/* Header */}
-        <div style={{padding:"15px 20px 11px", display:"flex", alignItems:"center", justifyContent:"space-between", borderBottom:"1.5px solid #eee"}}>
-          <span style={{fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:900, color:"#111", letterSpacing:-.5}}>My Avatar</span>
-          <button onClick={onClose} style={{background:"#eee", border:"none", borderRadius:"50%", width:30, height:30, fontSize:17, cursor:"pointer", fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center", color:"#555"}}>×</button>
+        <div style={{ padding:"15px 20px 11px", display:"flex", alignItems:"center", justifyContent:"space-between", borderBottom:"1.5px solid #eee" }}>
+          <span style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:900, color:"#111", letterSpacing:-.5 }}>My Avatar</span>
+          <button onClick={onClose} style={{ background:"#eee", border:"none", borderRadius:"50%", width:30, height:30, fontSize:17, cursor:"pointer", fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center", color:"#555" }}>×</button>
         </div>
 
         {/* Live preview */}
-        <div style={{background:"linear-gradient(155deg,#f0f4ff,#e4ecff)", padding:"18px 0 12px", display:"flex", flexDirection:"column", alignItems:"center", gap:10}}>
-          <div style={{width:120, height:120, borderRadius:"50%", overflow:"hidden", flexShrink:0, boxShadow:"0 6px 28px rgba(0,0,0,.2)", border:"3px solid #fff"}}>
+        <div style={{ background:"linear-gradient(155deg,#f0f4ff,#e4ecff)", padding:"16px 0 12px", display:"flex", flexDirection:"column", alignItems:"center", gap:10 }}>
+          <div style={{ width:120, height:120, borderRadius:"50%", overflow:"hidden", flexShrink:0, boxShadow:"0 6px 28px rgba(0,0,0,.2)", border:"3px solid #fff" }}>
             <MiniAvatar character={ch} size={120}/>
           </div>
-          <input value={ch.name||""} onChange={e=>onChange({...ch, name:e.target.value})} placeholder="Nickname…"
-            style={{border:"1.5px solid #ddd", borderRadius:20, padding:"5px 14px", fontSize:13, fontWeight:700, outline:"none", color:"#111", background:"white", textAlign:"center", width:155}}/>
+          <input value={ch.name||""} onChange={e => onChange({...ch, name:e.target.value})} placeholder="Nickname…"
+            style={{ border:"1.5px solid #ddd", borderRadius:20, padding:"5px 14px", fontSize:13, fontWeight:700, outline:"none", color:"#111", background:"white", textAlign:"center", width:155 }}/>
         </div>
 
         {/* Tabs */}
-        <div style={{display:"flex", background:"#fff", borderBottom:"1.5px solid #eee"}}>
+        <div style={{ display:"flex", background:"#fff", borderBottom:"1.5px solid #eee" }}>
           {TABS.map(t => (
-            <button key={t.id} onClick={()=>setTab(t.id)} style={{
+            <button key={t.id} onClick={() => setTab(t.id)} style={{
               flex:1, padding:"9px 4px 6px", border:"none", cursor:"pointer", background:"#fff",
               fontWeight:800, fontSize:10, letterSpacing:.5,
-              color: tab===t.id ? "#111" : "#bbb",
-              borderBottom:`2.5px solid ${tab===t.id ? "#111" : "transparent"}`,
+              color: tab===t.id?"#111":"#bbb",
+              borderBottom:`2.5px solid ${tab===t.id?"#111":"transparent"}`,
               transition:"all .14s"
             }}>{t.emoji}<br/>{t.label}</button>
           ))}
         </div>
 
-        {/* Tab content */}
-        <div style={{flex:1, overflowY:"auto", padding:"16px 18px", display:"flex", flexDirection:"column", gap:16}}>
+        {/* Scrollable tab content */}
+        <div style={{ flex:1, overflowY:"auto", padding:"16px 14px", display:"flex", flexDirection:"column", gap:18 }}>
 
+          {/* FACE */}
           {tab==="face" && <>
-            <Row label="SKIN TONE"><Swatches vals={SKINS} field="skin"/></Row>
-            <Row label="EYE SHAPE"><Pills vals={EYE_S} field="eyeShape"/></Row>
-            <Row label="EYE COLOUR"><Swatches vals={EYES} field="eyes"/></Row>
-            <Row label="EYEBROWS"><Pills vals={BROWS} field="eyebrow"/></Row>
-            <Row label="EXPRESSION"><Pills vals={MOUTHS} field="mouth"/></Row>
-          </>}
-
-          {tab==="hair" && <>
-            <Row label={`HAIR STYLE — ${HAIR_NAMES[ch.hairStyle||0]}`}>
-              <Pills vals={HAIR_NAMES} field="hairStyle"/>
+            <Row label="SKIN TONE">
+              <div style={{ display:"flex", flexWrap:"wrap", gap:7 }}>
+                {SKINS.map(v => (
+                  <button key={v} onClick={() => onChange({...ch, skin:v})} style={{
+                    width:32, height:32, borderRadius:"50%", background:v, cursor:"pointer",
+                    border:`3px solid ${ch.skin===v?"#111":"transparent"}`,
+                    outline:`2px solid ${ch.skin===v?"#fff":"transparent"}`, outlineOffset:"-1px",
+                    transform:ch.skin===v?"scale(1.2)":"scale(1)", transition:"transform .12s"
+                  }}/>
+                ))}
+              </div>
             </Row>
-            <Row label="HAIR COLOUR"><Swatches vals={HAIRS} field="hair" sz={24}/></Row>
+            <Row label="EYE SHAPE">
+              <ChipGrid field="eyeShape" items={EYE_S} size={62}/>
+            </Row>
+            <Row label="EYE COLOUR">
+              <Swatches vals={EYES} field="eyes" sz={26}/>
+            </Row>
+            <Row label="EYEBROWS">
+              <ChipGrid field="eyebrow" items={BROWS} size={60}/>
+            </Row>
+            <Row label="EXPRESSION">
+              <ChipGrid field="mouth" items={MOUTHS} size={60}/>
+            </Row>
           </>}
 
+          {/* HAIR */}
+          {tab==="hair" && <>
+            <Row label="HAIR STYLE — tap a preview to choose">
+              <ChipGrid field="hairStyle" items={HAIR_NAMES} size={66}/>
+            </Row>
+            <Row label="HAIR COLOUR">
+              <Swatches vals={HAIRS} field="hair" sz={24}/>
+            </Row>
+          </>}
+
+          {/* FIT */}
           {tab==="fit" && <>
-            <Row label="OUTFIT STYLE"><Pills vals={TOPS_S} field="topStyle"/></Row>
-            <Row label="OUTFIT COLOUR"><Swatches vals={TOPS} field="top"/></Row>
-            <Row label="ACCESSORY"><Pills vals={ACCS} field="accessory"/></Row>
-            <Row label="BACKGROUND"><Swatches vals={BG} field="bg" sz={24}/></Row>
+            <Row label="OUTFIT STYLE — tap a preview to choose">
+              <ChipGrid field="topStyle" items={TOPS_S} size={70}/>
+            </Row>
+            <Row label="OUTFIT COLOUR">
+              <Swatches vals={TOPS} field="top"/>
+            </Row>
+            <Row label="ACCESSORY">
+              <ChipGrid field="accessory" items={ACCS} size={60}/>
+            </Row>
+            <Row label="BACKGROUND">
+              <Swatches vals={BG} field="bg" sz={24}/>
+            </Row>
           </>}
 
+          {/* EXTRA */}
           {tab==="extra" && <>
             <Row label="EXTRAS">
-              <div style={{display:"flex", flexWrap:"wrap", gap:8}}>
-                <Toggle label="Blush"    field="blush"    emoji="🌸"/>
-                <Toggle label="Lip gloss" field="lips"    emoji="💋"/>
-                <Toggle label="Freckles" field="freckles" emoji="🟤"/>
+              <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+                <Toggle label="Blush"     field="blush"    emoji="🌸"/>
+                <Toggle label="Lip gloss" field="lips"     emoji="💋"/>
+                <Toggle label="Freckles"  field="freckles" emoji="🟤"/>
               </div>
             </Row>
             {ch.lips && <Row label="LIP COLOUR"><Swatches vals={LIP_C} field="lipColor" sz={24}/></Row>}
             <button
-              onClick={()=>onChange({skin:"#FDDBB4",hair:"#3D2B1F",hairStyle:0,eyes:"#2980B9",top:"#2C3E50",bg:"#dce8ff",mouth:0,eyebrow:0,eyeShape:0,accessory:0,topStyle:0,blush:false,lips:false,freckles:false,lipColor:"#d06060",name:ch.name})}
-              style={{padding:"8px 18px",background:"#eee",border:"none",borderRadius:20,fontSize:12,fontWeight:700,cursor:"pointer",color:"#555",alignSelf:"flex-start"}}>
+              onClick={() => onChange({skin:"#FDDBB4",hair:"#3D2B1F",hairStyle:0,eyes:"#2980B9",top:"#2C3E50",bg:"#dce8ff",mouth:0,eyebrow:0,eyeShape:0,accessory:0,topStyle:0,blush:false,lips:false,freckles:false,lipColor:"#d06060",name:ch.name})}
+              style={{ padding:"8px 18px", background:"#eee", border:"none", borderRadius:20, fontSize:12, fontWeight:700, cursor:"pointer", color:"#555", alignSelf:"flex-start" }}>
               🔄 Reset
             </button>
           </>}
         </div>
 
         {/* Done */}
-        <div style={{padding:"10px 18px 14px", borderTop:"1.5px solid #eee"}}>
-          <button onClick={onClose} style={{width:"100%",background:"#111",color:"#fff",border:"none",borderRadius:14,padding:"12px",fontSize:14,fontWeight:900,cursor:"pointer",letterSpacing:.3}}>
+        <div style={{ padding:"10px 18px 14px", borderTop:"1.5px solid #eee" }}>
+          <button onClick={onClose} style={{ width:"100%", background:"#111", color:"#fff", border:"none", borderRadius:14, padding:"12px", fontSize:14, fontWeight:900, cursor:"pointer", letterSpacing:.3 }}>
             Done ✓
           </button>
         </div>
-
       </div>
     </div>
   );
@@ -2146,6 +2267,146 @@ ${fileContext}`
 }
 
 
+// ─── VOICE NOTES TAB ─────────────────────────────────────────────────────────
+function VoiceNotesTab({ file, user, isGuest, notes, onNotesUpdate,
+    voiceRecordings, onSaveRecording, onDeleteRecording,
+    startVoice, stopVoice, recording, processing, voiceStatus }) {
+
+  const [playingIdx, setPlayingIdx] = useState(null);
+  const synthRef = useRef(null);
+
+  const playRecording = (idx, text) => {
+    window.speechSynthesis?.cancel();
+    if (playingIdx === idx) { setPlayingIdx(null); return; }
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 0.92;
+    const v = window.speechSynthesis.getVoices().find(x => x.lang.startsWith("en"));
+    if (v) u.voice = v;
+    u.onend = () => setPlayingIdx(null);
+    u.onerror = () => setPlayingIdx(null);
+    window.speechSynthesis.speak(u);
+    setPlayingIdx(idx);
+    synthRef.current = u;
+  };
+
+  const stopPlay = () => { window.speechSynthesis?.cancel(); setPlayingIdx(null); };
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ marginBottom:20 }}>
+        <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:700, color:C.text, marginBottom:4 }}>Voice Notes</h2>
+        <p style={{ fontSize:13, color:C.muted }}>Record your voice — AI cleans it up into notes automatically</p>
+      </div>
+
+      {/* Guest / no-user banner */}
+      {(isGuest || !user) && (
+        <div style={{ background:C.warmL, border:`1.5px solid ${C.warm}33`, borderRadius:12, padding:"14px 18px", marginBottom:20, fontSize:13, color:C.warm, fontWeight:500 }}>
+          🎙️ Voice Notes is available for Google account users only — sign in with Google to use this feature.
+        </div>
+      )}
+
+      {/* Record button area */}
+      {!isGuest && user && (
+        <div style={{ background: recording ? "#fff0f0" : C.surface, border:`2px solid ${recording ? C.red+"55" : C.border}`, borderRadius:18, padding:"24px", marginBottom:20, textAlign:"center", transition:"all .3s" }}>
+          {recording && <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}`}</style>}
+
+          <div style={{ fontSize:52, marginBottom:12, animation: recording ? "pulse 1.4s infinite" : "none" }}>
+            {recording ? "🔴" : "🎙️"}
+          </div>
+          <p style={{ fontSize:15, fontWeight:700, color: recording ? C.red : C.text, marginBottom:6 }}>
+            {recording ? "Recording…" : processing ? "Processing…" : "Tap to start recording"}
+          </p>
+          <p style={{ fontSize:13, color:C.muted, marginBottom:20 }}>
+            {recording
+              ? "Speak naturally. AI will clean up filler words and format as notes."
+              : "Lecture, study session, or revision spoken aloud"}
+          </p>
+
+          {/* Status bar */}
+          {voiceStatus && (
+            <div style={{ background: voiceStatus.startsWith("✅") ? C.greenL : voiceStatus.startsWith("🎙️") ? "#fff0f0" : voiceStatus.startsWith("✨") ? C.accentL : C.redL,
+              border:`1px solid ${voiceStatus.startsWith("✅") ? C.green : voiceStatus.startsWith("🎙️") ? C.red : voiceStatus.startsWith("✨") ? C.accentS : C.red}44`,
+              borderRadius:10, padding:"8px 14px", marginBottom:16, fontSize:13, fontWeight:500, textAlign:"left",
+              color: voiceStatus.startsWith("✅") ? C.green : voiceStatus.startsWith("🎙️") ? C.red : C.text }}>
+              {voiceStatus}
+            </div>
+          )}
+
+          {!recording ? (
+            <button onClick={startVoice} disabled={processing}
+              style={{ background: processing ? "#ccc" : C.red, color:"#fff", border:"none", borderRadius:14, padding:"13px 36px", fontSize:15, fontWeight:700, cursor:processing?"not-allowed":"pointer", boxShadow:`0 4px 16px ${C.red}44` }}>
+              {processing ? "⏳ Processing…" : "🎙️ Start Recording"}
+            </button>
+          ) : (
+            <button onClick={stopVoice} disabled={processing}
+              style={{ background:"#fff", color:C.red, border:`2px solid ${C.red}`, borderRadius:14, padding:"13px 36px", fontSize:15, fontWeight:700, cursor:"pointer", boxShadow:`0 4px 16px ${C.red}22` }}>
+              ⏹ Stop & Save
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Saved recordings list */}
+      {voiceRecordings.length > 0 && (
+        <div>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+            <p style={{ fontSize:13, fontWeight:700, color:C.muted, letterSpacing:.5 }}>SAVED RECORDINGS ({voiceRecordings.length})</p>
+            {playingIdx !== null && (
+              <button onClick={stopPlay} style={{ fontSize:12, color:C.red, background:"#fff0f0", border:`1px solid ${C.red}33`, borderRadius:8, padding:"4px 10px", cursor:"pointer", fontWeight:600 }}>⏹ Stop</button>
+            )}
+          </div>
+
+          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+            {voiceRecordings.map((rec, idx) => (
+              <div key={idx} style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"14px 16px" }}>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    <div style={{ width:32, height:32, borderRadius:"50%", background: playingIdx===idx ? C.accentL : "#f0f4ff", display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, cursor:"pointer", border:`1.5px solid ${playingIdx===idx ? C.accent : C.border}`, flexShrink:0 }}
+                      onClick={() => playRecording(idx, rec.text)}>
+                      {playingIdx===idx ? "⏸" : "▶"}
+                    </div>
+                    <div>
+                      <p style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:1 }}>Recording {voiceRecordings.length - idx}</p>
+                      <p style={{ fontSize:11, color:C.muted }}>{rec.date} · {rec.words} words</p>
+                    </div>
+                  </div>
+                  <div style={{ display:"flex", gap:6 }}>
+                    <button onClick={() => {
+                      const newNotes = notes ? notes + "\n\n---\n\n" + rec.text : rec.text;
+                      onNotesUpdate(newNotes);
+                    }} title="Add to written notes"
+                      style={{ fontSize:11, fontWeight:700, padding:"5px 10px", borderRadius:8, border:`1px solid ${C.accentS}`, background:C.accentL, color:C.accent, cursor:"pointer" }}>
+                      + Notes
+                    </button>
+                    <button onClick={() => onDeleteRecording(idx)} title="Delete"
+                      style={{ fontSize:12, padding:"5px 10px", borderRadius:8, border:`1px solid ${C.border}`, background:"#fff", color:C.muted, cursor:"pointer" }}>
+                      🗑
+                    </button>
+                  </div>
+                </div>
+                {/* Preview */}
+                <p style={{ fontSize:13, color:C.text, lineHeight:1.55, background:"#f9fafb", borderRadius:8, padding:"8px 10px", maxHeight:80, overflowY:"auto", margin:0 }}>
+                  {rec.text.slice(0, 200)}{rec.text.length > 200 ? "…" : ""}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {voiceRecordings.length === 0 && !isGuest && user && (
+        <div style={{ textAlign:"center", padding:"40px 0", color:C.muted }}>
+          <div style={{ fontSize:40, marginBottom:12 }}>🎤</div>
+          <p style={{ fontSize:14, fontWeight:600 }}>No recordings yet</p>
+          <p style={{ fontSize:13 }}>Start recording above — your saved notes will appear here</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function NotesTab({ file, onUpdate, user, isGuest }) {
   const [notes, setNotes] = useState(file.notes||"");
   const [gen, setGen] = useState(false);
@@ -2187,8 +2448,13 @@ function NotesTab({ file, onUpdate, user, isGuest }) {
         simple: "Write very simple short notes in plain English. Short sentences. No complex words.",
         exam: "Write exam revision notes. Include key terms, definitions, possible exam questions, and a checklist at the end.",
       };
+      // Determine effective style instruction
+      const effectiveStyle = useCustomStyle && customStyle.trim()
+        ? `You are a study notes writer. The student wants notes in this specific style: "${customStyle.trim()}". Follow their instructions precisely.`
+        : `You are a study notes writer. ${styleGuide[noteStyle] || styleGuide.detailed}`;
+
       const txt = await callClaude(
-        `You are a study notes writer. ${styleGuide[noteStyle] || styleGuide.detailed}
+        `${effectiveStyle}
 
 STRICT FORMATTING RULES - you MUST follow these exactly:
 1. NEVER use asterisks (*) or double asterisks (**) anywhere - not even once
@@ -2320,7 +2586,14 @@ Topic context: ${context}`,
       );
       const combined = notes ? notes + "\n\n---\n\n" + result : result;
       setNotes(combined); onUpdate({...file, notes: combined});
-      setVoiceStatus("✅ Notes added!");
+      // Save to voice recordings list so it appears in Voice tab
+      saveRecording({
+        text: result,
+        raw: raw,
+        date: new Date().toLocaleDateString("en-GB", {day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}),
+        words: result.trim().split(/\s+/).length
+      });
+      setVoiceStatus("✅ Notes saved!");
       setTimeout(() => setVoiceStatus(""), 3000);
     } catch(e) { setVoiceStatus("Error: " + e.message); }
     setProcessing(false);
@@ -2356,102 +2629,149 @@ Topic context: ${context}`,
     setGen(false);
   };
 
+  const [notesSubTab, setNotesSubTab] = useState("written"); // "written" | "voice"
   const [noteStyle, setNoteStyle] = useState("detailed");
+  const [customStyle, setCustomStyle] = useState("");       // user-typed style instruction
+  const [useCustomStyle, setUseCustomStyle] = useState(false);
   const NOTE_STYLES = [
-    {id:"detailed", label:"Detailed"},
-    {id:"bullet", label:"Bullet Points"},
-    {id:"simple", label:"Simple"},
-    {id:"exam", label:"Exam Focused"},
+    {id:"detailed", label:"📋 Detailed", desc:"Full notes with headings & examples"},
+    {id:"bullet",   label:"• Bullets",   desc:"Bullet points only, grouped by topic"},
+    {id:"simple",   label:"🧒 Simple",    desc:"Plain English, easy to understand"},
+    {id:"exam",     label:"📝 Exam",      desc:"Key terms, likely questions & checklist"},
+  ];
+
+  // Stored voice recordings for the Voice tab
+  const [voiceRecordings, setVoiceRecordings] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("vr_" + file.id) || "[]"); } catch { return []; }
+  });
+  const saveRecording = (rec) => {
+    const updated = [rec, ...voiceRecordings];
+    setVoiceRecordings(updated);
+    try { localStorage.setItem("vr_" + file.id, JSON.stringify(updated.slice(0, 20))); } catch {}
+  };
+  const deleteRecording = (idx) => {
+    const updated = voiceRecordings.filter((_,i) => i !== idx);
+    setVoiceRecordings(updated);
+    try { localStorage.setItem("vr_" + file.id, JSON.stringify(updated)); } catch {}
+  };
+
+  const SUB_TABS = [
+    {id:"written", label:"📝 Written Notes"},
+    {id:"voice",   label:"🎙️ Voice Notes"},
   ];
 
   return (
     <div>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:10 }}>
-        <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:22, fontWeight:700, color:C.text }}>Notes</h2>
-        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-          {/* Voice Notes — Google login only */}
-          {!isGuest && user && (
-            recording
-              ? <button onClick={stopVoice} disabled={processing}
-                  style={{ display:"flex", alignItems:"center", gap:7, background:"#FED7D7", color:C.red, border:`1.5px solid ${C.red}44`, borderRadius:10, padding:"9px 16px", fontSize:14, fontWeight:600, cursor:"pointer", animation:"pulse 1.5s infinite" }}>
-                  <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}`}</style>
-                  ⏹️ Stop Recording
-                </button>
-              : <button onClick={startVoice} disabled={gen || processing} className="hov"
-                  style={{ display:"flex", alignItems:"center", gap:7, background:"#FFF5F5", color:C.red, border:`1.5px solid ${C.red}44`, borderRadius:10, padding:"9px 16px", fontSize:14, fontWeight:600, cursor:"pointer" }}>
-                  🎙️ Voice Notes
-                </button>
-          )}
-          <button onClick={generate} disabled={gen} className="hov"
-            style={{ display:"flex", alignItems:"center", gap:7, background:C.accentL, color:C.accent, border:"none", borderRadius:10, padding:"9px 16px", fontSize:14, fontWeight:600, cursor:gen?"not-allowed":"pointer" }}>
-            <Icon d={gen?I.refresh:I.sparkle} size={15} color={C.accent} />{gen?"Generating…":"AI Generate"}
-          </button>
-          <button onClick={() => setShowTopicInput(true)} disabled={gen} className="hov"
-            style={{ display:"flex", alignItems:"center", gap:7, background:C.surface, color:C.text, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"9px 16px", fontSize:14, fontWeight:600, cursor:gen?"not-allowed":"pointer" }}>
-            <Icon d={I.edit} size={14} color={C.text} /> Custom Topic
-          </button>
-          <button onClick={save} className="hov"
-            style={{ display:"flex", alignItems:"center", gap:7, background:saved?C.greenL:C.accent, color:saved?C.green:"#fff", border:"none", borderRadius:10, padding:"9px 16px", fontSize:14, fontWeight:600, cursor:"pointer" }}>
-            <Icon d={saved?I.check:I.edit} size={14} color={saved?C.green:"#fff"} />{saved?"Saved!":"Save"}
-          </button>
-          <button onClick={generatePodcast} disabled={!notes.trim() || podcastLoading} className="hov"
-            style={{ display:"flex", alignItems:"center", gap:7, background:"#fdf4ff", color:"#7c3aed", border:"1.5px solid #7c3aed33", borderRadius:10, padding:"9px 16px", fontSize:14, fontWeight:600, cursor:notes.trim()?"pointer":"not-allowed", opacity:notes.trim()?1:0.5 }}>
-            🎧 {podcastLoading ? "Generating…" : "Podcast"}
-          </button>
-        </div>
-      </div>
-      {/* Note style selector */}
-      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12, flexWrap:"wrap" }}>
-        <span style={{ fontSize:12, color:C.muted, fontWeight:600 }}>Style:</span>
-        {NOTE_STYLES.map(s => (
-          <button key={s.id} onClick={() => setNoteStyle(s.id)}
-            style={{ fontSize:12, padding:"4px 10px", borderRadius:20, border:`1.5px solid ${noteStyle===s.id?C.accent:C.border}`, background:noteStyle===s.id?C.accentL:"#fff", color:noteStyle===s.id?C.accent:C.muted, cursor:"pointer", fontWeight:noteStyle===s.id?700:400 }}>
-            {s.label}
-          </button>
+      {/* ── Sub-tab pills ── */}
+      <div style={{ display:"flex", gap:6, marginBottom:20, borderBottom:`1.5px solid ${C.border}`, paddingBottom:12 }}>
+        {SUB_TABS.map(t => (
+          <button key={t.id} onClick={() => setNotesSubTab(t.id)} style={{
+            padding:"8px 18px", borderRadius:20, border:"none", cursor:"pointer",
+            fontWeight:700, fontSize:13,
+            background: notesSubTab===t.id ? C.accent : C.surface,
+            color:       notesSubTab===t.id ? "#fff"    : C.muted,
+            boxShadow:   notesSubTab===t.id ? `0 2px 10px ${C.accentS}55` : "none",
+            transition:"all .15s"
+          }}>{t.label}</button>
         ))}
       </div>
-      {voiceStatus && (
-        <div style={{ background: voiceStatus.startsWith("✅") ? C.greenL : voiceStatus.startsWith("🎙️") ? "#FFF5F5" : voiceStatus.startsWith("✨") ? C.accentL : C.redL,
-          border:`1.5px solid ${voiceStatus.startsWith("✅") ? C.green : voiceStatus.startsWith("🎙️") ? C.red : voiceStatus.startsWith("✨") ? C.accentS : C.red}44`,
-          borderRadius:10, padding:"10px 16px", marginBottom:14, fontSize:14, fontWeight:500,
-          color: voiceStatus.startsWith("✅") ? C.green : voiceStatus.startsWith("🎙️") ? C.red : C.text }}>
-          {voiceStatus}
-          {!isGuest && !user && <span style={{ marginLeft:8, fontSize:12, color:C.muted }}>— Sign in with Google to use voice notes</span>}
-        </div>
-      )}
-      {isGuest && (
-        <div style={{ background:C.warmL, border:`1.5px solid ${C.warm}33`, borderRadius:10, padding:"10px 16px", marginBottom:14, fontSize:13, color:C.warm, fontWeight:500 }}>
-          🎙️ Voice Notes is available for Google account users only — <strong>sign in with Google</strong> to unlock it
-        </div>
-      )}
 
-      {showTopicInput && (
-        <div style={{ background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:12, padding:16, marginBottom:16, display:"flex", gap:10, alignItems:"center" }}>
-          <input autoFocus value={customTopic} onChange={e => setCustomTopic(e.target.value)}
-            onKeyDown={e => { if(e.key==="Enter" && customTopic.trim()) generateWithTopic(customTopic.trim()); }}
-            placeholder="e.g. Photosynthesis, World War 2, Quadratic equations…"
-            style={{ flex:1, border:`1.5px solid ${C.accentS}`, borderRadius:8, padding:"9px 12px", fontSize:14, outline:"none", color:C.text, background:C.surface }} />
-          <button onClick={() => customTopic.trim() && generateWithTopic(customTopic.trim())}
-            disabled={!customTopic.trim()}
-            style={{ background:C.accent, color:"#fff", border:"none", borderRadius:8, padding:"9px 16px", fontSize:14, fontWeight:600, cursor:customTopic.trim()?"pointer":"not-allowed" }}>
-            Generate
-          </button>
-          <button onClick={() => setShowTopicInput(false)}
-            style={{ background:"none", border:"none", cursor:"pointer", color:C.muted, padding:"9px 6px" }}>✕</button>
+      {/* ════════════════════════════════════════
+          WRITTEN NOTES TAB
+          ════════════════════════════════════════ */}
+      {notesSubTab === "written" && <>
+        {/* Action buttons row */}
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14, flexWrap:"wrap", gap:10 }}>
+          <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:700, color:C.text, margin:0 }}>Notes</h2>
+          <div style={{ display:"flex", gap:7, flexWrap:"wrap" }}>
+            <button onClick={generate} disabled={gen} className="hov"
+              style={{ display:"flex", alignItems:"center", gap:6, background:C.accentL, color:C.accent, border:"none", borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:600, cursor:gen?"not-allowed":"pointer" }}>
+              <Icon d={gen?I.refresh:I.sparkle} size={14} color={C.accent} />{gen?"Generating…":"AI Generate"}
+            </button>
+            <button onClick={() => setShowTopicInput(t => !t)} disabled={gen} className="hov"
+              style={{ display:"flex", alignItems:"center", gap:6, background:C.surface, color:C.text, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+              <Icon d={I.edit} size={13} color={C.text} /> Topic
+            </button>
+            <button onClick={save} className="hov"
+              style={{ display:"flex", alignItems:"center", gap:6, background:saved?C.greenL:C.accent, color:saved?C.green:"#fff", border:"none", borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+              <Icon d={saved?I.check:I.edit} size={13} color={saved?C.green:"#fff"} />{saved?"Saved!":"Save"}
+            </button>
+            <button onClick={generatePodcast} disabled={!notes.trim() || podcastLoading} className="hov"
+              style={{ display:"flex", alignItems:"center", gap:6, background:"#fdf4ff", color:"#7c3aed", border:"1.5px solid #7c3aed33", borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:600, cursor:notes.trim()?"pointer":"not-allowed", opacity:notes.trim()?1:0.5 }}>
+              🎧 {podcastLoading ? "…" : "Podcast"}
+            </button>
+          </div>
         </div>
-      )}
 
-      <textarea value={notes} onChange={e=>setNotes(e.target.value)}
-        placeholder="Write notes here, or click 'AI Generate' to create them automatically…"
-        style={{ width:"100%", minHeight:420, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"20px", fontSize:15, lineHeight:1.7, outline:"none", resize:"vertical", color:C.text, background:C.surface, fontFamily:"'DM Sans',sans-serif" }} />
+        {/* ── Style selector ── */}
+        <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"12px 14px", marginBottom:14 }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+            <span style={{ fontSize:11, fontWeight:800, color:C.muted, letterSpacing:1 }}>NOTE STYLE</span>
+            <button onClick={() => setUseCustomStyle(u => !u)}
+              style={{ fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:20, border:`1.5px solid ${useCustomStyle?C.accent:C.border}`, background:useCustomStyle?C.accentL:"transparent", color:useCustomStyle?C.accent:C.muted, cursor:"pointer" }}>
+              {useCustomStyle ? "✏️ Custom (on)" : "✏️ Custom style"}
+            </button>
+          </div>
+          {!useCustomStyle ? (
+            <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+              {NOTE_STYLES.map(s => (
+                <button key={s.id} onClick={() => setNoteStyle(s.id)} title={s.desc}
+                  style={{ padding:"6px 12px", borderRadius:20, border:`1.5px solid ${noteStyle===s.id?C.accent:C.border}`, background:noteStyle===s.id?C.accentL:"#fff", color:noteStyle===s.id?C.accent:C.muted, cursor:"pointer", fontWeight:noteStyle===s.id?700:500, fontSize:12, transition:"all .12s" }}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div>
+              <textarea value={customStyle} onChange={e => setCustomStyle(e.target.value)}
+                placeholder="Describe exactly how you want your notes… e.g. 'Short bullet points with key definitions', 'Explain simply for a beginner', 'Focus only on what might appear in an exam'"
+                style={{ width:"100%", minHeight:70, border:`1.5px solid ${C.accentS}`, borderRadius:10, padding:"10px 12px", fontSize:13, outline:"none", resize:"vertical", color:C.text, background:"#fff", lineHeight:1.5, fontFamily:"'DM Sans',sans-serif" }}/>
+              <p style={{ fontSize:11, color:C.muted, marginTop:5 }}>The AI will follow your instructions exactly when generating notes.</p>
+            </div>
+          )}
+        </div>
 
-      {/* ── Podcast Player ── */}
-      {showPodcast && (
-        <PodcastPlayer
-          script={podcastScript}
-          loading={podcastLoading}
-          topic={file.name}
-          onClose={() => { setShowPodcast(false); window.speechSynthesis?.cancel(); }}
+        {/* Custom Topic input */}
+        {showTopicInput && (
+          <div style={{ background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:12, padding:14, marginBottom:14, display:"flex", gap:10, alignItems:"center" }}>
+            <input autoFocus value={customTopic} onChange={e => setCustomTopic(e.target.value)}
+              onKeyDown={e => { if(e.key==="Enter" && customTopic.trim()) generateWithTopic(customTopic.trim()); }}
+              placeholder="e.g. Photosynthesis, World War 2, Quadratic equations…"
+              style={{ flex:1, border:`1.5px solid ${C.accentS}`, borderRadius:8, padding:"9px 12px", fontSize:14, outline:"none", color:C.text, background:C.surface }} />
+            <button onClick={() => customTopic.trim() && generateWithTopic(customTopic.trim())} disabled={!customTopic.trim()}
+              style={{ background:C.accent, color:"#fff", border:"none", borderRadius:8, padding:"9px 14px", fontSize:14, fontWeight:600, cursor:customTopic.trim()?"pointer":"not-allowed" }}>Go</button>
+            <button onClick={() => setShowTopicInput(false)} style={{ background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:18 }}>✕</button>
+          </div>
+        )}
+
+        <textarea value={notes} onChange={e=>setNotes(e.target.value)}
+          placeholder="Write notes here, or click AI Generate to create them automatically…"
+          style={{ width:"100%", minHeight:400, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"18px", fontSize:15, lineHeight:1.7, outline:"none", resize:"vertical", color:C.text, background:C.surface, fontFamily:"'DM Sans',sans-serif" }} />
+
+        {showPodcast && (
+          <PodcastPlayer script={podcastScript} loading={podcastLoading} topic={file.name}
+            onClose={() => { setShowPodcast(false); window.speechSynthesis?.cancel(); }} />
+        )}
+      </>}
+
+      {/* ════════════════════════════════════════
+          VOICE NOTES TAB
+          ════════════════════════════════════════ */}
+      {notesSubTab === "voice" && (
+        <VoiceNotesTab
+          file={file}
+          user={user}
+          isGuest={isGuest}
+          notes={notes}
+          onNotesUpdate={(newNotes) => { setNotes(newNotes); onUpdate({...file, notes: newNotes}); }}
+          voiceRecordings={voiceRecordings}
+          onSaveRecording={saveRecording}
+          onDeleteRecording={deleteRecording}
+          startVoice={startVoice}
+          stopVoice={stopVoice}
+          recording={recording}
+          processing={processing}
+          voiceStatus={voiceStatus}
         />
       )}
     </div>
