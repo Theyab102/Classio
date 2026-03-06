@@ -53,6 +53,44 @@ async function callClaudeChat(system, messages) {
   return data.choices?.[0]?.message?.content || "";
 }
 
+// ─── GLOBAL VOICE SYSTEM ──────────────────────────────────────────────────────
+// Shared ChatGPT-style voice personas used across Podcast, Listening game, etc.
+// Each persona lists exact browser voice name fragments to try in order.
+const GLOBAL_PERSONAS = [
+  { id:"alloy",   label:"Alloy",   gender:"female", emoji:"🟤", desc:"Warm & natural",       pitch:1.0, targets:["microsoft aria online","microsoft jenny online","google us english","google uk english female","samantha","zira","victoria","karen"] },
+  { id:"echo",    label:"Echo",    gender:"male",   emoji:"🔵", desc:"Clear & steady",        pitch:1.0, targets:["microsoft guy online","microsoft davis online","microsoft eric online","google us english","google uk english male","daniel","alex","david","mark"] },
+  { id:"nova",    label:"Nova",    gender:"female", emoji:"🟣", desc:"Bright & expressive",   pitch:1.0, targets:["microsoft michelle online","microsoft amber online","microsoft ava online","google us english","ava","karen","moira"] },
+  { id:"onyx",    label:"Onyx",    gender:"male",   emoji:"⚫", desc:"Deep & authoritative",  pitch:1.0, targets:["microsoft christopher online","microsoft roger online","microsoft steffan online","google uk english male","lee","alex","fred"] },
+  { id:"shimmer", label:"Shimmer", gender:"female", emoji:"🟡", desc:"Gentle & soothing",     pitch:1.0, targets:["microsoft emma online","microsoft jane online","microsoft sara online","google uk english female","fiona","kate","tessa"] },
+  { id:"fable",   label:"Fable",   gender:"male",   emoji:"🟢", desc:"Friendly & casual",     pitch:1.0, targets:["microsoft brian online","microsoft liam online","microsoft ryan online","google uk english male","oliver","thomas","rishi"] },
+];
+
+function getSmartVoice(personaOrIdx, allVoices, lang = "en-US") {
+  const persona = typeof personaOrIdx === "number" ? GLOBAL_PERSONAS[personaOrIdx] : personaOrIdx;
+  if (!persona || !allVoices || !allVoices.length) return null;
+  const langCode = lang.slice(0, 2).toLowerCase();
+  const langPool = allVoices.filter(v => v.lang.toLowerCase().startsWith(langCode));
+  const pool = langPool.length > 0 ? langPool : allVoices;
+  for (const tgt of persona.targets) {
+    const v = pool.find(v => v.name.toLowerCase().includes(tgt.toLowerCase()));
+    if (v) return v;
+  }
+  // Microsoft Online or Google fallback
+  const online = pool.find(v => /microsoft.*online|google/i.test(v.name));
+  if (online) return online;
+  // macOS natural voices
+  const apple = pool.find(v => /samantha|ava|karen|moira|tessa|fiona|daniel|alex/i.test(v.name));
+  if (apple) return apple;
+  return pool[0] || allVoices[0] || null;
+}
+
+function getSmartVoiceLabel(personaIdx, allVoices, lang = "en-US") {
+  const v = getSmartVoice(personaIdx, allVoices, lang);
+  if (!v) return "Default";
+  return v.name.replace(/microsoft\s*/i, "").replace(/\s*online.*$/i, "").replace(/\s*-.*$/, "").trim() || v.name;
+}
+
+
 // ─── MATH FORMATTER ──────────────────────────────────────────────────────────
 // Converts spoken/written math phrases into proper numeric/symbol notation.
 // Works on AI-generated notes and voice transcriptions.
@@ -815,6 +853,10 @@ function avatarGid(ch, size) {
     ch.hairStyle||0, ch.topStyle||0, ch.eyeShape||0,
     ch.accessory||0, ch.eyebrow||0, ch.mouth||0,
     ch.blush?1:0, ch.lips?1:0, ch.freckles?1:0,
+    ch.hat||0, ch.hatColor||"#E74C3C",
+    ch.glasses||0, ch.glassesColor||"#333333",
+    ch.facialHair||0, ch.necklace||0, ch.necklaceColor||"#f0c040",
+    ch.earring||0, ch.earringColor||"#f0c040",
     size||40
   ].join("|");
   let h = 5381;
@@ -998,38 +1040,199 @@ function MiniAvatar({ character: ch, size = 40, uid = "" }) {
     <ellipse cx={s*.536} cy={s*.5} rx={s*.017} ry={s*.01} fill={sd} opacity={.27}/>
   </>;
 
-  // ── Accessories ───────────────────────────────────────────────────────────
-  const ACC = {
+  // ── Hat styles (rendered on top of hair) ─────────────────────────────────
+  const hc  = ch.hatColor  || "#E74C3C";
+  const hcd = shadeHex(hc, -30);
+  const hcl = shadeHex(hc,  25);
+  const HAT = {
     0: null,
-    1: /* Glasses */ <>
-      <rect x={s*.295} y={s*.33} width={s*.162} height={s*.106} rx={s*.04} fill="none" stroke="#333" strokeWidth={s*.02}/>
-      <rect x={s*.543} y={s*.33} width={s*.162} height={s*.106} rx={s*.04} fill="none" stroke="#333" strokeWidth={s*.02}/>
-      <line x1={s*.457} y1={s*.383} x2={s*.543} y2={s*.383} stroke="#333" strokeWidth={s*.016}/>
-      <line x1={s*.295} y1={s*.366} x2={s*.258} y2={s*.362} stroke="#333" strokeWidth={s*.015}/>
-      <line x1={s*.705} y1={s*.366} x2={s*.742} y2={s*.362} stroke="#333" strokeWidth={s*.015}/>
+    1: /* Beanie */ <>
+      <path d={`M${s*.255} ${s*.325} Q${s*.26} ${s*.09} ${cx} ${s*.07} Q${s*.74} ${s*.09} ${s*.745} ${s*.325}`} fill={hcd}/>
+      <path d={`M${s*.26} ${s*.325} Q${s*.265} ${s*.095} ${cx} ${s*.075} Q${s*.735} ${s*.095} ${s*.74} ${s*.325}`} fill={hc}/>
+      <rect x={s*.238} y={s*.29} width={s*.524} height={s*.055} rx={s*.022} fill={hcd}/>
+      <ellipse cx={cx} cy={s*.29} rx={s*.262} ry={s*.028} fill={hcl} opacity={.35}/>
+      <circle cx={cx} cy={s*.062} r={s*.038} fill={hc}/>
+      <circle cx={cx} cy={s*.062} r={s*.025} fill={hcl} opacity={.5}/>
     </>,
-    2: /* Beanie */ <>
-      <path d={`M${s*.265} ${s*.33} Q${s*.27} ${s*.09} ${cx} ${s*.07} Q${s*.73} ${s*.09} ${s*.735} ${s*.33}`} fill={ch.top}/>
-      <rect x={s*.245} y={s*.295} width={s*.51} height={s*.058} rx={s*.022} fill={td}/>
-      <ellipse cx={cx} cy={s*.295} rx={s*.255} ry={s*.03} fill={tl} opacity={.3}/>
+    2: /* Baseball cap */ <>
+      <path d={`M${s*.255} ${s*.34} Q${s*.26} ${s*.11} ${cx} ${s*.09} Q${s*.74} ${s*.11} ${s*.745} ${s*.34}`} fill={hcd}/>
+      <path d={`M${s*.26} ${s*.34} Q${s*.265} ${s*.115} ${cx} ${s*.095} Q${s*.735} ${s*.115} ${s*.74} ${s*.34}`} fill={hc}/>
+      <rect x={s*.238} y={s*.294} width={s*.524} height={s*.05} rx={s*.02} fill={hcd}/>
+      <path d={`M${s*.21} ${s*.338} Q${cx} ${s*.382} ${s*.685} ${s*.338}`} fill={hcd}/>
+      <path d={`M${s*.21} ${s*.336} Q${cx} ${s*.375} ${s*.685} ${s*.336}`} fill={hcl} opacity={.25}/>
+      <ellipse cx={cx} cy={s*.08} rx={s*.048} ry={s*.032} fill={hcl} opacity={.45}/>
     </>,
-    3: /* Cap */ <>
-      <path d={`M${s*.265} ${s*.34} Q${s*.27} ${s*.11} ${cx} ${s*.09} Q${s*.73} ${s*.11} ${s*.735} ${s*.34}`} fill={ch.top}/>
-      <rect x={s*.245} y={s*.295} width={s*.51} height={s*.05} rx={s*.022} fill={td}/>
-      <path d={`M${s*.21} ${s*.34} Q${cx} ${s*.38} ${s*.69} ${s*.34}`} fill={td}/>
-      <ellipse cx={cx} cy={s*.078} rx={s*.05} ry={s*.032} fill={tl} opacity={.4}/>
+    3: /* Cowboy hat */ <>
+      <ellipse cx={cx} cy={s*.3} rx={s*.34} ry={s*.048} fill={hcd}/>
+      <path d={`M${s*.31} ${s*.295} Q${s*.315} ${s*.09} ${cx} ${s*.075} Q${s*.685} ${s*.09} ${s*.69} ${s*.295}`} fill={hcd}/>
+      <path d={`M${s*.315} ${s*.295} Q${s*.32} ${s*.095} ${cx} ${s*.08} Q${s*.68} ${s*.095} ${s*.685} ${s*.295}`} fill={hc}/>
+      <path d={`M${s*.315} ${s*.295} Q${cx} ${s*.28} ${s*.685} ${s*.295}`} stroke={hcl} strokeWidth={s*.012} fill="none" opacity={.4}/>
     </>,
-    4: /* Headband */ <>
-      <path d={`M${s*.268} ${s*.29} Q${cx} ${s*.235} ${s*.732} ${s*.29}`} stroke={ch.top} strokeWidth={s*.062} fill="none" strokeLinecap="round"/>
-      <path d={`M${s*.268} ${s*.29} Q${cx} ${s*.235} ${s*.732} ${s*.29}`} stroke={tl} strokeWidth={s*.016} fill="none" strokeLinecap="round" opacity={.45}/>
+    4: /* Graduation cap */ <>
+      <rect x={s*.31} y={s*.145} width={s*.38} height={s*.085} rx={s*.018} fill={hc}/>
+      <path d={`M${s*.27} ${s*.185} Q${s*.285} ${s*.14} ${cx} ${s*.13} Q${s*.715} ${s*.14} ${s*.73} ${s*.185}`} fill={hcd}/>
+      <line x1={cx} y1={s*.145} x2={s*.32} y2={s*.27} stroke={hcd} strokeWidth={s*.014}/>
+      <circle cx={s*.31} cy={s*.28} r={s*.03} fill={hcd}/>
     </>,
-    5: /* Earrings */ <>
-      <circle cx={s*.258} cy={s*.442} r={s*.019} fill="#f0c040"/>
-      <ellipse cx={s*.258} cy={s*.455} rx={s*.009} ry={s*.016} fill="#f0c040"/>
-      <circle cx={s*.742} cy={s*.442} r={s*.019} fill="#f0c040"/>
-      <ellipse cx={s*.742} cy={s*.455} rx={s*.009} ry={s*.016} fill="#f0c040"/>
+    5: /* Crown */ <>
+      <path d={`M${s*.26} ${s*.31} L${s*.28} ${s*.19} L${s*.34} ${s*.255} L${cx} ${s*.16} L${s*.66} ${s*.255} L${s*.72} ${s*.19} L${s*.74} ${s*.31} Z`} fill={hc}/>
+      <path d={`M${s*.26} ${s*.31} L${s*.74} ${s*.31}`} stroke={hcd} strokeWidth={s*.018} fill="none"/>
+      {[s*.34, cx, s*.66].map((px,i)=><circle key={i} cx={px} cy={s*.225} r={s*.022} fill={i===1?"#fff":"#ff6b6b"}/>)}
+    </>,
+    6: /* Party hat */ <>
+      <path d={`M${cx} ${s*.06} L${s*.32} ${s*.32} Q${cx} ${s*.34} ${s*.68} ${s*.32} Z`} fill={hc}/>
+      <path d={`M${cx} ${s*.06} L${s*.32} ${s*.32} Q${cx} ${s*.34} ${s*.68} ${s*.32} Z`} fill="none" stroke={hcl} strokeWidth={s*.014} opacity={.5}/>
+      {[0,1,2].map(i=><circle key={i} cx={s*(.35+i*.15)} cy={s*(.26+i*.02)} r={s*.018} fill={["#fff","#ffcc00","#ff69b4"][i]}/>)}
+      <circle cx={cx} cy={s*.048} r={s*.03} fill={hcl}/>
+    </>,
+    7: /* Headband */ <>
+      <path d={`M${s*.268} ${s*.285} Q${cx} ${s*.23} ${s*.732} ${s*.285}`} stroke={hc} strokeWidth={s*.062} fill="none" strokeLinecap="round"/>
+      <path d={`M${s*.268} ${s*.285} Q${cx} ${s*.23} ${s*.732} ${s*.285}`} stroke={hcl} strokeWidth={s*.016} fill="none" strokeLinecap="round" opacity={.45}/>
+    </>,
+    8: /* Sunhat / bucket */ <>
+      <ellipse cx={cx} cy={s*.29} rx={s*.32} ry={s*.046} fill={hcd}/>
+      <path d={`M${s*.29} ${s*.284} Q${s*.295} ${s*.12} ${cx} ${s*.1} Q${s*.705} ${s*.12} ${s*.71} ${s*.284}`} fill={hcd}/>
+      <path d={`M${s*.295} ${s*.284} Q${s*.3} ${s*.125} ${cx} ${s*.105} Q${s*.7} ${s*.125} ${s*.705} ${s*.284}`} fill={hc}/>
+      <ellipse cx={cx} cy={s*.115} rx={s*.095} ry={s*.02} fill={hcl} opacity={.35}/>
     </>,
   };
+
+  // ── Glasses styles (colored, independent from old accessory) ─────────────
+  const gc  = ch.glassesColor || "#333333";
+  const gcl = shadeHex(gc,  28);
+  const GLASSES = {
+    0: null,
+    1: /* Classic round */ <>
+      <circle cx={s*.384} cy={s*.376} r={s*.068} fill="none" stroke={gc} strokeWidth={s*.022}/>
+      <circle cx={s*.616} cy={s*.376} r={s*.068} fill="none" stroke={gc} strokeWidth={s*.022}/>
+      <line x1={s*.452} y1={s*.376} x2={s*.548} y2={s*.376} stroke={gc} strokeWidth={s*.018}/>
+      <line x1={s*.316} y1={s*.362} x2={s*.272} y2={s*.358} stroke={gc} strokeWidth={s*.016}/>
+      <line x1={s*.684} y1={s*.362} x2={s*.728} y2={s*.358} stroke={gc} strokeWidth={s*.016}/>
+    </>,
+    2: /* Rectangular */ <>
+      <rect x={s*.302} y={s*.334} width={s*.148} height={s*.092} rx={s*.024} fill="none" stroke={gc} strokeWidth={s*.022}/>
+      <rect x={s*.55} y={s*.334} width={s*.148} height={s*.092} rx={s*.024} fill="none" stroke={gc} strokeWidth={s*.022}/>
+      <line x1={s*.45} y1={s*.38} x2={s*.55} y2={s*.38} stroke={gc} strokeWidth={s*.018}/>
+      <line x1={s*.302} y1={s*.362} x2={s*.265} y2={s*.36} stroke={gc} strokeWidth={s*.016}/>
+      <line x1={s*.698} y1={s*.362} x2={s*.735} y2={s*.36} stroke={gc} strokeWidth={s*.016}/>
+    </>,
+    3: /* Cat-eye */ <>
+      <path d={`M${s*.305} ${s*.418} Q${s*.305} ${s*.33} ${s*.39} ${s*.315} Q${s*.465} ${s*.308} ${s*.465} ${s*.385} Q${s*.465} ${s*.43} ${s*.38} ${s*.43} Z`} fill="none" stroke={gc} strokeWidth={s*.02}/>
+      <path d={`M${s*.535} ${s*.385} Q${s*.535} ${s*.308} ${s*.61} ${s*.315} Q${s*.695} ${s*.33} ${s*.695} ${s*.418} L${s*.62} ${s*.43} Q${s*.535} ${s*.43} ${s*.535} ${s*.385} Z`} fill="none" stroke={gc} strokeWidth={s*.02}/>
+      <line x1={s*.465} y1={s*.375} x2={s*.535} y2={s*.375} stroke={gc} strokeWidth={s*.018}/>
+      <line x1={s*.305} y1={s*.36} x2={s*.265} y2={s*.355} stroke={gc} strokeWidth={s*.016}/>
+      <line x1={s*.695} y1={s*.36} x2={s*.735} y2={s*.355} stroke={gc} strokeWidth={s*.016}/>
+    </>,
+    4: /* Sunglasses (dark lens) */ <>
+      <rect x={s*.298} y={s*.33} width={s*.155} height={s*.09} rx={s*.03} fill={gc} opacity={.82}/>
+      <rect x={s*.547} y={s*.33} width={s*.155} height={s*.09} rx={s*.03} fill={gc} opacity={.82}/>
+      <rect x={s*.298} y={s*.33} width={s*.155} height={s*.09} rx={s*.03} fill="none" stroke={gc} strokeWidth={s*.015}/>
+      <rect x={s*.547} y={s*.33} width={s*.155} height={s*.09} rx={s*.03} fill="none" stroke={gc} strokeWidth={s*.015}/>
+      <line x1={s*.453} y1={s*.375} x2={s*.547} y2={s*.375} stroke={gc} strokeWidth={s*.018}/>
+      <line x1={s*.298} y1={s*.358} x2={s*.26} y2={s*.354} stroke={gc} strokeWidth={s*.016}/>
+      <line x1={s*.702} y1={s*.358} x2={s*.74} y2={s*.354} stroke={gc} strokeWidth={s*.016}/>
+      {/* glare */}
+      <rect x={s*.31} y={s*.337} width={s*.044} height={s*.018} rx={s*.008} fill="#fff" opacity={.28}/>
+      <rect x={s*.559} y={s*.337} width={s*.044} height={s*.018} rx={s*.008} fill="#fff" opacity={.28}/>
+    </>,
+    5: /* Heart shaped */ <>
+      <path d={`M${s*.384} ${s*.342} Q${s*.37} ${s*.325} ${s*.342} ${s*.33} Q${s*.31} ${s*.335} ${s*.316} ${s*.365} Q${s*.322} ${s*.398} ${s*.384} ${s*.428} Q${s*.446} ${s*.398} ${s*.452} ${s*.365} Q${s*.458} ${s*.335} ${s*.426} ${s*.33} Q${s*.398} ${s*.325} ${s*.384} ${s*.342}`} fill="none" stroke={gc} strokeWidth={s*.019}/>
+      <path d={`M${s*.616} ${s*.342} Q${s*.602} ${s*.325} ${s*.574} ${s*.33} Q${s*.542} ${s*.335} ${s*.548} ${s*.365} Q${s*.554} ${s*.398} ${s*.616} ${s*.428} Q${s*.678} ${s*.398} ${s*.684} ${s*.365} Q${s*.69} ${s*.335} ${s*.658} ${s*.33} Q${s*.63} ${s*.325} ${s*.616} ${s*.342}`} fill="none" stroke={gc} strokeWidth={s*.019}/>
+      <line x1={s*.452} y1={s*.378} x2={s*.548} y2={s*.378} stroke={gc} strokeWidth={s*.018}/>
+      <line x1={s*.316} y1={s*.362} x2={s*.27} y2={s*.358} stroke={gc} strokeWidth={s*.016}/>
+      <line x1={s*.684} y1={s*.362} x2={s*.73} y2={s*.358} stroke={gc} strokeWidth={s*.016}/>
+    </>,
+  };
+
+  // ── Facial hair ───────────────────────────────────────────────────────────
+  const FACIAL_HAIR = {
+    0: null,
+    1: /* Stubble */ <>
+      {[[.39,.518],[.44,.532],[.5,.538],[.56,.532],[.61,.518],[.41,.545],[.46,.558],[.5,.562],[.54,.558],[.59,.545]].map(([fx,fy],i)=>
+        <circle key={i} cx={s*fx} cy={s*fy} r={s*.007} fill={hd} opacity={.45}/>
+      )}
+    </>,
+    2: /* Moustache */ <>
+      <path d={`M${s*.39} ${s*.506} Q${s*.44} ${s*.522} ${cx} ${s*.518} Q${s*.56} ${s*.522} ${s*.61} ${s*.506}`} fill={hd}/>
+      <path d={`M${s*.41} ${s*.51} Q${s*.455} ${s*.524} ${cx} ${s*.52} Q${s*.545} ${s*.524} ${s*.59} ${s*.51}`} fill={hl} opacity={.3}/>
+    </>,
+    3: /* Short beard */ <>
+      <path d={`M${s*.33} ${s*.49} Q${s*.32} ${s*.575} ${s*.36} ${s*.625} Q${cx} ${s*.66} ${s*.64} ${s*.625} Q${s*.68} ${s*.575} ${s*.67} ${s*.49}`} fill={hd} opacity={.72}/>
+      <path d={`M${s*.36} ${s*.49} Q${s*.355} ${s*.555} ${s*.375} ${s*.6} Q${cx} ${s*.63} ${s*.625} ${s*.6} Q${s*.645} ${s*.555} ${s*.64} ${s*.49}`} fill={hl} opacity={.2}/>
+    </>,
+    4: /* Full beard */ <>
+      <path d={`M${s*.28} ${s*.45} Q${s*.27} ${s*.6} ${s*.32} ${s*.68} Q${cx} ${s*.73} ${s*.68} ${s*.68} Q${s*.73} ${s*.6} ${s*.72} ${s*.45}`} fill={ch.hair} opacity={.9}/>
+      <path d={`M${s*.31} ${s*.45} Q${s*.305} ${s*.58} ${s*.345} ${s*.65} Q${cx} ${s*.7} ${s*.655} ${s*.65} Q${s*.695} ${s*.58} ${s*.69} ${s*.45}`} fill={hl} opacity={.22}/>
+      <path d={`M${s*.38} ${s*.505} Q${s*.44} ${s*.522} ${cx} ${s*.518} Q${s*.56} ${s*.522} ${s*.62} ${s*.505}`} fill={hd}/>
+    </>,
+    5: /* Goatee */ <>
+      <path d={`M${s*.42} ${s*.49} Q${s*.44} ${s*.556} ${cx} ${s*.572} Q${s*.56} ${s*.556} ${s*.58} ${s*.49}`} fill={hd} opacity={.78}/>
+      <path d={`M${s*.435} ${s*.505} Q${s*.455} ${s*.524} ${cx} ${s*.52} Q${s*.545} ${s*.524} ${s*.565} ${s*.505}`} fill={hd}/>
+    </>,
+  };
+
+  // ── Necklace styles ───────────────────────────────────────────────────────
+  const nc  = ch.necklaceColor || "#f0c040";
+  const ncd = shadeHex(nc, -25);
+  const NECKLACE = {
+    0: null,
+    1: /* Gold chain */ <>
+      {[0,1,2,3,4,5,6].map(i=>{
+        const t = i/6;
+        const x = s*(0.36 + t*0.28);
+        const y = s*(0.66 + Math.sin(t*Math.PI)*0.045);
+        return <circle key={i} cx={x} cy={y} r={s*.012} fill={nc} opacity={.9}/>;
+      })}
+    </>,
+    2: /* Pendant */ <>
+      <path d={`M${s*.36} ${s*.656} Q${cx} ${s*.698} ${s*.64} ${s*.656}`} stroke={nc} strokeWidth={s*.014} fill="none"/>
+      <circle cx={cx} cy={s*.702} r={s*.026} fill={nc}/>
+      <circle cx={cx} cy={s*.702} r={s*.016} fill={ncd}/>
+    </>,
+    3: /* Beads */ <>
+      {[0,1,2,3,4,5].map(i=>{
+        const t = i/5;
+        const x = s*(0.38 + t*0.24);
+        const y = s*(0.658 + Math.sin(t*Math.PI)*0.038);
+        return <circle key={i} cx={x} cy={y} r={s*.016} fill={i%2===0?nc:ncd}/>;
+      })}
+    </>,
+  };
+
+  // ── Earring styles ────────────────────────────────────────────────────────
+  const ec  = ch.earringColor || "#f0c040";
+  const ecd = shadeHex(ec, -20);
+  const EARRINGS = {
+    0: null,
+    1: /* Studs */ <>
+      <circle cx={s*.264} cy={s*.438} r={s*.02} fill={ec}/>
+      <circle cx={s*.736} cy={s*.438} r={s*.02} fill={ec}/>
+    </>,
+    2: /* Drops */ <>
+      <circle cx={s*.264} cy={s*.438} r={s*.016} fill={ec}/>
+      <ellipse cx={s*.264} cy={s*.462} rx={s*.01} ry={s*.02} fill={ecd}/>
+      <circle cx={s*.736} cy={s*.438} r={s*.016} fill={ec}/>
+      <ellipse cx={s*.736} cy={s*.462} rx={s*.01} ry={s*.02} fill={ecd}/>
+    </>,
+    3: /* Hoops */ <>
+      <circle cx={s*.264} cy={s*.444} r={s*.026} fill="none" stroke={ec} strokeWidth={s*.014}/>
+      <circle cx={s*.736} cy={s*.444} r={s*.026} fill="none" stroke={ec} strokeWidth={s*.014}/>
+    </>,
+    4: /* Stars */ <>
+      {[s*.264, s*.736].map((ex,i)=><g key={i} transform={`translate(${ex},${s*.445})`}>
+        {[0,1,2,3,4].map(pt=>{
+          const a = (pt*72-90)*Math.PI/180;
+          const a2 = ((pt*72+36)-90)*Math.PI/180;
+          const r1=s*.024,r2=s*.01;
+          return <path key={pt} d={`M${Math.cos(a)*r1} ${Math.sin(a)*r1}L${Math.cos(a2)*r2} ${Math.sin(a2)*r2}`} stroke={ec} strokeWidth={s*.008} fill="none"/>;
+        })}
+        <polygon points={[0,1,2,3,4].map(pt=>{const a=(pt*72-90)*Math.PI/180;return `${Math.cos(a)*s*.022},${Math.sin(a)*s*.022}`;}).join(' ')} fill={ec} opacity={.85}/>
+      </g>)}
+    </>,
+  };
+
+  // ── Legacy ACC block — kept for accessory field backward compat ───────────
+  const ACC = { 0: null };
 
   // ── Body / outfit — topStyle 0-11 ────────────────────────────────────────
   const ts = ch.topStyle || 0;
@@ -1176,8 +1379,20 @@ function MiniAvatar({ character: ch, size = 40, uid = "" }) {
           <circle key={i} cx={s*fx} cy={s*fy} r={s*.009} fill={sd} opacity={.44}/>)}
       </>}
 
-      {/* Accessories on top */}
-      <g clipPath={`url(#c${gid})`}>{ACC[ch.accessory||0]}</g>
+      {/* Facial hair (below accessories) */}
+      <g clipPath={`url(#c${gid})`}>{FACIAL_HAIR[ch.facialHair||0]}</g>
+
+      {/* Necklace */}
+      <g clipPath={`url(#c${gid})`}>{NECKLACE[ch.necklace||0]}</g>
+
+      {/* Earrings */}
+      {EARRINGS[ch.earring||0]}
+
+      {/* Glasses */}
+      <g clipPath={`url(#c${gid})`}>{GLASSES[ch.glasses||0]}</g>
+
+      {/* Hat (topmost layer) */}
+      <g clipPath={`url(#c${gid})`}>{HAT[ch.hat||0]}</g>
     </svg>
   );
 }
@@ -1188,6 +1403,7 @@ function CharacterModal({ character, onChange, onClose }) {
   const [tab, setTab] = useState("face");
   const ch = character;
 
+  // ── Colour palettes ────────────────────────────────────────────────────────
   const SKINS = ["#FDDBB4","#F5C89A","#FFCBA4","#E8A87C","#D4956A","#C68642","#A0693A","#8D5524","#6B3A1F","#F4D6C8"];
   const HAIRS = ["#0d0d0d","#1a0a00","#2C1810","#4A2912","#7B4F2C","#B5651D","#C9A96E","#EDD9A3","#F2E6C8",
                  "#C0392B","#E74C3C","#F39C12","#8E44AD","#2980B9","#27AE60","#1ABC9C","#fd79a8","#00CED1","#FF6347","#808080"];
@@ -1195,85 +1411,68 @@ function CharacterModal({ character, onChange, onClose }) {
   const TOPS  = ["#1a1a2e","#2C3E50","#34495E","#7f8c8d","#E74C3C","#C0392B","#E67E22","#F39C12","#27AE60","#16A085","#2980B9","#1abc9c","#8E44AD","#fd79a8","#FFFFFF","#ECF0F1"];
   const LIP_C = ["#C0392B","#E74C3C","#c0706a","#fd79a8","#8E44AD","#D35400","#FF1493","#DC143C"];
   const BG    = ["#dce8ff","#e8f4ff","#dfe6e9","#ffeaa7","#d5f5e3","#f8d7e3","#e8daef","#ffddd2","#c8e6c9","#fff3e0","#1a1a2e","#2d3436","#6c5ce7","#00b894"];
+  const HAT_C = ["#E74C3C","#2C3E50","#F39C12","#2980B9","#27AE60","#8E44AD","#1a1a2e","#ECF0F1","#fd79a8","#C0392B","#D35400","#16A085","#FF69B4","#800020"];
+  const GLASS_C = ["#333333","#1a1a2e","#8B4513","#C0392B","#2980B9","#27AE60","#8E44AD","#F39C12","#FFD700","#E0E0E0","#00CED1","#FF69B4"];
+  const JEWEL_C = ["#f0c040","#FFD700","#C0C0C0","#E8E8E8","#B87333","#E74C3C","#2980B9","#27AE60","#8E44AD","#FF69B4","#00CED1","#fff"];
 
+  // ── Option lists ───────────────────────────────────────────────────────────
   const HAIR_NAMES = ["Buzz","Side-part","Fringe","Textured","Long","Wavy","Ponytail","Bun","Afro","Box braids","Curly","Locs","Faux hawk","Space buns"];
   const EYE_S  = ["Round","Almond","Cat-eye"];
   const BROWS  = ["Arched","Straight","Thick","Sad"];
   const MOUTHS = ["Smile","Frown","Open","Smirk","Neutral"];
-  const ACCS   = ["None","Glasses","Beanie","Cap","Headband","Earrings"];
+  const HAT_NAMES  = ["None","Beanie","Cap","Cowboy","Grad cap","Crown","Party hat","Headband","Bucket hat"];
+  const GLASS_NAMES= ["None","Round","Rectangular","Cat-eye","Sunglasses","Heart"];
+  const FACIAL_NAMES=["None","Stubble","Moustache","Short beard","Full beard","Goatee"];
+  const NECKLACE_NAMES=["None","Gold chain","Pendant","Beads"];
+  const EARRING_NAMES =["None","Studs","Drops","Hoops","Stars"];
   const TOPS_S = [
-    {id:0, label:"T-Shirt",     cat:"Casual"},
-    {id:1, label:"Hoodie",      cat:"Streetwear"},
-    {id:2, label:"Jacket",      cat:"Casual"},
-    {id:3, label:"Tank Top",    cat:"Casual"},
-    {id:4, label:"Suit & Tie",  cat:"Formal"},
-    {id:5, label:"Crop Top",    cat:"Casual"},
-    {id:6, label:"Polo / School",cat:"School"},
-    {id:7, label:"Sport Jersey",cat:"Sport"},
-    {id:8, label:"Streetwear",  cat:"Streetwear"},
-    {id:9, label:"Dress",       cat:"Casual"},
-    {id:10,label:"Blazer",      cat:"Formal"},
-    {id:11,label:"Graphic Tee", cat:"Casual"},
+    {id:0,label:"T-Shirt",cat:"Casual"},{id:1,label:"Hoodie",cat:"Streetwear"},{id:2,label:"Jacket",cat:"Casual"},
+    {id:3,label:"Tank Top",cat:"Casual"},{id:4,label:"Suit & Tie",cat:"Formal"},{id:5,label:"Crop Top",cat:"Casual"},
+    {id:6,label:"Polo / School",cat:"School"},{id:7,label:"Sport Jersey",cat:"Sport"},{id:8,label:"Streetwear",cat:"Streetwear"},
+    {id:9,label:"Dress",cat:"Casual"},{id:10,label:"Blazer",cat:"Formal"},{id:11,label:"Graphic Tee",cat:"Casual"},
   ];
 
+  // ── Tabs ───────────────────────────────────────────────────────────────────
   const TABS = [
-    {id:"face", emoji:"😊", label:"FACE"},
-    {id:"hair", emoji:"💇", label:"HAIR"},
-    {id:"fit",  emoji:"👕", label:"FIT"},
-    {id:"extra",emoji:"✨", label:"EXTRA"},
+    {id:"face",  emoji:"😊", label:"FACE"},
+    {id:"hair",  emoji:"💇", label:"HAIR"},
+    {id:"fit",   emoji:"👕", label:"FIT"},
+    {id:"acc",   emoji:"💍", label:"ACCS"},
+    {id:"extra", emoji:"✨", label:"EXTRA"},
   ];
 
-  // ── Avatar preview chip ────────────────────────────────────────────────────
-  // Renders a small version of the avatar with ONE field swapped to 'value'
-  const AvatarChip = ({ field, value, label, selected, size=62 }) => {
+  // ── AvatarChip — shows a live preview with one field changed ───────────────
+  const AvatarChip = ({ field, value, label, selected, size=62, uid="" }) => {
     const preview = { ...ch, [field]: value };
     return (
-      <button
-        onClick={() => onChange({ ...ch, [field]: value })}
-        title={label}
-        style={{
-          display:"flex", flexDirection:"column", alignItems:"center", gap:4,
+      <button onClick={() => onChange({ ...ch, [field]: value })} title={label}
+        style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4,
           padding:"7px 5px 5px", borderRadius:14, border:"none", cursor:"pointer",
           background: selected ? "#eef1ff" : "#f7f8fa",
-          outline: selected ? "2.5px solid #4361ee" : "2px solid transparent",
-          outlineOffset:1,
-          transition:"all .13s",
-          transform: selected ? "scale(1.07)" : "scale(1)",
-          boxShadow: selected ? "0 3px 12px rgba(67,97,238,.28)" : "0 1px 3px rgba(0,0,0,.07)",
-        }}
-      >
-        <div style={{
-          width:size, height:size, borderRadius:"50%", overflow:"hidden", flexShrink:0,
-          boxShadow: selected ? "0 2px 10px rgba(67,97,238,.35)" : "0 1px 4px rgba(0,0,0,.14)",
-        }}>
-          <MiniAvatar character={preview} size={size}/>
+          outline: selected ? "2.5px solid #4361ee" : "2px solid transparent", outlineOffset:1,
+          transition:"all .13s", transform: selected ? "scale(1.07)" : "scale(1)",
+          boxShadow: selected ? "0 3px 12px rgba(67,97,238,.28)" : "0 1px 3px rgba(0,0,0,.07)" }}>
+        <div style={{ width:size, height:size, borderRadius:"50%", overflow:"hidden", flexShrink:0,
+          boxShadow: selected ? "0 2px 10px rgba(67,97,238,.35)" : "0 1px 4px rgba(0,0,0,.14)" }}>
+          <MiniAvatar character={preview} size={size} uid={uid||field+String(value)}/>
         </div>
-        <span style={{
-          fontSize:9, fontWeight:700, letterSpacing:.2, textAlign:"center",
+        <span style={{ fontSize:9, fontWeight:700, letterSpacing:.2, textAlign:"center",
           lineHeight:1.3, maxWidth:size+8, wordBreak:"break-word",
-          color: selected ? "#4361ee" : "#777",
-        }}>
-          {label}
-        </span>
+          color: selected ? "#4361ee" : "#777" }}>{label}</span>
       </button>
     );
   };
 
-  // Grid of avatar preview chips
   const ChipGrid = ({ field, items, size=62 }) => (
     <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
       {items.map((item, i) => {
         const value = typeof item === "object" ? item.id : i;
         const label = typeof item === "object" ? item.label : item;
-        return (
-          <AvatarChip key={i} field={field} value={value} label={label}
-            selected={ch[field] === value} size={size}/>
-        );
+        return <AvatarChip key={i} field={field} value={value} label={label} selected={ch[field]===value} size={size}/>;
       })}
     </div>
   );
 
-  // Colour swatch button
   const Swatch = ({ val, field, sz=26 }) => {
     const sel = ch[field] === val;
     return (
@@ -1286,19 +1485,11 @@ function CharacterModal({ character, onChange, onClose }) {
       }}/>
     );
   };
+
   const Swatches = ({ vals, field, sz=26 }) => (
     <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
       {vals.map(v => <Swatch key={v} val={v} field={field} sz={sz}/>)}
     </div>
-  );
-
-  const Toggle = ({ label, field, emoji }) => (
-    <button onClick={() => onChange({...ch, [field]: !ch[field]})} style={{
-      display:"flex", alignItems:"center", gap:7, padding:"7px 14px",
-      borderRadius:20, border:"none", cursor:"pointer", fontWeight:700, fontSize:12,
-      background: ch[field]?"#111":"#eee", color:ch[field]?"#fff":"#666",
-      transition:"all .14s", boxShadow:ch[field]?"0 2px 8px rgba(0,0,0,.22)":"none"
-    }}>{emoji} {label}</button>
   );
 
   const Row = ({ label, children }) => (
@@ -1308,10 +1499,38 @@ function CharacterModal({ character, onChange, onClose }) {
     </div>
   );
 
+  // Toggle pair with before/after avatar preview
+  const TogglePair = ({ label, field, onEmoji, offLabel="Off" }) => (
+    <Row label={label}>
+      <div style={{ display:"flex", gap:10 }}>
+        {[false, true].map(val => {
+          const sel = !!ch[field] === val;
+          return (
+            <button key={String(val)} onClick={() => onChange({...ch, [field]: val})}
+              style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4,
+                padding:"7px 5px 5px", borderRadius:14, border:"none", cursor:"pointer",
+                background:sel?"#eef1ff":"#f7f8fa",
+                outline:sel?"2.5px solid #4361ee":"2px solid transparent",
+                outlineOffset:1, transition:"all .13s", transform:sel?"scale(1.07)":"scale(1)",
+                boxShadow:sel?"0 3px 12px rgba(67,97,238,.28)":"0 1px 3px rgba(0,0,0,.07)" }}>
+              <div style={{ width:70, height:70, borderRadius:"50%", overflow:"hidden",
+                boxShadow:sel?"0 2px 10px rgba(67,97,238,.35)":"0 1px 4px rgba(0,0,0,.14)" }}>
+                <MiniAvatar character={{...ch,[field]:val}} size={70} uid={field+String(val)}/>
+              </div>
+              <span style={{ fontSize:10, fontWeight:700, color:sel?"#4361ee":"#777" }}>
+                {val ? `${onEmoji} On` : offLabel}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </Row>
+  );
+
   return (
     <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.65)", zIndex:3000, display:"flex", alignItems:"center", justifyContent:"center", padding:12 }}>
       <div onClick={e => e.stopPropagation()} style={{
-        background:"#fff", borderRadius:24, width:"100%", maxWidth:520,
+        background:"#fff", borderRadius:24, width:"100%", maxWidth:540,
         maxHeight:"94vh", overflow:"hidden", display:"flex", flexDirection:"column",
         boxShadow:"0 32px 100px rgba(0,0,0,.42)"
       }}>
@@ -1332,10 +1551,10 @@ function CharacterModal({ character, onChange, onClose }) {
         </div>
 
         {/* Tabs */}
-        <div style={{ display:"flex", background:"#fff", borderBottom:"1.5px solid #eee" }}>
+        <div style={{ display:"flex", background:"#fff", borderBottom:"1.5px solid #eee", overflowX:"auto" }}>
           {TABS.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)} style={{
-              flex:1, padding:"9px 4px 6px", border:"none", cursor:"pointer", background:"#fff",
+              flex:1, minWidth:52, padding:"9px 4px 6px", border:"none", cursor:"pointer", background:"#fff",
               fontWeight:800, fontSize:10, letterSpacing:.5,
               color: tab===t.id?"#111":"#bbb",
               borderBottom:`2.5px solid ${tab===t.id?"#111":"transparent"}`,
@@ -1347,7 +1566,7 @@ function CharacterModal({ character, onChange, onClose }) {
         {/* Scrollable tab content */}
         <div style={{ flex:1, overflowY:"auto", padding:"16px 14px", display:"flex", flexDirection:"column", gap:18 }}>
 
-          {/* FACE */}
+          {/* ── FACE ──────────────────────────────────────────────────────── */}
           {tab==="face" && <>
             <Row label="SKIN TONE">
               <div style={{ display:"flex", flexWrap:"wrap", gap:7 }}>
@@ -1361,159 +1580,103 @@ function CharacterModal({ character, onChange, onClose }) {
                 ))}
               </div>
             </Row>
-            <Row label="EYE SHAPE">
-              <ChipGrid field="eyeShape" items={EYE_S} size={62}/>
-            </Row>
-            <Row label="EYE COLOUR">
-              <Swatches vals={EYES} field="eyes" sz={26}/>
-            </Row>
-            <Row label="EYEBROWS">
-              <ChipGrid field="eyebrow" items={BROWS} size={60}/>
-            </Row>
-            <Row label="EXPRESSION">
-              <ChipGrid field="mouth" items={MOUTHS} size={60}/>
-            </Row>
+            <Row label="EYE SHAPE"><ChipGrid field="eyeShape" items={EYE_S} size={62}/></Row>
+            <Row label="EYE COLOUR"><Swatches vals={EYES} field="eyes" sz={26}/></Row>
+            <Row label="EYEBROWS"><ChipGrid field="eyebrow" items={BROWS} size={60}/></Row>
+            <Row label="EXPRESSION"><ChipGrid field="mouth" items={MOUTHS} size={60}/></Row>
+            <Row label="FACIAL HAIR"><ChipGrid field="facialHair" items={FACIAL_NAMES} size={62}/></Row>
           </>}
 
-          {/* HAIR */}
+          {/* ── HAIR ──────────────────────────────────────────────────────── */}
           {tab==="hair" && <>
             <Row label="HAIR STYLE — tap a preview to choose">
               <ChipGrid field="hairStyle" items={HAIR_NAMES} size={66}/>
             </Row>
-            <Row label="HAIR COLOUR">
-              <Swatches vals={HAIRS} field="hair" sz={24}/>
-            </Row>
+            <Row label="HAIR COLOUR"><Swatches vals={HAIRS} field="hair" sz={24}/></Row>
           </>}
 
-          {/* FIT */}
+          {/* ── FIT ───────────────────────────────────────────────────────── */}
           {tab==="fit" && <>
             <Row label="OUTFIT STYLE — tap a preview to choose">
               <ChipGrid field="topStyle" items={TOPS_S} size={70}/>
             </Row>
-            <Row label="OUTFIT COLOUR">
-              <Swatches vals={TOPS} field="top"/>
-            </Row>
-            <Row label="ACCESSORY">
-              <ChipGrid field="accessory" items={ACCS} size={60}/>
-            </Row>
-            <Row label="BACKGROUND">
-              <Swatches vals={BG} field="bg" sz={24}/>
-            </Row>
+            <Row label="OUTFIT COLOUR"><Swatches vals={TOPS} field="top"/></Row>
+            <Row label="BACKGROUND"><Swatches vals={BG} field="bg" sz={24}/></Row>
           </>}
 
-          {/* EXTRA */}
+          {/* ── ACCESSORIES ───────────────────────────────────────────────── */}
+          {tab==="acc" && <>
+            <Row label="HAT — tap a preview to choose">
+              <ChipGrid field="hat" items={HAT_NAMES} size={62}/>
+            </Row>
+            {ch.hat > 0 && (
+              <Row label="HAT COLOUR">
+                <Swatches vals={HAT_C} field="hatColor" sz={24}/>
+              </Row>
+            )}
+
+            <Row label="GLASSES — tap a preview to choose">
+              <ChipGrid field="glasses" items={GLASS_NAMES} size={62}/>
+            </Row>
+            {ch.glasses > 0 && (
+              <Row label="GLASSES COLOUR">
+                <Swatches vals={GLASS_C} field="glassesColor" sz={24}/>
+              </Row>
+            )}
+
+            <Row label="EARRINGS — tap a preview to choose">
+              <ChipGrid field="earring" items={EARRING_NAMES} size={62}/>
+            </Row>
+            {ch.earring > 0 && (
+              <Row label="EARRING COLOUR">
+                <Swatches vals={JEWEL_C} field="earringColor" sz={24}/>
+              </Row>
+            )}
+
+            <Row label="NECKLACE — tap a preview to choose">
+              <ChipGrid field="necklace" items={NECKLACE_NAMES} size={62}/>
+            </Row>
+            {ch.necklace > 0 && (
+              <Row label="NECKLACE COLOUR">
+                <Swatches vals={JEWEL_C} field="necklaceColor" sz={24}/>
+              </Row>
+            )}
+          </>}
+
+          {/* ── EXTRA ─────────────────────────────────────────────────────── */}
           {tab==="extra" && <>
-
-            <Row label="BLUSH — tap to toggle">
-              <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-                {[false, true].map(val => {
-                  const preview = { ...ch, blush: val };
-                  const sel = !!ch.blush === val;
-                  return (
-                    <button key={String(val)} onClick={() => onChange({...ch, blush: val})}
-                      style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4,
-                        padding:"7px 5px 5px", borderRadius:14, border:"none", cursor:"pointer",
-                        background: sel ? "#eef1ff" : "#f7f8fa",
-                        outline: sel ? "2.5px solid #4361ee" : "2px solid transparent",
-                        outlineOffset:1, transition:"all .13s",
-                        transform: sel ? "scale(1.07)" : "scale(1)",
-                        boxShadow: sel ? "0 3px 12px rgba(67,97,238,.28)" : "0 1px 3px rgba(0,0,0,.07)" }}>
-                      <div style={{ width:70, height:70, borderRadius:"50%", overflow:"hidden",
-                        boxShadow: sel ? "0 2px 10px rgba(67,97,238,.35)" : "0 1px 4px rgba(0,0,0,.14)" }}>
-                        <MiniAvatar character={preview} size={70} uid={"blush"+String(val)}/>
-                      </div>
-                      <span style={{ fontSize:10, fontWeight:700, color: sel ? "#4361ee" : "#777" }}>
-                        {val ? "🌸 On" : "Off"}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </Row>
-
-            <Row label="LIP GLOSS — tap to toggle">
-              <div style={{ display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
-                {[false, true].map(val => {
-                  const preview = { ...ch, lips: val };
-                  const sel = !!ch.lips === val;
-                  return (
-                    <button key={String(val)} onClick={() => onChange({...ch, lips: val})}
-                      style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4,
-                        padding:"7px 5px 5px", borderRadius:14, border:"none", cursor:"pointer",
-                        background: sel ? "#eef1ff" : "#f7f8fa",
-                        outline: sel ? "2.5px solid #4361ee" : "2px solid transparent",
-                        outlineOffset:1, transition:"all .13s",
-                        transform: sel ? "scale(1.07)" : "scale(1)",
-                        boxShadow: sel ? "0 3px 12px rgba(67,97,238,.28)" : "0 1px 3px rgba(0,0,0,.07)" }}>
-                      <div style={{ width:70, height:70, borderRadius:"50%", overflow:"hidden",
-                        boxShadow: sel ? "0 2px 10px rgba(67,97,238,.35)" : "0 1px 4px rgba(0,0,0,.14)" }}>
-                        <MiniAvatar character={preview} size={70} uid={"lips"+String(val)}/>
-                      </div>
-                      <span style={{ fontSize:10, fontWeight:700, color: sel ? "#4361ee" : "#777" }}>
-                        {val ? "💋 On" : "Off"}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              {ch.lips && (
-                <div style={{ marginTop:10 }}>
-                  <p style={{ fontSize:10, fontWeight:800, color:"#999", letterSpacing:1, marginBottom:7 }}>LIP COLOUR</p>
-                  <div style={{ display:"flex", flexWrap:"wrap", gap:7 }}>
-                    {LIP_C.map(v => {
-                      const preview = { ...ch, lipColor: v };
-                      const sel = ch.lipColor === v;
-                      return (
-                        <button key={v} onClick={() => onChange({...ch, lipColor: v})}
-                          style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3,
-                            padding:"5px 4px 4px", borderRadius:10, border:"none", cursor:"pointer",
-                            background: sel ? "#eef1ff" : "#f7f8fa",
-                            outline: sel ? "2.5px solid #4361ee" : "2px solid transparent", outlineOffset:1,
-                            transform: sel ? "scale(1.07)" : "scale(1)", transition:"all .13s" }}>
-                          <div style={{ width:52, height:52, borderRadius:"50%", overflow:"hidden",
-                            boxShadow: sel ? "0 2px 8px rgba(67,97,238,.3)" : "0 1px 3px rgba(0,0,0,.12)" }}>
-                            <MiniAvatar character={preview} size={52} uid={"lipc"+v}/>
-                          </div>
-                          <div style={{ width:14, height:14, borderRadius:"50%", background:v, border:"1.5px solid #ccc" }}/>
-                        </button>
-                      );
-                    })}
-                  </div>
+            <TogglePair label="BLUSH — tap to toggle" field="blush" onEmoji="🌸"/>
+            <TogglePair label="LIP GLOSS — tap to toggle" field="lips" onEmoji="💋"/>
+            {ch.lips && (
+              <Row label="LIP COLOUR">
+                <div style={{ display:"flex", flexWrap:"wrap", gap:7 }}>
+                  {LIP_C.map(v => {
+                    const preview = { ...ch, lipColor: v };
+                    const sel = ch.lipColor === v;
+                    return (
+                      <button key={v} onClick={() => onChange({...ch, lipColor: v})}
+                        style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3,
+                          padding:"5px 4px 4px", borderRadius:10, border:"none", cursor:"pointer",
+                          background: sel ? "#eef1ff" : "#f7f8fa",
+                          outline: sel ? "2.5px solid #4361ee" : "2px solid transparent", outlineOffset:1,
+                          transform: sel ? "scale(1.07)" : "scale(1)", transition:"all .13s" }}>
+                        <div style={{ width:52, height:52, borderRadius:"50%", overflow:"hidden",
+                          boxShadow: sel ? "0 2px 8px rgba(67,97,238,.3)" : "0 1px 3px rgba(0,0,0,.12)" }}>
+                          <MiniAvatar character={preview} size={52} uid={"lipc"+v}/>
+                        </div>
+                        <div style={{ width:14, height:14, borderRadius:"50%", background:v, border:"1.5px solid #ccc" }}/>
+                      </button>
+                    );
+                  })}
                 </div>
-              )}
-            </Row>
-
-            <Row label="FRECKLES — tap to toggle">
-              <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-                {[false, true].map(val => {
-                  const preview = { ...ch, freckles: val };
-                  const sel = !!ch.freckles === val;
-                  return (
-                    <button key={String(val)} onClick={() => onChange({...ch, freckles: val})}
-                      style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4,
-                        padding:"7px 5px 5px", borderRadius:14, border:"none", cursor:"pointer",
-                        background: sel ? "#eef1ff" : "#f7f8fa",
-                        outline: sel ? "2.5px solid #4361ee" : "2px solid transparent",
-                        outlineOffset:1, transition:"all .13s",
-                        transform: sel ? "scale(1.07)" : "scale(1)",
-                        boxShadow: sel ? "0 3px 12px rgba(67,97,238,.28)" : "0 1px 3px rgba(0,0,0,.07)" }}>
-                      <div style={{ width:70, height:70, borderRadius:"50%", overflow:"hidden",
-                        boxShadow: sel ? "0 2px 10px rgba(67,97,238,.35)" : "0 1px 4px rgba(0,0,0,.14)" }}>
-                        <MiniAvatar character={preview} size={70} uid={"freckles"+String(val)}/>
-                      </div>
-                      <span style={{ fontSize:10, fontWeight:700, color: sel ? "#4361ee" : "#777" }}>
-                        {val ? "🟤 On" : "Off"}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </Row>
+              </Row>
+            )}
+            <TogglePair label="FRECKLES — tap to toggle" field="freckles" onEmoji="🟤"/>
 
             <button
               onClick={() => onChange({skin:"#FDDBB4",hair:"#3D2B1F",hairStyle:0,eyes:"#2980B9",top:"#2C3E50",bg:"#dce8ff",mouth:0,eyebrow:0,eyeShape:0,accessory:0,topStyle:0,blush:false,lips:false,freckles:false,lipColor:"#d06060",hat:0,hatColor:"#E74C3C",glasses:0,glassesColor:"#333333",facialHair:0,necklace:0,necklaceColor:"#f0c040",earring:0,earringColor:"#f0c040",name:ch.name})}
               style={{ padding:"8px 18px", background:"#eee", border:"none", borderRadius:20, fontSize:12, fontWeight:700, cursor:"pointer", color:"#555", alignSelf:"flex-start" }}>
-              🔄 Reset
+              🔄 Reset to Default
             </button>
           </>}
         </div>
@@ -2622,26 +2785,35 @@ function VoicePodcastTab({ file, user, isGuest, onUpdate }) {
       const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[🇺🇸🇬🇧🇸🇦🇪🇬🇪🇸🇲🇽🇫🇷🇩🇪🇮🇹🇧🇷🇨🇳🇯🇵🇰🇷🇮🇳🇷🇺🇹🇷]\s*/g,'') || lang;
       const context = `File: "${file.name}". Topic context (for fixing speech recognition errors): ${(file.notes || "").slice(0, 300) || "none"}.`;
       const result = await callClaude(
-        `You are a speech-to-text cleaner. Output ONLY what the student said — nothing else.
+        `You are an expert note-taker. A student has just spoken aloud — your job is to turn their speech into clean, well-organised study notes.
 
-STRICT RULES — no exceptions:
-1. Output EXACTLY what the student spoke, word for word, lightly cleaned
-2. Do NOT write any intro sentence. Do NOT add "We will study...", "Today we cover...", "In this session..." or any opening line not spoken
-3. Do NOT add content from the file, context, or any outside knowledge
-4. Do NOT summarise, paraphrase, or expand beyond what was said
-5. Remove only filler words: um, uh, er, like, you know, sort of, kind of, basically, right
-6. Fix obvious speech-recognition errors using context only (e.g. "Assam" → "atom" in chemistry)
-7. Convert spoken math to symbols: "ten to the power of negative ten" → 10⁻¹⁰, "times" → ×, "squared" → ², "pi" → π, "metres" → m, "kilograms" → kg
-8. If student listed items, use dash (-) bullets. If student said a title, use ALL CAPS
-9. NEVER use asterisks (*), pound signs (#), or markdown
-10. Respond in ${langLabel} only
+RULES:
+1. Understand the MEANING and CONTEXT of what the student said
+2. Remove ALL filler words (um, uh, er, like, you know, sort of, kind of, basically, right, okay so)
+3. Fix grammar, vocabulary, and sentence structure automatically
+4. Organise into clear structure:
+   - Use ALL CAPS headings for topics (e.g. PHOTOSYNTHESIS)
+   - Use dash (-) bullet points for facts and details
+   - Write short, clear sentences
+5. Fix speech-recognition errors using context (e.g. "Adams" → "atoms", "Assam" → "atom")
+6. Convert spoken math/science to proper notation: "ten to the power of negative ten" → 10⁻¹⁰, "times" → ×, "squared" → ², "pi" → π, "metres" → m, "kilograms" → kg
+7. Keep ALL facts and information the student mentioned — do not remove content
+8. Do NOT add new information, outside facts, or content from the file that the student did not say
+9. If the student just said something casual (e.g. "hi we will study English"), write it simply and naturally — do NOT expand it or add a topic outline
+10. NEVER use asterisks (*) or pound signs (#)
+11. Respond entirely in ${langLabel}
 
-EXAMPLE — if student said: "hi we will study english"
-CORRECT output: Hi, we will study English.
-WRONG output: "We will study about English. Today we will cover the following topics..." ← never do this
+EXAMPLES:
+Student says: "so atoms right they have like a really tiny radius um one times ten to the power of minus ten metres"
+Output:
+ATOMIC RADIUS
+- Atoms have a very small radius: 1 × 10⁻¹⁰ m
 
-Context for fixing mis-heard words only (do NOT use as content): ${context}`,
-        `Output only what the student said, cleaned up:\n\n"${raw}"`
+Student says: "hi we will study english"
+Output: Hi, we will study English.
+
+Context (for fixing mis-heard words only — do NOT add this as content): ${context}`,
+        `Turn this spoken recording into clean study notes:\n\n"${raw}"`
       );
       const fixedResult = fixMath(result);
       const newNotes = notes ? notes + "\n\n---\n\n" + fixedResult : fixedResult;
@@ -2658,16 +2830,25 @@ Context for fixing mis-heard words only (do NOT use as content): ${context}`,
     setProcessing(false);
   };
 
+  // ── Voice playback state ────────────────────────────────────────────────────
+  const [playbackPersonaIdx, setPlaybackPersonaIdx] = useState(0);
+  const [playbackVoices,     setPlaybackVoices]     = useState([]);
+  const [showPlaybackPicker, setShowPlaybackPicker] = useState(false);
+  useEffect(() => {
+    const load = () => setPlaybackVoices(window.speechSynthesis.getVoices());
+    load(); window.speechSynthesis.onvoiceschanged = load;
+  }, []);
+
   const playRecording = (idx, text, recLang) => {
     window.speechSynthesis?.cancel();
     if (playingIdx === idx) { setPlayingIdx(null); return; }
     const u = new SpeechSynthesisUtterance(text);
-    u.rate = 0.92; u.pitch = 1;
-    u.lang = recLang || lang;
-    const allVoices = window.speechSynthesis.getVoices();
-    const v = allVoices.find(x => x.lang === u.lang) || allVoices.find(x => x.lang.startsWith(u.lang.slice(0,2)));
+    u.rate  = 0.9;
+    u.pitch = GLOBAL_PERSONAS[playbackPersonaIdx]?.pitch || 1.0;
+    u.lang  = recLang || lang;
+    const v = getSmartVoice(playbackPersonaIdx, playbackVoices, recLang || lang);
     if (v) u.voice = v;
-    u.onend = () => setPlayingIdx(null);
+    u.onend  = () => setPlayingIdx(null);
     u.onerror = () => setPlayingIdx(null);
     window.speechSynthesis.speak(u);
     setPlayingIdx(idx);
@@ -2802,6 +2983,32 @@ ${notesText.slice(0, 10000)}`,
           )}
 
           {/* Recordings list */}
+          {/* Playback voice picker */}
+          {voiceRecordings.length > 0 && (
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:14, flexWrap:"wrap" }}>
+              <span style={{ fontSize:11, fontWeight:700, color:C.muted }}>🎧 Playback voice:</span>
+              <button onClick={() => setShowPlaybackPicker(v => !v)}
+                style={{ display:"flex", alignItems:"center", gap:5, background:"#fff", border:`1.5px solid ${showPlaybackPicker?C.accent:C.border}`, borderRadius:20, padding:"5px 12px", fontSize:12, fontWeight:700, cursor:"pointer", color:showPlaybackPicker?C.accent:C.text }}>
+                {GLOBAL_PERSONAS[playbackPersonaIdx]?.emoji} {GLOBAL_PERSONAS[playbackPersonaIdx]?.label} {GLOBAL_PERSONAS[playbackPersonaIdx]?.gender==="female"?"♀":"♂"} ▾
+              </button>
+              {showPlaybackPicker && (
+                <div style={{ width:"100%", background:"#fff", border:`1.5px solid ${C.border}`, borderRadius:14, padding:"10px 12px", display:"flex", flexWrap:"wrap", gap:7, marginTop:4 }}>
+                  {GLOBAL_PERSONAS.map((p, i) => (
+                    <button key={p.id} onClick={() => { setPlaybackPersonaIdx(i); setShowPlaybackPicker(false); }}
+                      style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:20, border:"none", cursor:"pointer", fontSize:12, fontWeight:700,
+                        background: playbackPersonaIdx===i ? C.accent : C.surface,
+                        color: playbackPersonaIdx===i ? "#fff" : C.text }}>
+                      {p.emoji} {p.label} <span style={{ fontSize:10, opacity:.7 }}>{p.gender==="female"?"♀":"♂"}</span>
+                    </button>
+                  ))}
+                  <p style={{ width:"100%", fontSize:10, color:C.muted, marginTop:2 }}>
+                    ♀ Female · ♂ Male · Using: {getSmartVoiceLabel(playbackPersonaIdx, playbackVoices, lang)}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
           {voiceRecordings.length > 0 && (
             <div>
               <p style={{ fontSize:11, fontWeight:800, color:C.muted, letterSpacing:.8, marginBottom:12 }}>SAVED RECORDINGS ({voiceRecordings.length})</p>
@@ -4669,50 +4876,15 @@ function ListeningGame({ cards, onBack }) {
   const accent  = "#059669";
   const accentL = "#f0fdf4";
 
-  // ── Named voices ──────────────────────────────────────────────────────────
-  // We map browser TTS voices to friendly gendered names like ChatGPT
-  const VOICE_PERSONAS = [
-    { id:"alloy",   label:"Alloy",   gender:"female", pitch:1.0,  rate:0.9,  pref:["zira","samantha","victoria","karen","moira","fiona"] },
-    { id:"echo",    label:"Echo",    gender:"male",   pitch:0.95, rate:0.88, pref:["david","mark","daniel","alex","fred","lee"] },
-    { id:"nova",    label:"Nova",    gender:"female", pitch:1.05, rate:0.92, pref:["aria","jenny","michelle","ava","siri"] },
-    { id:"onyx",    label:"Onyx",    gender:"male",   pitch:0.9,  rate:0.85, pref:["guy","james","tom","reed","liam"] },
-    { id:"shimmer", label:"Shimmer", gender:"female", pitch:1.08, rate:0.9,  pref:["emma","amelie","claire","grace","helen"] },
-    { id:"fable",   label:"Fable",   gender:"male",   pitch:1.0,  rate:0.93, pref:["oliver","aaron","ryan","aaron","george"] },
-  ];
-
+  // ── Uses shared GLOBAL_PERSONAS + getSmartVoice ──────────────────────────
   const [allVoices,    setAllVoices]    = useState([]);
   const [personaIdx,   setPersonaIdx]   = useState(0);
   const [showVoicePick,setShowVoicePick]= useState(false);
 
   useEffect(() => {
-    const load = () => {
-      const v = window.speechSynthesis.getVoices();
-      setAllVoices(v);
-    };
-    load();
-    window.speechSynthesis.onvoiceschanged = load;
+    const load = () => setAllVoices(window.speechSynthesis.getVoices());
+    load(); window.speechSynthesis.onvoiceschanged = load;
   }, []);
-
-  // Pick best browser voice for a persona
-  const getVoiceForPersona = (persona) => {
-    if (!allVoices.length) return null;
-    // Try preferred name matches
-    for (const pref of persona.pref) {
-      const v = allVoices.find(v => v.name.toLowerCase().includes(pref));
-      if (v) return v;
-    }
-    // Fall back: female → any female-sounding, male → any male-sounding
-    // Heuristic: common female voice name fragments
-    if (persona.gender === "female") {
-      const v = allVoices.find(v => /zira|samantha|victoria|karen|aria|jenny|emma|ava|alice|amelie|claire|moira|fiona/i.test(v.name));
-      if (v) return v;
-    } else {
-      const v = allVoices.find(v => /david|mark|daniel|guy|james|tom|reed|liam|oliver|aaron|ryan|george/i.test(v.name));
-      if (v) return v;
-    }
-    // Final fallback: first English voice
-    return allVoices.find(v => v.lang.startsWith("en")) || allVoices[0] || null;
-  };
 
   // ── Game state ─────────────────────────────────────────────────────────────
   const [deck] = useState(() => [...cards].sort(() => Math.random() - .5).slice(0, 15));
@@ -4744,19 +4916,19 @@ function ListeningGame({ cards, onBack }) {
     return () => window.speechSynthesis?.cancel();
   }, [curr]);
 
-  const personaRef = useRef(VOICE_PERSONAS[0]);
-  useEffect(() => { personaRef.current = VOICE_PERSONAS[personaIdx]; }, [personaIdx]);
-  const persona = VOICE_PERSONAS[personaIdx];
+  const personaRef = useRef(GLOBAL_PERSONAS[0]);
+  useEffect(() => { personaRef.current = GLOBAL_PERSONAS[personaIdx]; }, [personaIdx]);
+  const persona = GLOBAL_PERSONAS[personaIdx];
 
   const speak = (text) => {
     if (!window.speechSynthesis) return;
     window.speechSynthesis.cancel();
     const p = personaRef.current;
     const u = new SpeechSynthesisUtterance(text);
-    u.rate  = p.rate;
-    u.pitch = p.pitch;
+    u.rate  = 0.9;
+    u.pitch = p.pitch || 1.0;
     u.lang  = "en-US";
-    const v = getVoiceForPersona(p);
+    const v = getSmartVoice(p, allVoices, "en-US");
     if (v) u.voice = v;
     u.onstart = () => setSpeaking(true);
     u.onend   = () => { setSpeaking(false); setHasPlayed(true); };
@@ -4794,16 +4966,16 @@ function ListeningGame({ cards, onBack }) {
         </button>
         {showVoicePick && (
           <div style={{ marginTop:8, background:"#fff", border:"1.5px solid #e5e7eb", borderRadius:14, padding:"10px 12px", display:"flex", flexWrap:"wrap", gap:8 }}>
-            {VOICE_PERSONAS.map((p, i) => (
+            {GLOBAL_PERSONAS.map((p, i) => (
               <button key={p.id} onClick={() => { setPersonaIdx(i); setShowVoicePick(false); }}
                 style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", borderRadius:20, border:"none", cursor:"pointer", fontSize:12, fontWeight:700,
                   background: personaIdx===i ? accent : "#f3f4f6",
                   color: personaIdx===i ? "#fff" : "#374151",
                   boxShadow: personaIdx===i ? `0 2px 10px ${accent}44` : "none" }}>
-                {p.gender === "female" ? "♀" : "♂"} {p.label}
+                {p.emoji} {p.label} {p.gender === "female" ? "♀" : "♂"}
               </button>
             ))}
-            <p style={{ width:"100%", fontSize:10, color:"#9ca3af", marginTop:4 }}>♀ = Female voice · ♂ = Male voice</p>
+            <p style={{ width:"100%", fontSize:10, color:"#9ca3af", marginTop:4 }}>Using: {getSmartVoiceLabel(personaIdx, allVoices, "en-US")} · ♀ = Female · ♂ = Male</p>
           </div>
         )}
       </div>
@@ -4907,150 +5079,18 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
   const totalChars  = useRef(1);
   const personaRef  = useRef(null);
 
-  // ── 6 ChatGPT-style personas ──────────────────────────────────────────────
-  // Each persona lists exact voice name fragments to search for, ranked best→worst.
-  // We target Microsoft Online (Edge/Windows) and Google (Chrome) which are the
-  // only genuinely natural-sounding voices available in browsers.
-  const PERSONAS = [
-    {
-      id:"alloy", label:"Alloy", gender:"female", emoji:"🟤", desc:"Warm & natural",
-      pitch:1.0,
-      // Best natural voices by platform — checked in order
-      targets: [
-        "microsoft aria online",    // Edge/Windows — very natural
-        "microsoft jenny online",   // Edge/Windows
-        "google us english",        // Chrome on Android/Mac
-        "google uk english female", // Chrome
-        "samantha",                 // macOS
-        "zira",                     // Windows offline
-        "victoria",                 // macOS offline
-        "karen",                    // macOS
-      ]
-    },
-    {
-      id:"echo", label:"Echo", gender:"male", emoji:"🔵", desc:"Clear & steady",
-      pitch:1.0,
-      targets: [
-        "microsoft guy online",
-        "microsoft davis online",
-        "microsoft eric online",
-        "google us english",
-        "google uk english male",
-        "daniel",
-        "alex",
-        "david",
-        "mark",
-      ]
-    },
-    {
-      id:"nova", label:"Nova", gender:"female", emoji:"🟣", desc:"Bright & expressive",
-      pitch:1.0,
-      targets: [
-        "microsoft michelle online",
-        "microsoft amber online",
-        "microsoft ashley online",
-        "microsoft ava online",
-        "google us english",
-        "google uk english female",
-        "ava",
-        "karen",
-        "moira",
-      ]
-    },
-    {
-      id:"onyx", label:"Onyx", gender:"male", emoji:"⚫", desc:"Deep & authoritative",
-      pitch:1.0,
-      targets: [
-        "microsoft christopher online",
-        "microsoft roger online",
-        "microsoft steffan online",
-        "google us english",
-        "google uk english male",
-        "lee",
-        "alex",
-        "fred",
-      ]
-    },
-    {
-      id:"shimmer", label:"Shimmer", gender:"female", emoji:"🟡", desc:"Gentle & soothing",
-      pitch:1.0,
-      targets: [
-        "microsoft emma online",
-        "microsoft jane online",
-        "microsoft sara online",
-        "google uk english female",
-        "google us english",
-        "fiona",
-        "kate",
-        "tessa",
-      ]
-    },
-    {
-      id:"fable", label:"Fable", gender:"male", emoji:"🟢", desc:"Friendly & casual",
-      pitch:1.0,
-      targets: [
-        "microsoft brian online",
-        "microsoft liam online",
-        "microsoft noah online",
-        "microsoft ryan online",
-        "google uk english male",
-        "google us english",
-        "oliver",
-        "thomas",
-        "rishi",
-      ]
-    },
-  ];
-
+  // ── Uses shared GLOBAL_PERSONAS + getSmartVoice / getSmartVoiceLabel ────────
   const SPEEDS = [0.75, 0.9, 1.0, 1.1, 1.25, 1.5];
 
   useEffect(() => {
-    const load = () => { setAllVoices(window.speechSynthesis.getVoices()); };
-    load();
-    window.speechSynthesis.onvoiceschanged = load;
+    const load = () => setAllVoices(window.speechSynthesis.getVoices());
+    load(); window.speechSynthesis.onvoiceschanged = load;
     return () => { window.speechSynthesis.cancel(); };
-  }, []);
+  }, [lang]);
 
   // Set personaRef whenever personaIdx changes
-  useEffect(() => { personaRef.current = PERSONAS[personaIdx]; }, [personaIdx]);
-  if (!personaRef.current) personaRef.current = PERSONAS[0];
-
-  // ── Best-voice finder ──────────────────────────────────────────────────────
-  // Strategy: try exact target fragments in order, preferring voices matching
-  // the selected language. Falls back to any English voice.
-  const getVoice = (persona, voices) => {
-    if (!voices || !voices.length) return null;
-
-    // Filter to current language first, fallback to all voices
-    const langCode = lang.slice(0, 2).toLowerCase();
-    const langPool = voices.filter(v => v.lang.toLowerCase().startsWith(langCode));
-    const pool = langPool.length > 0 ? langPool : voices;
-
-    // 1. Try each target fragment in order (case-insensitive)
-    for (const tgt of persona.targets) {
-      const v = pool.find(v => v.name.toLowerCase().includes(tgt.toLowerCase()));
-      if (v) return v;
-    }
-
-    // 2. Try any Microsoft Online or Google voice (natural quality)
-    const online = pool.find(v => /microsoft.*online|google/i.test(v.name));
-    if (online) return online;
-
-    // 3. Try macOS/iOS natural voices
-    const apple = pool.find(v => /samantha|ava|karen|moira|tessa|fiona|daniel|alex/i.test(v.name));
-    if (apple) return apple;
-
-    // 4. Any voice in pool
-    return pool[0] || voices[0] || null;
-  };
-
-  // ── What voice will actually be used for each persona (for display) ────────
-  const getVoiceName = (idx) => {
-    const v = getVoice(PERSONAS[idx], allVoices);
-    if (!v) return "Loading…";
-    // Shorten: strip "Microsoft" / "Google" / "- language" suffix
-    return v.name.replace(/microsoft\s*/i, "").replace(/\s*online.*$/i, "").replace(/\s*-.*$/, "").trim();
-  };
+  useEffect(() => { personaRef.current = GLOBAL_PERSONAS[personaIdx]; }, [personaIdx]);
+  if (!personaRef.current) personaRef.current = GLOBAL_PERSONAS[0];
 
   const stop = () => { window.speechSynthesis.cancel(); setPlaying(false); setPaused(false); setProgress(0); };
 
@@ -5060,8 +5100,8 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
     window.speechSynthesis.cancel();
     totalChars.current = script.length || 1;
 
-    const p = personaRef.current || PERSONAS[0];
-    const voice = getVoice(p, allVoices);
+    const p = personaRef.current || GLOBAL_PERSONAS[0];
+    const voice = getSmartVoice(p, allVoices, lang);
 
     // Pre-process for natural rhythm: paragraph breaks → pause, clean spacing
     const processed = script
@@ -5102,7 +5142,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
 
   const wordCount = script ? script.trim().split(/\s+/).length : 0;
   const estMins   = Math.max(1, Math.round((wordCount / 150) / speed));
-  const persona   = PERSONAS[personaIdx];
+  const persona   = GLOBAL_PERSONAS[personaIdx];
 
   return (
     <div style={{ background:"linear-gradient(135deg,#0f0c29,#302b63,#24243e)", borderRadius:22, overflow:"hidden", boxShadow:"0 20px 60px rgba(15,12,41,.6)" }}>
@@ -5173,9 +5213,9 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
               <div style={{ background:"rgba(0,0,0,.4)", borderRadius:18, padding:"14px 12px", marginBottom:12, border:"1px solid rgba(255,255,255,.08)" }}>
                 <p style={{ fontSize:10, fontWeight:800, color:"#818cf8", letterSpacing:1.2, marginBottom:11, textTransform:"uppercase", textAlign:"center" }}>Choose a Voice</p>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
-                  {PERSONAS.map((p, i) => {
+                  {GLOBAL_PERSONAS.map((p, i) => {
                     const sel = personaIdx === i;
-                    const vName = getVoiceName(i);
+                    const vName = getSmartVoiceLabel(i, allVoices, lang);
                     return (
                       <button key={p.id} onClick={() => { setPersonaIdx(i); if(playing||paused) stop(); }}
                         style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3, padding:"10px 6px", borderRadius:14, border:"none", cursor:"pointer",
@@ -5198,7 +5238,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
             {/* Current voice badge */}
             {!showPicker && (
               <p style={{ fontSize:11, color:"#818cf8", textAlign:"center", marginBottom:10 }}>
-                {persona.emoji} <strong style={{color:"#c7d2fe"}}>{persona.label}</strong> · {persona.gender==="female"?"♀ Female":"♂ Male"} · {persona.desc} · <span style={{color:"#6366f1"}}>{getVoiceName(personaIdx)}</span>
+                {persona.emoji} <strong style={{color:"#c7d2fe"}}>{persona.label}</strong> · {persona.gender==="female"?"♀ Female":"♂ Male"} · {persona.desc} · <span style={{color:"#6366f1"}}>{getSmartVoiceLabel(personaIdx, allVoices, lang)}</span>
               </p>
             )}
 
