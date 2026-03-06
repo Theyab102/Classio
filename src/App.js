@@ -962,8 +962,9 @@ function shadeHex(hex, amt) {
 }
 // Unique ID per every field + size so header (36px) and modal (120px) SVGs never clash
 function avatarGid(ch, size) {
+  // Safe fallbacks for every field so gid is always a valid string
   const str = [
-    ch.skin, ch.hair, ch.top, ch.eyes,
+    ch.skin||"#FDDBB4", ch.hair||"#3D2B1F", ch.top||"#2C3E50", ch.eyes||"#2980B9",
     ch.bg||"#dce8ff", ch.lipColor||"#d06060",
     ch.hairStyle||0, ch.topStyle||0, ch.eyeShape||0,
     ch.accessory||0, ch.eyebrow||0, ch.mouth||0,
@@ -1189,10 +1190,11 @@ function MiniAvatar({ character: ch, size = 40, uid = "" }) {
       <line x1={cx} y1={s*.145} x2={s*.32} y2={s*.27} stroke={hcd} strokeWidth={s*.014}/>
       <circle cx={s*.31} cy={s*.28} r={s*.03} fill={hcd}/>
     </>,
-    5: /* Crown */ <>
-      <path d={`M${s*.26} ${s*.31} L${s*.28} ${s*.19} L${s*.34} ${s*.255} L${cx} ${s*.16} L${s*.66} ${s*.255} L${s*.72} ${s*.19} L${s*.74} ${s*.31} Z`} fill={hc}/>
-      <path d={`M${s*.26} ${s*.31} L${s*.74} ${s*.31}`} stroke={hcd} strokeWidth={s*.018} fill="none"/>
-      {[s*.34, cx, s*.66].map((px,i)=><circle key={i} cx={px} cy={s*.225} r={s*.022} fill={i===1?"#fff":"#ff6b6b"}/>)}
+    5: /* Crown — shifted to fit within circle clip */ <>
+      <path d={`M${s*.28} ${s*.33} L${s*.30} ${s*.215} L${s*.36} ${s*.27} L${cx} ${s*.18} L${s*.64} ${s*.27} L${s*.70} ${s*.215} L${s*.72} ${s*.33} Z`} fill={hc}/>
+      <path d={`M${s*.28} ${s*.33} L${s*.72} ${s*.33}`} stroke={hcd} strokeWidth={s*.02} fill="none"/>
+      <path d={`M${s*.28} ${s*.33} L${s*.72} ${s*.33}`} stroke={hcl} strokeWidth={s*.006} fill="none" opacity={.45}/>
+      {[s*.365, cx, s*.635].map((px,i)=><circle key={i} cx={px} cy={s*.245} r={s*.02} fill={i===1?"#fff":"#ffb3b3"}/>)}
     </>,
     6: /* Party hat */ <>
       <path d={`M${cx} ${s*.06} L${s*.32} ${s*.32} Q${cx} ${s*.34} ${s*.68} ${s*.32} Z`} fill={hc}/>
@@ -1250,21 +1252,25 @@ function MiniAvatar({ character: ch, size = 40, uid = "" }) {
       <rect x={s*.31} y={s*.337} width={s*.044} height={s*.018} rx={s*.008} fill="#fff" opacity={.28}/>
       <rect x={s*.559} y={s*.337} width={s*.044} height={s*.018} rx={s*.008} fill="#fff" opacity={.28}/>
     </>,
-    5: /* Heart shaped */ <>
-      <path d={`M${s*.384} ${s*.342} Q${s*.37} ${s*.325} ${s*.342} ${s*.33} Q${s*.31} ${s*.335} ${s*.316} ${s*.365} Q${s*.322} ${s*.398} ${s*.384} ${s*.428} Q${s*.446} ${s*.398} ${s*.452} ${s*.365} Q${s*.458} ${s*.335} ${s*.426} ${s*.33} Q${s*.398} ${s*.325} ${s*.384} ${s*.342}`} fill="none" stroke={gc} strokeWidth={s*.019}/>
-      <path d={`M${s*.616} ${s*.342} Q${s*.602} ${s*.325} ${s*.574} ${s*.33} Q${s*.542} ${s*.335} ${s*.548} ${s*.365} Q${s*.554} ${s*.398} ${s*.616} ${s*.428} Q${s*.678} ${s*.398} ${s*.684} ${s*.365} Q${s*.69} ${s*.335} ${s*.658} ${s*.33} Q${s*.63} ${s*.325} ${s*.616} ${s*.342}`} fill="none" stroke={gc} strokeWidth={s*.019}/>
-      <line x1={s*.452} y1={s*.378} x2={s*.548} y2={s*.378} stroke={gc} strokeWidth={s*.018}/>
-      <line x1={s*.316} y1={s*.362} x2={s*.27} y2={s*.358} stroke={gc} strokeWidth={s*.016}/>
-      <line x1={s*.684} y1={s*.362} x2={s*.73} y2={s*.358} stroke={gc} strokeWidth={s*.016}/>
+    5: /* Heart shaped — symmetrical */ <>
+      {/* Left heart lens */}
+      <path d={`M${s*.384} ${s*.348} C${s*.384} ${s*.332} ${s*.364} ${s*.322} ${s*.346} ${s*.33} C${s*.312} ${s*.34} ${s*.312} ${s*.384} ${s*.345} ${s*.404} C${s*.36} ${s*.422} ${s*.384} ${s*.43} ${s*.384} ${s*.43} C${s*.384} ${s*.43} ${s*.408} ${s*.422} ${s*.423} ${s*.404} C${s*.456} ${s*.384} ${s*.456} ${s*.34} ${s*.422} ${s*.33} C${s*.404} ${s*.322} ${s*.384} ${s*.332} ${s*.384} ${s*.348}`} fill="none" stroke={gc} strokeWidth={s*.019}/>
+      {/* Right heart lens */}
+      <path d={`M${s*.616} ${s*.348} C${s*.616} ${s*.332} ${s*.596} ${s*.322} ${s*.578} ${s*.33} C${s*.544} ${s*.34} ${s*.544} ${s*.384} ${s*.577} ${s*.404} C${s*.592} ${s*.422} ${s*.616} ${s*.43} ${s*.616} ${s*.43} C${s*.616} ${s*.43} ${s*.640} ${s*.422} ${s*.655} ${s*.404} C${s*.688} ${s*.384} ${s*.688} ${s*.34} ${s*.654} ${s*.33} C${s*.636} ${s*.322} ${s*.616} ${s*.332} ${s*.616} ${s*.348}`} fill="none" stroke={gc} strokeWidth={s*.019}/>
+      <line x1={s*.456} y1={s*.374} x2={s*.544} y2={s*.374} stroke={gc} strokeWidth={s*.018}/>
+      <line x1={s*.312} y1={s*.358} x2={s*.272} y2={s*.354} stroke={gc} strokeWidth={s*.016}/>
+      <line x1={s*.688} y1={s*.358} x2={s*.728} y2={s*.354} stroke={gc} strokeWidth={s*.016}/>
     </>,
   };
 
   // ── Facial hair ───────────────────────────────────────────────────────────
   const FACIAL_HAIR = {
     0: null,
-    1: /* Stubble */ <>
-      {[[.39,.518],[.44,.532],[.5,.538],[.56,.532],[.61,.518],[.41,.545],[.46,.558],[.5,.562],[.54,.558],[.59,.545]].map(([fx,fy],i)=>
-        <circle key={i} cx={s*fx} cy={s*fy} r={s*.007} fill={hd} opacity={.45}/>
+    1: /* Stubble — uses hair color blended with skin for natural look */ <>
+      {[[.39,.518],[.44,.532],[.50,.538],[.56,.532],[.61,.518],
+        [.41,.546],[.46,.558],[.50,.562],[.54,.558],[.59,.546],
+        [.43,.504],[.50,.508],[.57,.504]].map(([fx,fy],i)=>
+        <circle key={i} cx={s*fx} cy={s*fy} r={s*.0075} fill={hd} opacity={.38}/>
       )}
     </>,
     2: /* Moustache */ <>
@@ -1289,27 +1295,31 @@ function MiniAvatar({ character: ch, size = 40, uid = "" }) {
   // ── Necklace styles ───────────────────────────────────────────────────────
   const nc  = ch.necklaceColor || "#f0c040";
   const ncd = shadeHex(nc, -25);
+  const ncl = shadeHex(nc,  22);
   const NECKLACE = {
     0: null,
-    1: /* Gold chain */ <>
-      {[0,1,2,3,4,5,6].map(i=>{
-        const t = i/6;
-        const x = s*(0.36 + t*0.28);
-        const y = s*(0.66 + Math.sin(t*Math.PI)*0.045);
-        return <circle key={i} cx={x} cy={y} r={s*.012} fill={nc} opacity={.9}/>;
+    1: /* Gold chain — sits just below neck */ <>
+      <path d={`M${s*.37} ${s*.67} Q${cx} ${s*.72} ${s*.63} ${s*.67}`} stroke={nc} strokeWidth={s*.013} fill="none" strokeLinecap="round"/>
+      <path d={`M${s*.37} ${s*.67} Q${cx} ${s*.715} ${s*.63} ${s*.67}`} stroke={ncl} strokeWidth={s*.005} fill="none" strokeLinecap="round" opacity={.5}/>
+      {[0,1,2,3,4].map(i=>{
+        const t = i/4;
+        const x = s*(0.37 + t*0.26);
+        const y = s*(0.67 + Math.sin(t*Math.PI)*0.05);
+        return <circle key={i} cx={x} cy={y} r={s*.011} fill={nc}/>;
       })}
     </>,
     2: /* Pendant */ <>
-      <path d={`M${s*.36} ${s*.656} Q${cx} ${s*.698} ${s*.64} ${s*.656}`} stroke={nc} strokeWidth={s*.014} fill="none"/>
-      <circle cx={cx} cy={s*.702} r={s*.026} fill={nc}/>
-      <circle cx={cx} cy={s*.702} r={s*.016} fill={ncd}/>
+      <path d={`M${s*.38} ${s*.668} Q${cx} ${s*.706} ${s*.62} ${s*.668}`} stroke={nc} strokeWidth={s*.013} fill="none"/>
+      <circle cx={cx} cy={s*.712} r={s*.024} fill={nc}/>
+      <circle cx={cx} cy={s*.712} r={s*.015} fill={ncd}/>
+      <circle cx={cx-s*.006} cy={s*.706} r={s*.005} fill={ncl} opacity={.7}/>
     </>,
     3: /* Beads */ <>
-      {[0,1,2,3,4,5].map(i=>{
-        const t = i/5;
-        const x = s*(0.38 + t*0.24);
-        const y = s*(0.658 + Math.sin(t*Math.PI)*0.038);
-        return <circle key={i} cx={x} cy={y} r={s*.016} fill={i%2===0?nc:ncd}/>;
+      {[0,1,2,3,4,5,6].map(i=>{
+        const t = i/6;
+        const x = s*(0.37 + t*0.26);
+        const y = s*(0.668 + Math.sin(t*Math.PI)*0.042);
+        return <circle key={i} cx={x} cy={y} r={s*.015} fill={i%2===0?nc:ncd}/>;
       })}
     </>,
   };
@@ -1346,8 +1356,9 @@ function MiniAvatar({ character: ch, size = 40, uid = "" }) {
     </>,
   };
 
-  // ── Legacy ACC block — kept for accessory field backward compat ───────────
-  const ACC = { 0: null };
+  // Legacy accessory field — no longer used (hat/glasses/earring/necklace replace it)
+  // Kept as empty map for backward compat only
+  const ACC = {};
 
   // ── Body / outfit — topStyle 0-11 ────────────────────────────────────────
   const ts = ch.topStyle || 0;
@@ -1500,8 +1511,8 @@ function MiniAvatar({ character: ch, size = 40, uid = "" }) {
       {/* Necklace */}
       <g clipPath={`url(#c${gid})`}>{NECKLACE[ch.necklace||0]}</g>
 
-      {/* Earrings */}
-      {EARRINGS[ch.earring||0]}
+      {/* Earrings — inside clip so they stay within avatar circle */}
+      <g clipPath={`url(#c${gid})`}>{EARRINGS[ch.earring||0]}</g>
 
       {/* Glasses */}
       <g clipPath={`url(#c${gid})`}>{GLASSES[ch.glasses||0]}</g>
@@ -1557,23 +1568,26 @@ function CharacterModal({ character, onChange, onClose }) {
   ];
 
   // ── AvatarChip — shows a live preview with one field changed ───────────────
+  // No scale transform — avoids overlapping siblings in wrap containers
   const AvatarChip = ({ field, value, label, selected, size=62, uid="" }) => {
     const preview = { ...ch, [field]: value };
     return (
       <button onClick={() => onChange({ ...ch, [field]: value })} title={label}
         style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4,
-          padding:"7px 5px 5px", borderRadius:14, border:"none", cursor:"pointer",
+          padding:"6px 5px 5px", borderRadius:14, border:"none", cursor:"pointer",
+          flexShrink:0,
           background: selected ? "#eef1ff" : "#f7f8fa",
-          outline: selected ? "2.5px solid #4361ee" : "2px solid transparent", outlineOffset:1,
-          transition:"all .13s", transform: selected ? "scale(1.07)" : "scale(1)",
-          boxShadow: selected ? "0 3px 12px rgba(67,97,238,.28)" : "0 1px 3px rgba(0,0,0,.07)" }}>
+          outline: selected ? "2.5px solid #4361ee" : "2px solid transparent",
+          outlineOffset: 1,
+          transition:"background .12s, outline .12s, box-shadow .12s",
+          boxShadow: selected ? "0 2px 14px rgba(67,97,238,.32)" : "0 1px 3px rgba(0,0,0,.06)" }}>
         <div style={{ width:size, height:size, borderRadius:"50%", overflow:"hidden", flexShrink:0,
-          boxShadow: selected ? "0 2px 10px rgba(67,97,238,.35)" : "0 1px 4px rgba(0,0,0,.14)" }}>
+          boxShadow: selected ? "0 2px 8px rgba(67,97,238,.3)" : "0 1px 3px rgba(0,0,0,.12)" }}>
           <MiniAvatar character={preview} size={size} uid={uid||field+String(value)}/>
         </div>
         <span style={{ fontSize:9, fontWeight:700, letterSpacing:.2, textAlign:"center",
-          lineHeight:1.3, maxWidth:size+8, wordBreak:"break-word",
-          color: selected ? "#4361ee" : "#777" }}>{label}</span>
+          lineHeight:1.3, maxWidth:size+4, wordBreak:"break-word",
+          color: selected ? "#4361ee" : "#666" }}>{label}</span>
       </button>
     );
   };
@@ -1626,8 +1640,9 @@ function CharacterModal({ character, onChange, onClose }) {
                 padding:"7px 5px 5px", borderRadius:14, border:"none", cursor:"pointer",
                 background:sel?"#eef1ff":"#f7f8fa",
                 outline:sel?"2.5px solid #4361ee":"2px solid transparent",
-                outlineOffset:1, transition:"all .13s", transform:sel?"scale(1.07)":"scale(1)",
-                boxShadow:sel?"0 3px 12px rgba(67,97,238,.28)":"0 1px 3px rgba(0,0,0,.07)" }}>
+                outlineOffset:1,
+                transition:"background .12s, outline .12s, box-shadow .12s",
+                boxShadow:sel?"0 2px 14px rgba(67,97,238,.32)":"0 1px 3px rgba(0,0,0,.06)" }}>
               <div style={{ width:70, height:70, borderRadius:"50%", overflow:"hidden",
                 boxShadow:sel?"0 2px 10px rgba(67,97,238,.35)":"0 1px 4px rgba(0,0,0,.14)" }}>
                 <MiniAvatar character={{...ch,[field]:val}} size={70} uid={field+String(val)}/>
@@ -3107,7 +3122,7 @@ ${notesText.slice(0, 10000)}`,
               <span style={{ fontSize:11, fontWeight:700, color:C.muted }}>🎧 Playback voice:</span>
               <button onClick={() => setShowPlaybackPicker(v => !v)}
                 style={{ display:"flex", alignItems:"center", gap:5, background:"#fff", border:`1.5px solid ${showPlaybackPicker?C.accent:C.border}`, borderRadius:20, padding:"5px 12px", fontSize:12, fontWeight:700, cursor:"pointer", color:showPlaybackPicker?C.accent:C.text }}>
-                {GLOBAL_PERSONAS[playbackPersonaIdx]?.emoji} {GLOBAL_PERSONAS[playbackPersonaIdx]?.label} {GLOBAL_PERSONAS[playbackPersonaIdx]?.gender==="female"?"♀":"♂"} ▾
+                {GLOBAL_PERSONAS[playbackPersonaIdx]?.emoji} {GLOBAL_PERSONAS[playbackPersonaIdx]?.label} {GLOBAL_PERSONAS[playbackPersonaIdx]?.gender==="female"?"♀":GLOBAL_PERSONAS[playbackPersonaIdx]?.gender==="male"?"♂":"⚥"} ▾
               </button>
               {showPlaybackPicker && (
                 <div style={{ width:"100%", background:"#fff", border:`1.5px solid ${C.border}`, borderRadius:14, padding:"10px 12px", display:"flex", flexWrap:"wrap", gap:7, marginTop:4 }}>
@@ -5347,8 +5362,8 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
     let charPos = 0;
     const utterances = sentences.map((sen, idx) => {
       const u = new SpeechSynthesisUtterance(sen.trim());
-      u.rate   = speed;
-      u.pitch  = p.pitch;
+      u.rate   = speed * (p.rate || 0.93);
+      u.pitch  = p.pitch || 1.0;
       u.volume = 1.0;
       u.lang   = lang;
       if (voice) u.voice = voice;
