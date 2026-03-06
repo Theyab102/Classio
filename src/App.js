@@ -653,216 +653,257 @@ function shadeHex(hex, amt) {
   const clamp = v => Math.min(255, Math.max(0, v));
   return `rgb(${clamp((n>>16&255)+amt)},${clamp((n>>8&255)+amt)},${clamp((n&255)+amt)})`;
 }
+// Make gradient IDs unique per colour combination — fixes all stale-gradient bugs
+function avatarGid(ch) {
+  const str = [ch.skin,ch.hair,ch.top,ch.bg||"#dce8ff"].join("");
+  let h = 0;
+  for (let i = 0; i < str.length; i++) { h = (h * 31 + str.charCodeAt(i)) >>> 0; }
+  return "av" + (h % 99999).toString(36);
+}
 
 // ─── AVATAR ───────────────────────────────────────────────────────────────────
 function MiniAvatar({ character: ch, size = 40 }) {
-  const s  = size;
-  const cx = s * 0.5;
-  const sd = shadeHex(ch.skin,  -30);
-  const sl = shadeHex(ch.skin,   28);
-  const hd = shadeHex(ch.hair,  -35);
-  const hl = shadeHex(ch.hair,   30);
-  const td = shadeHex(ch.top,   -25);
-  const tl = shadeHex(ch.top,    25);
-  const bg = ch.bg || '#dce8ff';
-  const gid = `av${s}`;   // unique per size to avoid gradient collisions
+  const s   = size;
+  const cx  = s * 0.5;
+  const sd  = shadeHex(ch.skin,  -30);
+  const sl  = shadeHex(ch.skin,   28);
+  const hd  = shadeHex(ch.hair,  -35);
+  const hl  = shadeHex(ch.hair,   30);
+  const td  = shadeHex(ch.top,   -28);
+  const tl  = shadeHex(ch.top,    28);
+  const bg  = ch.bg || "#dce8ff";
+  const gid = avatarGid(ch);
 
-  // ── Hair paths — all drawn with smooth bezier curves ──────────────────────
+  // ── Hair ──────────────────────────────────────────────────────────────────
   const H = {
-    // 0 – Clean buzz cut
-    0: <path d={`M${s*.29} ${s*.31} Q${s*.3} ${s*.11} ${cx} ${s*.1} Q${s*.7} ${s*.11} ${s*.71} ${s*.31}`} fill={ch.hair}/>,
-
-    // 1 – Side-part / textured top
-    1: <><path d={`M${s*.28} ${s*.33} Q${s*.27} ${s*.1} ${cx} ${s*.08} Q${s*.73} ${s*.1} ${s*.72} ${s*.33}`} fill={hd}/>
-        <path d={`M${s*.28} ${s*.33} Q${s*.29} ${s*.13} ${cx} ${s*.11} Q${s*.71} ${s*.13} ${s*.72} ${s*.33}`} fill={ch.hair}/>
-        <path d={`M${s*.29} ${s*.2} Q${s*.38} ${s*.09} ${s*.62} ${s*.12}`} stroke={hd} strokeWidth={s*.016} fill="none" strokeLinecap="round"/>
-       </>,
-
-    // 2 – Swept fringe / emo
-    2: <><path d={`M${s*.27} ${s*.35} Q${s*.25} ${s*.1} ${cx} ${s*.08} Q${s*.72} ${s*.1} ${s*.73} ${s*.32}`} fill={ch.hair}/>
-        <path d={`M${s*.29} ${s*.22} Q${s*.45} ${s*.06} ${s*.72} ${s*.19}`} fill={ch.hair}/>
-        <path d={`M${s*.29} ${s*.22} Q${s*.45} ${s*.11} ${s*.7} ${s*.22}`} fill={hd} opacity={.5}/>
-       </>,
-
-    // 3 – Medium textured
-    3: <><path d={`M${s*.26} ${s*.35} Q${s*.24} ${s*.09} ${cx} ${s*.07} Q${s*.76} ${s*.09} ${s*.74} ${s*.35}`} fill={hd}/>
-        <path d={`M${s*.27} ${s*.35} Q${s*.25} ${s*.11} ${cx} ${s*.09} Q${s*.75} ${s*.11} ${s*.73} ${s*.35}`} fill={ch.hair}/>
-        {/* Side sideburns */}
-        <path d={`M${s*.27} ${s*.3} Q${s*.24} ${s*.42} ${s*.27} ${s*.52}`} stroke={ch.hair} strokeWidth={s*.055} strokeLinecap="round" fill="none"/>
-        <path d={`M${s*.73} ${s*.3} Q${s*.76} ${s*.42} ${s*.73} ${s*.52}`} stroke={ch.hair} strokeWidth={s*.055} strokeLinecap="round" fill="none"/>
-       </>,
-
-    // 4 – Long straight (falls past shoulders)
-    4: <><path d={`M${s*.27} ${s*.35} Q${s*.24} ${s*.09} ${cx} ${s*.07} Q${s*.76} ${s*.09} ${s*.73} ${s*.35}`} fill={hd}/>
-        <path d={`M${s*.28} ${s*.35} Q${s*.26} ${s*.11} ${cx} ${s*.09} Q${s*.74} ${s*.11} ${s*.72} ${s*.35}`} fill={ch.hair}/>
-        {/* Long panels */}
-        <path d={`M${s*.27} ${s*.28} C${s*.22} ${s*.45} ${s*.2} ${s*.65} ${s*.23} ${s*.88}`} stroke={ch.hair} strokeWidth={s*.08} strokeLinecap="round" fill="none"/>
-        <path d={`M${s*.24} ${s*.28} C${s*.19} ${s*.45} ${s*.17} ${s*.65} ${s*.2} ${s*.88}`} stroke={hd} strokeWidth={s*.025} strokeLinecap="round" fill="none" opacity={.5}/>
-        <path d={`M${s*.73} ${s*.28} C${s*.78} ${s*.45} ${s*.8} ${s*.65} ${s*.77} ${s*.88}`} stroke={ch.hair} strokeWidth={s*.08} strokeLinecap="round" fill="none"/>
-        <path d={`M${s*.76} ${s*.28} C${s*.81} ${s*.45} ${s*.83} ${s*.65} ${s*.8} ${s*.88}`} stroke={hd} strokeWidth={s*.025} strokeLinecap="round" fill="none" opacity={.5}/>
-       </>,
-
-    // 5 – Wavy long
-    5: <><path d={`M${s*.27} ${s*.35} Q${s*.24} ${s*.09} ${cx} ${s*.07} Q${s*.76} ${s*.09} ${s*.73} ${s*.35}`} fill={ch.hair}/>
-        <path d={`M${s*.27} ${s*.28} C${s*.21} ${s*.4} ${s*.25} ${s*.55} ${s*.2} ${s*.7} C${s*.15} ${s*.85} ${s*.22} ${s*.95} ${s*.22} ${s*.98}`} stroke={ch.hair} strokeWidth={s*.085} strokeLinecap="round" fill="none"/>
-        <path d={`M${s*.27} ${s*.28} C${s*.21} ${s*.4} ${s*.25} ${s*.55} ${s*.2} ${s*.7} C${s*.15} ${s*.85} ${s*.22} ${s*.95} ${s*.22} ${s*.98}`} stroke={hl} strokeWidth={s*.022} strokeLinecap="round" fill="none" opacity={.4}/>
-        <path d={`M${s*.73} ${s*.28} C${s*.79} ${s*.4} ${s*.75} ${s*.55} ${s*.8} ${s*.7} C${s*.85} ${s*.85} ${s*.78} ${s*.95} ${s*.78} ${s*.98}`} stroke={ch.hair} strokeWidth={s*.085} strokeLinecap="round" fill="none"/>
-        <path d={`M${s*.73} ${s*.28} C${s*.79} ${s*.4} ${s*.75} ${s*.55} ${s*.8} ${s*.7} C${s*.85} ${s*.85} ${s*.78} ${s*.95} ${s*.78} ${s*.98}`} stroke={hl} strokeWidth={s*.022} strokeLinecap="round" fill="none" opacity={.4}/>
-       </>,
-
-    // 6 – Ponytail
-    6: <><path d={`M${s*.28} ${s*.35} Q${s*.26} ${s*.11} ${cx} ${s*.09} Q${s*.74} ${s*.11} ${s*.72} ${s*.35}`} fill={ch.hair}/>
-        <path d={`M${s*.28} ${s*.35} Q${s*.26} ${s*.13} ${cx} ${s*.11} Q${s*.74} ${s*.13} ${s*.72} ${s*.35}`} fill={hl} opacity={.3}/>
-        {/* Tail */}
-        <path d={`M${s*.67} ${s*.18} C${s*.82} ${s*.22} ${s*.85} ${s*.38} ${s*.82} ${s*.54} C${s*.79} ${s*.68} ${s*.83} ${s*.78} ${s*.8} ${s*.86}`} stroke={ch.hair} strokeWidth={s*.07} strokeLinecap="round" fill="none"/>
-        <path d={`M${s*.67} ${s*.18} C${s*.82} ${s*.22} ${s*.85} ${s*.38} ${s*.82} ${s*.54} C${s*.79} ${s*.68} ${s*.83} ${s*.78} ${s*.8} ${s*.86}`} stroke={hl} strokeWidth={s*.018} strokeLinecap="round" fill="none" opacity={.45}/>
-        {/* Tie */}
-        <circle cx={s*.755} cy={s*.2} r={s*.022} fill={hd}/>
-       </>,
-
-    // 7 – Top bun
-    7: <><path d={`M${s*.28} ${s*.34} Q${s*.27} ${s*.15} ${cx} ${s*.13} Q${s*.73} ${s*.15} ${s*.72} ${s*.34}`} fill={ch.hair}/>
-        {/* Bun ball */}
-        <circle cx={cx} cy={s*.08} r={s*.1} fill={hd}/>
-        <circle cx={cx} cy={s*.08} r={s*.085} fill={ch.hair}/>
-        <ellipse cx={s*.47} cy={s*.06} rx={s*.04} ry={s*.025} fill={hl} opacity={.5}/>
-        {/* Wrap */}
-        <path d={`M${s*.39} ${s*.14} Q${cx} ${s*.16} ${s*.61} ${s*.14}`} stroke={hd} strokeWidth={s*.018} fill="none"/>
-       </>,
-
-    // 8 – Afro
-    8: <><ellipse cx={cx} cy={s*.16} rx={s*.26} ry={s*.2} fill={hd}/>
-        {[...Array(18)].map((_,i) => {
-          const a = -Math.PI + (i/18)*Math.PI*2;
-          const r = s*(0.2+Math.random()*0.04);
-          return <circle key={i} cx={cx+Math.cos(a)*r} cy={s*.18+Math.sin(a)*r*.7} r={s*.055} fill={i%3===0?hl:ch.hair}/>;
-        })}
-        <ellipse cx={cx} cy={s*.19} rx={s*.19} ry={s*.15} fill={ch.hair}/>
-       </>,
-
-    // 9 – Box braids
-    9: <><path d={`M${s*.28} ${s*.34} Q${s*.26} ${s*.1} ${cx} ${s*.08} Q${s*.74} ${s*.1} ${s*.72} ${s*.34}`} fill={ch.hair}/>
-        {/* Braid strands — alternating shade */}
-        {[...Array(7)].map((_,i) => {
-          const x = s*(0.3 + i*0.058);
-          const len = s*(0.38 + (i%3)*0.09);
-          return <g key={i}>
-            <rect x={x} y={s*.22} width={s*.03} height={len} rx={s*.015} fill={i%2===0?ch.hair:hd}/>
-            <ellipse cx={x+s*.015} cy={s*.22+len} rx={s*.018} ry={s*.012} fill={hd}/>
-          </g>;
-        })}
-       </>,
-
-    // 10 – Curly / coily
-    10: <><ellipse cx={cx} cy={s*.17} rx={s*.24} ry={s*.16} fill={hd}/>
-         {[...Array(22)].map((_,i)=>{
-           const a = (i/22)*Math.PI*2;
-           const rx = 0.18+Math.sin(i*1.3)*0.03;
-           const ry = 0.14+Math.cos(i*1.7)*0.03;
-           return <circle key={i} cx={cx+Math.cos(a)*s*rx} cy={s*.18+Math.sin(a)*s*ry} r={s*.042} fill={i%2===0?ch.hair:hl}/>;
-         })}
-         <ellipse cx={cx} cy={s*.19} rx={s*.17} ry={s*.13} fill={ch.hair}/>
-        </>,
-
-    // 11 – Locs / dreads
-    11: <><path d={`M${s*.28} ${s*.34} Q${s*.26} ${s*.1} ${cx} ${s*.08} Q${s*.74} ${s*.1} ${s*.72} ${s*.34}`} fill={ch.hair}/>
-         {[...Array(9)].map((_,i)=>{
-           const x = s*(0.28+i*0.054);
-           const h = s*(0.32+Math.sin(i*0.8)*0.08);
-           const w = s*.032;
-           return <g key={i}>
-             <rect x={x} y={s*.21} width={w} height={h} rx={w/2} fill={i%2===0?ch.hair:hd}/>
-             <ellipse cx={x+w/2} cy={s*.21+h+s*.012} rx={w*.6} ry={s*.014} fill={hd}/>
-           </g>;
-         })}
-        </>,
-
-    // 12 – Faux hawk / mohawk
-    12: <><path d={`M${s*.28} ${s*.34} Q${s*.27} ${s*.17} ${cx} ${s*.15} Q${s*.73} ${s*.17} ${s*.72} ${s*.34}`} fill={ch.hair}/>
-         {/* Raised center strip */}
-         <path d={`M${s*.41} ${s*.16} C${s*.43} ${s*.03} ${s*.57} ${s*.03} ${s*.59} ${s*.16}`} fill={ch.hair}/>
-         <path d={`M${s*.43} ${s*.16} C${s*.45} ${s*.06} ${s*.55} ${s*.06} ${s*.57} ${s*.16}`} fill={hl} opacity={.45}/>
-        </>,
-
-    // 13 – Space buns
-    13: <><path d={`M${s*.28} ${s*.34} Q${s*.27} ${s*.15} ${cx} ${s*.13} Q${s*.73} ${s*.15} ${s*.72} ${s*.34}`} fill={ch.hair}/>
-         <circle cx={s*.34} cy={s*.1} r={s*.085} fill={hd}/><circle cx={s*.34} cy={s*.1} r={s*.07} fill={ch.hair}/>
-         <ellipse cx={s*.32} cy={s*.08} rx={s*.03} ry={s*.02} fill={hl} opacity={.5}/>
-         <circle cx={s*.66} cy={s*.1} r={s*.085} fill={hd}/><circle cx={s*.66} cy={s*.1} r={s*.07} fill={ch.hair}/>
-         <ellipse cx={s*.64} cy={s*.08} rx={s*.03} ry={s*.02} fill={hl} opacity={.5}/>
-        </>,
+    0: /* Buzz */ <path d={`M${s*.29} ${s*.315} Q${s*.3} ${s*.11} ${cx} ${s*.1} Q${s*.7} ${s*.11} ${s*.71} ${s*.315}`} fill={ch.hair}/>,
+    1: /* Side-part */ <>
+      <path d={`M${s*.28} ${s*.33} Q${s*.27} ${s*.1} ${cx} ${s*.08} Q${s*.73} ${s*.1} ${s*.72} ${s*.33}`} fill={hd}/>
+      <path d={`M${s*.28} ${s*.33} Q${s*.29} ${s*.12} ${cx} ${s*.1} Q${s*.71} ${s*.12} ${s*.72} ${s*.33}`} fill={ch.hair}/>
+      <path d={`M${s*.29} ${s*.19} Q${s*.39} ${s*.09} ${s*.63} ${s*.12}`} stroke={hd} strokeWidth={s*.016} fill="none" strokeLinecap="round"/>
+    </>,
+    2: /* Fringe */ <>
+      <path d={`M${s*.27} ${s*.35} Q${s*.25} ${s*.1} ${cx} ${s*.08} Q${s*.72} ${s*.1} ${s*.73} ${s*.32}`} fill={ch.hair}/>
+      <path d={`M${s*.29} ${s*.21} Q${s*.45} ${s*.06} ${s*.73} ${s*.19}`} fill={ch.hair}/>
+      <path d={`M${s*.29} ${s*.21} Q${s*.46} ${s*.11} ${s*.71} ${s*.21}`} fill={hd} opacity={.45}/>
+    </>,
+    3: /* Textured */ <>
+      <path d={`M${s*.26} ${s*.36} Q${s*.24} ${s*.09} ${cx} ${s*.07} Q${s*.76} ${s*.09} ${s*.74} ${s*.36}`} fill={hd}/>
+      <path d={`M${s*.27} ${s*.36} Q${s*.25} ${s*.11} ${cx} ${s*.09} Q${s*.75} ${s*.11} ${s*.73} ${s*.36}`} fill={ch.hair}/>
+      <path d={`M${s*.27} ${s*.3} Q${s*.24} ${s*.43} ${s*.27} ${s*.53}`} stroke={ch.hair} strokeWidth={s*.052} strokeLinecap="round" fill="none"/>
+      <path d={`M${s*.73} ${s*.3} Q${s*.76} ${s*.43} ${s*.73} ${s*.53}`} stroke={ch.hair} strokeWidth={s*.052} strokeLinecap="round" fill="none"/>
+    </>,
+    4: /* Long straight */ <>
+      <path d={`M${s*.27} ${s*.35} Q${s*.24} ${s*.09} ${cx} ${s*.07} Q${s*.76} ${s*.09} ${s*.73} ${s*.35}`} fill={hd}/>
+      <path d={`M${s*.28} ${s*.35} Q${s*.26} ${s*.11} ${cx} ${s*.09} Q${s*.74} ${s*.11} ${s*.72} ${s*.35}`} fill={ch.hair}/>
+      <path d={`M${s*.27} ${s*.28} C${s*.22} ${s*.45} ${s*.2} ${s*.65} ${s*.23} ${s*.9}`} stroke={ch.hair} strokeWidth={s*.082} strokeLinecap="round" fill="none"/>
+      <path d={`M${s*.73} ${s*.28} C${s*.78} ${s*.45} ${s*.8} ${s*.65} ${s*.77} ${s*.9}`} stroke={ch.hair} strokeWidth={s*.082} strokeLinecap="round" fill="none"/>
+      <path d={`M${s*.25} ${s*.29} C${s*.2} ${s*.46} ${s*.18} ${s*.66} ${s*.21} ${s*.91}`} stroke={hl} strokeWidth={s*.022} strokeLinecap="round" fill="none" opacity={.4}/>
+      <path d={`M${s*.75} ${s*.29} C${s*.8} ${s*.46} ${s*.82} ${s*.66} ${s*.79} ${s*.91}`} stroke={hl} strokeWidth={s*.022} strokeLinecap="round" fill="none" opacity={.4}/>
+    </>,
+    5: /* Wavy */ <>
+      <path d={`M${s*.27} ${s*.35} Q${s*.24} ${s*.09} ${cx} ${s*.07} Q${s*.76} ${s*.09} ${s*.73} ${s*.35}`} fill={ch.hair}/>
+      <path d={`M${s*.27} ${s*.27} C${s*.21} ${s*.4} ${s*.26} ${s*.54} ${s*.2} ${s*.68} C${s*.14} ${s*.82} ${s*.21} ${s*.93} ${s*.21} ${s*.98}`} stroke={ch.hair} strokeWidth={s*.088} strokeLinecap="round" fill="none"/>
+      <path d={`M${s*.27} ${s*.27} C${s*.21} ${s*.4} ${s*.26} ${s*.54} ${s*.2} ${s*.68} C${s*.14} ${s*.82} ${s*.21} ${s*.93} ${s*.21} ${s*.98}`} stroke={hl} strokeWidth={s*.024} strokeLinecap="round" fill="none" opacity={.38}/>
+      <path d={`M${s*.73} ${s*.27} C${s*.79} ${s*.4} ${s*.74} ${s*.54} ${s*.8} ${s*.68} C${s*.86} ${s*.82} ${s*.79} ${s*.93} ${s*.79} ${s*.98}`} stroke={ch.hair} strokeWidth={s*.088} strokeLinecap="round" fill="none"/>
+      <path d={`M${s*.73} ${s*.27} C${s*.79} ${s*.4} ${s*.74} ${s*.54} ${s*.8} ${s*.68} C${s*.86} ${s*.82} ${s*.79} ${s*.93} ${s*.79} ${s*.98}`} stroke={hl} strokeWidth={s*.024} strokeLinecap="round" fill="none" opacity={.38}/>
+    </>,
+    6: /* Ponytail */ <>
+      <path d={`M${s*.28} ${s*.35} Q${s*.26} ${s*.11} ${cx} ${s*.09} Q${s*.74} ${s*.11} ${s*.72} ${s*.35}`} fill={ch.hair}/>
+      <path d={`M${s*.28} ${s*.35} Q${s*.26} ${s*.13} ${cx} ${s*.11} Q${s*.74} ${s*.13} ${s*.72} ${s*.35}`} fill={hl} opacity={.28}/>
+      <path d={`M${s*.68} ${s*.18} C${s*.84} ${s*.23} ${s*.87} ${s*.4} ${s*.84} ${s*.57} C${s*.81} ${s*.71} ${s*.85} ${s*.82} ${s*.82} ${s*.9}`} stroke={ch.hair} strokeWidth={s*.072} strokeLinecap="round" fill="none"/>
+      <path d={`M${s*.68} ${s*.18} C${s*.84} ${s*.23} ${s*.87} ${s*.4} ${s*.84} ${s*.57} C${s*.81} ${s*.71} ${s*.85} ${s*.82} ${s*.82} ${s*.9}`} stroke={hl} strokeWidth={s*.02} strokeLinecap="round" fill="none" opacity={.42}/>
+      <circle cx={s*.755} cy={s*.21} r={s*.022} fill={hd}/>
+    </>,
+    7: /* Bun */ <>
+      <path d={`M${s*.28} ${s*.34} Q${s*.27} ${s*.15} ${cx} ${s*.13} Q${s*.73} ${s*.15} ${s*.72} ${s*.34}`} fill={ch.hair}/>
+      <circle cx={cx} cy={s*.082} r={s*.105} fill={hd}/>
+      <circle cx={cx} cy={s*.082} r={s*.088} fill={ch.hair}/>
+      <ellipse cx={s*.475} cy={s*.062} rx={s*.042} ry={s*.026} fill={hl} opacity={.48}/>
+      <path d={`M${s*.39} ${s*.14} Q${cx} ${s*.165} ${s*.61} ${s*.14}`} stroke={hd} strokeWidth={s*.016} fill="none"/>
+    </>,
+    8: /* Afro */ <>
+      <ellipse cx={cx} cy={s*.17} rx={s*.27} ry={s*.21} fill={hd}/>
+      {[...Array(20)].map((_,i) => {
+        const a = -Math.PI + (i/20)*Math.PI*2;
+        const r = s*(0.21 + (i%3)*0.018);
+        return <circle key={i} cx={cx+Math.cos(a)*r} cy={s*.19+Math.sin(a)*r*.72} r={s*.052} fill={i%3===0?hl:i%3===1?ch.hair:hd}/>;
+      })}
+      <ellipse cx={cx} cy={s*.2} rx={s*.2} ry={s*.16} fill={ch.hair}/>
+    </>,
+    9: /* Box braids */ <>
+      <path d={`M${s*.28} ${s*.35} Q${s*.26} ${s*.1} ${cx} ${s*.08} Q${s*.74} ${s*.1} ${s*.72} ${s*.35}`} fill={ch.hair}/>
+      {[...Array(8)].map((_,i) => {
+        const x = s*(0.29 + i*0.056);
+        const len = s*(0.36 + (i%3)*0.07);
+        return <g key={i}>
+          <rect x={x} y={s*.21} width={s*.03} height={len} rx={s*.015} fill={i%2===0?ch.hair:hd}/>
+          <ellipse cx={x+s*.015} cy={s*.21+len+s*.01} rx={s*.016} ry={s*.012} fill={hd}/>
+        </g>;
+      })}
+    </>,
+    10: /* Curly */ <>
+      <ellipse cx={cx} cy={s*.18} rx={s*.25} ry={s*.17} fill={hd}/>
+      {[...Array(24)].map((_,i) => {
+        const a = (i/24)*Math.PI*2;
+        const rx2 = 0.19+(i%4)*0.014;
+        const ry2 = 0.15+(i%3)*0.014;
+        return <circle key={i} cx={cx+Math.cos(a)*s*rx2} cy={s*.19+Math.sin(a)*s*ry2} r={s*.038} fill={i%2===0?ch.hair:hl}/>;
+      })}
+      <ellipse cx={cx} cy={s*.2} rx={s*.18} ry={s*.14} fill={ch.hair}/>
+    </>,
+    11: /* Locs */ <>
+      <path d={`M${s*.28} ${s*.35} Q${s*.26} ${s*.1} ${cx} ${s*.08} Q${s*.74} ${s*.1} ${s*.72} ${s*.35}`} fill={ch.hair}/>
+      {[...Array(10)].map((_,i) => {
+        const x = s*(0.27+i*0.052);
+        const h2 = s*(0.3+Math.sin(i*0.9)*0.09);
+        const w = s*.03;
+        return <g key={i}>
+          <rect x={x} y={s*.21} width={w} height={h2} rx={w/2} fill={i%2===0?ch.hair:hd}/>
+          <ellipse cx={x+w/2} cy={s*.21+h2+s*.012} rx={w*.55} ry={s*.013} fill={hd}/>
+        </g>;
+      })}
+    </>,
+    12: /* Faux hawk */ <>
+      <path d={`M${s*.28} ${s*.35} Q${s*.27} ${s*.17} ${cx} ${s*.15} Q${s*.73} ${s*.17} ${s*.72} ${s*.35}`} fill={ch.hair}/>
+      <path d={`M${s*.41} ${s*.17} C${s*.43} ${s*.03} ${s*.57} ${s*.03} ${s*.59} ${s*.17}`} fill={ch.hair}/>
+      <path d={`M${s*.43} ${s*.17} C${s*.45} ${s*.07} ${s*.55} ${s*.07} ${s*.57} ${s*.17}`} fill={hl} opacity={.42}/>
+    </>,
+    13: /* Space buns */ <>
+      <path d={`M${s*.28} ${s*.35} Q${s*.27} ${s*.16} ${cx} ${s*.14} Q${s*.73} ${s*.16} ${s*.72} ${s*.35}`} fill={ch.hair}/>
+      <circle cx={s*.34} cy={s*.1} r={s*.088} fill={hd}/><circle cx={s*.34} cy={s*.1} r={s*.072} fill={ch.hair}/>
+      <ellipse cx={s*.325} cy={s*.08} rx={s*.032} ry={s*.02} fill={hl} opacity={.48}/>
+      <circle cx={s*.66} cy={s*.1} r={s*.088} fill={hd}/><circle cx={s*.66} cy={s*.1} r={s*.072} fill={ch.hair}/>
+      <ellipse cx={s*.645} cy={s*.08} rx={s*.032} ry={s*.02} fill={hl} opacity={.48}/>
+    </>,
   };
 
+  // ── Mouth ─────────────────────────────────────────────────────────────────
   const MOUTH = {
-    0: <path d={`M${s*.41} ${s*.525} Q${cx} ${s*.575} ${s*.59} ${s*.525}`} stroke="#b06050" strokeWidth={s*.024} fill="none" strokeLinecap="round"/>,
-    1: <path d={`M${s*.41} ${s*.545} Q${cx} ${s*.5} ${s*.59} ${s*.545}`}   stroke="#b06050" strokeWidth={s*.024} fill="none" strokeLinecap="round"/>,
-    2: <><path d={`M${s*.41} ${s*.52} Q${cx} ${s*.585} ${s*.59} ${s*.52}`} fill="#8B3A3A"/>
-        <path d={`M${s*.41} ${s*.52} Q${cx} ${s*.56}  ${s*.59} ${s*.52}`}  fill="white" opacity={.4}/>
-        <path d={`M${s*.41} ${s*.52} Q${cx} ${s*.585} ${s*.59} ${s*.52}`}  stroke="#b06050" strokeWidth={s*.022} fill="none" strokeLinecap="round"/></>,
-    3: <path d={`M${s*.44} ${s*.525} Q${cx} ${s*.555} ${s*.56} ${s*.525}`} stroke="#b06050" strokeWidth={s*.022} fill="none" strokeLinecap="round"/>,
-    4: <><ellipse cx={cx} cy={s*.535} rx={s*.075} ry={s*.028} fill="#b06050"/>
-        <ellipse cx={cx} cy={s*.528} rx={s*.055} ry={s*.014} fill="white" opacity={.35}/></>,
+    0: <path d={`M${s*.41} ${s*.526} Q${cx} ${s*.576} ${s*.59} ${s*.526}`} stroke="#b06050" strokeWidth={s*.024} fill="none" strokeLinecap="round"/>,
+    1: <path d={`M${s*.41} ${s*.546} Q${cx} ${s*.5} ${s*.59} ${s*.546}`} stroke="#b06050" strokeWidth={s*.024} fill="none" strokeLinecap="round"/>,
+    2: <>
+      <path d={`M${s*.39} ${s*.52} Q${cx} ${s*.59} ${s*.61} ${s*.52}`} fill="#8B3A3A"/>
+      <path d={`M${s*.39} ${s*.52} Q${cx} ${s*.56} ${s*.61} ${s*.52}`} fill="white" opacity={.38}/>
+      <path d={`M${s*.39} ${s*.52} Q${cx} ${s*.59} ${s*.61} ${s*.52}`} stroke="#b06050" strokeWidth={s*.02} fill="none" strokeLinecap="round"/>
+    </>,
+    3: <path d={`M${s*.44} ${s*.526} Q${cx} ${s*.556} ${s*.56} ${s*.526}`} stroke="#b06050" strokeWidth={s*.022} fill="none" strokeLinecap="round"/>,
+    4: <>
+      <ellipse cx={cx} cy={s*.536} rx={s*.076} ry={s*.028} fill="#b06050"/>
+      <ellipse cx={cx} cy={s*.528} rx={s*.054} ry={s*.014} fill="white" opacity={.34}/>
+    </>,
   };
 
+  // ── Brows ─────────────────────────────────────────────────────────────────
   const BROW = {
-    0: <><path d={`M${s*.34} ${s*.31} Q${s*.405} ${s*.28} ${s*.465} ${s*.295}`} stroke={hd} strokeWidth={s*.025} fill="none" strokeLinecap="round"/>
-        <path d={`M${s*.535} ${s*.295} Q${s*.595} ${s*.28} ${s*.66} ${s*.31}`}  stroke={hd} strokeWidth={s*.025} fill="none" strokeLinecap="round"/></>,
-    1: <><line x1={s*.34} y1={s*.3}  x2={s*.465} y2={s*.305} stroke={hd} strokeWidth={s*.024} strokeLinecap="round"/>
-        <line x1={s*.535} y1={s*.305} x2={s*.66}  y2={s*.3}  stroke={hd} strokeWidth={s*.024} strokeLinecap="round"/></>,
-    2: <><path d={`M${s*.34} ${s*.305} Q${s*.405} ${s*.268} ${s*.465} ${s*.285}`} stroke={hd} strokeWidth={s*.033} fill="none" strokeLinecap="round"/>
-        <path d={`M${s*.535} ${s*.285} Q${s*.595} ${s*.268} ${s*.66} ${s*.305}`}  stroke={hd} strokeWidth={s*.033} fill="none" strokeLinecap="round"/></>,
-    3: <><path d={`M${s*.34} ${s*.295} Q${s*.405} ${s*.315} ${s*.465} ${s*.305}`} stroke={hd} strokeWidth={s*.025} fill="none" strokeLinecap="round"/>
-        <path d={`M${s*.535} ${s*.305} Q${s*.595} ${s*.315} ${s*.66} ${s*.295}`}  stroke={hd} strokeWidth={s*.025} fill="none" strokeLinecap="round"/></>,
+    0: <>
+      <path d={`M${s*.34} ${s*.312} Q${s*.405} ${s*.282} ${s*.465} ${s*.298}`} stroke={hd} strokeWidth={s*.025} fill="none" strokeLinecap="round"/>
+      <path d={`M${s*.535} ${s*.298} Q${s*.595} ${s*.282} ${s*.66} ${s*.312}`} stroke={hd} strokeWidth={s*.025} fill="none" strokeLinecap="round"/>
+    </>,
+    1: <>
+      <line x1={s*.34} y1={s*.302} x2={s*.465} y2={s*.308} stroke={hd} strokeWidth={s*.024} strokeLinecap="round"/>
+      <line x1={s*.535} y1={s*.308} x2={s*.66} y2={s*.302} stroke={hd} strokeWidth={s*.024} strokeLinecap="round"/>
+    </>,
+    2: <>
+      <path d={`M${s*.34} ${s*.308} Q${s*.405} ${s*.27} ${s*.465} ${s*.29}`} stroke={hd} strokeWidth={s*.034} fill="none" strokeLinecap="round"/>
+      <path d={`M${s*.535} ${s*.29} Q${s*.595} ${s*.27} ${s*.66} ${s*.308}`} stroke={hd} strokeWidth={s*.034} fill="none" strokeLinecap="round"/>
+    </>,
+    3: <>
+      <path d={`M${s*.34} ${s*.296} Q${s*.405} ${s*.318} ${s*.465} ${s*.308}`} stroke={hd} strokeWidth={s*.025} fill="none" strokeLinecap="round"/>
+      <path d={`M${s*.535} ${s*.308} Q${s*.595} ${s*.318} ${s*.66} ${s*.296}`} stroke={hd} strokeWidth={s*.025} fill="none" strokeLinecap="round"/>
+    </>,
   };
 
+  // ── Eyes ──────────────────────────────────────────────────────────────────
   const eye = (ex, ey) => {
-    const sh = ch.eyeShape||0;
-    const W  = sh===1 ? <ellipse cx={ex} cy={ey} rx={s*.062} ry={s*.042} fill="white"/>
-               : sh===2 ? <path d={`M${ex-s*.062} ${ey+s*.01} Q${ex} ${ey-s*.072} ${ex+s*.062} ${ey+s*.01} Q${ex} ${ey+s*.048} ${ex-s*.062} ${ey+s*.01}`} fill="white"/>
-               : <ellipse cx={ex} cy={ey} rx={s*.058} ry={s*.055} fill="white"/>;
+    const sh = ch.eyeShape || 0;
+    const W = sh===1 ? <ellipse cx={ex} cy={ey} rx={s*.062} ry={s*.042} fill="white"/>
+              : sh===2 ? <path d={`M${ex-s*.062} ${ey+s*.01} Q${ex} ${ey-s*.074} ${ex+s*.062} ${ey+s*.01} Q${ex} ${ey+s*.048} ${ex-s*.062} ${ey+s*.01}`} fill="white"/>
+              : <ellipse cx={ex} cy={ey} rx={s*.058} ry={s*.056} fill="white"/>;
     return <>
       {W}
       <ellipse cx={ex} cy={ey} rx={s*.034} ry={s*.036} fill={ch.eyes}/>
-      <ellipse cx={ex} cy={ey} rx={s*.019} ry={s*.02}  fill="#111" opacity={.88}/>
-      <circle  cx={ex+s*.016} cy={ey-s*.017} r={s*.01} fill="white"/>
-      <circle  cx={ex-s*.009} cy={ey+s*.012} r={s*.005} fill="white" opacity={.55}/>
-      {/* Lashes top */}
-      {sh===2 && <path d={`M${ex-s*.055} ${ey+s*.008} Q${ex} ${ey-s*.075} ${ex+s*.055} ${ey+s*.008}`} stroke="#222" strokeWidth={s*.012} fill="none"/>}
+      <ellipse cx={ex} cy={ey} rx={s*.019} ry={s*.02} fill="#111" opacity={.88}/>
+      <circle cx={ex+s*.016} cy={ey-s*.017} r={s*.01} fill="white"/>
+      <circle cx={ex-s*.009} cy={ey+s*.012} r={s*.005} fill="white" opacity={.55}/>
+      {sh===2 && <path d={`M${ex-s*.055} ${ey+s*.008} Q${ex} ${ey-s*.076} ${ex+s*.055} ${ey+s*.008}`} stroke="#222" strokeWidth={s*.012} fill="none"/>}
     </>;
   };
 
+  // ── Nose ──────────────────────────────────────────────────────────────────
   const nose = <>
-    <path d={`M${cx} ${s*.42} Q${s*.545} ${s*.46} ${s*.535} ${s*.495}`} stroke={sd} strokeWidth={s*.015} fill="none" opacity={.45}/>
-    <ellipse cx={s*.464} cy={s*.5}  rx={s*.017} ry={s*.01} fill={sd} opacity={.28}/>
-    <ellipse cx={s*.536} cy={s*.5}  rx={s*.017} ry={s*.01} fill={sd} opacity={.28}/>
+    <path d={`M${cx} ${s*.42} Q${s*.545} ${s*.462} ${s*.534} ${s*.496}`} stroke={sd} strokeWidth={s*.015} fill="none" opacity={.44}/>
+    <ellipse cx={s*.464} cy={s*.5} rx={s*.017} ry={s*.01} fill={sd} opacity={.27}/>
+    <ellipse cx={s*.536} cy={s*.5} rx={s*.017} ry={s*.01} fill={sd} opacity={.27}/>
   </>;
 
+  // ── Accessories ───────────────────────────────────────────────────────────
   const ACC = {
     0: null,
-    1: <> {/* Glasses */}
-       <rect x={s*.3} y={s*.33} width={s*.16} height={s*.105} rx={s*.04} fill="none" stroke="#333" strokeWidth={s*.02}/>
-       <rect x={s*.54} y={s*.33} width={s*.16} height={s*.105} rx={s*.04} fill="none" stroke="#333" strokeWidth={s*.02}/>
-       <line x1={s*.46} y1={s*.382} x2={s*.54} y2={s*.382} stroke="#333" strokeWidth={s*.016}/>
-       <line x1={s*.3}  y1={s*.365} x2={s*.26} y2={s*.36} stroke="#333" strokeWidth={s*.016}/>
-       <line x1={s*.7}  y1={s*.365} x2={s*.74} y2={s*.36} stroke="#333" strokeWidth={s*.016}/>
-       </>,
-    2: <> {/* Beanie */}
-       <path d={`M${s*.27} ${s*.33} Q${s*.28} ${s*.1} ${cx} ${s*.08} Q${s*.72} ${s*.1} ${s*.73} ${s*.33}`} fill={ch.top}/>
-       <rect x={s*.25} y={s*.3} width={s*.5} height={s*.055} rx={s*.02} fill={td}/>
-       </>,
-    3: <> {/* Cap */}
-       <path d={`M${s*.27} ${s*.34} Q${s*.28} ${s*.12} ${cx} ${s*.1} Q${s*.72} ${s*.12} ${s*.73} ${s*.34}`} fill={ch.top}/>
-       <rect x={s*.25} y={s*.3} width={s*.5} height={s*.048} rx={s*.02} fill={td}/>
-       <path d={`M${s*.22} ${s*.34} Q${cx} ${s*.37} ${s*.68} ${s*.34}`} fill={td}/>
-       </>,
-    4: <> {/* Headband */}
-       <path d={`M${s*.27} ${s*.3} Q${cx} ${s*.24} ${s*.73} ${s*.3}`} stroke={ch.top} strokeWidth={s*.06} fill="none" strokeLinecap="round"/>
-       </>,
-    5: <> {/* Earrings */}
-       <circle cx={s*.265} cy={s*.44} r={s*.018} fill="#f0c040"/>
-       <circle cx={s*.735} cy={s*.44} r={s*.018} fill="#f0c040"/>
-       </>,
+    1: /* Glasses */ <>
+      <rect x={s*.295} y={s*.33} width={s*.162} height={s*.106} rx={s*.04} fill="none" stroke="#333" strokeWidth={s*.02}/>
+      <rect x={s*.543} y={s*.33} width={s*.162} height={s*.106} rx={s*.04} fill="none" stroke="#333" strokeWidth={s*.02}/>
+      <line x1={s*.457} y1={s*.383} x2={s*.543} y2={s*.383} stroke="#333" strokeWidth={s*.016}/>
+      <line x1={s*.295} y1={s*.366} x2={s*.258} y2={s*.362} stroke="#333" strokeWidth={s*.015}/>
+      <line x1={s*.705} y1={s*.366} x2={s*.742} y2={s*.362} stroke="#333" strokeWidth={s*.015}/>
+    </>,
+    2: /* Beanie */ <>
+      <path d={`M${s*.265} ${s*.33} Q${s*.27} ${s*.09} ${cx} ${s*.07} Q${s*.73} ${s*.09} ${s*.735} ${s*.33}`} fill={ch.top}/>
+      <rect x={s*.245} y={s*.295} width={s*.51} height={s*.058} rx={s*.022} fill={td}/>
+      <ellipse cx={cx} cy={s*.295} rx={s*.255} ry={s*.03} fill={tl} opacity={.3}/>
+    </>,
+    3: /* Cap */ <>
+      <path d={`M${s*.265} ${s*.34} Q${s*.27} ${s*.11} ${cx} ${s*.09} Q${s*.73} ${s*.11} ${s*.735} ${s*.34}`} fill={ch.top}/>
+      <rect x={s*.245} y={s*.295} width={s*.51} height={s*.05} rx={s*.022} fill={td}/>
+      <path d={`M${s*.21} ${s*.34} Q${cx} ${s*.38} ${s*.69} ${s*.34}`} fill={td}/>
+      <ellipse cx={cx} cy={s*.078} rx={s*.05} ry={s*.032} fill={tl} opacity={.4}/>
+    </>,
+    4: /* Headband */ <>
+      <path d={`M${s*.268} ${s*.29} Q${cx} ${s*.235} ${s*.732} ${s*.29}`} stroke={ch.top} strokeWidth={s*.062} fill="none" strokeLinecap="round"/>
+      <path d={`M${s*.268} ${s*.29} Q${cx} ${s*.235} ${s*.732} ${s*.29}`} stroke={tl} strokeWidth={s*.016} fill="none" strokeLinecap="round" opacity={.45}/>
+    </>,
+    5: /* Earrings */ <>
+      <circle cx={s*.258} cy={s*.442} r={s*.019} fill="#f0c040"/>
+      <ellipse cx={s*.258} cy={s*.455} rx={s*.009} ry={s*.016} fill="#f0c040"/>
+      <circle cx={s*.742} cy={s*.442} r={s*.019} fill="#f0c040"/>
+      <ellipse cx={s*.742} cy={s*.455} rx={s*.009} ry={s*.016} fill="#f0c040"/>
+    </>,
   };
+
+  // ── Body / outfit — topStyle changes the actual shape ─────────────────────
+  const ts = ch.topStyle || 0;
+  const bodyPath = `M${s*.04} ${s*1.04} C${s*.1} ${s*.82} ${s*.25} ${s*.7} ${s*.36} ${s*.66} Q${cx} ${s*.63} ${s*.64} ${s*.66} C${s*.75} ${s*.7} ${s*.9} ${s*.82} ${s*.96} ${s*1.04} Z`;
+  const body = <>
+    {/* Base shape — always uses top colour */}
+    <path d={bodyPath} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
+    {/* Style details */}
+    {ts===1 && /* Hoodie — pocket + drawstrings */ <>
+      <ellipse cx={cx} cy={s*.88} rx={s*.09} ry={s*.06} fill={td} clipPath={`url(#c${gid})`}/>
+      <line x1={s*.47} y1={s*.66} x2={s*.45} y2={s*.92} stroke={td} strokeWidth={s*.018} clipPath={`url(#c${gid})`}/>
+      <line x1={s*.53} y1={s*.66} x2={s*.55} y2={s*.92} stroke={td} strokeWidth={s*.018} clipPath={`url(#c${gid})`}/>
+    </>}
+    {ts===2 && /* Jacket — lapels + buttons */ <>
+      <path d={`M${s*.5} ${s*.63} L${s*.41} ${s*.72} L${s*.36} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
+      <path d={`M${s*.5} ${s*.63} L${s*.59} ${s*.72} L${s*.64} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
+      {[0,1,2].map(i=><circle key={i} cx={cx} cy={s*(.72+i*.09)} r={s*.014} fill={tl} clipPath={`url(#c${gid})`}/>)}
+    </>}
+    {ts===3 && /* Tank — bare shoulders */ <>
+      <path d={`M${s*.04} ${s*1.04} C${s*.06} ${s*.84} ${s*.18} ${s*.72} ${s*.28} ${s*.67} Q${cx} ${s*.64} ${s*.72} ${s*.67} C${s*.82} ${s*.72} ${s*.94} ${s*.84} ${s*.96} ${s*1.04} Z`}
+        fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
+      <path d={bodyPath} fill="none" clipPath={`url(#c${gid})`}/>
+    </>}
+    {ts===4 && /* Suit — tie + lapels */ <>
+      <path d={`M${s*.5} ${s*.63} L${s*.42} ${s*.73} L${s*.37} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
+      <path d={`M${s*.5} ${s*.63} L${s*.58} ${s*.73} L${s*.63} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
+      <path d={`M${s*.48} ${s*.66} L${s*.5} ${s*.76} L${s*.52} ${s*.66}`} fill="#c0392b" clipPath={`url(#c${gid})`}/>
+      <path d={`M${s*.5} ${s*.76} L${s*.49} ${s*.93} L${s*.5} ${s*.97} L${s*.51} ${s*.93} Z`} fill="#c0392b" clipPath={`url(#c${gid})`}/>
+    </>}
+    {ts===5 && /* Crop — shorter body */ <>
+      <rect x={s*.1} y={s*.77} width={s*.8} height={s*.3} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
+    </>}
+    {/* Collar highlight on all styles */}
+    <path d={`M${s*.38} ${s*.645} Q${cx} ${s*.605} ${s*.62} ${s*.645}`} stroke={tl} strokeWidth={s*.018} fill="none" opacity={.48} clipPath={`url(#c${gid})`}/>
+  </>;
 
   return (
     <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`} style={{display:"block"}}>
@@ -872,71 +913,65 @@ function MiniAvatar({ character: ch, size = 40 }) {
           <stop offset="55%"  stopColor={ch.skin}/>
           <stop offset="100%" stopColor={sd}/>
         </radialGradient>
-        <radialGradient id={`b${gid}`} cx="38%" cy="28%" r="72%">
+        <radialGradient id={`b${gid}`} cx="40%" cy="28%" r="72%">
           <stop offset="0%"   stopColor={tl}/>
           <stop offset="55%"  stopColor={ch.top}/>
           <stop offset="100%" stopColor={td}/>
         </radialGradient>
         <radialGradient id={`g${gid}`} cx="50%" cy="45%" r="55%">
-          <stop offset="0%"   stopColor={shadeHex(bg, 20)}/>
+          <stop offset="0%"   stopColor={shadeHex(bg,22)}/>
           <stop offset="100%" stopColor={bg}/>
         </radialGradient>
-        <clipPath id={`c${gid}`}><circle cx={cx} cy={cx} r={cx-.5}/></clipPath>
+        <clipPath id={`c${gid}`}><circle cx={cx} cy={cx} r={cx-0.5}/></clipPath>
       </defs>
 
-      {/* BG */}
+      {/* Background */}
       <circle cx={cx} cy={cx} r={cx} fill={`url(#g${gid})`}/>
 
-      {/* Shoulders — wide human bust */}
-      <path d={`M${s*.04} ${s*1.04} C${s*.1} ${s*.82} ${s*.25} ${s*.7} ${s*.36} ${s*.66} Q${cx} ${s*.63} ${s*.64} ${s*.66} C${s*.75} ${s*.7} ${s*.9} ${s*.82} ${s*.96} ${s*1.04} Z`}
-        fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
-      {/* Collar / neckline highlight */}
-      <path d={`M${s*.38} ${s*.64} Q${cx} ${s*.6} ${s*.62} ${s*.64}`} stroke={tl} strokeWidth={s*.018} fill="none" opacity={.5} clipPath={`url(#c${gid})`}/>
+      {/* Body / outfit */}
+      {body}
 
       {/* Neck */}
-      <path d={`M${s*.42} ${s*.565} L${s*.42} ${s*.655} Q${cx} ${s*.685} ${s*.58} ${s*.655} L${s*.58} ${s*.565}`}
+      <path d={`M${s*.42} ${s*.566} L${s*.42} ${s*.656} Q${cx} ${s*.686} ${s*.58} ${s*.656} L${s*.58} ${s*.566}`}
         fill={`url(#f${gid})`} clipPath={`url(#c${gid})`}/>
-      <ellipse cx={cx} cy={s*.655} rx={s*.09} ry={s*.022} fill={sd} opacity={.22} clipPath={`url(#c${gid})`}/>
+      <ellipse cx={cx} cy={s*.656} rx={s*.09} ry={s*.022} fill={sd} opacity={.22} clipPath={`url(#c${gid})`}/>
 
       {/* Ears */}
-      <ellipse cx={s*.275} cy={s*.395} rx={s*.038} ry={s*.052} fill={`url(#f${gid})`}/>
-      <ellipse cx={s*.28}  cy={s*.395} rx={s*.018} ry={s*.03}  fill={sd} opacity={.28}/>
-      <ellipse cx={s*.725} cy={s*.395} rx={s*.038} ry={s*.052} fill={`url(#f${gid})`}/>
-      <ellipse cx={s*.72}  cy={s*.395} rx={s*.018} ry={s*.03}  fill={sd} opacity={.28}/>
+      <ellipse cx={s*.274} cy={s*.395} rx={s*.038} ry={s*.052} fill={`url(#f${gid})`}/>
+      <ellipse cx={s*.279} cy={s*.395} rx={s*.018} ry={s*.03}  fill={sd} opacity={.28}/>
+      <ellipse cx={s*.726} cy={s*.395} rx={s*.038} ry={s*.052} fill={`url(#f${gid})`}/>
+      <ellipse cx={s*.721} cy={s*.395} rx={s*.018} ry={s*.03}  fill={sd} opacity={.28}/>
 
-      {/* Hair (behind face) */}
+      {/* Hair behind face */}
       <g clipPath={`url(#c${gid})`}>{H[ch.hairStyle||0]}</g>
 
       {/* Face */}
-      <ellipse cx={cx} cy={s*.385} rx={s*.208} ry={s*.232} fill={`url(#f${gid})`}/>
-      <ellipse cx={cx} cy={s*.385} rx={s*.208} ry={s*.232} fill="none" stroke={sd} strokeWidth={s*.01} opacity={.15}/>
+      <ellipse cx={cx} cy={s*.386} rx={s*.209} ry={s*.233} fill={`url(#f${gid})`}/>
+      <ellipse cx={cx} cy={s*.386} rx={s*.209} ry={s*.233} fill="none" stroke={sd} strokeWidth={s*.01} opacity={.14}/>
 
       {/* Blush */}
       {ch.blush && <>
-        <ellipse cx={s*.325} cy={s*.465} rx={s*.06}  ry={s*.032} fill="#ff85b3" opacity={.28}/>
-        <ellipse cx={s*.675} cy={s*.465} rx={s*.06}  ry={s*.032} fill="#ff85b3" opacity={.28}/>
+        <ellipse cx={s*.322} cy={s*.466} rx={s*.06} ry={s*.032} fill="#ff85b3" opacity={.28}/>
+        <ellipse cx={s*.678} cy={s*.466} rx={s*.06} ry={s*.032} fill="#ff85b3" opacity={.28}/>
       </>}
 
-      {/* Eyebrows */}
+      {/* Brows → Eyes → Nose → Mouth */}
       {BROW[ch.eyebrow||0]}
-      {/* Eyes */}
-      {eye(s*.385, s*.37)}
-      {eye(s*.615, s*.37)}
-      {/* Nose */}
+      {eye(s*.384, s*.37)}
+      {eye(s*.616, s*.37)}
       {nose}
-      {/* Mouth */}
       {MOUTH[ch.mouth||0]}
 
       {/* Lip colour */}
-      {ch.lips && <ellipse cx={cx} cy={s*.525} rx={s*.058} ry={s*.018} fill={ch.lipColor||"#d06060"} opacity={.6}/>}
+      {ch.lips && <ellipse cx={cx} cy={s*.526} rx={s*.058} ry={s*.018} fill={ch.lipColor||"#d06060"} opacity={.6}/>}
 
       {/* Freckles */}
       {ch.freckles && <>
-        {[[.38,.44],[.43,.47],[.5,.46],[.57,.47],[.62,.44],[.4,.42],[.6,.42]].map(([fx,fy],i)=>
-          <circle key={i} cx={s*fx} cy={s*fy} r={s*.009} fill={sd} opacity={.45}/>)}
+        {[[.38,.442],[.432,.47],[.5,.462],[.568,.47],[.62,.442],[.402,.422],[.598,.422]].map(([fx,fy],i)=>
+          <circle key={i} cx={s*fx} cy={s*fy} r={s*.009} fill={sd} opacity={.44}/>)}
       </>}
 
-      {/* Accessory (on top of everything) */}
+      {/* Accessories on top */}
       <g clipPath={`url(#c${gid})`}>{ACC[ch.accessory||0]}</g>
     </svg>
   );
@@ -947,132 +982,154 @@ function CharacterModal({ character, onChange, onClose }) {
   const [tab, setTab] = useState("face");
   const ch = character;
 
-  const SKINS  = ["#FDDBB4","#F5C89A","#FFCBA4","#E8A87C","#D4956A","#C68642","#A0693A","#8D5524","#6B3A1F","#F4D6C8"];
-  const HAIRS  = ["#0d0d0d","#1a0a00","#2C1810","#4A2912","#7B4F2C","#B5651D","#C9A96E","#EDD9A3","#F2E6C8",
-                  "#C0392B","#E74C3C","#F39C12","#8E44AD","#2980B9","#27AE60","#1ABC9C","#fd79a8","#00CED1","#FF6347","#808080"];
-  const EYES   = ["#1a3a5c","#2980B9","#74b9ff","#27AE60","#52BE80","#2d6a4f","#8B6914","#C8A84B","#2C2C2C","#6B4226","#C0392B","#8E44AD","#00b894"];
-  const TOPS   = ["#1a1a2e","#2C3E50","#34495E","#7f8c8d","#E74C3C","#C0392B","#E67E22","#F39C12","#27AE60","#16A085","#2980B9","#1abc9c","#8E44AD","#fd79a8","#FFFFFF","#ECF0F1"];
-  const LIP_C  = ["#C0392B","#E74C3C","#c0706a","#fd79a8","#8E44AD","#D35400","#FF1493","#DC143C"];
-  const BG     = ["#dce8ff","#e8f4ff","#dfe6e9","#ffeaa7","#d5f5e3","#f8d7e3","#e8daef","#ffddd2","#c8e6c9","#fff3e0","#1a1a2e","#2d3436","#6c5ce7","#00b894"];
+  const SKINS   = ["#FDDBB4","#F5C89A","#FFCBA4","#E8A87C","#D4956A","#C68642","#A0693A","#8D5524","#6B3A1F","#F4D6C8"];
+  const HAIRS   = ["#0d0d0d","#1a0a00","#2C1810","#4A2912","#7B4F2C","#B5651D","#C9A96E","#EDD9A3","#F2E6C8",
+                   "#C0392B","#E74C3C","#F39C12","#8E44AD","#2980B9","#27AE60","#1ABC9C","#fd79a8","#00CED1","#FF6347","#808080"];
+  const EYES    = ["#1a3a5c","#2980B9","#74b9ff","#27AE60","#52BE80","#2d6a4f","#8B6914","#C8A84B","#2C2C2C","#6B4226","#C0392B","#8E44AD","#00b894"];
+  const TOPS    = ["#1a1a2e","#2C3E50","#34495E","#7f8c8d","#E74C3C","#C0392B","#E67E22","#F39C12","#27AE60","#16A085","#2980B9","#1abc9c","#8E44AD","#fd79a8","#FFFFFF","#ECF0F1"];
+  const LIP_C   = ["#C0392B","#E74C3C","#c0706a","#fd79a8","#8E44AD","#D35400","#FF1493","#DC143C"];
+  const BG      = ["#dce8ff","#e8f4ff","#dfe6e9","#ffeaa7","#d5f5e3","#f8d7e3","#e8daef","#ffddd2","#c8e6c9","#fff3e0","#1a1a2e","#2d3436","#6c5ce7","#00b894"];
 
-  const HAIR_NAMES = ["Buzz","Side-part","Fringe","Textured","Long","Wavy long","Ponytail","Top bun","Afro","Box braids","Curly","Locs","Faux hawk","Space buns"];
-  const EYE_S  = ["Round","Almond","Cat-eye"];
-  const BROWS  = ["Arched","Straight","Thick","Sad"];
-  const MOUTHS = ["Smile","Frown","Open smile","Smirk","Neutral"];
-  const ACCS   = ["None","Glasses","Beanie","Cap","Headband","Earrings"];
-  const TOPS_S = ["T-Shirt","Hoodie","Jacket","Tank top","Suit","Crop top"];
+  const HAIR_NAMES = ["Buzz","Side-part","Fringe","Textured","Long","Wavy","Ponytail","Bun","Afro","Box braids","Curly","Locs","Faux hawk","Space buns"];
+  const EYE_S   = ["Round","Almond","Cat-eye"];
+  const BROWS   = ["Arched","Straight","Thick","Sad"];
+  const MOUTHS  = ["Smile","Frown","Open","Smirk","Neutral"];
+  const ACCS    = ["None","Glasses","Beanie","Cap","Headband","Earrings"];
+  const TOPS_S  = ["T-Shirt","Hoodie","Jacket","Tank","Suit","Crop"];
 
   const TABS = [
-    {id:"face", label:"Face",  emoji:"😊"},
-    {id:"hair", label:"Hair",  emoji:"💇"},
-    {id:"fit",  label:"Fit",   emoji:"👕"},
-    {id:"extra",label:"Extra", emoji:"✨"},
+    {id:"face", emoji:"😊", label:"FACE"},
+    {id:"hair", emoji:"💇", label:"HAIR"},
+    {id:"fit",  emoji:"👕", label:"FIT"},
+    {id:"extra",emoji:"✨", label:"EXTRA"},
   ];
 
-  const Swatches = ({vals, field, sz=27}) => (
-    <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-      {vals.map(v=>(
-        <button key={v} onClick={()=>onChange({...ch,[field]:v})} style={{
-          width:sz,height:sz,borderRadius:"50%",background:v,cursor:"pointer",
-          border:`3px solid ${ch[field]===v?"#333":"transparent"}`,
-          outline:`2px solid ${ch[field]===v?"#fff":"transparent"}`,
-          transform:ch[field]===v?"scale(1.22)":"scale(1)",
-          transition:"transform .12s",boxShadow:"0 1px 5px rgba(0,0,0,.25)"
-        }}/>
-      ))}
+  const Swatch = ({val, field, sz=26}) => {
+    const sel = ch[field] === val;
+    return (
+      <button onClick={() => onChange({...ch, [field]: val})} style={{
+        width:sz, height:sz, borderRadius:"50%", background:val, cursor:"pointer", flexShrink:0,
+        border:`3px solid ${sel ? "#000" : "transparent"}`,
+        outline:`2px solid ${sel ? "#fff" : "transparent"}`,
+        outlineOffset:"-1px",
+        transform: sel ? "scale(1.22)" : "scale(1)",
+        transition:"transform .12s",
+        boxShadow:`0 2px 5px rgba(0,0,0,${sel?".35":".18"})`
+      }}/>
+    );
+  };
+
+  const Swatches = ({vals, field, sz=26}) => (
+    <div style={{display:"flex", flexWrap:"wrap", gap:5}}>
+      {vals.map(v => <Swatch key={v} val={v} field={field} sz={sz}/>)}
     </div>
   );
 
   const Pills = ({vals, field}) => (
-    <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-      {vals.map((v,i)=>(
-        <button key={i} onClick={()=>onChange({...ch,[field]:i})} style={{
-          padding:"5px 11px",fontSize:11,fontWeight:700,borderRadius:20,cursor:"pointer",
-          border:"none",transition:"all .12s",
-          background:ch[field]===i?"#222":"#eee",
-          color:ch[field]===i?"#fff":"#555",
-          boxShadow:ch[field]===i?"0 2px 8px rgba(0,0,0,.3)":"none",
-          transform:ch[field]===i?"scale(1.05)":"scale(1)"
+    <div style={{display:"flex", flexWrap:"wrap", gap:5}}>
+      {vals.map((v,i) => (
+        <button key={i} onClick={() => onChange({...ch, [field]: i})} style={{
+          padding:"5px 12px", fontSize:11, fontWeight:700, borderRadius:20, cursor:"pointer",
+          border:"none", transition:"all .12s",
+          background: ch[field]===i ? "#111" : "#eee",
+          color:       ch[field]===i ? "#fff" : "#666",
+          boxShadow:   ch[field]===i ? "0 2px 8px rgba(0,0,0,.28)" : "none",
+          transform:   ch[field]===i ? "scale(1.06)" : "scale(1)"
         }}>{v}</button>
       ))}
     </div>
   );
 
-  const Toggle = ({label,field,emoji}) => (
-    <button onClick={()=>onChange({...ch,[field]:!ch[field]})} style={{
-      display:"flex",alignItems:"center",gap:7,padding:"7px 14px",
-      borderRadius:20,border:"none",cursor:"pointer",fontWeight:700,fontSize:12,
-      background:ch[field]?"#222":"#eee",color:ch[field]?"#fff":"#555",
-      transition:"all .15s",boxShadow:ch[field]?"0 2px 8px rgba(0,0,0,.2)":"none"
+  const Toggle = ({label, field, emoji}) => (
+    <button onClick={() => onChange({...ch, [field]: !ch[field]})} style={{
+      display:"flex", alignItems:"center", gap:7, padding:"7px 14px",
+      borderRadius:20, border:"none", cursor:"pointer", fontWeight:700, fontSize:12,
+      background: ch[field] ? "#111" : "#eee",
+      color:      ch[field] ? "#fff" : "#666",
+      transition:"all .14s",
+      boxShadow:  ch[field] ? "0 2px 8px rgba(0,0,0,.22)" : "none"
     }}>{emoji} {label}</button>
+  );
+
+  const Row = ({label, children}) => (
+    <div style={{marginBottom:0}}>
+      <p style={{fontSize:10, fontWeight:800, color:"#999", letterSpacing:1, marginBottom:7}}>{label}</p>
+      {children}
+    </div>
   );
 
   return (
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.65)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:12}}>
       <div onClick={e=>e.stopPropagation()} style={{
-        background:"#fff",borderRadius:24,width:"100%",maxWidth:490,
-        maxHeight:"94vh",overflow:"hidden",display:"flex",flexDirection:"column",
-        boxShadow:"0 32px 100px rgba(0,0,0,.45)"
+        background:"#fff", borderRadius:24, width:"100%", maxWidth:490,
+        maxHeight:"94vh", overflow:"hidden", display:"flex", flexDirection:"column",
+        boxShadow:"0 32px 100px rgba(0,0,0,.42)"
       }}>
 
         {/* Header */}
-        <div style={{padding:"16px 20px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1.5px solid #eee"}}>
-          <span style={{fontFamily:"'Fraunces',serif",fontSize:20,fontWeight:900,color:"#111",letterSpacing:-.5}}>My Avatar</span>
-          <button onClick={onClose} style={{background:"#eee",border:"none",borderRadius:"50%",width:30,height:30,fontSize:17,cursor:"pointer",fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",color:"#555"}}>×</button>
+        <div style={{padding:"15px 20px 11px", display:"flex", alignItems:"center", justifyContent:"space-between", borderBottom:"1.5px solid #eee"}}>
+          <span style={{fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:900, color:"#111", letterSpacing:-.5}}>My Avatar</span>
+          <button onClick={onClose} style={{background:"#eee", border:"none", borderRadius:"50%", width:30, height:30, fontSize:17, cursor:"pointer", fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center", color:"#555"}}>×</button>
         </div>
 
-        {/* Preview */}
-        <div style={{background:"linear-gradient(160deg,#f0f4ff,#e8f0ff)",padding:"18px 0 12px",display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
-          <div style={{borderRadius:"50%",overflow:"hidden",boxShadow:"0 6px 24px rgba(0,0,0,.18)",border:"3px solid #fff"}}>
-            <MiniAvatar character={ch} size={115}/>
+        {/* Live preview */}
+        <div style={{background:"linear-gradient(155deg,#f0f4ff,#e4ecff)", padding:"18px 0 12px", display:"flex", flexDirection:"column", alignItems:"center", gap:10}}>
+          <div style={{borderRadius:"50%", overflow:"hidden", boxShadow:"0 6px 28px rgba(0,0,0,.2)", border:"3px solid #fff"}}>
+            <MiniAvatar character={ch} size={120}/>
           </div>
-          <input value={ch.name||""} onChange={e=>onChange({...ch,name:e.target.value})} placeholder="Nickname…"
-            style={{border:"1.5px solid #ddd",borderRadius:20,padding:"5px 14px",fontSize:13,fontWeight:700,outline:"none",color:"#111",background:"white",textAlign:"center",width:155}}/>
+          <input value={ch.name||""} onChange={e=>onChange({...ch, name:e.target.value})} placeholder="Nickname…"
+            style={{border:"1.5px solid #ddd", borderRadius:20, padding:"5px 14px", fontSize:13, fontWeight:700, outline:"none", color:"#111", background:"white", textAlign:"center", width:155}}/>
         </div>
 
         {/* Tabs */}
-        <div style={{display:"flex",background:"#fff",borderBottom:"1.5px solid #eee"}}>
-          {TABS.map(t=>(
+        <div style={{display:"flex", background:"#fff", borderBottom:"1.5px solid #eee"}}>
+          {TABS.map(t => (
             <button key={t.id} onClick={()=>setTab(t.id)} style={{
-              flex:1,padding:"9px 4px 7px",border:"none",cursor:"pointer",background:"#fff",
-              fontWeight:800,fontSize:10,color:tab===t.id?"#111":"#aaa",
-              borderBottom:`2.5px solid ${tab===t.id?"#111":"transparent"}`,
-              transition:"all .15s",letterSpacing:.5
-            }}>{t.emoji}<br/>{t.label.toUpperCase()}</button>
+              flex:1, padding:"9px 4px 6px", border:"none", cursor:"pointer", background:"#fff",
+              fontWeight:800, fontSize:10, letterSpacing:.5,
+              color: tab===t.id ? "#111" : "#bbb",
+              borderBottom:`2.5px solid ${tab===t.id ? "#111" : "transparent"}`,
+              transition:"all .14s"
+            }}>{t.emoji}<br/>{t.label}</button>
           ))}
         </div>
 
-        {/* Content */}
-        <div style={{flex:1,overflowY:"auto",padding:"16px 18px",display:"flex",flexDirection:"column",gap:18}}>
+        {/* Tab content */}
+        <div style={{flex:1, overflowY:"auto", padding:"16px 18px", display:"flex", flexDirection:"column", gap:16}}>
 
           {tab==="face" && <>
-            <div><p style={{fontSize:10,fontWeight:800,color:"#aaa",letterSpacing:1,marginBottom:8}}>SKIN TONE</p><Swatches vals={SKINS} field="skin"/></div>
-            <div><p style={{fontSize:10,fontWeight:800,color:"#aaa",letterSpacing:1,marginBottom:8}}>EYE SHAPE</p><Pills vals={EYE_S} field="eyeShape"/></div>
-            <div><p style={{fontSize:10,fontWeight:800,color:"#aaa",letterSpacing:1,marginBottom:8}}>EYE COLOUR</p><Swatches vals={EYES} field="eyes"/></div>
-            <div><p style={{fontSize:10,fontWeight:800,color:"#aaa",letterSpacing:1,marginBottom:8}}>EYEBROWS</p><Pills vals={BROWS} field="eyebrow"/></div>
-            <div><p style={{fontSize:10,fontWeight:800,color:"#aaa",letterSpacing:1,marginBottom:8}}>EXPRESSION</p><Pills vals={MOUTHS} field="mouth"/></div>
+            <Row label="SKIN TONE"><Swatches vals={SKINS} field="skin"/></Row>
+            <Row label="EYE SHAPE"><Pills vals={EYE_S} field="eyeShape"/></Row>
+            <Row label="EYE COLOUR"><Swatches vals={EYES} field="eyes"/></Row>
+            <Row label="EYEBROWS"><Pills vals={BROWS} field="eyebrow"/></Row>
+            <Row label="EXPRESSION"><Pills vals={MOUTHS} field="mouth"/></Row>
           </>}
 
           {tab==="hair" && <>
-            <div><p style={{fontSize:10,fontWeight:800,color:"#aaa",letterSpacing:1,marginBottom:8}}>STYLE — {HAIR_NAMES[ch.hairStyle||0]}</p><Pills vals={HAIR_NAMES} field="hairStyle"/></div>
-            <div><p style={{fontSize:10,fontWeight:800,color:"#aaa",letterSpacing:1,marginBottom:8}}>COLOUR</p><Swatches vals={HAIRS} field="hair" sz={24}/></div>
+            <Row label={`HAIR STYLE — ${HAIR_NAMES[ch.hairStyle||0]}`}>
+              <Pills vals={HAIR_NAMES} field="hairStyle"/>
+            </Row>
+            <Row label="HAIR COLOUR"><Swatches vals={HAIRS} field="hair" sz={24}/></Row>
           </>}
 
           {tab==="fit" && <>
-            <div><p style={{fontSize:10,fontWeight:800,color:"#aaa",letterSpacing:1,marginBottom:8}}>OUTFIT STYLE</p><Pills vals={TOPS_S} field="topStyle"/></div>
-            <div><p style={{fontSize:10,fontWeight:800,color:"#aaa",letterSpacing:1,marginBottom:8}}>OUTFIT COLOUR</p><Swatches vals={TOPS} field="top"/></div>
-            <div><p style={{fontSize:10,fontWeight:800,color:"#aaa",letterSpacing:1,marginBottom:8}}>ACCESSORY</p><Pills vals={ACCS} field="accessory"/></div>
-            <div><p style={{fontSize:10,fontWeight:800,color:"#aaa",letterSpacing:1,marginBottom:8}}>BACKGROUND</p><Swatches vals={BG} field="bg" sz={24}/></div>
+            <Row label="OUTFIT STYLE"><Pills vals={TOPS_S} field="topStyle"/></Row>
+            <Row label="OUTFIT COLOUR"><Swatches vals={TOPS} field="top"/></Row>
+            <Row label="ACCESSORY"><Pills vals={ACCS} field="accessory"/></Row>
+            <Row label="BACKGROUND"><Swatches vals={BG} field="bg" sz={24}/></Row>
           </>}
 
           {tab==="extra" && <>
-            <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-              <Toggle label="Blush"    field="blush"    emoji="🌸"/>
-              <Toggle label="Lip gloss" field="lips"   emoji="💋"/>
-              <Toggle label="Freckles" field="freckles" emoji="🟤"/>
-            </div>
-            {ch.lips && <div><p style={{fontSize:10,fontWeight:800,color:"#aaa",letterSpacing:1,marginBottom:8}}>LIP COLOUR</p><Swatches vals={LIP_C} field="lipColor" sz={24}/></div>}
-            <button onClick={()=>onChange({skin:"#FDDBB4",hair:"#3D2B1F",hairStyle:0,eyes:"#2980B9",top:"#2C3E50",bg:"#dce8ff",mouth:0,eyebrow:0,eyeShape:0,accessory:0,topStyle:0,blush:false,lips:false,freckles:false,lipColor:"#d06060",name:ch.name})}
+            <Row label="EXTRAS">
+              <div style={{display:"flex", flexWrap:"wrap", gap:8}}>
+                <Toggle label="Blush"    field="blush"    emoji="🌸"/>
+                <Toggle label="Lip gloss" field="lips"    emoji="💋"/>
+                <Toggle label="Freckles" field="freckles" emoji="🟤"/>
+              </div>
+            </Row>
+            {ch.lips && <Row label="LIP COLOUR"><Swatches vals={LIP_C} field="lipColor" sz={24}/></Row>}
+            <button
+              onClick={()=>onChange({skin:"#FDDBB4",hair:"#3D2B1F",hairStyle:0,eyes:"#2980B9",top:"#2C3E50",bg:"#dce8ff",mouth:0,eyebrow:0,eyeShape:0,accessory:0,topStyle:0,blush:false,lips:false,freckles:false,lipColor:"#d06060",name:ch.name})}
               style={{padding:"8px 18px",background:"#eee",border:"none",borderRadius:20,fontSize:12,fontWeight:700,cursor:"pointer",color:"#555",alignSelf:"flex-start"}}>
               🔄 Reset
             </button>
@@ -1080,7 +1137,7 @@ function CharacterModal({ character, onChange, onClose }) {
         </div>
 
         {/* Done */}
-        <div style={{padding:"10px 18px 14px",borderTop:"1.5px solid #eee"}}>
+        <div style={{padding:"10px 18px 14px", borderTop:"1.5px solid #eee"}}>
           <button onClick={onClose} style={{width:"100%",background:"#111",color:"#fff",border:"none",borderRadius:14,padding:"12px",fontSize:14,fontWeight:900,cursor:"pointer",letterSpacing:.3}}>
             Done ✓
           </button>
@@ -1090,6 +1147,8 @@ function CharacterModal({ character, onChange, onClose }) {
     </div>
   );
 }
+
+
 // ─── LINK FILES BUTTON ────────────────────────────────────────────────────────
 function LinkBtn({ file, allFiles, onSave }) {
   const [open, setOpen] = useState(false);
@@ -1511,20 +1570,28 @@ function ViewTab({ file, onUpdate }) {
     setAnnotations(p => { const n = {...p}; delete n[pageNum]; return n; });
   };
 
+  const pptSlidesRef = useRef([]);   // populated by PPTViewer
+
   const doExplain = async () => {
     setExplaining(true); setShowExplain(true); setExplanation("");
     try {
       let text = "";
       if (pdfRef.current) {
+        // PDF — extract text from current page only
         const pg = await pdfRef.current.getPage(pageNum);
         text = (await pg.getTextContent()).items.map(i => i.str).join(" ").trim().slice(0, 3000);
+      } else if (isPPT && pptSlidesRef.current.length > 0) {
+        // PPT — use the parsed text of the current slide
+        const slide = pptSlidesRef.current[pptPage - 1];
+        text = slide ? slide.texts.join(" ").slice(0, 3000) : "";
       } else if (fileObj) {
         text = (await extractFileText(fileObj).catch(() => "")).slice(0, 3000);
       }
+      const pageLabel = isPPT ? `slide ${pptPage}` : `page ${pageNum}`;
       const res = await callClaude(
         "You are a helpful study tutor. Explain clearly and simply. Plain text only — no asterisks, no markdown.",
         text
-          ? `Explain ONLY this content from page ${pageNum} of "${file.name}":
+          ? `Explain ONLY this content from ${pageLabel} of "${file.name}":
 
 ${text}`
           : `Explain the topic "${file.name}" to a student.`
@@ -1623,7 +1690,7 @@ ${text}`
           {isImage  && <ImageViewer  fileObj={fileObj} fileName={fileName} />}
           {isText   && <TextViewer   fileObj={fileObj} />}
           {isWord   && <WordViewer   fileObj={fileObj} />}
-          {isPPT    && <PPTViewer    fileObj={fileObj} page={pptPage} onTotalPages={setPptTotal} />}
+          {isPPT    && <PPTViewer    fileObj={fileObj} page={pptPage} onTotalPages={setPptTotal} onSlidesLoaded={slides => { pptSlidesRef.current = slides; }} />}
           {isExcel  && <ExcelViewer  fileObj={fileObj} />}
 
           {!isPDF && !isImage && !isText && !isWord && !isPPT && !isExcel && (
@@ -1720,7 +1787,7 @@ function WordViewer({ fileObj }) {
   );
 }
 
-function PPTViewer({ fileObj, page, onTotalPages }) {
+function PPTViewer({ fileObj, page, onTotalPages, onSlidesLoaded }) {
   const [slides,  setSlides]  = useState([]);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState("");
@@ -1749,6 +1816,7 @@ function PPTViewer({ fileObj, page, onTotalPages }) {
 
         if (slideKeys.length === 0) { setError("No slides found in this file."); setLoading(false); return; }
         onTotalPages && onTotalPages(slideKeys.length);
+        // We'll call onSlidesLoaded after parsing below
 
         const parsed = await Promise.all(slideKeys.map(async sk => {
           const xml  = await zip.files[sk].async("string");
@@ -1778,6 +1846,7 @@ function PPTViewer({ fileObj, page, onTotalPages }) {
         }));
 
         setSlides(parsed);
+        onSlidesLoaded && onSlidesLoaded(parsed);
       } catch(e) {
         console.error("PPT:", e);
         setError("Could not render PowerPoint: " + e.message);
@@ -2445,6 +2514,28 @@ function CardsTab({ file, onUpdate }) {
 }
 
 // ─── GAME TAB ─────────────────────────────────────────────────────────────────
+// AI-powered answer checker — returns true/false
+// Falls back to fuzzy string match if API call fails
+async function aiCheckAnswer(question, correct, userAnswer) {
+  const ua = userAnswer.trim().toLowerCase();
+  const ca = correct.trim().toLowerCase();
+  // Instant pass for exact / contains match
+  if (ua === ca) return true;
+  if (ca.includes(ua) && ua.length > 2) return true;
+  // Simple word overlap score (fast fallback, no API call needed for clear cases)
+  const overlap = ua.split(" ").filter(w => ca.includes(w) && w.length > 2).length;
+  const maxWords = Math.max(ua.split(" ").length, ca.split(" ").length);
+  if (maxWords > 0 && overlap / maxWords >= 0.75) return true;
+  // Ask the AI for ambiguous cases
+  try {
+    const res = await callClaude(
+      "You are a strict but fair answer checker for a student quiz. Reply ONLY with 'yes' or 'no'.",
+      `Question: ${question}\nExpected answer: ${correct}\nStudent answered: ${userAnswer}\nIs the student's answer correct or essentially correct (85%+ right)? Reply ONLY 'yes' or 'no'.`
+    );
+    return res.trim().toLowerCase().startsWith("yes");
+  } catch { return false; }
+}
+
 function GameTab({ file }) {
   const cards = file.studyCards || [];
   const [activeGame, setActiveGame] = useState(null);
@@ -2568,28 +2659,126 @@ function MCQ({ cards, onBack }) {
 }
 
 function Scramble({ cards, onBack }) {
-  const [deck]=useState(()=>[...cards].sort(()=>Math.random()-.5).slice(0,Math.min(cards.length,8)));
-  const [curr,setCurr]=useState(0);const [inp,setInp]=useState("");const [res,setRes]=useState(null);const [score,setScore]=useState(0);const [done,setDone]=useState(false);
-  const sc=(s)=>{let x=s.split("").sort(()=>Math.random()-.5).join(""),t=0;while(x===s&&t++<10)x=s.split("").sort(()=>Math.random()-.5).join("");return x;};
-  const [scr]=useState(()=>deck.map(c=>sc(c.answer)));
-  const check=()=>{ const ok=inp.trim().toLowerCase()===deck[curr].answer.trim().toLowerCase(); setRes(ok?"correct":"wrong"); if(ok)setScore(s=>s+1); };
-  const next=()=>{ if(curr+1>=deck.length){setDone(true);return;} setCurr(c=>c+1);setInp("");setRes(null); };
-  if(done) return <GResults score={score} total={deck.length} onBack={onBack} />;
+  // Pick short words only (≤12 chars), max 8 cards
+  const [deck] = useState(() => [...cards]
+    .filter(c => c.answer && c.answer.trim().length <= 12 && c.answer.trim().length >= 2)
+    .sort(() => Math.random() - .5)
+    .slice(0, Math.min(cards.length, 8)));
+
+  const [curr,   setCurr]   = useState(0);
+  const [chosen, setChosen] = useState([]);   // indices into shuffled array that user picked
+  const [res,    setRes]    = useState(null); // null | "correct" | "wrong"
+  const [score,  setScore]  = useState(0);
+  const [done,   setDone]   = useState(false);
+  const [checking, setChecking] = useState(false);
+
+  // Shuffle answer letters for each card (no spaces, clean letters only)
+  const [shuffled] = useState(() => deck.map(c => {
+    const letters = c.answer.replace(/\s+/g, '').split('');
+    let arr = [...letters];
+    let tries = 0;
+    while (arr.join('') === letters.join('') && tries++ < 20)
+      arr = [...letters].sort(() => Math.random() - .5);
+    return arr;
+  }));
+
+  const card = deck[curr];
+  if (!card) return <GResults score={score} total={deck.length} onBack={onBack} />;
+
+  const letters = shuffled[curr]; // e.g. ['n','o','t','e']
+  // Which tile indices are still available (not yet chosen)
+  const usedIdxs = new Set(chosen);
+  const composed = chosen.map(i => letters[i]).join('');
+
+  const pickTile = (idx) => {
+    if (res || usedIdxs.has(idx)) return;
+    setChosen(prev => [...prev, idx]);
+  };
+
+  const removeLast = () => {
+    if (res || chosen.length === 0) return;
+    setChosen(prev => prev.slice(0, -1));
+  };
+
+  const clearAll = () => {
+    if (!res) setChosen([]);
+  };
+
+  const check = async () => {
+    if (res || chosen.length === 0 || checking) return;
+    setChecking(true);
+    const ok = await aiCheckAnswer(card.question, card.answer, composed);
+    setChecking(false);
+    setRes(ok ? "correct" : "wrong");
+    if (ok) setScore(s => s + 1);
+  };
+
+  const next = () => {
+    if (curr + 1 >= deck.length) { setDone(true); return; }
+    setCurr(c => c + 1);
+    setChosen([]);
+    setRes(null);
+  };
+
+  if (done) return <GResults score={score} total={deck.length} onBack={onBack} />;
+
   return (
     <div style={{ maxWidth:500, margin:"0 auto" }}>
       <GHeader title="Word Scramble" score={score} curr={curr} total={deck.length} onBack={onBack} accent={C.warm} />
-      <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:20, padding:"28px", marginBottom:16 }}>
-        <p style={{ fontSize:12, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:"uppercase", marginBottom:10 }}>Question</p>
-        <p style={{ fontSize:16, color:C.text, lineHeight:1.5, marginBottom:20 }}>{deck[curr].question}</p>
-        <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:20 }}>
-          {scr[curr].split("").map((ch,i)=><div key={i} style={{ width:36,height:40,background:C.warmL,border:`1.5px solid ${C.warm}44`,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700,color:C.warm }}>{ch===" "?"·":ch}</div>)}
-        </div>
-        <input value={inp} onChange={e=>{if(!res)setInp(e.target.value);}} onKeyDown={e=>{if(e.key==="Enter"&&!res&&inp.trim())check();}} placeholder="Type your answer…"
-          style={{ width:"100%", border:`1.5px solid ${res==="correct"?C.green:res==="wrong"?C.red:C.border}`, borderRadius:10, padding:"11px 14px", fontSize:15, outline:"none", color:C.text, background:res==="correct"?C.greenL:res==="wrong"?C.redL:C.bg }} />
-        {res&&<p style={{ marginTop:8, fontSize:14, fontWeight:600, color:res==="correct"?C.green:C.red }}>{res==="correct"?"✓ Correct!":"✗ Answer: "+deck[curr].answer}</p>}
+
+      {/* Question */}
+      <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:20, padding:"22px 24px", marginBottom:14 }}>
+        <p style={{ fontSize:12, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:"uppercase", marginBottom:8 }}>Question</p>
+        <p style={{ fontSize:16, color:C.text, lineHeight:1.5 }}>{card.question}</p>
       </div>
-      {!res?<button onClick={check} disabled={!inp.trim()} style={{ width:"100%", background:inp.trim()?C.warm:C.border, color:inp.trim()?"#fff":C.muted, border:"none", borderRadius:12, padding:"13px", fontSize:15, fontWeight:700, cursor:inp.trim()?"pointer":"not-allowed" }}>Check Answer</button>
-           :<button onClick={next} style={{ width:"100%", background:C.warm, color:"#fff", border:"none", borderRadius:12, padding:"13px", fontSize:15, fontWeight:700, cursor:"pointer" }}>{curr+1>=deck.length?"See Results":"Next →"}</button>}
+
+      {/* Answer line — composed letters */}
+      <div style={{ background:res==="correct"?C.greenL:res==="wrong"?C.redL:C.accentL, border:`2px solid ${res==="correct"?C.green:res==="wrong"?C.red:C.accentS}`, borderRadius:14, minHeight:56, padding:"10px 14px", display:"flex", flexWrap:"wrap", gap:6, alignItems:"center", marginBottom:12 }}>
+        {chosen.length === 0
+          ? <span style={{ color:C.muted, fontSize:14 }}>Tap letters to build your answer…</span>
+          : chosen.map((tileIdx, pos) => (
+            <button key={pos} onClick={removeLast} disabled={!!res}
+              style={{ width:40, height:44, background:res==="correct"?"#4A7C59":res==="wrong"?"#C45C5C":C.accent, color:"#fff", border:"none", borderRadius:10, fontSize:20, fontWeight:800, cursor:res?"default":"pointer", boxShadow:"0 2px 6px rgba(0,0,0,.18)" }}>
+              {letters[tileIdx]}
+            </button>
+          ))
+        }
+      </div>
+
+      {/* Feedback */}
+      {res && <p style={{ textAlign:"center", fontSize:15, fontWeight:700, color:res==="correct"?C.green:C.red, marginBottom:10 }}>
+        {res==="correct" ? "✓ Correct!" : `✗ Answer: ${card.answer}`}
+      </p>}
+
+      {/* Scrambled letter tiles */}
+      {!res && (
+        <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"center", marginBottom:16 }}>
+          {letters.map((letter, idx) => {
+            const used = usedIdxs.has(idx);
+            return (
+              <button key={idx} onClick={() => pickTile(idx)} disabled={used}
+                style={{ width:46, height:52, background:used?"#ddd":C.warmL, color:used?C.muted:C.warm, border:`2.5px solid ${used?C.border:C.warm}`, borderRadius:12, fontSize:22, fontWeight:800, cursor:used?"default":"pointer", transition:"all .12s", transform:used?"scale(0.9)":"scale(1)", boxShadow:used?"none":"0 3px 8px rgba(0,0,0,.15)" }}>
+                {letter.toUpperCase()}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Controls */}
+      <div style={{ display:"flex", gap:8 }}>
+        {!res ? <>
+          <button onClick={clearAll} style={{ flex:1, background:C.border, color:C.muted, border:"none", borderRadius:12, padding:"12px", fontSize:14, fontWeight:700, cursor:"pointer" }}>Clear</button>
+          <button onClick={check} disabled={chosen.length===0||checking}
+            style={{ flex:2, background:chosen.length>0?C.warm:"#ccc", color:"#fff", border:"none", borderRadius:12, padding:"12px", fontSize:15, fontWeight:700, cursor:chosen.length>0?"pointer":"not-allowed" }}>
+            {checking ? "Checking…" : "Check ✓"}
+          </button>
+        </> : (
+          <button onClick={next} style={{ width:"100%", background:C.warm, color:"#fff", border:"none", borderRadius:12, padding:"13px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
+            {curr+1>=deck.length ? "See Results" : "Next →"}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -2632,7 +2821,8 @@ function Falling({ cards, onBack }) {
   const nextCard=useCallback((ns,nl)=>{ if(curr+1>=deck.length||nl<=0){setDone(true);return;} setTimeout(()=>{setCurr(c=>c+1);setInp("");setPos(0);posRef.current=0;setRes(null);inpRef.current?.focus();},800); },[curr,deck.length]);
   useEffect(()=>{ if(res||done)return; const id=setInterval(()=>{ posRef.current+=0.18; setPos(posRef.current); if(posRef.current>=100){clearInterval(id);setRes("missed");const nl=lives-1;setLives(nl);nextCard(score,nl);} },60); return ()=>clearInterval(id); },[curr,res,done]);
   useEffect(()=>{inpRef.current?.focus();},[curr]);
-  const check=()=>{ if(res)return; const ok=inp.trim().toLowerCase()===deck[curr].answer.trim().toLowerCase(); setRes(ok?"correct":"wrong"); const ns=ok?score+1:score,nl=ok?lives:lives-1; if(ok)setScore(ns);else setLives(nl); nextCard(ns,nl); };
+  const [checking,setChecking]=useState(false);
+  const check=async()=>{ if(res||checking)return; setChecking(true); const ok=await aiCheckAnswer(deck[curr].question,deck[curr].answer,inp); setChecking(false); setRes(ok?"correct":"wrong"); const ns=ok?score+1:score,nl=ok?lives:lives-1; if(ok)setScore(ns);else setLives(nl); nextCard(ns,nl); };
   if(done) return <GResults score={score} total={deck.length} onBack={onBack} msg={lives<=0?"Out of lives!":"All done!"} />;
   const card=deck[curr];
   const bc=pos<50?C.purple:pos<80?C.warm:C.red;
@@ -2670,8 +2860,11 @@ function Tower({ cards, onBack }) {
   const [curr,setCurr]=useState(0);const [inp,setInp]=useState("");const [res,setRes]=useState(null);
   const [tower,setTower]=useState([]);const [done,setDone]=useState(false);
   const teal="#2C7A7B";
-  const check=()=>{
-    const ok=inp.trim().toLowerCase()===deck[curr].answer.trim().toLowerCase();
+  const [checking,setChecking]=useState(false);
+  const check=async()=>{
+    if(checking||res)return; setChecking(true);
+    const ok=await aiCheckAnswer(deck[curr].question,deck[curr].answer,inp);
+    setChecking(false);
     setRes(ok?"correct":"wrong");
     if(ok)setTower(t=>[...t,{q:deck[curr].question,color:`hsl(${170+t.length*8},60%,${45-t.length*2}%)`}]);
     setTimeout(()=>{
@@ -2724,9 +2917,10 @@ function Speedrun({ cards, onBack }) {
     },1000);
     return ()=>clearInterval(id);
   },[started,done]);
-  const submit=()=>{
+  const submit=async()=>{
     if(!inp.trim()||done)return;
-    const ok=inp.trim().toLowerCase()===deck[curr%deck.length].answer.trim().toLowerCase();
+    const card=deck[curr%deck.length];
+    const ok=await aiCheckAnswer(card.question,card.answer,inp);
     if(ok){setScore(s=>s+1);setFlash("correct");}else{setFlash("wrong");}
     setTimeout(()=>setFlash(null),300);
     setCurr(c=>c+1);setInp("");
@@ -2902,10 +3096,12 @@ function FillBlank({ cards, onBack }) {
   const blank = words.length > 1 ? words[words.length - 1].replace(/[?:.]/g, "") : card?.answer;
   const questionWithBlank = words.length > 1 ? words.slice(0, -1).join(" ") + " ___?" : "What is the answer?";
 
-  const check = () => {
-    if (!inp.trim()) return;
-    const ok = inp.trim().toLowerCase() === (card.answer || "").trim().toLowerCase() ||
-               inp.trim().toLowerCase() === blank.toLowerCase();
+  const [checking, setChecking] = useState(false);
+  const check = async () => {
+    if (!inp.trim() || checking) return;
+    setChecking(true);
+    const ok = await aiCheckAnswer(card.question, card.answer || blank, inp);
+    setChecking(false);
     setResult(ok);
     if (ok) setScore(s => s + 1);
   };
