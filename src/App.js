@@ -23,14 +23,14 @@ const googleProvider = new GoogleAuthProvider();
 const GROQ_KEY = process.env.REACT_APP_GROQ_KEY || "";
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
-async function callClaude(system, userMessage) {
+async function callClaude(system, userMessage, maxTok = 3000) {
   const res = await fetch(GROQ_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_KEY}` },
     body: JSON.stringify({
       model: "llama-3.3-70b-versatile",
       messages: [{ role: "system", content: system }, { role: "user", content: userMessage }],
-      max_tokens: 1200,
+      max_tokens: maxTok,
     }),
   });
   const data = await res.json();
@@ -1714,7 +1714,7 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
       {tab==="view"
         ? <ViewTab file={file} onUpdate={onUpdate} />
         : <div style={{ maxWidth:900, margin:"0 auto", padding:"32px 24px" }}>
-            {tab==="notes" && <NotesTab file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} />}
+            {tab==="notes" && <NotesTab key={file.id} file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} />}
             {tab==="voice" && <VoicePodcastTab file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} />}
             {tab==="cards" && <CardsTab file={file} onUpdate={onUpdate} />}
             {tab==="ai" && <AITab file={file} allFiles={allFiles} folder={folder} onUpdate={onUpdate} />}
@@ -2523,23 +2523,26 @@ function VoicePodcastTab({ file, user, isGuest, onUpdate }) {
       const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[🇺🇸🇬🇧🇸🇦🇪🇬🇪🇸🇲🇽🇫🇷🇩🇪🇮🇹🇧🇷🇨🇳🇯🇵🇰🇷🇮🇳🇷🇺🇹🇷]\s*/g,'') || lang;
       const context = `File: "${file.name}". Topic context (for fixing speech recognition errors): ${(file.notes || "").slice(0, 300) || "none"}.`;
       const result = await callClaude(
-        `You are an expert note-taker and science/math transcription specialist. Language: ${langLabel}.
-A student recorded a voice note. Fix all speech recognition errors using topic context.
+        `You are a speech-to-text cleaner. Output ONLY what the student said — nothing else.
 
-CRITICAL RULES:
-1. Fix science/math terminology using context (e.g. "atom" not "Adam", "velocity" not "velocity")
-2. Convert spoken math to proper notation: "ten to the power of negative ten" → 10⁻¹⁰, "times" → ×, "squared" → ², "pi" → π
-3. Convert spoken units: "metres" → m, "kilograms" → kg, "centimetres" → cm, etc.
-4. Remove ALL filler words (um, uh, like, you know, sort of, kind of, basically)
-5. Fix grammar and punctuation
-6. Write section headings in ALL CAPS on their own line
-7. Use a dash (-) for bullet points
-8. NEVER use asterisks, pound signs, or markdown
-9. Respond ONLY in ${langLabel} — do not mix languages
-10. Make notes clear and structured for exam revision
+STRICT RULES — no exceptions:
+1. Output EXACTLY what the student spoke, word for word, lightly cleaned
+2. Do NOT write any intro sentence. Do NOT add "We will study...", "Today we cover...", "In this session..." or any opening line not spoken
+3. Do NOT add content from the file, context, or any outside knowledge
+4. Do NOT summarise, paraphrase, or expand beyond what was said
+5. Remove only filler words: um, uh, er, like, you know, sort of, kind of, basically, right
+6. Fix obvious speech-recognition errors using context only (e.g. "Assam" → "atom" in chemistry)
+7. Convert spoken math to symbols: "ten to the power of negative ten" → 10⁻¹⁰, "times" → ×, "squared" → ², "pi" → π, "metres" → m, "kilograms" → kg
+8. If student listed items, use dash (-) bullets. If student said a title, use ALL CAPS
+9. NEVER use asterisks (*), pound signs (#), or markdown
+10. Respond in ${langLabel} only
 
-Topic context: ${context}`,
-        `Transcribe and convert to clean study notes:\n\n"${raw}"`
+EXAMPLE — if student said: "hi we will study english"
+CORRECT output: Hi, we will study English.
+WRONG output: "We will study about English. Today we will cover the following topics..." ← never do this
+
+Context for fixing mis-heard words only (do NOT use as content): ${context}`,
+        `Output only what the student said, cleaned up:\n\n"${raw}"`
       );
       const fixedResult = fixMath(result);
       const newNotes = notes ? notes + "\n\n---\n\n" + fixedResult : fixedResult;
@@ -2571,35 +2574,53 @@ Topic context: ${context}`,
     setPlayingIdx(idx);
   };
 
-  // ── Podcast state ─────────────────────────────────────────────────────────
-  const [podcastScript,  setPodcastScript]  = useState("");
+  // ── Podcast state — persisted to localStorage so it survives tab switches ──
+  const PODCAST_KEY = "podcast_" + file.id;
+  const [podcastScript,  setPodcastScript]  = useState(() => {
+    try { return localStorage.getItem(PODCAST_KEY) || ""; } catch { return ""; }
+  });
   const [podcastLoading, setPodcastLoading] = useState(false);
-  const [showPodcast,    setShowPodcast]    = useState(false);
+  const [showPodcast,    setShowPodcast]    = useState(() => {
+    try { return !!localStorage.getItem(PODCAST_KEY); } catch { return false; }
+  });
 
   const generatePodcast = async () => {
-    const notesText = file.notes || notes;
-    if (!notesText.trim()) { setVoiceStatus("⚠️ Generate some notes first, then create a podcast from them."); return; }
+    // Get the most recent notes — prefer saved notes from localStorage if editor is empty
+    const savedArr = (() => { try { return JSON.parse(localStorage.getItem("saved_notes_" + file.id) || "[]"); } catch { return []; } })();
+    const notesText = file.notes || (savedArr.length > 0 ? savedArr[0].text : "");
+    if (!notesText.trim()) {
+      setVoiceStatus("⚠️ No notes found. Go to the Notes tab, generate or write notes, then Save them — then come back here.");
+      return;
+    }
     setPodcastLoading(true);
     setShowPodcast(true);
     setPodcastScript("");
     const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[🇺🇸🇬🇧🇸🇦🇪🇬🇪🇸🇲🇽🇫🇷🇩🇪🇮🇹🇧🇷🇨🇳🇯🇵🇰🇷🇮🇳🇷🇺🇹🇷]\s*/g,'') || lang;
     try {
       const script = await callClaude(
-        `You are a friendly, engaging podcast host turning study notes into a spoken audio lesson.
-Language: ${langLabel}. Write ENTIRELY in ${langLabel} — do not mix languages.
+        `You are a podcast host reading study notes aloud as a natural lesson.
+Language: ${langLabel}. Write ENTIRELY in ${langLabel}.
 
-Write a natural, conversational podcast script that:
-1. Starts warmly: "Hey! Today we're covering [topic]…"
-2. Explains every key concept clearly in simple spoken ${langLabel}
-3. Uses natural transitions: "Now let's talk about…", "Here's something really interesting…", "Moving on…"
-4. Ends with a short recap: "So to wrap up…" then 3-4 key points
-5. Is 3-5 min when spoken (≈ 450-600 words)
-6. Uses NO markdown, NO asterisks, NO bullet symbols — plain text only
-7. Sounds like a real person talking, not reading — include natural pauses like "…" and "Now,"
-8. Convert any math symbols BACK to spoken words so TTS reads them correctly (e.g. 10⁻¹⁰ → "ten to the power of negative ten")`,
-        `Create a podcast script from these notes:\n\n${notesText.slice(0, 8000)}`
+CRITICAL: Your podcast must be based STRICTLY on the notes provided below — do not add outside information.
+Cover EVERY point in the notes. Do not skip any section.
+
+Format as spoken audio:
+1. Open warmly: "Hey! Today we're covering [topic from notes]…"
+2. Go through each section of the notes in order, explaining it naturally in conversational spoken ${langLabel}
+3. Use natural transitions between topics: "Moving on to…", "Now let's look at…", "Here's an important point…"
+4. End with "So to wrap up…" then summarise the key points from the notes
+5. 3-5 minutes when spoken aloud (≈ 450-600 words)
+6. NO markdown, NO asterisks, NO bullet symbols — plain spoken text only
+7. Include natural pauses: "…", "Now,", "So,"
+8. Convert math symbols to spoken words for TTS: 10⁻¹⁰ → "ten to the power of negative ten", × → "times", ² → "squared", π → "pi"
+9. Sound like a knowledgeable friend explaining the topic, not a robot reading a list`,
+        `Turn these notes into a podcast script. Cover every point:
+
+${notesText.slice(0, 10000)}`,
+        2000
       );
       setPodcastScript(script);
+      try { localStorage.setItem(PODCAST_KEY, script); } catch {}
     } catch(e) { setPodcastScript("Error: " + e.message); }
     setPodcastLoading(false);
   };
@@ -2729,14 +2750,22 @@ Write a natural, conversational podcast script that:
       {subTab === "podcast" && (
         <div>
           <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:16, padding:"20px 22px", marginBottom:18 }}>
-            <p style={{ fontSize:14, fontWeight:700, color:C.text, marginBottom:6 }}>Generate Study Podcast</p>
-            <p style={{ fontSize:13, color:C.muted, marginBottom:16 }}>
-              AI converts your notes into a natural, conversational podcast in {LANG_OPTIONS.find(l=>l[0]===lang)?.[1] || lang}. Go to the Notes tab first to generate notes, then come back here to create the podcast.
+            <p style={{ fontSize:14, fontWeight:700, color:C.text, marginBottom:5 }}>Study Podcast</p>
+            <p style={{ fontSize:13, color:C.muted, marginBottom:14 }}>
+              Converts your saved notes into a natural spoken lesson. The podcast stays saved — it won't disappear when you switch tabs.
             </p>
-            <button onClick={generatePodcast} disabled={podcastLoading}
-              style={{ background:podcastLoading?"#ccc":"#7c3aed", color:"#fff", border:"none", borderRadius:12, padding:"11px 28px", fontSize:14, fontWeight:700, cursor:podcastLoading?"not-allowed":"pointer", boxShadow:podcastLoading?"none":"0 4px 16px rgba(124,58,237,.4)" }}>
-              {podcastLoading ? "⏳ Generating…" : "🎧 Generate Podcast"}
-            </button>
+            <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+              <button onClick={generatePodcast} disabled={podcastLoading}
+                style={{ background:podcastLoading?"#ccc":"#7c3aed", color:"#fff", border:"none", borderRadius:12, padding:"11px 24px", fontSize:14, fontWeight:700, cursor:podcastLoading?"not-allowed":"pointer", boxShadow:podcastLoading?"none":"0 4px 16px rgba(124,58,237,.4)" }}>
+                {podcastLoading ? "⏳ Generating…" : podcastScript ? "🔄 Regenerate" : "🎧 Generate Podcast"}
+              </button>
+              {podcastScript && !podcastLoading && (
+                <button onClick={() => { setPodcastScript(""); setShowPodcast(false); try { localStorage.removeItem(PODCAST_KEY); } catch {} }}
+                  style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:12, padding:"11px 18px", fontSize:13, fontWeight:600, color:C.muted, cursor:"pointer" }}>
+                  🗑 Clear
+                </button>
+              )}
+            </div>
           </div>
 
           {showPodcast && (
@@ -2771,7 +2800,10 @@ function VoiceNotesTab({ file, user, isGuest, notes, onNotesUpdate,
 
 // ─── NOTES TAB ───────────────────────────────────────────────────────────────
 function NotesTab({ file, onUpdate, user, isGuest }) {
-  const [notes,    setNotes]   = useState(file.notes || "");
+  // Notes start empty — user must load a saved note or generate new ones
+  // (unsaved notes are NOT persisted when leaving the file)
+  const [notes,    setNotes]   = useState("");
+  const [unsaved,  setUnsaved]  = useState(false);  // track unsaved changes
   const [gen,      setGen]     = useState(false);
   const [showTopicInput, setShowTopicInput] = useState(false);
   const [customTopic,    setCustomTopic]    = useState("");
@@ -2800,11 +2832,11 @@ function NotesTab({ file, onUpdate, user, isGuest }) {
       date: new Date().toLocaleDateString("en-GB", {day:"numeric", month:"short", year:"numeric"})
     };
     persistSaved([entry, ...savedNotes.filter(n => n.name !== entry.name)]);
-    setNewNoteName(""); setShowSaveModal(false);
+    setNewNoteName(""); setShowSaveModal(false); setUnsaved(false);
     setSavedFeedback("✅ Saved as \"" + entry.name + "\"");
     setTimeout(() => setSavedFeedback(""), 2500);
   };
-  const loadNote  = (entry) => { setNotes(entry.text); setShowDropdown(false); };
+  const loadNote  = (entry) => { setNotes(entry.text); setUnsaved(false); setShowDropdown(false); };
   const delSaved  = (name)  => persistSaved(savedNotes.filter(n => n.name !== name));
   const filtered  = savedNotes.filter(n => n.name.toLowerCase().includes(dropSearch.toLowerCase()));
 
@@ -2828,12 +2860,12 @@ function NotesTab({ file, onUpdate, user, isGuest }) {
     try {
       const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
       const fileText = fileObj ? await extractFileText(fileObj) : null;
-      const safeText = fileText ? fileText.slice(0, 12000) : null;
+      const safeText = fileText ? fileText.slice(0, 16000) : null;
       const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[\u{1F1E0}-\u{1F1FF}]{2}\s*/gu, '') || lang;
 
       const userMsg = safeText
-        ? `Here is the COMPLETE content from the file "${file.name}":\n\n${safeText}\n\nAnalyze ALL of this content and create detailed study notes covering EVERY section, concept, and detail.`
-        : `Create comprehensive study notes for: "${file.name}". Make them detailed and useful for exam revision.`;
+        ? `Here is the COMPLETE content from the file "${file.name}":\n\n${safeText}\n\nCRITICAL: You MUST cover EVERY SINGLE section, concept, definition, formula, and fact in the above content. Do not skip anything. Write notes section by section, following the document structure. Include ALL details.`
+        : `Create comprehensive study notes for: "${file.name}". Make them detailed and useful for exam revision. Cover all key topics, definitions, formulas, and concepts.`;
 
       const styleGuide = {
         detailed: "Write detailed notes split into sections. Each section has a heading in ALL CAPS followed by bullet points.",
@@ -2864,11 +2896,13 @@ STRICT FORMATTING RULES — follow exactly:
    - Write: ×, ÷, ≈, ≥, ≤, ≠, ±  NOT words
 7. Units: always use standard abbreviations (m, km, kg, g, s, J, N, W, V, A, K, °C, mol, Hz)
 8. ONLY use content from the provided file — do not invent facts`,
-        userMsg
+        userMsg,
+        4000
       );
       const fixedTxt = fixMath(txt);
       setNotes(fixedTxt);
-      onUpdate({ ...file, notes: fixedTxt });
+      setUnsaved(true);
+      // Don't auto-save to file — user must click Save
     } catch(e) { setNotes(`Error: ${e.message}`); }
     setGen(false);
   };
@@ -2878,7 +2912,7 @@ STRICT FORMATTING RULES — follow exactly:
     try {
       const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
       const fileText = fileObj ? await extractFileText(fileObj) : null;
-      const safeText2 = fileText ? fileText.slice(0, 12000) : null;
+      const safeText2 = fileText ? fileText.slice(0, 16000) : null;
       const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[\u{1F1E0}-\u{1F1FF}]{2}\s*/gu, '') || lang;
       const userMsg = safeText2
         ? `File "${file.name}":\n\n${safeText2}\n\nCreate detailed study notes specifically about "${topic}" from this document.`
@@ -2890,7 +2924,7 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
         userMsg
       );
       const fixedTxt2 = fixMath(txt);
-      setNotes(fixedTxt2); onUpdate({ ...file, notes: fixedTxt2 });
+      setNotes(fixedTxt2); setUnsaved(true);
     } catch(e) { setNotes(`Error: ${e.message}`); }
     setGen(false);
   };
@@ -2959,8 +2993,8 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
           )}
 
           {/* Save — always rightmost */}
-          <button onClick={() => { setNewNoteName(""); setShowSaveModal(true); }} className="hov"
-            style={{ display:"flex", alignItems:"center", gap:6, background:C.accent, color:"#fff", border:"none", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:"pointer" }}>
+          <button onClick={() => { if(notes.trim()) { setNewNoteName(""); setShowSaveModal(true); } }} disabled={!notes.trim()} className="hov"
+            style={{ display:"flex", alignItems:"center", gap:6, background:notes.trim()?C.accent:"#ccc", color:"#fff", border:"none", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:notes.trim()?"pointer":"not-allowed", opacity:notes.trim()?1:0.6 }}>
             <Icon d={I.check} size={13} color="#fff"/> Save
           </button>
         </div>
@@ -3034,10 +3068,15 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
       )}
 
       {/* ── Notes textarea ──────────────────────────────────────────────────── */}
-      <textarea value={notes} onChange={e => { setNotes(e.target.value); onUpdate({...file, notes: e.target.value}); }}
+      {unsaved && notes.trim() && (
+        <div style={{ background:"#fffbeb", border:"1px solid #f59e0b33", borderRadius:8, padding:"6px 12px", marginBottom:8, fontSize:12, color:"#b45309", fontWeight:600, display:"flex", alignItems:"center", gap:6 }}>
+          ⚠️ Unsaved — click Save to keep these notes
+        </div>
+      )}
+      <textarea value={notes} onChange={e => { setNotes(e.target.value); setUnsaved(true); }}
         dir={isRTL ? "rtl" : "ltr"}
-        placeholder="Write notes here, or click AI Generate to create them automatically…"
-        style={{ width:"100%", minHeight:440, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"18px 20px", fontSize:15, lineHeight:1.85, outline:"none", resize:"vertical", color:C.text, background:C.surface, fontFamily:"'DM Sans',sans-serif", direction:isRTL?"rtl":"ltr" }}/>
+        placeholder="Notes will clear when you leave. Click AI Generate to create notes, then Save to keep them."
+        style={{ width:"100%", minHeight:440, border:`1.5px solid ${unsaved && notes.trim() ? "#f59e0b" : C.border}`, borderRadius:14, padding:"18px 20px", fontSize:15, lineHeight:1.85, outline:"none", resize:"vertical", color:C.text, background:C.surface, fontFamily:"'DM Sans',sans-serif", direction:isRTL?"rtl":"ltr" }}/>
 
     </div>
   );
@@ -4659,7 +4698,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
   const [playing,  setPlaying]  = useState(false);
   const [paused,   setPaused]   = useState(false);
   const [progress, setProgress] = useState(0);
-  const [speed,    setSpeed]    = useState(0.92);  // slightly slower = more natural
+  const [speed,    setSpeed]    = useState(0.88);  // slightly slower = more natural, human-like
   const [allVoices, setAllVoices] = useState([]);
   const [selVoice,  setSelVoice]  = useState(null);
   const [showVoicePicker, setShowVoicePicker] = useState(false);
@@ -4724,13 +4763,29 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
     window.speechSynthesis.cancel();
     totalChars.current = script.length || 1;
 
-    // Split on sentence boundaries for smoother progress
-    const sentences = script.match(/[^.!?…]+[.!?…]+/g) || [script];
+    // Pre-process script for more natural TTS:
+    // 1. Add pauses after paragraph breaks
+    // 2. Replace "..." with pause markers
+    // 3. Split into natural sentence chunks
+    const processed = script
+      .replace(/
+
++/g, ' ... ')   // paragraph breaks → pause
+      .replace(/\. ([A-Z])/g, '. $1') // ensure space after period
+      .trim();
+
+    // Split on sentence boundaries — include punctuation
+    const rawSents = processed.match(/[^.!?]+[.!?]+(\s|$)/g) || [processed];
+    // Further split on "..." for natural pauses
+    const sentences = rawSents.flatMap(s => s.split(' ... ')).filter(s => s.trim().length > 0);
+
     let charPos = 0;
     const utterances = sentences.map((sen, idx) => {
-      const u = new SpeechSynthesisUtterance(sen.trim());
+      const cleanSen = sen.trim();
+      const u = new SpeechSynthesisUtterance(cleanSen);
       u.rate  = speed;
-      u.pitch = 1.0;           // natural pitch (1.05 sounds robotic)
+      u.pitch = 1.0;    // exactly 1.0 = most natural, avoid robotic 1.05+
+      u.volume = 1.0;
       u.lang  = lang;
       if (selVoice) u.voice = selVoice;
       const myStart = charPos;
