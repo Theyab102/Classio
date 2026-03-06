@@ -1874,7 +1874,8 @@ function CharacterModal({ character, onChange, onClose }) {
           <MiniAvatar character={preview} size={size} uid={uid||field+String(value)}/>
         </div>
         <span style={{ fontSize:9, fontWeight:700, letterSpacing:.2, textAlign:"center",
-          lineHeight:1.3, maxWidth:size+4, wordBreak:"break-word",
+          lineHeight:1.2, width:size+8, wordBreak:"break-word",
+          overflow:"hidden", display:"block",
           color: selected ? "#4361ee" : "#666" }}>{label}</span>
       </button>
     );
@@ -1987,46 +1988,83 @@ function CharacterModal({ character, onChange, onClose }) {
   );
 
   return (
-    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.72)", zIndex:3000, display:"flex", alignItems:"flex-end", justifyContent:"center", padding:0 }}>
+    <div onClick={onClose} style={{
+      position:"fixed", inset:0, zIndex:3000,
+      background:"rgba(0,0,0,.65)",
+      display:"flex", alignItems:"flex-end", justifyContent:"center"
+    }}>
       <div onClick={e => e.stopPropagation()} style={{
-        background:"#fff", borderRadius:"24px 24px 0 0", width:"100%", maxWidth:560,
-        height:"92vh", display:"flex", flexDirection:"column", overflow:"hidden",
-        boxShadow:"0 -12px 60px rgba(0,0,0,.35)"
+        width:"100%", maxWidth:560,
+        maxHeight:"92dvh",
+        display:"flex", flexDirection:"column",
+        background:"#fff",
+        borderRadius:"22px 22px 0 0",
+        boxShadow:"0 -8px 48px rgba(0,0,0,.28)",
+        overflow:"hidden"
       }}>
 
-        {/* Drag handle */}
-        <div style={{ display:"flex", justifyContent:"center", padding:"10px 0 4px", flexShrink:0 }}>
-          <div style={{ width:36, height:4, borderRadius:2, background:"#ddd" }}/>
+        {/* ── Drag handle ── */}
+        <div style={{ flexShrink:0, display:"flex", justifyContent:"center", paddingTop:10, paddingBottom:2 }}>
+          <div style={{ width:36, height:4, borderRadius:2, background:"#e0e0e0" }}/>
         </div>
 
-        {/* Header + compact preview in one row */}
-        <div style={{ display:"flex", alignItems:"center", gap:14, padding:"0 18px 10px", flexShrink:0, borderBottom:"1.5px solid #f0f0f0" }}>
-          <div style={{ width:64, height:64, borderRadius:"50%", overflow:"hidden", flexShrink:0, boxShadow:"0 3px 14px rgba(0,0,0,.18)", border:"2.5px solid #fff" }}>
-            <MiniAvatar character={ch} size={64}/>
+        {/* ── Compact header row: avatar + title + close ── */}
+        <div style={{
+          flexShrink:0,
+          display:"flex", alignItems:"center", gap:12,
+          padding:"6px 16px 10px",
+          borderBottom:"1px solid #efefef"
+        }}>
+          <div style={{ width:52, height:52, borderRadius:"50%", overflow:"hidden", flexShrink:0,
+            boxShadow:"0 2px 10px rgba(0,0,0,.15)", border:"2px solid #fff" }}>
+            <MiniAvatar character={ch} size={52}/>
           </div>
-          <div style={{ flex:1 }}>
-            <p style={{ fontFamily:"'Fraunces',serif", fontSize:18, fontWeight:900, color:"#111", margin:"0 0 5px" }}>My Avatar</p>
-            <input value={ch.name||""} onChange={e => onChange({...ch, name:e.target.value})} placeholder="Nickname…"
-              style={{ border:"1.5px solid #e0e0e0", borderRadius:20, padding:"4px 13px", fontSize:13, fontWeight:700, outline:"none", color:"#111", background:"#fafafa", width:"100%", boxSizing:"border-box" }}/>
+          <div style={{ flex:1, minWidth:0 }}>
+            <p style={{ fontFamily:"'Fraunces',serif", fontSize:16, fontWeight:900, color:"#111",
+              margin:0, lineHeight:1.2, marginBottom:5 }}>My Avatar</p>
+            <input value={ch.name||""} onChange={e => onChange({...ch, name:e.target.value})}
+              placeholder="Nickname…"
+              style={{ border:"1.5px solid #e5e5e5", borderRadius:20, padding:"4px 12px",
+                fontSize:12, fontWeight:700, outline:"none", color:"#111", background:"#f8f8f8",
+                width:"100%", boxSizing:"border-box" }}/>
           </div>
-          <button onClick={onClose} style={{ background:"#f0f0f0", border:"none", borderRadius:"50%", width:32, height:32, fontSize:18, cursor:"pointer", fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center", color:"#555", flexShrink:0 }}>×</button>
+          <button onClick={onClose} style={{
+            flexShrink:0, width:30, height:30, borderRadius:"50%",
+            background:"#f0f0f0", border:"none", cursor:"pointer",
+            fontSize:17, fontWeight:700, color:"#555",
+            display:"flex", alignItems:"center", justifyContent:"center"
+          }}>×</button>
         </div>
 
-        {/* Sticky tab bar */}
-        <div style={{ display:"flex", background:"#fff", borderBottom:"1.5px solid #eee", flexShrink:0, overflowX:"auto" }}>
+        {/* ── Tab bar — never scrolls away ── */}
+        <div style={{
+          flexShrink:0,
+          display:"flex", background:"#fff",
+          borderBottom:"1px solid #efefef",
+          overflowX:"auto"
+        }}>
           {TABS.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)} style={{
-              flex:1, minWidth:54, padding:"9px 4px 7px", border:"none", cursor:"pointer", background:"#fff",
-              fontWeight:800, fontSize:10, letterSpacing:.4, whiteSpace:"nowrap",
-              color: tab===t.id?"#4361ee":"#bbb",
-              borderBottom:`2.5px solid ${tab===t.id?"#4361ee":"transparent"}`,
-              transition:"color .12s, border-color .12s"
+              flex:1, minWidth:50,
+              padding:"8px 2px 6px", border:"none", cursor:"pointer", background:"#fff",
+              fontWeight:800, fontSize:10, letterSpacing:.3, whiteSpace:"nowrap",
+              color: tab===t.id ? "#4361ee" : "#bbb",
+              borderBottom:`2.5px solid ${tab===t.id ? "#4361ee" : "transparent"}`,
+              lineHeight:1.5
             }}>{t.emoji}<br/>{t.label}</button>
           ))}
         </div>
 
-        {/* Scrollable tab content — fills remaining height */}
-        <div style={{ flex:1, overflowY:"auto", overflowX:"hidden", padding:"14px 16px 24px", display:"flex", flexDirection:"column", gap:20, WebkitOverflowScrolling:"touch" }}>
+        {/* ── Scroll area — minHeight:0 is the key fix that lets flex shrink ── */}
+        <div style={{
+          flex:1,
+          minHeight:0,
+          overflowY:"auto",
+          overflowX:"hidden",
+          padding:"16px 16px 8px",
+          display:"flex", flexDirection:"column", gap:20,
+          WebkitOverflowScrolling:"touch"
+        }}>
 
           {/* ── FACE ──────────────────────────────────────────────────────── */}
           {tab==="face" && <>
@@ -2153,9 +2191,19 @@ function CharacterModal({ character, onChange, onClose }) {
           </>}
         </div>
 
-        {/* Done button — flexShrink:0 keeps it always visible */}
-        <div style={{ padding:"10px 18px 14px", borderTop:"1.5px solid #eee", background:"#fff", flexShrink:0 }}>
-          <button onClick={onClose} style={{ width:"100%", background:"#111", color:"#fff", border:"none", borderRadius:14, padding:"13px", fontSize:14, fontWeight:900, cursor:"pointer", letterSpacing:.3 }}>
+        {/* ── Done button — flexShrink:0 pins it to bottom, never overlaps content ── */}
+        <div style={{
+          flexShrink:0,
+          padding:"10px 16px 16px",
+          paddingBottom:"max(16px, env(safe-area-inset-bottom, 16px))",
+          borderTop:"1px solid #efefef",
+          background:"#fff"
+        }}>
+          <button onClick={onClose} style={{
+            width:"100%", background:"#111", color:"#fff",
+            border:"none", borderRadius:14, padding:"13px",
+            fontSize:14, fontWeight:900, cursor:"pointer", letterSpacing:.3
+          }}>
             Done ✓
           </button>
         </div>
