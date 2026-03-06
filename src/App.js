@@ -4768,10 +4768,8 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
     // 2. Replace "..." with pause markers
     // 3. Split into natural sentence chunks
     const processed = script
-      .replace(/
-
-+/g, ' ... ')   // paragraph breaks → pause
-      .replace(/\. ([A-Z])/g, '. $1') // ensure space after period
+      .replace(/[\r\n]{2,}/g, ' ... ')   // paragraph breaks → pause
+      .replace(/\.\s+([A-Z])/g, '. $1') // ensure space after period
       .trim();
 
     // Split on sentence boundaries — include punctuation
