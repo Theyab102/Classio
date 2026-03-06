@@ -474,10 +474,22 @@ const C = {
 };
 
 const FILE_COLORS = [
-  { bg: "#E8EFF5", accent: "#3D5A80" }, { bg: "#F5EDE5", accent: "#C17F5A" },
-  { bg: "#E5F0E8", accent: "#4A7C59" }, { bg: "#EDE5F5", accent: "#6B4E8A" },
-  { bg: "#F5E5E5", accent: "#C45C5C" }, { bg: "#EAEDF0", accent: "#4A5568" },
+  { bg:"#E8EFF5", accent:"#3D5A80" }, { bg:"#F5EDE5", accent:"#C17F5A" },
+  { bg:"#E5F0E8", accent:"#4A7C59" }, { bg:"#EDE5F5", accent:"#6B4E8A" },
+  { bg:"#F5E5E5", accent:"#C45C5C" }, { bg:"#EAEDF0", accent:"#4A5568" },
+  { bg:"#FFF8E1", accent:"#D69E2E" }, { bg:"#E0F7FA", accent:"#0694a2" },
+  { bg:"#FCE4EC", accent:"#E91E8C" }, { bg:"#F3E5F5", accent:"#7B1FA2" },
+  { bg:"#E8F5E9", accent:"#2E7D32" }, { bg:"#FBE9E7", accent:"#BF360C" },
 ];
+// Helper: given a file, return { bg, accent } (custom overrides colorIndex)
+function getFileColor(file) {
+  if (file.customColor) {
+    const c = file.customColor;
+    // derive a light bg from the custom accent
+    return { accent: c, bg: c + "22" };
+  }
+  return FILE_COLORS[file.colorIndex||0] || FILE_COLORS[0];
+}
 const FOLDER_COLORS = ["#3D5A80","#C17F5A","#4A7C59","#6B4E8A","#C45C5C","#4A5568","#8A7C4E","#4E7C8A"];
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
@@ -646,7 +658,8 @@ export default function App() {
   const [activeFile, setActiveFile] = useState(null);
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newColor, setNewColor] = useState(FOLDER_COLORS[0]);
+  const [newColor,       setNewColor]       = useState(FOLDER_COLORS[0]);
+  const [showFolderPicker,setShowFolderPicker] = useState(false);
   const [showCharacter, setShowCharacter] = useState(false);
   const DEFAULT_CHAR = { skin:"#FDDBB4", hair:"#3D2B1F", hairStyle:0, eyes:"#2980B9", top:"#2C3E50", bg:"#dce8ff", mouth:0, eyebrow:0, eyeShape:0, accessory:0, topStyle:0, blush:false, lips:false, freckles:false, lipColor:"#d06060", hat:0, hatColor:"#E74C3C", glasses:0, glassesColor:"#333333", facialHair:0, necklace:0, necklaceColor:"#f0c040", earring:0, earringColor:"#f0c040", name:"" };
   const [character, setCharacter] = useState(() => {
@@ -874,8 +887,30 @@ export default function App() {
             placeholder="e.g. Biology, Maths…"
             style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 14px", fontSize:15, outline:"none", marginBottom:16, color:C.text, background:C.bg }} />
           <label style={{ fontSize:13, fontWeight:600, color:C.muted, display:"block", marginBottom:10 }}>COLOUR</label>
-          <div style={{ display:"flex", gap:8, marginBottom:24 }}>
-            {FOLDER_COLORS.map(col => <button key={col} onClick={() => setNewColor(col)} style={{ width:28, height:28, borderRadius:"50%", background:col, border:newColor===col?`3px solid ${C.text}`:"3px solid transparent", cursor:"pointer" }} />)}
+          <div style={{ marginBottom:16 }}>
+            <div style={{ display:"flex", gap:7, flexWrap:"wrap", marginBottom:8, alignItems:"center" }}>
+              {FOLDER_COLORS.map(col => (
+                <button key={col} onClick={() => { setNewColor(col); setShowFolderPicker(false); }}
+                  style={{ width:28, height:28, borderRadius:"50%", background:col, cursor:"pointer", flexShrink:0,
+                    border:`3px solid ${newColor===col?C.text:"transparent"}`,
+                    boxShadow:`0 1px 4px rgba(0,0,0,${newColor===col?".35":".15"})` }} />
+              ))}
+              <button onClick={() => setShowFolderPicker(p => !p)}
+                style={{ width:28, height:28, borderRadius:"50%", cursor:"pointer",
+                  border:"2px dashed #bbb", background:showFolderPicker?"#4361ee":"transparent",
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                  fontSize:14, color:showFolderPicker?"#fff":"#888" }}>
+                {showFolderPicker ? "×" : "+"}
+              </button>
+            </div>
+            {showFolderPicker && (
+              <div style={{ borderRadius:20, overflow:"hidden",
+                boxShadow:"0 8px 40px rgba(0,0,0,.45)", background:"#18182a" }}>
+                <ColorPicker value={newColor} label="Folder Colour"
+                  onChange={col => setNewColor(col)}
+                  onClose={() => setShowFolderPicker(false)}/>
+              </div>
+            )}
           </div>
           <div style={{ display:"flex", gap:10 }}>
             <button onClick={() => { setShowNewFolder(false); setNewName(""); }}
@@ -955,6 +990,259 @@ function Header({ user, saveStatus, isGuest, onSignOut, character, onOpenCharact
 }
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
+
+// ─── COLOR UTILITIES ──────────────────────────────────────────────────────────
+function hexToHsv(hex) {
+  let r = parseInt((hex||"#888888").replace('#','').slice(0,2),16)/255;
+  let g = parseInt((hex||"#888888").replace('#','').slice(2,4),16)/255;
+  let b = parseInt((hex||"#888888").replace('#','').slice(4,6),16)/255;
+  const max=Math.max(r,g,b), min=Math.min(r,g,b), d=max-min;
+  let h=0,s=max===0?0:d/max,v=max;
+  if(d){
+    if(max===r) h=((g-b)/d)%6;
+    else if(max===g) h=(b-r)/d+2;
+    else h=(r-g)/d+4;
+    h=Math.round(h*60); if(h<0)h+=360;
+  }
+  return {h,s,v};
+}
+function hsvToHex(h,s,v) {
+  const f=n=>{const k=(n+h/60)%6;return v-v*s*Math.max(0,Math.min(k,4-k,1));};
+  const toB=x=>Math.round(x*255).toString(16).padStart(2,'0');
+  return '#'+toB(f(5))+toB(f(3))+toB(f(1));
+}
+function hexValid(h){ return /^#[0-9a-fA-F]{6}$/.test(h); }
+function ensureHex(v){ return hexValid(v)?v:'#888888'; }
+
+// ─── COLOR PICKER ─────────────────────────────────────────────────────────────
+// Full HSV picker: SV gradient square + hue bar + hex input
+// Self-contained, no external deps beyond React.
+function ColorPicker({ value, onChange, onClose, label="" }) {
+  const start  = hexToHsv(ensureHex(value));
+  const [hue,  setHue]    = useState(start.h);
+  const [sv,   setSv]     = useState({ s: start.s, v: start.v });
+  const [hexIn,setHexIn]  = useState(ensureHex(value));
+
+  const sqRef  = useRef(null);
+  const hueRef = useRef(null);
+  const sqDrag  = useRef(false);
+  const hueDrag = useRef(false);
+
+  // Push colour out on every hue/sv change
+  const curHex = hsvToHex(hue, sv.s, sv.v);
+  useEffect(() => { setHexIn(curHex); onChange(curHex); }, [hue, sv.s, sv.v]);
+
+  const posFromEvent = (e, el) => {
+    const r = el.getBoundingClientRect();
+    const px = (e.touches?.[0]?.clientX ?? e.clientX);
+    const py = (e.touches?.[0]?.clientY ?? e.clientY);
+    return { x: Math.max(0,Math.min(1,(px-r.left)/r.width)), y: Math.max(0,Math.min(1,(py-r.top)/r.height)) };
+  };
+
+  useEffect(() => {
+    const onMove = e => {
+      if (sqDrag.current  && sqRef.current)  { const p=posFromEvent(e,sqRef.current);  setSv({s:p.x, v:1-p.y}); }
+      if (hueDrag.current && hueRef.current) { const p=posFromEvent(e,hueRef.current); setHue(Math.round(p.x*360)); }
+    };
+    const onUp = () => { sqDrag.current=false; hueDrag.current=false; };
+    window.addEventListener('mousemove',onMove);
+    window.addEventListener('mouseup',onUp);
+    window.addEventListener('touchmove',onMove,{passive:false});
+    window.addEventListener('touchend',onUp);
+    return () => {
+      window.removeEventListener('mousemove',onMove);
+      window.removeEventListener('mouseup',onUp);
+      window.removeEventListener('touchmove',onMove);
+      window.removeEventListener('touchend',onUp);
+    };
+  }, []);
+
+  const handleHex = raw => {
+    setHexIn(raw);
+    const h = raw.startsWith('#') ? raw : '#'+raw;
+    if (hexValid(h)) { const v=hexToHsv(h); setHue(v.h); setSv({s:v.s,v:v.v}); }
+  };
+
+  const hueBase = hsvToHex(hue,1,1);
+  const previewSwatches = [0,60,120,180,240,300].map(h => hsvToHex(h,0.8,0.9));
+
+  return (
+    <div onClick={e=>e.stopPropagation()}
+      style={{background:'#18182a',borderRadius:20,padding:'18px 16px 16px',
+        userSelect:'none',boxShadow:'0 16px 56px rgba(0,0,0,.6)'}}>
+
+      {label && <p style={{fontSize:10,fontWeight:800,color:'#666',letterSpacing:1.2,marginBottom:12,textTransform:'uppercase'}}>{label}</p>}
+
+      {/* ── Saturation / Value square ── */}
+      <div ref={sqRef}
+        style={{position:'relative',width:'100%',paddingBottom:'72%',borderRadius:12,
+          overflow:'hidden',cursor:'crosshair',marginBottom:12,flexShrink:0}}
+        onMouseDown={e=>{sqDrag.current=true; const p=posFromEvent(e,sqRef.current); setSv({s:p.x,v:1-p.y}); e.preventDefault();}}
+        onTouchStart={e=>{sqDrag.current=true; const p=posFromEvent(e,sqRef.current); setSv({s:p.x,v:1-p.y});}}>
+        <div style={{position:'absolute',inset:0,background:hueBase}}/>
+        <div style={{position:'absolute',inset:0,background:'linear-gradient(to right,#fff,rgba(255,255,255,0))'}}/>
+        <div style={{position:'absolute',inset:0,background:'linear-gradient(to bottom,rgba(0,0,0,0),#000)'}}/>
+        <div style={{
+          position:'absolute',
+          left:`${sv.s*100}%`, top:`${(1-sv.v)*100}%`,
+          width:20,height:20,borderRadius:'50%',
+          border:'2.5px solid #fff',
+          boxShadow:'0 0 0 1.5px rgba(0,0,0,.6), 0 2px 6px rgba(0,0,0,.5)',
+          transform:'translate(-50%,-50%)',
+          pointerEvents:'none',
+          background:curHex,
+        }}/>
+      </div>
+
+      {/* ── Hue bar ── */}
+      <div ref={hueRef}
+        style={{position:'relative',height:22,borderRadius:11,
+          background:'linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)',
+          cursor:'pointer',marginBottom:14}}
+        onMouseDown={e=>{hueDrag.current=true; const p=posFromEvent(e,hueRef.current); setHue(Math.round(p.x*360)); e.preventDefault();}}
+        onTouchStart={e=>{hueDrag.current=true; const p=posFromEvent(e,hueRef.current); setHue(Math.round(p.x*360));}}>
+        <div style={{
+          position:'absolute',left:`${(hue/360)*100}%`,top:'50%',
+          width:24,height:24,borderRadius:'50%',
+          border:'2.5px solid #fff',
+          boxShadow:'0 0 0 1.5px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.4)',
+          transform:'translate(-50%,-50%)',
+          background:hueBase,pointerEvents:'none',
+        }}/>
+      </div>
+
+      {/* ── Quick hue presets ── */}
+      <div style={{display:'flex',gap:6,marginBottom:12}}>
+        {previewSwatches.map(c=>(
+          <button key={c} onClick={()=>{const v=hexToHsv(c);setHue(v.h);setSv({s:v.s,v:v.v});}}
+            style={{flex:1,height:20,borderRadius:6,background:c,border:'none',cursor:'pointer',
+              boxShadow:'0 1px 3px rgba(0,0,0,.3)'}}/>
+        ))}
+      </div>
+
+      {/* ── Hex input row ── */}
+      <div style={{display:'flex',gap:8,alignItems:'center'}}>
+        <div style={{width:36,height:36,borderRadius:10,background:curHex,flexShrink:0,
+          border:'2px solid rgba(255,255,255,.12)',boxShadow:'0 2px 8px rgba(0,0,0,.4)'}}/>
+        <div style={{flex:1,position:'relative'}}>
+          <span style={{position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',
+            fontSize:13,color:'#555',fontFamily:'monospace',pointerEvents:'none'}}>#</span>
+          <input value={hexIn.replace('#','')} onChange={e=>handleHex('#'+e.target.value)}
+            maxLength={6} spellCheck={false}
+            style={{width:'100%',background:'#26263a',border:'1.5px solid rgba(255,255,255,.1)',
+              borderRadius:9,padding:'8px 10px 8px 24px',fontSize:14,fontWeight:700,
+              color:'#fff',outline:'none',fontFamily:'monospace',letterSpacing:.8,
+              boxSizing:'border-box'}}/>
+        </div>
+        {onClose && (
+          <button onClick={onClose}
+            style={{background:'#4361ee',color:'#fff',border:'none',borderRadius:10,
+              padding:'8px 14px',fontSize:13,fontWeight:800,cursor:'pointer',flexShrink:0,
+              boxShadow:'0 2px 8px rgba(67,97,238,.5)'}}>
+            ✓ Done
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── SKIN SHADE SLIDER ────────────────────────────────────────────────────────
+// Horizontal gradient slider: lighter ← → darker within one hue family.
+// When `base` changes, the slider position resets to the midpoint.
+function SkinSlider({ base, value, onChange }) {
+  const getHsv = b => hexToHsv(ensureHex(b));
+
+  // Map t ∈ [0,1] → hex:  0 = very light, 1 = very dark
+  const hexAt = (b, t) => {
+    const {h} = getHsv(b);
+    // saturation: 0.08 (pastel) → 0.82 (saturated dark)
+    // value:      0.98 (near white) → 0.22 (near black)
+    return hsvToHex(h, 0.08 + t*0.74, 0.98 - t*0.76);
+  };
+
+  // Infer t from a known hex (nearest match across 60 steps)
+  const inferT = (b, hex) => {
+    let best=0.5, bestD=99;
+    for(let i=0;i<=60;i++){
+      const t=i/60, a=getHsv(hexAt(b,t)), c=getHsv(ensureHex(hex));
+      const d=Math.abs(a.v-c.v)*1.4 + Math.abs(a.s-c.s)*0.6;
+      if(d<bestD){bestD=d;best=t;}
+    }
+    return best;
+  };
+
+  const [t, setT] = useState(() => inferT(base, value));
+  const prevBase  = useRef(base);
+  const barRef    = useRef(null);
+  const dragging  = useRef(false);
+
+  // Reset slider position when the user picks a new base swatch
+  useEffect(() => {
+    if (prevBase.current !== base) { prevBase.current=base; setT(0.4); }
+  }, [base]);
+
+  // Fire onChange whenever t moves
+  useEffect(() => { onChange(hexAt(base, t)); }, [t, base]);
+
+  const posFromEvent = (e, el) => {
+    const r = el.getBoundingClientRect();
+    const x = (e.touches?.[0]?.clientX ?? e.clientX) - r.left;
+    return Math.max(0, Math.min(1, x / r.width));
+  };
+
+  useEffect(() => {
+    const up   = () => { dragging.current=false; };
+    const move = e => { if(dragging.current && barRef.current) setT(posFromEvent(e,barRef.current)); };
+    window.addEventListener('mousemove',move);
+    window.addEventListener('mouseup',up);
+    window.addEventListener('touchmove',move,{passive:false});
+    window.addEventListener('touchend',up);
+    return()=>{
+      window.removeEventListener('mousemove',move);
+      window.removeEventListener('mouseup',up);
+      window.removeEventListener('touchmove',move);
+      window.removeEventListener('touchend',up);
+    };
+  },[]);
+
+  // Gradient: sample 8 stops for smooth transition
+  const stops = Array.from({length:8},(_,i)=>hexAt(base,i/7)).join(',');
+  const thumbColor = hexAt(base, t);
+
+  return (
+    <div style={{marginTop:10,marginBottom:4}}>
+      {/* Track */}
+      <div ref={barRef}
+        style={{position:'relative',height:26,borderRadius:13,
+          background:`linear-gradient(to right,${stops})`,
+          cursor:'pointer',
+          boxShadow:'inset 0 1px 4px rgba(0,0,0,.25), 0 1px 3px rgba(0,0,0,.12)'}}
+        onMouseDown={e=>{dragging.current=true; setT(posFromEvent(e,barRef.current)); e.preventDefault();}}
+        onTouchStart={e=>{dragging.current=true; setT(posFromEvent(e,barRef.current));}}>
+        {/* Thumb */}
+        <div style={{
+          position:'absolute',left:`${t*100}%`,top:'50%',
+          width:32,height:32,borderRadius:'50%',
+          background:thumbColor,
+          border:'3px solid #fff',
+          boxShadow:'0 2px 10px rgba(0,0,0,.45)',
+          transform:'translate(-50%,-50%)',
+          pointerEvents:'none',
+          transition:'background .05s',
+        }}/>
+      </div>
+      {/* Labels */}
+      <div style={{display:'flex',justifyContent:'space-between',marginTop:5,
+        fontSize:10,color:'#999',fontWeight:700,letterSpacing:.4}}>
+        <span>☀️ Lighter</span>
+        <span style={{background:thumbColor,color:'#fff',padding:'2px 8px',borderRadius:10,
+          fontSize:10,fontWeight:800,boxShadow:'0 1px 4px rgba(0,0,0,.3)'}}>{thumbColor.toUpperCase()}</span>
+        <span>🌑 Darker</span>
+      </div>
+    </div>
+  );
+}
 function shadeHex(hex, amt) {
   const n = parseInt((hex||"#888888").replace('#',''), 16);
   const clamp = v => Math.min(255, Math.max(0, v));
@@ -1602,24 +1890,65 @@ function CharacterModal({ character, onChange, onClose }) {
     </div>
   );
 
-  const Swatch = ({ val, field, sz=26 }) => {
-    const sel = ch[field] === val;
+  // ── openPicker state: which field is open (null = closed) ──────────────────
+  const PICKER_LABELS = {
+    hair:"Hair Colour", top:"Outfit Colour", bg:"Background", eyes:"Eye Colour",
+    hatColor:"Hat Colour", glassesColor:"Glasses Colour",
+    earringColor:"Earring Colour", necklaceColor:"Necklace Colour", lipColor:"Lip Colour",
+  };
+  const [openPicker,  setOpenPicker]  = useState(null);  // field name string
+  const [skinBase,    setSkinBase]    = useState(() => {
+    // Find closest SKINS base for initial ch.skin
+    const SKIN_BASES = ["#FDDBB4","#F5C89A","#FFCBA4","#E8A87C","#D4956A","#C68642","#A0693A","#8D5524","#6B3A1F","#F4D6C8"];
+    const cur = hexToHsv(ensureHex(ch.skin||"#FDDBB4"));
+    let best = SKIN_BASES[0], bestD = 999;
+    for(const s of SKIN_BASES){ const b=hexToHsv(s); const d=Math.abs(cur.h-b.h); if(d<bestD){bestD=d;best=s;} }
+    return best;
+  });
+
+  // ColorSwatch: palette row + "Custom" button → inline ColorPicker
+  const Swatches = ({ vals, field, sz=26, showCustom=true }) => {
+    const isOpen = openPicker === field;
     return (
-      <button onClick={() => onChange({...ch, [field]: val})} style={{
-        width:sz, height:sz, borderRadius:"50%", background:val, cursor:"pointer", flexShrink:0,
-        border:`3px solid ${sel?"#000":"transparent"}`,
-        outline:`2px solid ${sel?"#fff":"transparent"}`, outlineOffset:"-1px",
-        transform: sel?"scale(1.22)":"scale(1)", transition:"transform .12s",
-        boxShadow:`0 2px 5px rgba(0,0,0,${sel?".35":".18"})`
-      }}/>
+      <div>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:6, alignItems:"center" }}>
+          {vals.map(v => {
+            const sel = ch[field] === v;
+            return (
+              <button key={v} onClick={() => { onChange({...ch,[field]:v}); setOpenPicker(null); }}
+                style={{ width:sz, height:sz, borderRadius:"50%", background:v, cursor:"pointer", flexShrink:0,
+                  border:`3px solid ${sel?"#111":"transparent"}`,
+                  outline:`2px solid ${sel?"rgba(255,255,255,.9)":"transparent"}`, outlineOffset:"-1px",
+                  boxShadow:`0 2px 6px rgba(0,0,0,${sel?".4":".15"})`,
+                  transition:"box-shadow .12s" }} />
+            );
+          })}
+          {showCustom && (
+            <button onClick={() => setOpenPicker(isOpen ? null : field)}
+              title="Custom colour"
+              style={{ width:sz, height:sz, borderRadius:"50%", flexShrink:0, cursor:"pointer",
+                border:"2px dashed #bbb", background: isOpen ? "#4361ee" : "transparent",
+                display:"flex", alignItems:"center", justifyContent:"center",
+                fontSize:sz>22?15:11, color: isOpen ? "#fff" : "#888",
+                transition:"background .14s, color .14s" }}>
+              {isOpen ? "×" : "+"}
+            </button>
+          )}
+        </div>
+        {isOpen && (
+          <div style={{ marginTop:10, borderRadius:20, overflow:"hidden",
+            boxShadow:"0 8px 40px rgba(0,0,0,.35)", background:"#18182a" }}>
+            <ColorPicker
+              value={ch[field] || "#888888"}
+              label={PICKER_LABELS[field] || field}
+              onChange={hex => onChange({...ch,[field]:hex})}
+              onClose={() => setOpenPicker(null)}
+            />
+          </div>
+        )}
+      </div>
     );
   };
-
-  const Swatches = ({ vals, field, sz=26 }) => (
-    <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
-      {vals.map(v => <Swatch key={v} val={v} field={field} sz={sz}/>)}
-    </div>
-  );
 
   const Row = ({ label, children }) => (
     <div>
@@ -1701,17 +2030,46 @@ function CharacterModal({ character, onChange, onClose }) {
 
           {/* ── FACE ──────────────────────────────────────────────────────── */}
           {tab==="face" && <>
-            <Row label="SKIN TONE">
-              <div style={{ display:"flex", flexWrap:"wrap", gap:7 }}>
-                {SKINS.map(v => (
-                  <button key={v} onClick={() => onChange({...ch, skin:v})} style={{
-                    width:32, height:32, borderRadius:"50%", background:v, cursor:"pointer",
-                    border:`3px solid ${ch.skin===v?"#111":"transparent"}`,
-                    outline:`2px solid ${ch.skin===v?"#fff":"transparent"}`, outlineOffset:"-1px",
-                    transform:ch.skin===v?"scale(1.2)":"scale(1)", transition:"transform .12s"
-                  }}/>
-                ))}
+            <Row label="SKIN TONE — pick a base, then slide to adjust shade">
+              <div style={{ display:"flex", flexWrap:"wrap", gap:7, marginBottom:4 }}>
+                {SKINS.map(v => {
+                  const hsvB   = hexToHsv(v);
+                  const curHsv = hexToHsv(ensureHex(ch.skin||"#FDDBB4"));
+                  const isSel  = skinBase === v;
+                  return (
+                    <button key={v}
+                      onClick={() => {
+                        setSkinBase(v);
+                        setOpenPicker(null);
+                        const mid = hsvToHex(hsvB.h, 0.15+0.5*0.70, 0.95-0.5*0.63);
+                        onChange({...ch, skin: mid});
+                      }}
+                      style={{ width:34, height:34, borderRadius:"50%", background:v, cursor:"pointer",
+                        border:`3px solid ${isSel?"#111":"transparent"}`,
+                        outline:`2px solid ${isSel?"rgba(255,255,255,.9)":"transparent"}`, outlineOffset:"-1px",
+                        boxShadow:`0 2px 6px rgba(0,0,0,${isSel?".4":".15"})` }} />
+                  );
+                })}
+                <button onClick={() => setOpenPicker(openPicker==="skin"?null:"skin")}
+                  style={{ width:34, height:34, borderRadius:"50%", cursor:"pointer",
+                    border:"2px dashed #bbb", background:openPicker==="skin"?"#4361ee":"transparent",
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    fontSize:14, color:openPicker==="skin"?"#fff":"#888" }}>
+                  {openPicker==="skin" ? "×" : "+"}
+                </button>
               </div>
+              {skinBase && openPicker !== "skin" && (
+                <SkinSlider base={skinBase} value={ch.skin||"#FDDBB4"}
+                  onChange={hex => onChange({...ch, skin: hex})} />
+              )}
+              {openPicker === "skin" && (
+                <div style={{ marginTop:10, borderRadius:20, overflow:"hidden",
+                  boxShadow:"0 8px 40px rgba(0,0,0,.35)", background:"#18182a" }}>
+                  <ColorPicker value={ch.skin||"#FDDBB4"} label="Skin Tone"
+                    onChange={hex => onChange({...ch,skin:hex})}
+                    onClose={() => setOpenPicker(null)}/>
+                </div>
+              )}
             </Row>
             <Row label="EYE SHAPE"><ChipGrid field="eyeShape" items={EYE_S} size={62}/></Row>
             <Row label="EYE COLOUR"><Swatches vals={EYES} field="eyes" sz={26}/></Row>
@@ -1782,26 +2140,7 @@ function CharacterModal({ character, onChange, onClose }) {
             <TogglePair label="LIP GLOSS — tap to toggle" field="lips" onEmoji="💋"/>
             {ch.lips && (
               <Row label="LIP COLOUR">
-                <div style={{ display:"flex", flexWrap:"wrap", gap:7 }}>
-                  {LIP_C.map(v => {
-                    const preview = { ...ch, lipColor: v };
-                    const sel = ch.lipColor === v;
-                    return (
-                      <button key={v} onClick={() => onChange({...ch, lipColor: v})}
-                        style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3,
-                          padding:"5px 4px 4px", borderRadius:10, border:"none", cursor:"pointer",
-                          background: sel ? "#eef1ff" : "#f7f8fa",
-                          outline: sel ? "2.5px solid #4361ee" : "2px solid transparent", outlineOffset:1,
-                          transform: sel ? "scale(1.07)" : "scale(1)", transition:"all .13s" }}>
-                        <div style={{ width:52, height:52, borderRadius:"50%", overflow:"hidden",
-                          boxShadow: sel ? "0 2px 8px rgba(67,97,238,.3)" : "0 1px 3px rgba(0,0,0,.12)" }}>
-                          <MiniAvatar character={preview} size={52} uid={"lipc"+v}/>
-                        </div>
-                        <div style={{ width:14, height:14, borderRadius:"50%", background:v, border:"1.5px solid #ccc" }}/>
-                      </button>
-                    );
-                  })}
-                </div>
+                <Swatches vals={LIP_C} field="lipColor" sz={26}/>
               </Row>
             )}
             <TogglePair label="FRECKLES — tap to toggle" field="freckles" onEmoji="🟤"/>
@@ -1950,11 +2289,62 @@ function SignIn({ onSignIn, onGuest }) {
 }
 
 // ─── FOLDER VIEW ──────────────────────────────────────────────────────────────
+// ─── FILE COLOR PICKER ───────────────────────────────────────────────────────
+// Per-file colour dot — 12 presets + custom button → inline ColorPicker popover
+function FileColorPicker({ file, onPick }) {
+  const [open, setOpen] = useState(false);
+  const curAccent = getFileColor(file).accent;
+
+  return (
+    <div style={{ position:"relative" }}>
+      {/* Trigger: shows current file colour */}
+      <button title="Change file colour" onClick={() => setOpen(o=>!o)}
+        style={{ width:26, height:26, borderRadius:"50%", background:curAccent,
+          border:`2.5px solid ${open?"#111":"rgba(0,0,0,.15)"}`,
+          cursor:"pointer", flexShrink:0,
+          boxShadow:"0 1px 4px rgba(0,0,0,.2)",
+          transition:"border .12s" }}/>
+
+      {/* Popover */}
+      {open && (
+        <div onClick={e=>e.stopPropagation()}
+          style={{ position:"absolute", right:0, top:34, zIndex:800,
+            background:"#18182a", borderRadius:18, padding:"12px",
+            boxShadow:"0 12px 48px rgba(0,0,0,.55)", width:220 }}>
+          {/* Preset dots */}
+          <p style={{ fontSize:9, fontWeight:800, color:"#666", letterSpacing:1, marginBottom:8, textTransform:"uppercase" }}>Presets</p>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:12 }}>
+            {FILE_COLORS.map((col,ci) => {
+              const isSel = !file.customColor && (file.colorIndex||0)===ci;
+              return (
+                <button key={ci}
+                  onClick={() => { onPick({colorIndex:ci, customColor:null}); setOpen(false); }}
+                  style={{ width:22, height:22, borderRadius:"50%", background:col.accent,
+                    border:`2.5px solid ${isSel?"#fff":"transparent"}`,
+                    boxShadow:isSel?"0 0 0 1.5px rgba(255,255,255,.5)":"none",
+                    cursor:"pointer", transition:"border .1s" }}/>
+              );
+            })}
+          </div>
+          {/* Custom picker */}
+          <p style={{ fontSize:9, fontWeight:800, color:"#666", letterSpacing:1, marginBottom:8, textTransform:"uppercase" }}>Custom</p>
+          <ColorPicker
+            value={file.customColor || curAccent}
+            onChange={hex => onPick({customColor:hex, colorIndex: file.colorIndex||0})}
+            onClose={() => setOpen(false)}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
   const [dragging, setDragging] = useState(false);
   const [tab, setTab] = useState("files");
   const [editingName, setEditingName] = useState(false);
   const [folderName, setFolderName] = useState(folder.name);
+  const [showFolderColorPicker, setShowFolderColorPicker] = useState(false);
   const fileInput = useRef();
 
   const addFiles = (list) => {
@@ -1995,9 +2385,32 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
           }
         </div>
         <div style={{ display:"flex", gap:6 }}>
-          {FOLDER_COLORS.map(col => <button key={col} onClick={() => onUpdate({...folder,color:col})} style={{ width:20, height:20, borderRadius:"50%", background:col, border:folder.color===col?`3px solid ${C.text}`:"2px solid transparent", cursor:"pointer" }} />)}
+          {FOLDER_COLORS.map(col => (
+            <button key={col} onClick={() => onUpdate({...folder,color:col})}
+              style={{ width:22, height:22, borderRadius:"50%", background:col, cursor:"pointer", flexShrink:0,
+                border:`3px solid ${folder.color===col?C.text:"transparent"}`,
+                boxShadow:`0 1px 3px rgba(0,0,0,${folder.color===col?".35":".12"})` }} />
+          ))}
+          <button onClick={() => setShowFolderColorPicker(p=>!p)}
+            style={{ width:22, height:22, borderRadius:"50%", cursor:"pointer",
+              border:"2px dashed #aaa", background:showFolderColorPicker?"#4361ee":"transparent",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              fontSize:13, color:showFolderColorPicker?"#fff":"#888" }}>
+            {showFolderColorPicker?"×":"+"}
+          </button>
         </div>
       </div>
+      {/* Folder custom colour picker — slides open below topbar */}
+      {showFolderColorPicker && (
+        <div style={{ padding:"12px 24px 0", background:C.surface, borderBottom:`1px solid ${C.border}` }}>
+          <ColorPicker
+            value={folder.color || "#3D5A80"}
+            label="Folder Colour"
+            onChange={col => onUpdate({...folder, color:col})}
+            onClose={() => setShowFolderColorPicker(false)}
+          />
+        </div>
+      )}
       {/* Tabs */}
       <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 12px", display:"flex", gap:2, overflowX:"auto" }}>
         {TABS.map(t => (
@@ -2026,7 +2439,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
               ? <div style={{ textAlign:"center", padding:"40px 0", color:C.muted }}><Icon d={I.file} size={40} color={C.border} /><p style={{ marginTop:12, fontSize:15 }}>No files yet</p></div>
               : <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
                   {folder.files.map(file => {
-                    const fc = FILE_COLORS[file.colorIndex||0];
+                    const fc = getFileColor(file);
                     const linked = file.linkedFiles || [];
                     return (
                       <div key={file.id} className="row"
@@ -2042,12 +2455,8 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
                               {(file.linkedFileIds||[]).length > 0 && <span style={{ marginLeft:8, color:C.accent }}>🔗 {(file.linkedFileIds||[]).length} linked</span>}
                             </p>
                           </div>
-                          <div style={{ display:"flex", gap:4 }}>
-                            {FILE_COLORS.map((col,ci) => (
-                              <button key={ci} onClick={() => onUpdate({...folder,files:folder.files.map(f=>f.id===file.id?{...f,colorIndex:ci}:f)})}
-                                style={{ width:14, height:14, borderRadius:"50%", background:col.accent, border:file.colorIndex===ci?`2px solid ${C.text}`:"2px solid transparent", cursor:"pointer" }} />
-                            ))}
-                          </div>
+                          <FileColorPicker file={file}
+                            onPick={(patch) => onUpdate({...folder,files:folder.files.map(f=>f.id===file.id?{...f,...patch}:f)})}/>
                           <LinkBtn file={file} allFiles={folder.files}
                             onSave={ids => onUpdate({...folder,files:folder.files.map(f=>f.id===file.id?{...f,linkedFileIds:ids}:f)})} />
                           <button onClick={() => onOpenFile(file)} className="hov"
@@ -2083,7 +2492,7 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
     {id:"ai",    label:"AI Assistant",    icon:I.ai},
     {id:"game",  label:"Game Mode",       icon:I.game},
   ];
-  const fc = FILE_COLORS[file.colorIndex||0];
+  const fc = getFileColor(file);
 
   return (
     <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif" }}>
