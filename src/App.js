@@ -2158,6 +2158,11 @@ function NotesTab({ file, onUpdate, user, isGuest }) {
   const recognitionRef = useRef(null);
   const transcriptRef = useRef("");
 
+  // ── Podcast state ─────────────────────────────────────────────
+  const [showPodcast,   setShowPodcast]   = useState(false);
+  const [podcastScript, setPodcastScript] = useState("");
+  const [podcastLoading,setPodcastLoading]= useState(false);
+
   const generate = async () => {
     setGen(true);
     try {
@@ -2200,6 +2205,31 @@ STRICT FORMATTING RULES - you MUST follow these exactly:
   };
 
   const save = () => { onUpdate({...file,notes}); setSaved(true); setTimeout(()=>setSaved(false),2000); };
+
+  const generatePodcast = async () => {
+    if (!notes.trim()) return;
+    setPodcastLoading(true);
+    setShowPodcast(true);
+    setPodcastScript("");
+    try {
+      const script = await callClaude(
+        `You are a friendly podcast host turning study notes into a spoken audio summary.
+Write an engaging, conversational podcast script that:
+1. Starts with a warm 1-sentence intro ("Hey there! Today we're covering…")
+2. Explains every key concept clearly in simple spoken English
+3. Uses natural transitions like "Now, moving on to…", "Here's an interesting point…", "Let's talk about…"
+4. Ends with a quick 2-3 bullet recap ("So to wrap up…")
+5. Is 3-5 minutes when spoken aloud (roughly 400-600 words)
+6. Uses NO markdown, NO asterisks, NO bullet symbols — plain text only for clean TTS
+7. Sounds natural when read aloud, not like written text`,
+        `Turn these notes into a podcast script:
+
+${notes.slice(0, 8000)}`
+      );
+      setPodcastScript(script);
+    } catch(e) { setPodcastScript("Error generating podcast: " + e.message); }
+    setPodcastLoading(false);
+  };
 
   const isRecordingRef = useRef(false);
 
@@ -2364,6 +2394,10 @@ Topic context: ${context}`,
             style={{ display:"flex", alignItems:"center", gap:7, background:saved?C.greenL:C.accent, color:saved?C.green:"#fff", border:"none", borderRadius:10, padding:"9px 16px", fontSize:14, fontWeight:600, cursor:"pointer" }}>
             <Icon d={saved?I.check:I.edit} size={14} color={saved?C.green:"#fff"} />{saved?"Saved!":"Save"}
           </button>
+          <button onClick={generatePodcast} disabled={!notes.trim() || podcastLoading} className="hov"
+            style={{ display:"flex", alignItems:"center", gap:7, background:"#fdf4ff", color:"#7c3aed", border:"1.5px solid #7c3aed33", borderRadius:10, padding:"9px 16px", fontSize:14, fontWeight:600, cursor:notes.trim()?"pointer":"not-allowed", opacity:notes.trim()?1:0.5 }}>
+            🎧 {podcastLoading ? "Generating…" : "Podcast"}
+          </button>
         </div>
       </div>
       {/* Note style selector */}
@@ -2410,6 +2444,16 @@ Topic context: ${context}`,
       <textarea value={notes} onChange={e=>setNotes(e.target.value)}
         placeholder="Write notes here, or click 'AI Generate' to create them automatically…"
         style={{ width:"100%", minHeight:420, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"20px", fontSize:15, lineHeight:1.7, outline:"none", resize:"vertical", color:C.text, background:C.surface, fontFamily:"'DM Sans',sans-serif" }} />
+
+      {/* ── Podcast Player ── */}
+      {showPodcast && (
+        <PodcastPlayer
+          script={podcastScript}
+          loading={podcastLoading}
+          topic={file.name}
+          onClose={() => { setShowPodcast(false); window.speechSynthesis?.cancel(); }}
+        />
+      )}
     </div>
   );
 }
@@ -2572,6 +2616,8 @@ function GameTab({ file }) {
   if (activeGame==="quizshow") return <QuizShow cards={cards} onBack={()=>setActiveGame(null)} />;
   if (activeGame==="rapidfire") return <RapidFire cards={cards} onBack={()=>setActiveGame(null)} />;
   if (activeGame==="voice") return <VoiceAnswer cards={cards} onBack={()=>setActiveGame(null)} />;
+  if (activeGame==="listening") return <ListeningGame cards={cards} onBack={()=>setActiveGame(null)} />;
+  if (activeGame==="wordfill") return <WordFill cards={cards} onBack={()=>setActiveGame(null)} />;
 
   const GAMES = [
     {id:"mcq",emoji:"🧠",title:"Multiple Choice",desc:"4 options — pick the right one",bg:C.accentL,accent:C.accent},
@@ -2583,10 +2629,12 @@ function GameTab({ file }) {
     {id:"truefalse",emoji:"✅",title:"True or False",desc:"Decide if the statement is true or false",bg:"#FAF5FF",accent:"#6B46C1"},
     {id:"memory",emoji:"🎴",title:"Memory Flip",desc:"Match question cards to answer cards",bg:"#FFF5F5",accent:"#C53030"},
     {id:"match",emoji:"🔗",title:"Matching Pairs",desc:"Connect each term to its definition",bg:C.greenL,accent:C.green},
-    {id:"scramble",emoji:"🔀",title:"Word Scramble",desc:"Unscramble the answer letters",bg:C.warmL,accent:C.warm},
+    {id:"scramble",emoji:"🔀",title:"Word Scramble",desc:"AI scrambles a key word — rearrange the letter tiles",bg:C.warmL,accent:C.warm},
     {id:"speedrun",emoji:"🏃",title:"Speed Run",desc:"Answer as many as you can in 60 seconds",bg:"#FFFFF0",accent:"#D69E2E"},
     {id:"tower",emoji:"🏗️",title:"Answer Tower",desc:"Build a tower — answer correctly to stack blocks",bg:"#E6FFFA",accent:"#2C7A7B"},
     {id:"falling",emoji:"🧱",title:"Falling Blocks",desc:"Type the answer before the block falls",bg:C.purpleL,accent:C.purple},
+    {id:"listening",emoji:"🎧",title:"Listening Quiz",desc:"Listen to the question — answer without reading it",bg:"#f0fdf4",accent:"#059669"},
+    {id:"wordfill",emoji:"🔤",title:"Word Fill",desc:"Key words are blanked out — tap tiles to fill them in",bg:"#fff7ed",accent:"#ea580c"},
   ];
 
   return (
@@ -2669,186 +2717,195 @@ function MCQ({ cards, onBack }) {
   );
 }
 
+// ─── GAME: WORD SCRAMBLE (AI-simplified fill-the-blank + tiles) ───────────────
+// AI converts every card into a simpler short Q&A, then blanks the key word.
+// Player taps letter tiles to fill the blank. No typing required.
 function Scramble({ cards, onBack }) {
-  // Only use answers that are single words or short phrases (≤ 10 letters, letters only)
-  const [deck] = useState(() => {
-    const good = cards.filter(c => {
-      const a = (c.answer || "").trim();
-      // allow letters and single spaces, max 10 letters total (ignore spaces for length)
-      return a.length >= 2 && a.replace(/\s/g,"").length <= 10 && /^[a-zA-Z\s]+$/.test(a);
-    });
-    return [...good].sort(() => Math.random() - .5).slice(0, 10);
-  });
+  const [simplified, setSimplified] = useState(null); // null while loading
+  const [loadErr,    setLoadErr]    = useState(false);
 
-  const [curr,     setCurr]    = useState(0);
-  const [answer,   setAnswer]  = useState([]); // {id, letter} placed in answer row
-  const [pool,     setPool]    = useState([]); // {id, letter, used} scrambled source tiles
-  const [result,   setResult]  = useState(null); // null | "correct" | "wrong"
-  const [score,    setScore]   = useState(0);
-  const [done,     setDone]    = useState(false);
-  const [checking, setChecking]= useState(false);
-
-  // Build tile pool for current card
-  const buildPool = (cardIdx) => {
-    const word = (deck[cardIdx]?.answer || "").trim();
-    const letters = word.split("").filter(l => l !== " ");
-    // Shuffle
-    let arr = letters.map((l, i) => ({ id: `t${cardIdx}_${i}`, letter: l, used: false }));
-    let tries = 0;
-    while (arr.map(x=>x.letter).join("") === letters.join("") && tries++ < 30)
-      arr = [...arr].sort(() => Math.random() - .5);
-    return arr;
-  };
-
-  // Re-init tiles whenever the card changes
+  // Step 1: ask AI to produce 10 simplified Q→single-word-answer pairs
   useEffect(() => {
-    setPool(buildPool(curr));
-    setAnswer([]);
-    setResult(null);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [curr]);
+    (async () => {
+      try {
+        const sample = cards.slice(0, 20).map((c,i) => `${i+1}. Q: ${c.question} | A: ${c.answer}`).join("\n");
+        const raw = await callClaude(
+          "You are a quiz simplifier. Reply ONLY with a valid JSON array. No markdown, no explanation.",
+          `Here are study cards:\n${sample}\n\nCreate 10 simple fill-in-the-blank items from these cards.
+For each one:
+- Write a short simple sentence with ONE important word replaced by _____
+- The answer must be that ONE word (1-8 letters, letters only, no spaces)
+- Keep the sentence under 12 words
 
-  const card = deck[curr];
-  if (!card || deck.length === 0) return (
+Reply ONLY with this JSON array (no markdown):
+[{"sentence":"Photosynthesis happens in the _____ of a plant","word":"LEAVES"},...]`
+        );
+        const clean = raw.replace(/```json|```/g,"").trim();
+        const parsed = JSON.parse(clean);
+        // validate
+        const valid = parsed
+          .filter(x => x.sentence && x.word && /^[A-Za-z]{1,8}$/.test(x.word))
+          .slice(0, 10)
+          .map(x => ({ ...x, word: x.word.toUpperCase() }));
+        if (valid.length === 0) throw new Error("No valid items");
+        setSimplified(valid);
+      } catch(e) {
+        console.error("Scramble simplify error:", e);
+        // Fallback: use original cards, take first word of answer
+        const fallback = cards.slice(0,10).map(c => {
+          const w = (c.answer||"").replace(/[^a-zA-Z]/g,"").slice(0,8).toUpperCase() || "WORD";
+          return { sentence: c.question.slice(0,60) + " _____", word: w };
+        });
+        setSimplified(fallback);
+      }
+    })();
+  }, []);
+
+  if (!simplified) return (
     <div style={{ textAlign:"center", padding:"60px 20px" }}>
-      <p style={{ fontSize:18, fontWeight:700, color:C.text, marginBottom:8 }}>Not enough short-word cards</p>
-      <p style={{ fontSize:14, color:C.muted, marginBottom:24 }}>Word Scramble works best with single-word answers under 10 letters.</p>
-      <button onClick={onBack} style={{ background:C.warm, color:"#fff", border:"none", borderRadius:12, padding:"12px 28px", fontSize:15, fontWeight:700, cursor:"pointer" }}>← Back</button>
+      <div style={{ fontSize:40, marginBottom:16 }}>✨</div>
+      <p style={{ fontSize:16, fontWeight:700, color:C.text, marginBottom:8 }}>Preparing your puzzle…</p>
+      <p style={{ fontSize:13, color:C.muted }}>AI is simplifying the cards for you</p>
     </div>
   );
 
-  // Move tile from pool → answer
-  const pickTile = (tile) => {
-    if (result || tile.used) return;
-    setPool(prev => prev.map(t => t.id === tile.id ? {...t, used:true} : t));
-    setAnswer(prev => [...prev, {id: tile.id, letter: tile.letter}]);
+  return <ScrambleGame deck={simplified} onBack={onBack} />;
+}
+
+function ScrambleGame({ deck, onBack }) {
+  const [curr,     setCurr]    = useState(0);
+  const [pool,     setPool]    = useState([]);
+  const [placed,   setPlaced]  = useState([]);
+  const [result,   setResult]  = useState(null);
+  const [score,    setScore]   = useState(0);
+  const [done,     setDone]    = useState(false);
+
+  const buildPool = (idx) => {
+    const word = deck[idx]?.word || "";
+    let arr = word.split("").map((l,i) => ({ id:`sc_${idx}_${i}`, letter:l, used:false }));
+    let t = 0;
+    while (arr.map(x=>x.letter).join("") === word && t++ < 30)
+      arr = [...arr].sort(() => Math.random()-.5);
+    return arr;
   };
 
-  // Remove last tile from answer → back to pool
-  const unpick = (tileId) => {
-    if (result) return;
-    setAnswer(prev => prev.filter(t => t.id !== tileId));
-    setPool(prev => prev.map(t => t.id === tileId ? {...t, used:false} : t));
-  };
+  useEffect(() => {
+    setPool(buildPool(curr));
+    setPlaced([]);
+    setResult(null);
+  }, [curr]);
 
-  const clearAnswer = () => {
-    if (result) return;
-    setAnswer([]);
-    setPool(prev => prev.map(t => ({...t, used:false})));
-  };
+  const pick   = (tile) => { if (result||tile.used) return; setPool(p=>p.map(t=>t.id===tile.id?{...t,used:true}:t)); setPlaced(p=>[...p,{id:tile.id,letter:tile.letter}]); };
+  const remove = (id)   => { if (result) return; setPlaced(p=>p.filter(t=>t.id!==id)); setPool(p=>p.map(t=>t.id===id?{...t,used:false}:t)); };
+  const clear  = ()     => { if (result) return; setPlaced([]); setPool(p=>p.map(t=>({...t,used:false}))); };
 
-  const check = async () => {
-    if (result || answer.length === 0 || checking) return;
-    const composed = answer.map(t => t.letter).join("");
-    setChecking(true);
-    const ok = await aiCheckAnswer(card.question, card.answer, composed);
-    setChecking(false);
+  const check = () => {
+    if (result || placed.length===0) return;
+    const typed = placed.map(t=>t.letter).join("");
+    const ok = typed === deck[curr].word;
     setResult(ok ? "correct" : "wrong");
-    if (ok) setScore(s => s + 1);
+    if (ok) setScore(s=>s+1);
   };
 
   const next = () => {
-    if (curr + 1 >= deck.length) { setDone(true); return; }
-    setCurr(c => c + 1);
+    if (curr+1 >= deck.length) { setDone(true); return; }
+    setCurr(c=>c+1);
   };
 
   if (done) return <GResults score={score} total={deck.length} onBack={onBack} />;
 
-  const composed = answer.map(t => t.letter).join("");
-  const isComplete = answer.length === pool.length;
+  const item = deck[curr];
+  const sentenceParts = item.sentence.split("_____");
 
   return (
     <div style={{ maxWidth:520, margin:"0 auto" }}>
       <GHeader title="Word Scramble" score={score} curr={curr} total={deck.length} onBack={onBack} accent={C.warm} />
 
-      {/* Question card */}
-      <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:18, padding:"20px 22px", marginBottom:16 }}>
-        <p style={{ fontSize:11, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:"uppercase", marginBottom:7 }}>Unscramble the answer</p>
-        <p style={{ fontSize:17, color:C.text, lineHeight:1.55, fontWeight:600 }}>{card.question}</p>
+      {/* Sentence with inline answer slot */}
+      <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:18, padding:"22px 24px", marginBottom:16 }}>
+        <p style={{ fontSize:11, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:"uppercase", marginBottom:12 }}>Fill in the blank</p>
+        <p style={{ fontSize:18, color:C.text, lineHeight:1.8, fontWeight:500 }}>
+          {sentenceParts[0]}
+          <span style={{
+            display:"inline-block", minWidth:80, padding:"2px 10px",
+            background: result==="correct"?"#f0fdf4": result==="wrong"?"#fff1f1":"#f0f4ff",
+            border:`2px solid ${result==="correct"?"#16a34a":result==="wrong"?C.red:C.accentS}`,
+            borderRadius:8, marginLeft:2, marginRight:2,
+            color: result==="correct"?"#16a34a": result==="wrong"?C.red: C.accent,
+            fontWeight:800, fontSize:17, letterSpacing:1,
+            transition:"all .2s", verticalAlign:"middle"
+          }}>
+            {placed.length>0 ? placed.map(t=>t.letter).join("") : "?"}
+          </span>
+          {sentenceParts[1] || ""}
+        </p>
       </div>
 
-      {/* Answer drop zone */}
-      <div style={{
-        minHeight:62, padding:"10px 12px", marginBottom:10,
-        background: result==="correct" ? "#f0fdf4" : result==="wrong" ? "#fff1f1" : "#f8f9ff",
-        border: `2.5px ${result ? "solid" : "dashed"} ${result==="correct" ? "#16a34a" : result==="wrong" ? C.red : C.accentS}`,
-        borderRadius:14, display:"flex", flexWrap:"wrap", gap:7, alignItems:"center",
-        transition:"all .2s"
-      }}>
-        {answer.length === 0 && !result && (
-          <span style={{ color:C.muted, fontSize:13, fontStyle:"italic" }}>Tap letters below to build your answer…</span>
-        )}
-        {answer.map((tile, pos) => (
-          <button key={tile.id} onClick={() => unpick(tile.id)} disabled={!!result}
-            title="Tap to remove"
-            style={{
-              width:42, height:46,
-              background: result==="correct" ? "#16a34a" : result==="wrong" ? C.red : C.accent,
-              color:"#fff", border:"none", borderRadius:10,
-              fontSize:20, fontWeight:800,
-              cursor: result ? "default" : "pointer",
-              boxShadow:"0 2px 8px rgba(0,0,0,.18)",
-              transition:"all .15s",
-              transform: result ? "none" : "translateY(-1px)"
-            }}>
-            {tile.letter.toUpperCase()}
-          </button>
-        ))}
-      </div>
-
-      {/* Result message */}
+      {/* Result banner */}
       {result && (
-        <div style={{ textAlign:"center", marginBottom:10 }}>
-          <span style={{ fontSize:15, fontWeight:700, color: result==="correct" ? "#16a34a" : C.red }}>
-            {result==="correct" ? "✓ Correct!" : `✗ Answer: ${card.answer}`}
+        <div style={{ textAlign:"center", marginBottom:12, padding:"10px", borderRadius:12,
+          background:result==="correct"?"#f0fdf4":"#fff1f1" }}>
+          <span style={{ fontSize:16, fontWeight:800, color:result==="correct"?"#16a34a":C.red }}>
+            {result==="correct" ? "✓ Correct!" : `✗ The word was: ${item.word}`}
           </span>
         </div>
       )}
 
-      {/* Scrambled source tiles */}
+      {/* Scrambled tiles */}
       {!result && (
-        <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"center", padding:"8px 0 16px" }}>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:10, justifyContent:"center", padding:"4px 0 18px" }}>
           {pool.map(tile => (
-            <button key={tile.id} onClick={() => pickTile(tile)}
-              disabled={tile.used}
-              style={{
-                width:48, height:54,
-                background: tile.used ? "#e8e8e8" : C.warmL,
-                color: tile.used ? "#bbb" : C.warm,
-                border: `2.5px solid ${tile.used ? "#ddd" : C.warm}`,
-                borderRadius:12, fontSize:22, fontWeight:800,
-                cursor: tile.used ? "default" : "pointer",
-                transition:"all .14s",
-                transform: tile.used ? "scale(0.88)" : "scale(1)",
-                boxShadow: tile.used ? "none" : "0 3px 10px rgba(0,0,0,.14)",
-                opacity: tile.used ? 0.45 : 1
-              }}>
-              {tile.letter.toUpperCase()}
-            </button>
+            <button key={tile.id} onClick={() => pick(tile)} disabled={tile.used} style={{
+              width:52, height:58, fontSize:24, fontWeight:900,
+              background: tile.used?"#ececec":C.warmL,
+              color: tile.used?"#bbb":C.warm,
+              border:`2.5px solid ${tile.used?"#ddd":C.warm}`,
+              borderRadius:14, cursor:tile.used?"default":"pointer",
+              transition:"all .12s",
+              transform:tile.used?"scale(.85)":"scale(1)",
+              boxShadow:tile.used?"none":"0 4px 12px rgba(0,0,0,.12)",
+              opacity:tile.used?.35:1
+            }}>{tile.letter}</button>
           ))}
         </div>
       )}
 
-      {/* Action buttons */}
+      {/* Answer tray - placed tiles */}
+      {placed.length > 0 && !result && (
+        <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"center", marginBottom:14 }}>
+          {placed.map(tile => (
+            <button key={tile.id} onClick={() => remove(tile.id)} style={{
+              width:52, height:58, fontSize:24, fontWeight:900,
+              background:C.accent, color:"#fff", border:"none",
+              borderRadius:14, cursor:"pointer",
+              boxShadow:"0 3px 10px rgba(0,0,0,.2)",
+              transition:"all .12s"
+            }} title="Tap to remove">{tile.letter}</button>
+          ))}
+        </div>
+      )}
+
+      {/* Buttons */}
       {!result ? (
         <div style={{ display:"flex", gap:8 }}>
-          <button onClick={clearAnswer} disabled={answer.length === 0}
-            style={{ flex:1, background:"#eee", color:answer.length>0?"#555":"#bbb", border:"none", borderRadius:12, padding:"12px", fontSize:14, fontWeight:700, cursor:answer.length>0?"pointer":"not-allowed" }}>
+          <button onClick={clear} disabled={placed.length===0}
+            style={{ flex:1, background:"#eee", color:placed.length>0?"#555":"#bbb", border:"none", borderRadius:12, padding:"13px", fontSize:14, fontWeight:700, cursor:placed.length>0?"pointer":"not-allowed" }}>
             Clear
           </button>
-          <button onClick={check} disabled={answer.length === 0 || checking}
-            style={{ flex:2, background:answer.length>0 ? C.warm : "#ccc", color:"#fff", border:"none", borderRadius:12, padding:"12px", fontSize:15, fontWeight:700, cursor:answer.length>0?"pointer":"not-allowed", transition:"background .15s" }}>
-            {checking ? "Checking…" : isComplete ? "Check ✓" : `Check (${answer.length}/${pool.length})`}
+          <button onClick={check} disabled={placed.length===0}
+            style={{ flex:2, background:placed.length>0?C.warm:"#ccc", color:"#fff", border:"none", borderRadius:12, padding:"13px", fontSize:15, fontWeight:700, cursor:placed.length>0?"pointer":"not-allowed", transition:"background .15s" }}>
+            Check ✓
           </button>
         </div>
       ) : (
-        <button onClick={next} style={{ width:"100%", background:C.warm, color:"#fff", border:"none", borderRadius:12, padding:"13px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
-          {curr + 1 >= deck.length ? "See Results 🎉" : "Next →"}
+        <button onClick={next} style={{ width:"100%", background:C.warm, color:"#fff", border:"none", borderRadius:12, padding:"14px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
+          {curr+1>=deck.length ? "See Results 🎉" : "Next →"}
         </button>
       )}
     </div>
   );
 }
+
 
 function Match({ cards, onBack }) {
   const count=Math.min(cards.length,6);
@@ -3693,6 +3750,522 @@ Is the student correct? Reply only YES or NO.`
     </div>
   );
 }
+
+
+// ─── GAME: WORD FILL ─────────────────────────────────────────────────────────
+// AI picks the most important word in the answer, blanks it out,
+// player taps letter tiles to fill it in (no typing).
+function WordFill({ cards, onBack }) {
+  const accent = "#ea580c";
+  const accentL = "#fff7ed";
+
+  // For each card, prepare a "blank" puzzle. We'll do this lazily per card.
+  const [deck] = useState(() => [...cards].sort(() => Math.random() - .5).slice(0, 12));
+  const [curr, setCurr] = useState(0);
+  const [puzzle, setPuzzle] = useState(null);   // { sentence, blank, letters, answer }
+  const [pool, setPool] = useState([]);          // [{id,letter,used}]
+  const [placed, setPlaced] = useState([]);      // [{id,letter}]
+  const [result, setResult] = useState(null);
+  const [score, setScore] = useState(0);
+  const [done, setDone] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [checking, setChecking] = useState(false);
+
+  const buildTiles = (word) => {
+    const letters = word.toUpperCase().split("");
+    let arr = letters.map((l, i) => ({ id: `wf_${curr}_${i}`, letter: l, used: false }));
+    let tries = 0;
+    while (arr.map(x => x.letter).join("") === letters.join("") && tries++ < 30)
+      arr = [...arr].sort(() => Math.random() - .5);
+    return arr;
+  };
+
+  const loadPuzzle = async (idx) => {
+    setLoading(true);
+    setPool([]);
+    setPlaced([]);
+    setResult(null);
+    setPuzzle(null);
+    const card = deck[idx];
+    if (!card) { setDone(true); return; }
+    try {
+      // Ask AI to pick the single most important word to blank out
+      const raw = await callClaude(
+        "You are a quiz maker. Reply with ONLY a JSON object, no markdown, no explanation.",
+        `Given this Q&A pair:
+Q: ${card.question}
+A: ${card.answer}
+
+Pick the single most important keyword from the ANSWER (1-10 letters, letters only).
+Return ONLY this JSON: {"word":"THEWORD","sentence":"The answer with _____ where the word was"}`
+      );
+      let parsed;
+      try {
+        parsed = JSON.parse(raw.trim().replace(/```json|```/g, ""));
+      } catch {
+        // Fallback: use first word of answer
+        const w = card.answer.replace(/[^a-zA-Z ]/g, "").trim().split(/\s+/)[0] || "word";
+        parsed = { word: w, sentence: card.answer.replace(new RegExp(w, "i"), "_____") };
+      }
+      const word = (parsed.word || "word").toUpperCase().replace(/[^A-Z]/g, "");
+      const sentence = parsed.sentence || card.answer;
+      setPuzzle({ sentence, word, question: card.question });
+      setPool(buildTiles(word));
+    } catch {
+      // Fallback
+      const w = (card.answer || "word").replace(/[^a-zA-Z]/g, "").slice(0, 8).toUpperCase();
+      setPuzzle({ sentence: card.answer, word: w, question: card.question });
+      setPool(buildTiles(w));
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { loadPuzzle(curr); }, [curr]);
+
+  const pickTile = (tile) => {
+    if (result || tile.used) return;
+    setPool(prev => prev.map(t => t.id === tile.id ? { ...t, used: true } : t));
+    setPlaced(prev => [...prev, { id: tile.id, letter: tile.letter }]);
+  };
+
+  const removeTile = (tileId) => {
+    if (result) return;
+    setPlaced(prev => prev.filter(t => t.id !== tileId));
+    setPool(prev => prev.map(t => t.id === tileId ? { ...t, used: false } : t));
+  };
+
+  const clearAll = () => {
+    if (result) return;
+    setPlaced([]);
+    setPool(prev => prev.map(t => ({ ...t, used: false })));
+  };
+
+  const check = async () => {
+    if (!puzzle || result || placed.length === 0 || checking) return;
+    setChecking(true);
+    const typed = placed.map(t => t.letter).join("");
+    const ok = await aiCheckAnswer(puzzle.question, puzzle.word, typed);
+    setChecking(false);
+    setResult(ok ? "correct" : "wrong");
+    if (ok) setScore(s => s + 1);
+  };
+
+  const next = () => {
+    if (curr + 1 >= deck.length) { setDone(true); return; }
+    setCurr(c => c + 1);
+  };
+
+  if (done) return <GResults score={score} total={deck.length} onBack={onBack} />;
+
+  const card = deck[curr];
+
+  return (
+    <div style={{ maxWidth: 520, margin: "0 auto" }}>
+      <GHeader title="Word Fill" score={score} curr={curr} total={deck.length} onBack={onBack} accent={accent} />
+
+      {/* Question */}
+      <div style={{ background: "#fff7ed", border: `1.5px solid ${accent}33`, borderRadius: 18, padding: "20px 22px", marginBottom: 14 }}>
+        <p style={{ fontSize: 11, fontWeight: 700, color: accent, letterSpacing: 1, textTransform: "uppercase", marginBottom: 7 }}>Fill in the blank</p>
+        <p style={{ fontSize: 15, fontWeight: 600, color: "#1a1a2e", lineHeight: 1.55, marginBottom: 10 }}>{card.question}</p>
+        {/* Sentence with blank */}
+        {puzzle && !loading && (
+          <p style={{ fontSize: 17, color: "#374151", lineHeight: 1.7, background: "#fff", borderRadius: 10, padding: "12px 14px", border: `1px solid ${accent}22` }}>
+            {puzzle.sentence.replace("_____",
+              placed.length > 0
+                ? `[${placed.map(t => t.letter).join("")}]`
+                : "[ _____ ]"
+            )}
+          </p>
+        )}
+        {loading && <div style={{ textAlign: "center", padding: "20px 0", color: "#999", fontSize: 13 }}>✨ Preparing puzzle…</div>}
+      </div>
+
+      {/* Answer tray */}
+      {!loading && puzzle && (
+        <>
+          <div style={{
+            minHeight: 58, padding: "10px 12px", marginBottom: 10,
+            background: result === "correct" ? "#f0fdf4" : result === "wrong" ? "#fff1f1" : "#f9fafb",
+            border: `2.5px ${result ? "solid" : "dashed"} ${result === "correct" ? "#16a34a" : result === "wrong" ? "#dc2626" : accent}`,
+            borderRadius: 14, display: "flex", flexWrap: "wrap", gap: 7, alignItems: "center", transition: "all .2s"
+          }}>
+            {placed.length === 0 && !result && (
+              <span style={{ color: "#9ca3af", fontSize: 13, fontStyle: "italic" }}>Tap letters to build the missing word…</span>
+            )}
+            {placed.map(tile => (
+              <button key={tile.id} onClick={() => removeTile(tile.id)} disabled={!!result}
+                style={{ width: 42, height: 46, background: result === "correct" ? "#16a34a" : result === "wrong" ? "#dc2626" : accent, color: "#fff", border: "none", borderRadius: 10, fontSize: 20, fontWeight: 800, cursor: result ? "default" : "pointer", boxShadow: "0 2px 8px rgba(0,0,0,.18)" }}>
+                {tile.letter}
+              </button>
+            ))}
+          </div>
+
+          {result && (
+            <p style={{ textAlign: "center", marginBottom: 10, fontSize: 15, fontWeight: 700, color: result === "correct" ? "#16a34a" : "#dc2626" }}>
+              {result === "correct" ? "✓ Correct!" : `✗ Answer: ${puzzle.word}`}
+            </p>
+          )}
+
+          {/* Letter tiles */}
+          {!result && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", padding: "6px 0 14px" }}>
+              {pool.map(tile => (
+                <button key={tile.id} onClick={() => pickTile(tile)} disabled={tile.used}
+                  style={{ width: 48, height: 54, background: tile.used ? "#e5e7eb" : accentL, color: tile.used ? "#9ca3af" : accent, border: `2.5px solid ${tile.used ? "#d1d5db" : accent}`, borderRadius: 12, fontSize: 22, fontWeight: 800, cursor: tile.used ? "default" : "pointer", transition: "all .14s", transform: tile.used ? "scale(.88)" : "scale(1)", boxShadow: tile.used ? "none" : "0 3px 10px rgba(0,0,0,.12)", opacity: tile.used ? 0.4 : 1 }}>
+                  {tile.letter}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {!result ? (
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={clearAll} disabled={placed.length === 0}
+                style={{ flex: 1, background: "#eee", color: placed.length > 0 ? "#555" : "#bbb", border: "none", borderRadius: 12, padding: "12px", fontSize: 14, fontWeight: 700, cursor: placed.length > 0 ? "pointer" : "not-allowed" }}>Clear</button>
+              <button onClick={check} disabled={placed.length === 0 || checking}
+                style={{ flex: 2, background: placed.length > 0 ? accent : "#ccc", color: "#fff", border: "none", borderRadius: 12, padding: "12px", fontSize: 15, fontWeight: 700, cursor: placed.length > 0 ? "pointer" : "not-allowed" }}>
+                {checking ? "Checking…" : `Check (${placed.length}/${pool.length})`}
+              </button>
+            </div>
+          ) : (
+            <button onClick={next} style={{ width: "100%", background: accent, color: "#fff", border: "none", borderRadius: 12, padding: "13px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
+              {curr + 1 >= deck.length ? "See Results 🎉" : "Next →"}
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── GAME: LISTENING QUIZ ─────────────────────────────────────────────────────
+// The question is read aloud (TTS). Student can't see it — must listen.
+// They answer by typing. AI judges correctness.
+function ListeningGame({ cards, onBack }) {
+  const accent = "#059669";
+  const accentL = "#f0fdf4";
+  const [deck] = useState(() => [...cards].sort(() => Math.random() - .5).slice(0, 15));
+  const [curr, setCurr] = useState(0);
+  const [inp, setInp] = useState("");
+  const [result, setResult] = useState(null);
+  const [score, setScore] = useState(0);
+  const [done, setDone] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const [hasPlayed, setHasPlayed] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+  const inputRef = useRef(null);
+
+  const speak = (text) => {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.rate = 0.88;
+    utter.pitch = 1;
+    utter.onstart = () => setSpeaking(true);
+    utter.onend = () => { setSpeaking(false); setHasPlayed(true); inputRef.current?.focus(); };
+    utter.onerror = () => setSpeaking(false);
+    window.speechSynthesis.speak(utter);
+  };
+
+  // Auto-play when card changes
+  useEffect(() => {
+    setHasPlayed(false);
+    setRevealed(false);
+    setTimeout(() => {
+      const card = deck[curr];
+      if (card) speak(card.question);
+    }, 400);
+    return () => window.speechSynthesis?.cancel();
+  }, [curr]);
+
+  const check = async () => {
+    if (!inp.trim() || checking || result) return;
+    setChecking(true);
+    const card = deck[curr];
+    const ok = await aiCheckAnswer(card.question, card.answer, inp);
+    setChecking(false);
+    setResult(ok ? "correct" : "wrong");
+    if (ok) setScore(s => s + 1);
+  };
+
+  const next = () => {
+    if (curr + 1 >= deck.length) { setDone(true); return; }
+    setCurr(c => c + 1);
+    setInp("");
+    setResult(null);
+    setRevealed(false);
+  };
+
+  if (done) return <GResults score={score} total={deck.length} onBack={onBack} />;
+  const card = deck[curr];
+
+  return (
+    <div style={{ maxWidth: 520, margin: "0 auto" }}>
+      <GHeader title="Listening Quiz" score={score} curr={curr} total={deck.length} onBack={onBack} accent={accent} />
+
+      {/* Audio card */}
+      <div style={{ background: speaking ? "#ecfdf5" : accentL, border: `2px solid ${speaking ? accent : accent + "33"}`, borderRadius: 20, padding: "30px 24px", marginBottom: 18, textAlign: "center", transition: "all .3s" }}>
+        <div style={{ fontSize: 48, marginBottom: 14 }}>{speaking ? "🔊" : "🎧"}</div>
+        <p style={{ fontSize: 14, color: speaking ? accent : "#6b7280", fontWeight: 600, marginBottom: 18 }}>
+          {speaking ? "Listen carefully…" : hasPlayed ? "Heard it? Type your answer below" : "Press play to hear the question"}
+        </p>
+        <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+          <button onClick={() => speak(card.question)} disabled={speaking}
+            style={{ background: accent, color: "#fff", border: "none", borderRadius: 12, padding: "11px 24px", fontSize: 14, fontWeight: 700, cursor: speaking ? "not-allowed" : "pointer", opacity: speaking ? 0.6 : 1, display: "flex", alignItems: "center", gap: 8 }}>
+            {speaking ? "🔊 Playing…" : "▶ Play Question"}
+          </button>
+          {hasPlayed && !result && (
+            <button onClick={() => setRevealed(r => !r)}
+              style={{ background: "#fff", color: "#6b7280", border: "1.5px solid #e5e7eb", borderRadius: 12, padding: "11px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+              {revealed ? "🙈 Hide" : "👁 Peek"}
+            </button>
+          )}
+        </div>
+        {revealed && !result && (
+          <p style={{ marginTop: 14, fontSize: 15, color: "#374151", fontStyle: "italic", background: "#fff", borderRadius: 10, padding: "10px 14px", border: "1px solid #e5e7eb" }}>
+            "{card.question}"
+          </p>
+        )}
+      </div>
+
+      {/* Answer */}
+      {result ? (
+        <div style={{ textAlign: "center", background: result === "correct" ? "#f0fdf4" : "#fff1f1", border: `1.5px solid ${result === "correct" ? "#16a34a" : "#dc2626"}33`, borderRadius: 16, padding: "20px 24px", marginBottom: 14 }}>
+          <div style={{ fontSize: 48, marginBottom: 10 }}>{result === "correct" ? "✅" : "❌"}</div>
+          <p style={{ fontSize: 16, fontWeight: 700, color: result === "correct" ? "#16a34a" : "#dc2626", marginBottom: 8 }}>
+            {result === "correct" ? "Correct!" : "Not quite"}
+          </p>
+          <p style={{ fontSize: 13, color: "#6b7280", marginBottom: 4 }}>Question was:</p>
+          <p style={{ fontSize: 14, color: "#374151", fontStyle: "italic", marginBottom: result === "correct" ? 0 : 10 }}>"{card.question}"</p>
+          {result !== "correct" && <>
+            <p style={{ fontSize: 13, color: "#6b7280", marginBottom: 4 }}>Correct answer:</p>
+            <p style={{ fontSize: 15, fontWeight: 700, color: "#374151" }}>{card.answer}</p>
+          </>}
+        </div>
+      ) : (
+        <div style={{ display: "flex", gap: 10 }}>
+          <input ref={inputRef} value={inp} onChange={e => setInp(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && check()}
+            placeholder={hasPlayed ? "Type your answer…" : "Listen first, then type here"}
+            disabled={!hasPlayed || checking}
+            style={{ flex: 1, border: `2px solid ${!hasPlayed ? "#e5e7eb" : C.border}`, borderRadius: 12, padding: "12px 16px", fontSize: 15, outline: "none", color: C.text, background: !hasPlayed ? "#f9fafb" : "#fff", transition: "border .2s" }} />
+          <button onClick={check} disabled={!inp.trim() || checking || !hasPlayed}
+            style={{ background: inp.trim() && hasPlayed ? accent : "#ccc", color: "#fff", border: "none", borderRadius: 12, padding: "12px 22px", fontSize: 14, fontWeight: 700, cursor: inp.trim() && hasPlayed ? "pointer" : "not-allowed" }}>
+            {checking ? "…" : "✓"}
+          </button>
+        </div>
+      )}
+
+      {result && (
+        <button onClick={next} style={{ marginTop: 12, width: "100%", background: accent, color: "#fff", border: "none", borderRadius: 12, padding: "13px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
+          {curr + 1 >= deck.length ? "See Results 🎉" : "Next →"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+
+// ─── PODCAST PLAYER ───────────────────────────────────────────────────────────
+function PodcastPlayer({ script, loading, topic, onClose }) {
+  const [playing,   setPlaying]   = useState(false);
+  const [paused,    setPaused]    = useState(false);
+  const [progress,  setProgress]  = useState(0);   // 0-100
+  const [speed,     setSpeed]     = useState(1);
+  const [voice,     setVoice]     = useState(null);
+  const [voices,    setVoices]    = useState([]);
+  const utterRef    = useRef(null);
+  const charsSpoken = useRef(0);
+  const totalChars  = useRef(1);
+
+  // Load available voices
+  useEffect(() => {
+    const load = () => {
+      const v = window.speechSynthesis.getVoices().filter(v => v.lang.startsWith("en"));
+      setVoices(v);
+      if (v.length > 0) setVoice(v.find(x => x.name.toLowerCase().includes("google")) || v[0]);
+    };
+    load();
+    window.speechSynthesis.onvoiceschanged = load;
+    return () => { window.speechSynthesis.cancel(); };
+  }, []);
+
+  const stop = () => {
+    window.speechSynthesis.cancel();
+    setPlaying(false);
+    setPaused(false);
+    setProgress(0);
+    charsSpoken.current = 0;
+  };
+
+  const play = () => {
+    if (!script || loading) return;
+    if (paused) {
+      window.speechSynthesis.resume();
+      setPlaying(true);
+      setPaused(false);
+      return;
+    }
+    window.speechSynthesis.cancel();
+    charsSpoken.current = 0;
+    totalChars.current = script.length || 1;
+
+    // Split into ~200-char sentences for progress tracking
+    const sentences = script.match(/[^.!?]+[.!?]+/g) || [script];
+    let charPos = 0;
+    const utterances = sentences.map((sen, idx) => {
+      const u = new SpeechSynthesisUtterance(sen.trim());
+      u.rate  = speed;
+      u.pitch = 1.05;
+      u.lang  = "en-US";
+      if (voice) u.voice = voice;
+      const myStart = charPos;
+      charPos += sen.length;
+      const myEnd = charPos;
+      u.onstart = () => {
+        setPlaying(true);
+        setPaused(false);
+        setProgress(Math.round((myStart / totalChars.current) * 100));
+      };
+      u.onend = () => {
+        setProgress(Math.round((myEnd / totalChars.current) * 100));
+        if (idx === utterances.length - 1) {
+          setPlaying(false);
+          setPaused(false);
+          setProgress(100);
+        }
+      };
+      u.onerror = () => { setPlaying(false); setPaused(false); };
+      return u;
+    });
+
+    utterRef.current = utterances;
+    utterances.forEach(u => window.speechSynthesis.speak(u));
+    setPlaying(true);
+    setPaused(false);
+  };
+
+  const pause = () => {
+    if (window.speechSynthesis.speaking) {
+      window.speechSynthesis.pause();
+      setPaused(true);
+      setPlaying(false);
+    }
+  };
+
+  // When speed changes mid-play, restart
+  const changeSpeed = (s) => {
+    setSpeed(s);
+    if (playing || paused) { stop(); }
+  };
+
+  const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75];
+
+  // Estimate read time
+  const wordCount = script ? script.trim().split(/\s+/).length : 0;
+  const estMins   = Math.round((wordCount / 150) / speed * 10) / 10;
+
+  return (
+    <div style={{
+      marginTop:24, background:"linear-gradient(135deg,#1e1b4b,#312e81)",
+      borderRadius:20, overflow:"hidden",
+      boxShadow:"0 20px 60px rgba(30,27,75,.45)"
+    }}>
+      {/* Header */}
+      <div style={{ padding:"18px 22px 14px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+          <div style={{ width:42, height:42, borderRadius:12, background:"linear-gradient(135deg,#7c3aed,#a855f7)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0, boxShadow:"0 4px 12px rgba(124,58,237,.5)" }}>
+            🎙️
+          </div>
+          <div>
+            <p style={{ fontSize:11, color:"#a5b4fc", fontWeight:700, letterSpacing:1, textTransform:"uppercase", marginBottom:1 }}>Study Podcast</p>
+            <p style={{ fontSize:15, color:"#fff", fontWeight:700, margin:0 }}>{topic}</p>
+          </div>
+        </div>
+        <button onClick={onClose} style={{ background:"rgba(255,255,255,.1)", border:"none", borderRadius:8, width:30, height:30, color:"#a5b4fc", cursor:"pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
+      </div>
+
+      {loading ? (
+        <div style={{ padding:"30px 22px", textAlign:"center" }}>
+          <div style={{ display:"flex", gap:6, justifyContent:"center", marginBottom:12 }}>
+            {[0,1,2].map(i => (
+              <div key={i} style={{ width:10, height:10, borderRadius:"50%", background:"#7c3aed",
+                animation:"bounce 1.2s infinite", animationDelay:`${i*.2}s` }} />
+            ))}
+          </div>
+          <p style={{ color:"#a5b4fc", fontSize:14 }}>Writing your podcast script…</p>
+        </div>
+      ) : (
+        <>
+          {/* Progress bar */}
+          <div style={{ padding:"0 22px 4px" }}>
+            <div style={{ height:4, background:"rgba(255,255,255,.15)", borderRadius:2 }}>
+              <div style={{ height:"100%", width:`${progress}%`, background:"linear-gradient(90deg,#7c3aed,#a855f7)", borderRadius:2, transition:"width .4s" }} />
+            </div>
+            <div style={{ display:"flex", justifyContent:"space-between", marginTop:4 }}>
+              <span style={{ fontSize:11, color:"#6366f1" }}>{progress}%</span>
+              <span style={{ fontSize:11, color:"#6366f1" }}>~{estMins} min</span>
+            </div>
+          </div>
+
+          {/* Controls */}
+          <div style={{ padding:"12px 22px 18px" }}>
+            {/* Main playback buttons */}
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:14, marginBottom:16 }}>
+              <button onClick={stop} disabled={!playing && !paused && progress === 0}
+                style={{ width:40, height:40, borderRadius:"50%", background:"rgba(255,255,255,.1)", border:"none", color:"#a5b4fc", fontSize:18, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", opacity:(!playing&&!paused&&progress===0)?.4:1 }}>
+                ⏹
+              </button>
+              {!playing ? (
+                <button onClick={play} disabled={!script}
+                  style={{ width:60, height:60, borderRadius:"50%", background:"linear-gradient(135deg,#7c3aed,#a855f7)", border:"none", color:"#fff", fontSize:24, cursor:"pointer", boxShadow:"0 6px 20px rgba(124,58,237,.6)", display:"flex", alignItems:"center", justifyContent:"center", transition:"transform .15s" }}
+                  onMouseEnter={e=>e.currentTarget.style.transform="scale(1.08)"}
+                  onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
+                  {paused ? "▶" : progress===100 ? "↺" : "▶"}
+                </button>
+              ) : (
+                <button onClick={pause}
+                  style={{ width:60, height:60, borderRadius:"50%", background:"linear-gradient(135deg,#7c3aed,#a855f7)", border:"none", color:"#fff", fontSize:22, cursor:"pointer", boxShadow:"0 6px 20px rgba(124,58,237,.6)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  ⏸
+                </button>
+              )}
+              {/* Voice selector */}
+              {voices.length > 1 && (
+                <select value={voice?.name||""} onChange={e => { const v = voices.find(x=>x.name===e.target.value); setVoice(v); if(playing||paused)stop(); }}
+                  style={{ background:"rgba(255,255,255,.1)", border:"1px solid rgba(255,255,255,.2)", borderRadius:10, color:"#e0e7ff", fontSize:12, padding:"6px 10px", outline:"none", maxWidth:130, cursor:"pointer" }}>
+                  {voices.map(v => <option key={v.name} value={v.name} style={{background:"#1e1b4b"}}>{v.name.replace("Google ","").replace(" Online (Natural)","").slice(0,20)}</option>)}
+                </select>
+              )}
+            </div>
+
+            {/* Speed buttons */}
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+              <span style={{ fontSize:11, color:"#6366f1", marginRight:4, fontWeight:600 }}>SPEED</span>
+              {SPEEDS.map(s => (
+                <button key={s} onClick={() => changeSpeed(s)}
+                  style={{ padding:"4px 10px", borderRadius:20, border:`1.5px solid ${speed===s?"#7c3aed":"rgba(255,255,255,.15)"}`, background:speed===s?"#7c3aed":"transparent", color:speed===s?"#fff":"#a5b4fc", fontSize:12, fontWeight:700, cursor:"pointer", transition:"all .15s" }}>
+                  {s}×
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Script preview - collapsible */}
+          <details style={{ borderTop:"1px solid rgba(255,255,255,.08)" }}>
+            <summary style={{ padding:"10px 22px", color:"#6366f1", fontSize:12, fontWeight:700, cursor:"pointer", letterSpacing:.5, listStyle:"none", userSelect:"none" }}>
+              📄 VIEW SCRIPT
+            </summary>
+            <div style={{ padding:"0 22px 18px", maxHeight:220, overflowY:"auto" }}>
+              <p style={{ fontSize:13, color:"#c7d2fe", lineHeight:1.8, whiteSpace:"pre-wrap" }}>{script}</p>
+            </div>
+          </details>
+        </>
+      )}
+    </div>
+  );
+}
+
 
 // ─── MODAL ────────────────────────────────────────────────────────────────────
 function Modal({ children, onClose }) {
