@@ -654,14 +654,15 @@ function shadeHex(hex, amt) {
   const clamp = v => Math.min(255, Math.max(0, v));
   return `rgb(${clamp((n>>16&255)+amt)},${clamp((n>>8&255)+amt)},${clamp((n&255)+amt)})`;
 }
-// Unique ID per every field that can affect SVG rendering
-function avatarGid(ch) {
+// Unique ID per every field + size so header (36px) and modal (120px) SVGs never clash
+function avatarGid(ch, size) {
   const str = [
     ch.skin, ch.hair, ch.top, ch.eyes,
     ch.bg||"#dce8ff", ch.lipColor||"#d06060",
     ch.hairStyle||0, ch.topStyle||0, ch.eyeShape||0,
     ch.accessory||0, ch.eyebrow||0, ch.mouth||0,
-    ch.blush?1:0, ch.lips?1:0, ch.freckles?1:0
+    ch.blush?1:0, ch.lips?1:0, ch.freckles?1:0,
+    size||40
   ].join("|");
   let h = 5381;
   for (let i = 0; i < str.length; i++) { h = ((h << 5) + h) ^ str.charCodeAt(i); h = h >>> 0; }
@@ -679,7 +680,7 @@ function MiniAvatar({ character: ch, size = 40 }) {
   const td  = shadeHex(ch.top,   -28);
   const tl  = shadeHex(ch.top,    28);
   const bg  = ch.bg || "#dce8ff";
-  const gid = avatarGid(ch);
+  const gid = avatarGid(ch, s);
 
   // ── Hair ──────────────────────────────────────────────────────────────────
   const H = {
@@ -1081,7 +1082,7 @@ function CharacterModal({ character, onChange, onClose }) {
 
         {/* Live preview */}
         <div style={{background:"linear-gradient(155deg,#f0f4ff,#e4ecff)", padding:"18px 0 12px", display:"flex", flexDirection:"column", alignItems:"center", gap:10}}>
-          <div style={{borderRadius:"50%", overflow:"hidden", boxShadow:"0 6px 28px rgba(0,0,0,.2)", border:"3px solid #fff"}}>
+          <div style={{width:120, height:120, borderRadius:"50%", overflow:"hidden", flexShrink:0, boxShadow:"0 6px 28px rgba(0,0,0,.2)", border:"3px solid #fff"}}>
             <MiniAvatar character={ch} size={120}/>
           </div>
           <input value={ch.name||""} onChange={e=>onChange({...ch, name:e.target.value})} placeholder="Nickname…"
@@ -2699,20 +2700,12 @@ function Scramble({ cards, onBack }) {
     return arr;
   };
 
-  // Init pool for card 0
-  useState(() => { setPool(buildPool(0)); });
-  // Re-init when curr changes
-  const prevCurrRef = React.useRef(0);
-  if (prevCurrRef.current !== curr) {
-    prevCurrRef.current = curr;
-    // We'll do this via effect below
-  }
-
-  React.useEffect(() => {
+  // Re-init tiles whenever the card changes
+  useEffect(() => {
     setPool(buildPool(curr));
     setAnswer([]);
     setResult(null);
-  // eslint-disable-next-line
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [curr]);
 
   const card = deck[curr];
