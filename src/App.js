@@ -2801,7 +2801,7 @@ function NotesTab({ file, onUpdate, user, isGuest }) {
     };
     persistSaved([entry, ...savedNotes.filter(n => n.name !== entry.name)]);
     setNewNoteName(""); setShowSaveModal(false);
-    setSavedFeedback("✅ Saved as "" + entry.name + """);
+    setSavedFeedback("✅ Saved as \"" + entry.name + "\"");
     setTimeout(() => setSavedFeedback(""), 2500);
   };
   const loadNote  = (entry) => { setNotes(entry.text); setShowDropdown(false); };
