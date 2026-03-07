@@ -1028,9 +1028,15 @@ function ColorPicker({ value, onChange, onClose, label="" }) {
   const sqDrag  = useRef(false);
   const hueDrag = useRef(false);
 
-  // Push colour out on every hue/sv change
-  const curHex = hsvToHex(hue, sv.s, sv.v);
-  useEffect(() => { setHexIn(curHex); onChange(curHex); }, [hue, sv.s, sv.v]);
+  // Push colour out on every hue/sv change — skip the very first render
+  // so opening the picker doesn't immediately overwrite a preset click
+  const curHex  = hsvToHex(hue, sv.s, sv.v);
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) { mounted.current = true; return; }
+    setHexIn(curHex);
+    onChange(curHex);
+  }, [hue, sv.s, sv.v]);
 
   const posFromEvent = (e, el) => {
     const r = el.getBoundingClientRect();
@@ -1816,46 +1822,148 @@ function MiniAvatar({ character: ch, size = 40, uid = "" }) {
 // ─── AVATAR SWATCHES (top-level — proper hook support) ────────────────────────
 // Receives ch, field, vals, customColors, and all callbacks as props.
 // Never re-created on render — stable component identity = stable hooks.
+// ─── AVATAR ROW LABEL ────────────────────────────────────────────────────────
+function AvatarRow({ label, children }) {
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+      <p style={{ fontSize:10, fontWeight:800, color:"#aaa", letterSpacing:1.1,
+        margin:0, textTransform:"uppercase" }}>{label}</p>
+      <div>{children}</div>
+    </div>
+  );
+}
+
+// ─── AVATAR CHIP ─────────────────────────────────────────────────────────────
+// Pure top-level component — stable identity, no hooks issues.
+function AvatarChip({ ch, field, value, label, size=62, onApply }) {
+  const preview = { ...ch, [field]: value };
+  const sel = ch[field] === value;
+  const A = "#4361ee";
+  return (
+    <button
+      onClick={() => onApply(field, value)}
+      title={label}
+      style={{
+        display:"flex", flexDirection:"column", alignItems:"center", gap:5,
+        padding:"7px 6px 6px", borderRadius:14, border:"none", cursor:"pointer",
+        flexShrink:0,
+        background: sel ? "#eef1ff" : "#f5f6fa",
+        outline: sel ? `2.5px solid ${A}` : "2px solid transparent",
+        outlineOffset:2,
+        boxShadow: sel ? `0 0 0 1.5px #fff, 0 3px 12px rgba(67,97,238,.28)` : "0 1px 3px rgba(0,0,0,.07)",
+        transition:"background .12s, outline-color .12s, box-shadow .12s",
+      }}
+    >
+      <div style={{
+        width:size, height:size, borderRadius:"50%", overflow:"hidden", flexShrink:0,
+        boxShadow: sel ? `0 0 0 2.5px ${A}, 0 2px 8px rgba(67,97,238,.3)` : "0 1px 4px rgba(0,0,0,.13)",
+      }}>
+        <MiniAvatar character={preview} size={size} uid={field+String(value)} />
+      </div>
+      <span style={{
+        fontSize:9, fontWeight:700, letterSpacing:.2, textAlign:"center",
+        lineHeight:1.25, width:size+6, display:"block",
+        whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
+        color: sel ? A : "#666",
+      }}>{label}</span>
+    </button>
+  );
+}
+
+// ─── AVATAR CHIP GRID ────────────────────────────────────────────────────────
+function AvatarChipGrid({ ch, field, items, size=62, onApply }) {
+  return (
+    <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+      {items.map((item, i) => {
+        const value = typeof item === "object" ? item.id : i;
+        const label = typeof item === "object" ? item.label : item;
+        return (
+          <AvatarChip key={i} ch={ch} field={field} value={value}
+            label={label} size={size} onApply={onApply} />
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── AVATAR TOGGLE PAIR ───────────────────────────────────────────────────────
+function AvatarTogglePair({ ch, field, label, onEmoji, offLabel="Off", onApply }) {
+  const A = "#4361ee";
+  return (
+    <AvatarRow label={label}>
+      <div style={{ display:"flex", gap:10 }}>
+        {[false, true].map(val => {
+          const sel = !!ch[field] === val;
+          return (
+            <button key={String(val)} onClick={() => onApply(field, val)}
+              style={{
+                display:"flex", flexDirection:"column", alignItems:"center", gap:4,
+                padding:"7px 5px 5px", borderRadius:14, border:"none", cursor:"pointer",
+                background: sel ? "#eef1ff" : "#f5f6fa",
+                outline: sel ? `2.5px solid ${A}` : "2px solid transparent",
+                outlineOffset:2,
+                boxShadow: sel ? "0 2px 12px rgba(67,97,238,.28)" : "0 1px 3px rgba(0,0,0,.07)",
+                transition:"background .12s, outline-color .12s, box-shadow .12s",
+              }}>
+              <div style={{
+                width:66, height:66, borderRadius:"50%", overflow:"hidden",
+                boxShadow: sel ? `0 0 0 2.5px ${A}` : "0 1px 4px rgba(0,0,0,.14)",
+              }}>
+                <MiniAvatar character={{ ...ch, [field]: val }} size={66} uid={field+String(val)} />
+              </div>
+              <span style={{ fontSize:10, fontWeight:700, color: sel ? A : "#777" }}>
+                {val ? `${onEmoji} On` : offLabel}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </AvatarRow>
+  );
+}
+
+// ─── AVATAR SWATCHES ─────────────────────────────────────────────────────────
+// Top-level component with its own open/draft state.
+// Receives ch + callbacks as props — no stale closures.
 function AvatarSwatches({
   ch, field, vals, sz=26, showCustom=true,
   customColors, onApply, onApplyCustom, onRemoveCustom,
 }) {
-  const saved       = customColors[field] || [];
-  const [open, setOpen]   = useState(false);
-  const [draft, setDraft] = useState(ch[field] || vals[0] || "#888888");
+  const saved = customColors[field] || [];
+  const [open,  setOpen]  = useState(false);
+  const [draft, setDraft] = useState(() => ensureHex(ch[field] || vals[0] || "#888888"));
+  const A = "#4361ee";
 
-  // Sync draft when the active colour changes externally (e.g. preset click)
-  const prevField = useRef(ch[field]);
-  useEffect(() => {
-    if (prevField.current !== ch[field]) {
-      prevField.current = ch[field];
-      if (!open) setDraft(ch[field] || vals[0] || "#888888");
-    }
-  });
-
-  const handleLivePick = (hex) => {
-    setDraft(hex);
-    onApply(field, hex);       // live preview while dragging
-  };
-
-  const handleDone = () => {
-    onApplyCustom(field, draft); // save + select + close
-    setOpen(false);
-  };
-
-  const ACCENT = "#4361ee";
-  const selStyle = (isSelected) => ({
-    outline: isSelected ? `3px solid ${ACCENT}` : "3px solid transparent",
+  // Swatch selection ring helper
+  const ring = (isSel) => ({
+    outline: isSel ? `3px solid ${A}` : "3px solid transparent",
     outlineOffset: 2,
-    boxShadow: isSelected
+    boxShadow: isSel
       ? `0 0 0 1.5px #fff, 0 3px 10px rgba(67,97,238,.45)`
       : "0 1px 4px rgba(0,0,0,.18)",
     transition: "outline-color .1s, box-shadow .1s",
   });
 
+  const handleOpen = () => {
+    setDraft(ensureHex(ch[field] || vals[0] || "#888888"));
+    setOpen(o => !o);
+  };
+
+  // Live preview while dragging — does NOT save yet
+  const handleLivePick = (hex) => {
+    setDraft(hex);
+    onApply(field, hex);
+  };
+
+  // "Done" — save custom colour, mark as selected, close picker
+  const handleDone = () => {
+    setOpen(false);
+    onApplyCustom(field, draft);  // saves to list + selects
+  };
+
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-      {/* ── Swatch row ── */}
+      {/* ── Swatch + saved row ── */}
       <div style={{ display:"flex", flexWrap:"wrap", gap:7, alignItems:"center" }}>
 
         {/* Built-in presets */}
@@ -1865,7 +1973,7 @@ function AvatarSwatches({
             style={{
               width:sz, height:sz, borderRadius:"50%", background:v,
               cursor:"pointer", flexShrink:0, border:"none", padding:0,
-              ...selStyle(ch[field] === v),
+              ...ring(ch[field] === v),
             }}
           />
         ))}
@@ -1878,9 +1986,10 @@ function AvatarSwatches({
               style={{
                 width:sz, height:sz, borderRadius:"50%", background:v,
                 cursor:"pointer", border:"none", padding:0,
-                ...selStyle(ch[field] === v),
+                ...ring(ch[field] === v),
               }}
             />
+            {/* Remove button */}
             <button
               onClick={e => { e.stopPropagation(); onRemoveCustom(field, i); }}
               style={{
@@ -1898,12 +2007,12 @@ function AvatarSwatches({
         {/* "+" — always last */}
         {showCustom && (
           <button
-            onClick={() => { setDraft(ch[field] || vals[0] || "#888888"); setOpen(o => !o); }}
+            onClick={handleOpen}
             title="Custom colour"
             style={{
               width:sz, height:sz, borderRadius:"50%", flexShrink:0,
               cursor:"pointer", border:"2px dashed #bbb",
-              background: open ? ACCENT : "rgba(67,97,238,.06)",
+              background: open ? A : "rgba(67,97,238,.06)",
               display:"flex", alignItems:"center", justifyContent:"center",
               fontSize: sz > 22 ? 15 : 11,
               color: open ? "#fff" : "#888",
@@ -1913,7 +2022,7 @@ function AvatarSwatches({
         )}
       </div>
 
-      {/* ── Inline picker ── */}
+      {/* ── Inline colour picker ── */}
       {open && (
         <div style={{ borderRadius:16, overflow:"hidden", background:"#18182a",
           boxShadow:"0 6px 32px rgba(0,0,0,.4)" }}>
@@ -1928,45 +2037,43 @@ function AvatarSwatches({
   );
 }
 
-// ─── AVATAR SKIN SECTION (top-level — proper hook support) ────────────────────
+// ─── AVATAR SKIN SECTION ─────────────────────────────────────────────────────
 function AvatarSkinSection({
   ch, skinBase, setSkinBase, customColors,
   onApply, onApplyCustom, onRemoveCustom,
 }) {
   const SKINS = ["#FDDBB4","#F5C89A","#FFCBA4","#E8A87C","#D4956A","#C68642","#A0693A","#8D5524","#6B3A1F","#F4D6C8"];
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [draft, setDraft] = useState(ch.skin || "#FDDBB4");
+  const [draft, setDraft] = useState(() => ensureHex(ch.skin || "#FDDBB4"));
   const saved = customColors["skin"] || [];
-  const ACCENT = "#4361ee";
+  const A = "#4361ee";
 
-  const selStyle = (isSelected) => ({
-    outline: isSelected ? `3px solid ${ACCENT}` : "3px solid transparent",
+  const ring = (isSel) => ({
+    outline: isSel ? `3px solid ${A}` : "3px solid transparent",
     outlineOffset: 2,
-    boxShadow: isSelected
+    boxShadow: isSel
       ? `0 0 0 1.5px #fff, 0 2px 8px rgba(67,97,238,.4)`
       : "0 1px 4px rgba(0,0,0,.15)",
     transition: "outline-color .1s",
   });
 
-  const handleLivePick = (hex) => {
-    setDraft(hex);
-    onApply("skin", hex);
+  const handleOpen = () => {
+    setDraft(ensureHex(ch.skin || "#FDDBB4"));
+    setPickerOpen(p => !p);
   };
 
-  const handleDone = () => {
-    onApplyCustom("skin", draft);
-    setPickerOpen(false);
-  };
+  const handleLivePick = (hex) => { setDraft(hex); onApply("skin", hex); };
+  const handleDone = () => { setPickerOpen(false); onApplyCustom("skin", draft); };
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
       <p style={{ fontSize:10, fontWeight:800, color:"#aaa", letterSpacing:1.1,
         margin:0, textTransform:"uppercase" }}>
-        Skin Tone — pick a base then fine-tune
+        Skin Tone — pick a base, then fine-tune shade
       </p>
 
-      {/* Base swatches row */}
       <div style={{ display:"flex", flexWrap:"wrap", gap:7, alignItems:"center" }}>
+        {/* Base tone row */}
         {SKINS.map(v => (
           <button key={v}
             onClick={() => {
@@ -1979,12 +2086,12 @@ function AvatarSkinSection({
             style={{
               width:32, height:32, borderRadius:"50%", background:v,
               cursor:"pointer", border:"none", padding:0, flexShrink:0,
-              ...selStyle(skinBase === v),
+              ...ring(skinBase === v),
             }}
           />
         ))}
 
-        {/* Saved custom skin colours */}
+        {/* Saved custom skin tones */}
         {saved.map((v, i) => (
           <div key={"cs"+i} style={{ position:"relative", flexShrink:0 }}>
             <button
@@ -1992,7 +2099,7 @@ function AvatarSkinSection({
               style={{
                 width:32, height:32, borderRadius:"50%", background:v,
                 cursor:"pointer", border:"none", padding:0,
-                ...selStyle(ch.skin === v),
+                ...ring(ch.skin === v),
               }}
             />
             <button
@@ -2009,21 +2116,19 @@ function AvatarSkinSection({
           </div>
         ))}
 
-        {/* + custom */}
-        <button
-          onClick={() => { setDraft(ch.skin || "#FDDBB4"); setPickerOpen(p => !p); }}
+        {/* + custom skin */}
+        <button onClick={handleOpen}
           style={{
             width:32, height:32, borderRadius:"50%", flexShrink:0,
             border:"2px dashed #bbb",
-            background: pickerOpen ? ACCENT : "rgba(67,97,238,.06)",
-            cursor:"pointer", fontSize:14,
-            color: pickerOpen ? "#fff" : "#888",
+            background: pickerOpen ? A : "rgba(67,97,238,.06)",
+            cursor:"pointer", fontSize:14, color: pickerOpen ? "#fff" : "#888",
             display:"flex", alignItems:"center", justifyContent:"center",
           }}
         >{pickerOpen ? "×" : "+"}</button>
       </div>
 
-      {/* Shade slider */}
+      {/* Shade slider — visible when a base is selected and picker is closed */}
       {!pickerOpen && skinBase && (
         <SkinSlider
           base={skinBase}
@@ -2032,15 +2137,11 @@ function AvatarSkinSection({
         />
       )}
 
-      {/* Custom picker */}
+      {/* Full colour picker */}
       {pickerOpen && (
         <div style={{ borderRadius:16, overflow:"hidden", background:"#18182a",
           boxShadow:"0 6px 32px rgba(0,0,0,.4)" }}>
-          <ColorPicker
-            value={draft}
-            onChange={handleLivePick}
-            onClose={handleDone}
-          />
+          <ColorPicker value={draft} onChange={handleLivePick} onClose={handleDone} />
         </div>
       )}
     </div>
@@ -2049,7 +2150,7 @@ function AvatarSkinSection({
 
 // ─── CHARACTER MODAL ──────────────────────────────────────────────────────────
 function CharacterModal({ character, onChange, onClose }) {
-  const ch = character;
+  const ch = character;  // alias for readability — always current via prop
 
   // ── Tabs ───────────────────────────────────────────────────────────────────
   const [tab, setTab] = useState("face");
@@ -2108,14 +2209,12 @@ function CharacterModal({ character, onChange, onClose }) {
     return best;
   });
 
-  // ── Callbacks ──────────────────────────────────────────────────────────────
-  // Apply one field change to the character
-  const applyField = useCallback((field, value) => {
-    onChange({ ...character, [field]: value });
-  }, [character, onChange]);
+  // ── applyField: apply a single field change immediately ───────────────────
+  // Spread character (the prop) directly — never a stale copy
+  const applyField = (field, value) => onChange({ ...character, [field]: value });
 
-  // Save a custom colour: add to list, auto-select, persist
-  const applyCustomColor = useCallback((field, hex) => {
+  // ── applyCustomColor: save to list + select immediately ───────────────────
+  const applyCustomColor = (field, hex) => {
     setCustomColors(prev => {
       const existing = prev[field] || [];
       const deduped  = [hex, ...existing.filter(c => c.toLowerCase() !== hex.toLowerCase())].slice(0, 8);
@@ -2123,113 +2222,20 @@ function CharacterModal({ character, onChange, onClose }) {
       try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(next)); } catch {}
       return next;
     });
-    onChange({ ...character, [field]: hex }); // select it immediately
-  }, [character, onChange]);
+    onChange({ ...character, [field]: hex });
+  };
 
-  // Remove a saved custom colour by index
-  const removeCustomColor = useCallback((field, idx) => {
+  // ── removeCustomColor: delete saved colour by index ───────────────────────
+  const removeCustomColor = (field, idx) => {
     setCustomColors(prev => {
       const next = { ...prev, [field]: (prev[field] || []).filter((_, i) => i !== idx) };
       try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(next)); } catch {}
       return next;
     });
-  }, []);
+  };
 
-  // ── AvatarChip — live preview chip ────────────────────────────────────────
-  const AvatarChip = useCallback(({ field, value, label, selected, size=62 }) => {
-    const preview = { ...ch, [field]: value };
-    const ACCENT = "#4361ee";
-    return (
-      <button
-        onClick={() => applyField(field, value)}
-        title={label}
-        style={{
-          display:"flex", flexDirection:"column", alignItems:"center", gap:5,
-          padding:"7px 6px 6px", borderRadius:14, border:"none", cursor:"pointer",
-          flexShrink:0,
-          background: selected ? "#eef1ff" : "#f5f6fa",
-          outline: selected ? `2.5px solid ${ACCENT}` : "2px solid transparent",
-          outlineOffset:2,
-          boxShadow: selected
-            ? "0 0 0 1.5px #fff, 0 3px 12px rgba(67,97,238,.28)"
-            : "0 1px 3px rgba(0,0,0,.07)",
-          transition:"background .12s, outline-color .12s, box-shadow .12s",
-        }}
-      >
-        <div style={{
-          width:size, height:size, borderRadius:"50%", overflow:"hidden", flexShrink:0,
-          boxShadow: selected
-            ? `0 0 0 2.5px ${ACCENT}, 0 2px 8px rgba(67,97,238,.3)`
-            : "0 1px 4px rgba(0,0,0,.13)",
-        }}>
-          <MiniAvatar character={preview} size={size} uid={field+String(value)} />
-        </div>
-        <span style={{
-          fontSize:9, fontWeight:700, letterSpacing:.2, textAlign:"center",
-          lineHeight:1.25, width:size+6, display:"block",
-          whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
-          color: selected ? ACCENT : "#666",
-        }}>{label}</span>
-      </button>
-    );
-  }, [ch, applyField]);
-
-  // ── ChipGrid ───────────────────────────────────────────────────────────────
-  const ChipGrid = ({ field, items, size=62 }) => (
-    <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
-      {items.map((item, i) => {
-        const value = typeof item === "object" ? item.id : i;
-        const label = typeof item === "object" ? item.label : item;
-        return (
-          <AvatarChip key={i} field={field} value={value} label={label}
-            selected={ch[field] === value} size={size} />
-        );
-      })}
-    </div>
-  );
-
-  // ── Row layout ─────────────────────────────────────────────────────────────
-  const Row = ({ label, children }) => (
-    <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-      <p style={{ fontSize:10, fontWeight:800, color:"#aaa", letterSpacing:1.1,
-        margin:0, textTransform:"uppercase" }}>{label}</p>
-      <div>{children}</div>
-    </div>
-  );
-
-  // ── TogglePair ─────────────────────────────────────────────────────────────
-  const TogglePair = ({ label, field, onEmoji, offLabel="Off" }) => (
-    <Row label={label}>
-      <div style={{ display:"flex", gap:10 }}>
-        {[false, true].map(val => {
-          const sel = !!ch[field] === val;
-          const ACCENT = "#4361ee";
-          return (
-            <button key={String(val)} onClick={() => applyField(field, val)}
-              style={{
-                display:"flex", flexDirection:"column", alignItems:"center", gap:4,
-                padding:"7px 5px 5px", borderRadius:14, border:"none", cursor:"pointer",
-                background: sel ? "#eef1ff" : "#f5f6fa",
-                outline: sel ? `2.5px solid ${ACCENT}` : "2px solid transparent",
-                outlineOffset:2,
-                boxShadow: sel ? "0 2px 12px rgba(67,97,238,.28)" : "0 1px 3px rgba(0,0,0,.07)",
-                transition:"background .12s, outline-color .12s, box-shadow .12s",
-              }}>
-              <div style={{
-                width:66, height:66, borderRadius:"50%", overflow:"hidden",
-                boxShadow: sel ? `0 0 0 2.5px ${ACCENT}` : "0 1px 4px rgba(0,0,0,.14)",
-              }}>
-                <MiniAvatar character={{ ...ch, [field]: val }} size={66} uid={field+String(val)} />
-              </div>
-              <span style={{ fontSize:10, fontWeight:700, color: sel ? ACCENT : "#777" }}>
-                {val ? `${onEmoji} On` : offLabel}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </Row>
-  );
+  // ── Shared props object for AvatarSwatches ────────────────────────────────
+  const swatchProps = { ch, customColors, onApply:applyField, onApplyCustom:applyCustomColor, onRemoveCustom:removeCustomColor };
 
   // ─────────────────────────────────────────────────────────────────────────
   // RENDER
@@ -2309,7 +2315,7 @@ function CharacterModal({ character, onChange, onClose }) {
           ))}
         </div>
 
-        {/* ── Scroll content ── */}
+        {/* ── Scrollable content ── */}
         <div style={{
           flex:1, minHeight:0, overflowY:"auto", overflowX:"hidden",
           padding:"18px 18px 12px",
@@ -2322,114 +2328,94 @@ function CharacterModal({ character, onChange, onClose }) {
             <AvatarSkinSection
               ch={ch} skinBase={skinBase} setSkinBase={setSkinBase}
               customColors={customColors}
-              onApply={applyField}
-              onApplyCustom={applyCustomColor}
-              onRemoveCustom={removeCustomColor}
+              onApply={applyField} onApplyCustom={applyCustomColor} onRemoveCustom={removeCustomColor}
             />
-            <Row label="Eye Shape">
-              <ChipGrid field="eyeShape" items={EYE_S} size={60} />
-            </Row>
-            <Row label="Eye Colour">
-              <AvatarSwatches ch={ch} field="eyes" vals={EYES} sz={26}
-                customColors={customColors}
-                onApply={applyField} onApplyCustom={applyCustomColor} onRemoveCustom={removeCustomColor} />
-            </Row>
-            <Row label="Eyebrows">
-              <ChipGrid field="eyebrow" items={BROWS} size={58} />
-            </Row>
-            <Row label="Expression">
-              <ChipGrid field="mouth" items={MOUTHS} size={58} />
-            </Row>
-            <Row label="Facial Hair">
-              <ChipGrid field="facialHair" items={FACIAL_NAMES} size={58} />
-            </Row>
+            <AvatarRow label="Eye Shape">
+              <AvatarChipGrid ch={ch} field="eyeShape" items={EYE_S} size={60} onApply={applyField} />
+            </AvatarRow>
+            <AvatarRow label="Eye Colour">
+              <AvatarSwatches {...swatchProps} field="eyes" vals={EYES} sz={26} />
+            </AvatarRow>
+            <AvatarRow label="Eyebrows">
+              <AvatarChipGrid ch={ch} field="eyebrow" items={BROWS} size={58} onApply={applyField} />
+            </AvatarRow>
+            <AvatarRow label="Expression">
+              <AvatarChipGrid ch={ch} field="mouth" items={MOUTHS} size={58} onApply={applyField} />
+            </AvatarRow>
+            <AvatarRow label="Facial Hair">
+              <AvatarChipGrid ch={ch} field="facialHair" items={FACIAL_NAMES} size={58} onApply={applyField} />
+            </AvatarRow>
           </>}
 
           {/* ══ HAIR ══ */}
           {tab === "hair" && <>
-            <Row label="Hair Style">
-              <ChipGrid field="hairStyle" items={HAIR_NAMES} size={64} />
-            </Row>
-            <Row label="Hair Colour">
-              <AvatarSwatches ch={ch} field="hair" vals={HAIRS} sz={26}
-                customColors={customColors}
-                onApply={applyField} onApplyCustom={applyCustomColor} onRemoveCustom={removeCustomColor} />
-            </Row>
+            <AvatarRow label="Hair Style">
+              <AvatarChipGrid ch={ch} field="hairStyle" items={HAIR_NAMES} size={64} onApply={applyField} />
+            </AvatarRow>
+            <AvatarRow label="Hair Colour">
+              <AvatarSwatches {...swatchProps} field="hair" vals={HAIRS} sz={26} />
+            </AvatarRow>
           </>}
 
           {/* ══ FIT ══ */}
           {tab === "fit" && <>
-            <Row label="Outfit Style">
-              <ChipGrid field="topStyle" items={TOPS_S} size={66} />
-            </Row>
-            <Row label="Outfit Colour">
-              <AvatarSwatches ch={ch} field="top" vals={TOPS} sz={26}
-                customColors={customColors}
-                onApply={applyField} onApplyCustom={applyCustomColor} onRemoveCustom={removeCustomColor} />
-            </Row>
-            <Row label="Background">
-              <AvatarSwatches ch={ch} field="bg" vals={BG} sz={26}
-                customColors={customColors}
-                onApply={applyField} onApplyCustom={applyCustomColor} onRemoveCustom={removeCustomColor} />
-            </Row>
+            <AvatarRow label="Outfit Style">
+              <AvatarChipGrid ch={ch} field="topStyle" items={TOPS_S} size={66} onApply={applyField} />
+            </AvatarRow>
+            <AvatarRow label="Outfit Colour">
+              <AvatarSwatches {...swatchProps} field="top" vals={TOPS} sz={26} />
+            </AvatarRow>
+            <AvatarRow label="Background">
+              <AvatarSwatches {...swatchProps} field="bg" vals={BG} sz={26} />
+            </AvatarRow>
           </>}
 
           {/* ══ ACCESSORIES ══ */}
           {tab === "acc" && <>
-            <Row label="Hat">
-              <ChipGrid field="hat" items={HAT_NAMES} size={60} />
-            </Row>
+            <AvatarRow label="Hat">
+              <AvatarChipGrid ch={ch} field="hat" items={HAT_NAMES} size={60} onApply={applyField} />
+            </AvatarRow>
             {ch.hat > 0 && (
-              <Row label="Hat Colour">
-                <AvatarSwatches ch={ch} field="hatColor" vals={HAT_C} sz={26}
-                  customColors={customColors}
-                  onApply={applyField} onApplyCustom={applyCustomColor} onRemoveCustom={removeCustomColor} />
-              </Row>
+              <AvatarRow label="Hat Colour">
+                <AvatarSwatches {...swatchProps} field="hatColor" vals={HAT_C} sz={26} />
+              </AvatarRow>
             )}
-            <Row label="Glasses">
-              <ChipGrid field="glasses" items={GLASS_NAMES} size={60} />
-            </Row>
+            <AvatarRow label="Glasses">
+              <AvatarChipGrid ch={ch} field="glasses" items={GLASS_NAMES} size={60} onApply={applyField} />
+            </AvatarRow>
             {ch.glasses > 0 && (
-              <Row label="Glasses Colour">
-                <AvatarSwatches ch={ch} field="glassesColor" vals={GLASS_C} sz={26}
-                  customColors={customColors}
-                  onApply={applyField} onApplyCustom={applyCustomColor} onRemoveCustom={removeCustomColor} />
-              </Row>
+              <AvatarRow label="Glasses Colour">
+                <AvatarSwatches {...swatchProps} field="glassesColor" vals={GLASS_C} sz={26} />
+              </AvatarRow>
             )}
-            <Row label="Earrings">
-              <ChipGrid field="earring" items={EARRING_NAMES} size={60} />
-            </Row>
+            <AvatarRow label="Earrings">
+              <AvatarChipGrid ch={ch} field="earring" items={EARRING_NAMES} size={60} onApply={applyField} />
+            </AvatarRow>
             {ch.earring > 0 && (
-              <Row label="Earring Colour">
-                <AvatarSwatches ch={ch} field="earringColor" vals={JEWEL_C} sz={26}
-                  customColors={customColors}
-                  onApply={applyField} onApplyCustom={applyCustomColor} onRemoveCustom={removeCustomColor} />
-              </Row>
+              <AvatarRow label="Earring Colour">
+                <AvatarSwatches {...swatchProps} field="earringColor" vals={JEWEL_C} sz={26} />
+              </AvatarRow>
             )}
-            <Row label="Necklace">
-              <ChipGrid field="necklace" items={NECKLACE_NAMES} size={60} />
-            </Row>
+            <AvatarRow label="Necklace">
+              <AvatarChipGrid ch={ch} field="necklace" items={NECKLACE_NAMES} size={60} onApply={applyField} />
+            </AvatarRow>
             {ch.necklace > 0 && (
-              <Row label="Necklace Colour">
-                <AvatarSwatches ch={ch} field="necklaceColor" vals={JEWEL_C} sz={26}
-                  customColors={customColors}
-                  onApply={applyField} onApplyCustom={applyCustomColor} onRemoveCustom={removeCustomColor} />
-              </Row>
+              <AvatarRow label="Necklace Colour">
+                <AvatarSwatches {...swatchProps} field="necklaceColor" vals={JEWEL_C} sz={26} />
+              </AvatarRow>
             )}
           </>}
 
           {/* ══ EXTRA ══ */}
           {tab === "extra" && <>
-            <TogglePair label="Blush" field="blush" onEmoji="🌸" />
-            <TogglePair label="Lip Gloss" field="lips" onEmoji="💋" />
+            <AvatarTogglePair ch={ch} field="blush"    label="Blush"     onEmoji="🌸" onApply={applyField} />
+            <AvatarTogglePair ch={ch} field="lips"     label="Lip Gloss" onEmoji="💋" onApply={applyField} />
             {ch.lips && (
-              <Row label="Lip Colour">
-                <AvatarSwatches ch={ch} field="lipColor" vals={LIP_C} sz={26}
-                  customColors={customColors}
-                  onApply={applyField} onApplyCustom={applyCustomColor} onRemoveCustom={removeCustomColor} />
-              </Row>
+              <AvatarRow label="Lip Colour">
+                <AvatarSwatches {...swatchProps} field="lipColor" vals={LIP_C} sz={26} />
+              </AvatarRow>
             )}
-            <TogglePair label="Freckles" field="freckles" onEmoji="🟤" />
+            <AvatarTogglePair ch={ch} field="freckles" label="Freckles"  onEmoji="🟤" onApply={applyField} />
             <button
               onClick={() => onChange({
                 skin:"#FDDBB4", hair:"#3D2B1F", hairStyle:0, eyes:"#2980B9",
