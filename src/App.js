@@ -7589,7 +7589,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
 }
 
 // ── Game launcher — topic + game mode grid ────────────────────────────────────
-function SGGameLauncher({ group, db, groupId, user, onClose }) {
+function SGGameLauncher({ group, db, groupId, user, groupFile, onClose }) {
   const [topic,      setTopic]      = useState("");
   const [generating, setGenerating] = useState(false);
   const [error,      setError]      = useState("");
@@ -7601,15 +7601,27 @@ function SGGameLauncher({ group, db, groupId, user, onClose }) {
     { id:"quizshow",  emoji:"🎤", title:"Quiz Show",        desc:"Millionaire-style with lifelines",   bg:"#fef2f2",  accent:C.red },
   ];
 
+  // Source: use uploaded group file if available, otherwise fall back to typed topic
+  const effectiveTopic = groupFile?.name || topic.trim();
+
   const startGame = async (gameId) => {
-    if (!topic.trim()) { setError("Enter a topic first"); return; }
+    if (!effectiveTopic) { setError("Enter a topic or upload a study file first"); return; }
     setGenerating(true); setError("");
     try {
+      // Extract file text if a group file was uploaded (same as CardsTab / SGAIFlashcardGen)
+      let fileText = null;
+      if (groupFile?._fileObj) {
+        fileText = await extractFileText(groupFile._fileObj).catch(() => null);
+      }
+      const safeText = fileText ? fileText.slice(0, 12000) : null;
+
+      const userMsg = safeText
+        ? `Here is the COMPLETE content from "${groupFile.name}":\n\n${safeText}\n\nCreate 6 multiple-choice quiz questions based ONLY on this content. Each item: {"question":"...","options":["full option A","full option B","full option C","full option D"],"answer":"exact text of correct option"}. Make distractors realistic. Return ONLY the JSON array.`
+        : `Create 6 multiple-choice quiz questions about: "${topic}". Each item: {"question":"...","options":["full option A","full option B","full option C","full option D"],"answer":"exact text of correct option"}. Make distractors realistic. Return ONLY the JSON array.`;
+
       const raw = await callClaude(
         "You are a quiz generator. Return ONLY a valid JSON array, no explanation, no markdown.",
-        `Create 6 multiple-choice quiz questions about: "${topic}".
-Each item: {"question":"...","options":["full option A text","full option B text","full option C text","full option D text"],"answer":"exact text of correct option"}.
-Make distractors realistic. Return ONLY the JSON array.`, 1400
+        userMsg, 1400
       );
       const clean     = raw.replace(/```json|```/g,"").trim();
       const questions = JSON.parse(clean);
@@ -7618,7 +7630,7 @@ Make distractors realistic. Return ONLY the JSON array.`, 1400
       Object.keys(group.members||{}).forEach(uid => { initScores[uid]=0; });
       await updateDoc(doc(db,"studyGroups",groupId), {
         gameState: { mode:gameId, phase:"question", questions, questionIndex:0,
-          currentQuestion:questions[0], scores:initScores, answers:{}, topic },
+          currentQuestion:questions[0], scores:initScores, answers:{}, topic:effectiveTopic },
         lastActivity: Date.now(),
       });
       onClose();
@@ -7646,15 +7658,31 @@ Make distractors realistic. Return ONLY the JSON array.`, 1400
             fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
         </div>
         <div style={{ padding:"16px 20px" }}>
-          <label style={{ fontSize:11, fontWeight:700, color:C.muted, letterSpacing:.8, textTransform:"uppercase" }}>
-            Quiz topic (AI generates questions)
-          </label>
-          <input value={topic} onChange={e=>{setTopic(e.target.value);setError("");}}
-            placeholder="e.g. Photosynthesis, WW2, Python loops…"
-            style={{ width:"100%", padding:"10px 14px", boxSizing:"border-box",
-              background:C.bg, border:`1.5px solid ${C.border}`, borderRadius:10,
-              color:C.text, fontSize:13, outline:"none", fontFamily:"inherit",
-              marginTop:6, marginBottom:14 }} />
+
+          {/* Group file banner — shown when a file is loaded */}
+          {groupFile ? (
+            <div style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 12px",
+              background:C.accentL, border:`1px solid ${C.accentS}`, borderRadius:10, marginBottom:14 }}>
+              <span style={{ fontSize:16 }}>📎</span>
+              <div style={{ flex:1, minWidth:0 }}>
+                <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.accent }}>Using group file</p>
+                <p style={{ margin:0, fontSize:11, color:C.muted, overflow:"hidden",
+                  textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{groupFile.name}</p>
+              </div>
+            </div>
+          ) : (
+            <div style={{ marginBottom:14 }}>
+              <label style={{ fontSize:11, fontWeight:700, color:C.muted, letterSpacing:.8, textTransform:"uppercase" }}>
+                Quiz topic (AI generates questions)
+              </label>
+              <input value={topic} onChange={e=>{setTopic(e.target.value);setError("");}}
+                placeholder="e.g. Photosynthesis, WW2, Python loops…"
+                style={{ width:"100%", padding:"10px 14px", boxSizing:"border-box",
+                  background:C.bg, border:`1.5px solid ${C.border}`, borderRadius:10,
+                  color:C.text, fontSize:13, outline:"none", fontFamily:"inherit", marginTop:6 }} />
+            </div>
+          )}
+
           {error && <div style={{ padding:"8px 12px", borderRadius:9, background:C.redL,
             border:`1px solid ${C.red}44`, color:C.red, fontSize:12, marginBottom:12 }}>{error}</div>}
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
@@ -7674,7 +7702,7 @@ Make distractors realistic. Return ONLY the JSON array.`, 1400
           {generating && (
             <div style={{ display:"flex", alignItems:"center", justifyContent:"center",
               gap:8, marginTop:14, color:C.muted, fontSize:13 }}>
-              <SGSpinner /> Generating questions for "{topic}"…
+              <SGSpinner /> Generating questions from {groupFile ? `"${groupFile.name}"` : `"${topic}"`}…
             </div>
           )}
         </div>
@@ -7892,6 +7920,7 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
       )}
       {showGame && (
         <SGGameLauncher group={group} db={db} groupId={groupId} user={user}
+          groupFile={groupFile}
           onClose={() => setShowGame(false)} />
       )}
       {showWhiteboard && (
