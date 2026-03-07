@@ -6324,180 +6324,284 @@ function SGAvatar({ character, displayName, size = 36, isHost = false, isSelf = 
 
 // ── Study Group Lobby — create or join ────────────────────────────────────────
 function StudyGroupLobby({ user, db, onJoin, onClose }) {
-  const [mode, setMode]       = useState("menu"); // menu | create | join
-  const [joinCode, setJoinCode] = useState("");
+  const [mode,      setMode]      = useState("menu"); // menu | create | join
+  const [joinCode,  setJoinCode]  = useState("");
   const [groupName, setGroupName] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState("");
+  const [loading,   setLoading]   = useState(false);
+  const [error,     setError]     = useState("");
 
+  // ── Create ─────────────────────────────────────────────────────────────────
+  // Key fix: call onJoin ONLY after setLoading(false) so state updates on the
+  // still-mounted component before we transition screens.
   const handleCreate = async () => {
     if (!groupName.trim()) { setError("Enter a group name"); return; }
-    setLoading(true); setError("");
+    setLoading(true);
+    setError("");
     try {
-      const gid = Math.random().toString(36).slice(2,8).toUpperCase();
+      const gid = Math.random().toString(36).slice(2, 8).toUpperCase();
       const member = {
-        uid: user.uid,
+        uid:         user.uid,
         displayName: user.displayName || "User",
-        photoURL: user.photoURL || null,
-        character: JSON.parse(localStorage.getItem("classio_char") || "{}"),
-        joinedAt: Date.now(),
-        emoji: "😊",
+        photoURL:    user.photoURL    || null,
+        character:   (() => { try { return JSON.parse(localStorage.getItem("classio_char") || "{}"); } catch { return {}; } })(),
+        joinedAt:    Date.now(),
       };
       await setDoc(doc(db, "studyGroups", gid), {
-        id: gid,
-        name: groupName.trim(),
-        hostUid: user.uid,
-        createdAt: Date.now(),
-        members: { [user.uid]: member },
+        id:            gid,
+        name:          groupName.trim(),
+        hostUid:       user.uid,
+        createdAt:     Date.now(),
+        members:       { [user.uid]: member },
         sharedContent: null,
-        gameState: null,
-        lastActivity: Date.now(),
+        gameState:     null,
+        lastActivity:  Date.now(),
       });
+      // Success — stop loading FIRST, then navigate
+      setLoading(false);
       onJoin(gid);
-    } catch(e) { setError("Failed to create: " + e.message); }
-    setLoading(false);
+    } catch (e) {
+      setLoading(false);
+      setError("Failed to create group: " + (e?.message || "Check your connection and Firestore rules."));
+    }
   };
 
+  // ── Join ───────────────────────────────────────────────────────────────────
   const handleJoin = async () => {
     const code = joinCode.trim().toUpperCase();
-    if (!code) { setError("Enter a group code"); return; }
-    setLoading(true); setError("");
+    if (code.length < 4) { setError("Enter a valid group code"); return; }
+    setLoading(true);
+    setError("");
     try {
       const snap = await getDoc(doc(db, "studyGroups", code));
-      if (!snap.exists()) { setError("Group not found. Check the code."); setLoading(false); return; }
+      if (!snap.exists()) {
+        setLoading(false);
+        setError("Group not found. Double-check the code.");
+        return;
+      }
       const member = {
-        uid: user.uid,
+        uid:         user.uid,
         displayName: user.displayName || "User",
-        photoURL: user.photoURL || null,
-        character: JSON.parse(localStorage.getItem("classio_char") || "{}"),
-        joinedAt: Date.now(),
-        emoji: "😊",
+        photoURL:    user.photoURL    || null,
+        character:   (() => { try { return JSON.parse(localStorage.getItem("classio_char") || "{}"); } catch { return {}; } })(),
+        joinedAt:    Date.now(),
       };
       await updateDoc(doc(db, "studyGroups", code), {
         [`members.${user.uid}`]: member,
         lastActivity: Date.now(),
       });
+      setLoading(false);
       onJoin(code);
-    } catch(e) { setError("Failed to join: " + e.message); }
-    setLoading(false);
+    } catch (e) {
+      setLoading(false);
+      setError("Failed to join: " + (e?.message || "Check your connection."));
+    }
   };
 
+  // ── Shared input style ─────────────────────────────────────────────────────
+  const inputStyle = {
+    width: "100%", marginTop: 6, padding: "11px 14px", boxSizing: "border-box",
+    background: C.bg, border: `1.5px solid ${C.border}`,
+    borderRadius: 10, color: C.text, fontSize: 14, outline: "none",
+    fontFamily: "inherit", transition: "border-color .15s",
+  };
+
+  // ── Spinner SVG ────────────────────────────────────────────────────────────
+  const Spinner = () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+      style={{ animation: "sg-spin 0.7s linear infinite", flexShrink: 0 }}>
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="40 20" strokeLinecap="round"/>
+    </svg>
+  );
+
   return (
-    <div onClick={onClose} style={{
-      position:"fixed", inset:0, zIndex:4000,
-      background:"rgba(0,0,0,.75)", backdropFilter:"blur(6px)",
-      display:"flex", alignItems:"center", justifyContent:"center", padding:16,
-    }}>
-      <div onClick={e => e.stopPropagation()} style={{
-        width:"100%", maxWidth:420, background:SG.surface,
-        borderRadius:24, padding:32, boxShadow:"0 32px 80px rgba(0,0,0,.6)",
-        border:`1px solid ${SG.border}`,
+    <>
+      {/* Spinner keyframe — injected once */}
+      <style>{`@keyframes sg-spin { to { transform: rotate(360deg); } }`}</style>
+
+      <div onClick={onClose} style={{
+        position: "fixed", inset: 0, zIndex: 4000,
+        background: "rgba(26,23,20,.55)", backdropFilter: "blur(4px)",
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
       }}>
-        {/* Header */}
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
-          <div>
-            <h2 style={{ margin:0, color:SG.text, fontSize:20, fontWeight:800, fontFamily:"'Fraunces',serif" }}>👥 Study Group</h2>
-            <p style={{ margin:"4px 0 0", color:SG.muted, fontSize:13 }}>Study together in real time</p>
+        <div onClick={e => e.stopPropagation()} style={{
+          width: "100%", maxWidth: 400,
+          background: C.surface,
+          borderRadius: 20,
+          boxShadow: "0 20px 60px rgba(0,0,0,.18)",
+          border: `1px solid ${C.border}`,
+          overflow: "hidden",
+        }}>
+
+          {/* ── Header ── */}
+          <div style={{
+            padding: "20px 24px 16px",
+            borderBottom: `1px solid ${C.border}`,
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+          }}>
+            <div>
+              <h2 style={{
+                margin: 0, fontSize: 18, fontWeight: 700,
+                fontFamily: "'Fraunces',serif", color: C.text,
+              }}>👥 Study Group</h2>
+              <p style={{ margin: "3px 0 0", fontSize: 13, color: C.muted }}>
+                Study together in real time
+              </p>
+            </div>
+            <button onClick={onClose} style={{
+              background: C.bg, border: `1px solid ${C.border}`,
+              borderRadius: "50%", width: 30, height: 30,
+              color: C.muted, cursor: "pointer", fontSize: 16,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              flexShrink: 0,
+            }}>×</button>
           </div>
-          <button onClick={onClose} style={{ background:"rgba(255,255,255,.08)", border:"none", borderRadius:"50%", width:32, height:32, color:SG.muted, cursor:"pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
+
+          {/* ── Body ── */}
+          <div style={{ padding: "20px 24px 24px" }}>
+
+            {/* MENU */}
+            {mode === "menu" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <button onClick={() => { setMode("create"); setError(""); }} style={{
+                  display: "flex", alignItems: "center", gap: 14,
+                  background: C.accentL, border: `1.5px solid ${C.accentS}`,
+                  borderRadius: 14, padding: "14px 18px",
+                  cursor: "pointer", textAlign: "left",
+                  transition: "opacity .15s",
+                }}>
+                  <div style={{
+                    width: 40, height: 40, borderRadius: 12, flexShrink: 0,
+                    background: C.accent, display: "flex", alignItems: "center",
+                    justifyContent: "center", fontSize: 18,
+                  }}>✨</div>
+                  <div>
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.text }}>Create a Study Group</p>
+                    <p style={{ margin: "2px 0 0", fontSize: 12, color: C.muted }}>Start a new room and invite friends</p>
+                  </div>
+                </button>
+
+                <button onClick={() => { setMode("join"); setError(""); }} style={{
+                  display: "flex", alignItems: "center", gap: 14,
+                  background: C.surface, border: `1.5px solid ${C.border}`,
+                  borderRadius: 14, padding: "14px 18px",
+                  cursor: "pointer", textAlign: "left",
+                  transition: "opacity .15s",
+                }}>
+                  <div style={{
+                    width: 40, height: 40, borderRadius: 12, flexShrink: 0,
+                    background: C.warmL, display: "flex", alignItems: "center",
+                    justifyContent: "center", fontSize: 18,
+                  }}>🔗</div>
+                  <div>
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.text }}>Join a Study Group</p>
+                    <p style={{ margin: "2px 0 0", fontSize: 12, color: C.muted }}>Enter a code from a friend</p>
+                  </div>
+                </button>
+              </div>
+            )}
+
+            {/* CREATE */}
+            {mode === "create" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <button onClick={() => { setMode("menu"); setError(""); setGroupName(""); }}
+                  style={{ background: "none", border: "none", color: C.muted, cursor: "pointer",
+                    fontSize: 13, textAlign: "left", padding: 0, display: "flex", alignItems: "center", gap: 4 }}>
+                  ← Back
+                </button>
+
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: C.muted,
+                    letterSpacing: .8, textTransform: "uppercase" }}>Group Name</label>
+                  <input
+                    autoFocus
+                    value={groupName}
+                    onChange={e => { setGroupName(e.target.value); setError(""); }}
+                    onKeyDown={e => e.key === "Enter" && !loading && handleCreate()}
+                    placeholder="e.g. Physics Study Squad"
+                    disabled={loading}
+                    style={{ ...inputStyle, opacity: loading ? .6 : 1 }}
+                  />
+                </div>
+
+                {error && (
+                  <div style={{
+                    padding: "10px 12px", borderRadius: 10,
+                    background: C.redL, border: `1px solid ${C.red}44`,
+                    color: C.red, fontSize: 12, fontWeight: 600,
+                  }}>{error}</div>
+                )}
+
+                <button onClick={handleCreate} disabled={loading} style={{
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                  background: loading ? C.accentS : C.accent,
+                  color: "#fff", border: "none", borderRadius: 12, padding: "13px",
+                  fontSize: 14, fontWeight: 700,
+                  cursor: loading ? "not-allowed" : "pointer",
+                  transition: "background .15s",
+                  boxShadow: loading ? "none" : "0 4px 14px rgba(61,90,128,.35)",
+                }}>
+                  {loading ? <><Spinner /> Creating…</> : "Create Group →"}
+                </button>
+              </div>
+            )}
+
+            {/* JOIN */}
+            {mode === "join" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <button onClick={() => { setMode("menu"); setError(""); setJoinCode(""); }}
+                  style={{ background: "none", border: "none", color: C.muted, cursor: "pointer",
+                    fontSize: 13, textAlign: "left", padding: 0 }}>
+                  ← Back
+                </button>
+
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: C.muted,
+                    letterSpacing: .8, textTransform: "uppercase" }}>Group Code</label>
+                  <input
+                    autoFocus
+                    value={joinCode}
+                    onChange={e => { setJoinCode(e.target.value.toUpperCase()); setError(""); }}
+                    onKeyDown={e => e.key === "Enter" && !loading && handleJoin()}
+                    placeholder="A3X7K2"
+                    maxLength={6}
+                    disabled={loading}
+                    style={{
+                      ...inputStyle,
+                      fontSize: 22, fontWeight: 800, letterSpacing: 5,
+                      textAlign: "center", fontFamily: "monospace",
+                      opacity: loading ? .6 : 1,
+                    }}
+                  />
+                </div>
+
+                {error && (
+                  <div style={{
+                    padding: "10px 12px", borderRadius: 10,
+                    background: C.redL, border: `1px solid ${C.red}44`,
+                    color: C.red, fontSize: 12, fontWeight: 600,
+                  }}>{error}</div>
+                )}
+
+                <button onClick={handleJoin} disabled={loading} style={{
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                  background: loading ? C.accentS : C.accent,
+                  color: "#fff", border: "none", borderRadius: 12, padding: "13px",
+                  fontSize: 14, fontWeight: 700,
+                  cursor: loading ? "not-allowed" : "pointer",
+                  transition: "background .15s",
+                  boxShadow: loading ? "none" : "0 4px 14px rgba(61,90,128,.35)",
+                }}>
+                  {loading ? <><Spinner /> Joining…</> : "Join Group →"}
+                </button>
+              </div>
+            )}
+
+          </div>
         </div>
-
-        {mode === "menu" && (
-          <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-            <button onClick={() => setMode("create")} style={{
-              background: `linear-gradient(135deg, ${SG.accent}, #a855f7)`,
-              color:"#fff", border:"none", borderRadius:14, padding:"16px 20px",
-              fontSize:15, fontWeight:700, cursor:"pointer",
-              display:"flex", alignItems:"center", gap:12,
-              boxShadow:"0 8px 24px rgba(124,58,237,.4)",
-            }}>
-              <span style={{ fontSize:24 }}>✨</span>
-              <div style={{ textAlign:"left" }}>
-                <div>Create a Study Group</div>
-                <div style={{ fontSize:11, fontWeight:400, opacity:.8 }}>Start a new room and invite friends</div>
-              </div>
-            </button>
-            <button onClick={() => setMode("join")} style={{
-              background:SG.card, color:SG.text, border:`1px solid ${SG.border}`,
-              borderRadius:14, padding:"16px 20px",
-              fontSize:15, fontWeight:700, cursor:"pointer",
-              display:"flex", alignItems:"center", gap:12,
-            }}>
-              <span style={{ fontSize:24 }}>🔗</span>
-              <div style={{ textAlign:"left" }}>
-                <div>Join a Study Group</div>
-                <div style={{ fontSize:11, fontWeight:400, color:SG.muted }}>Enter a group code from a friend</div>
-              </div>
-            </button>
-          </div>
-        )}
-
-        {mode === "create" && (
-          <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-            <button onClick={() => { setMode("menu"); setError(""); }} style={{ background:"none", border:"none", color:SG.muted, cursor:"pointer", fontSize:13, textAlign:"left", padding:0 }}>← Back</button>
-            <div>
-              <label style={{ color:SG.muted, fontSize:11, fontWeight:700, letterSpacing:.8, textTransform:"uppercase" }}>Group Name</label>
-              <input
-                autoFocus
-                value={groupName}
-                onChange={e => setGroupName(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleCreate()}
-                placeholder="e.g. Physics Study Squad"
-                style={{
-                  width:"100%", marginTop:6, padding:"12px 14px", boxSizing:"border-box",
-                  background:"rgba(255,255,255,.06)", border:`1px solid ${SG.border}`,
-                  borderRadius:10, color:SG.text, fontSize:14, outline:"none",
-                  fontFamily:"inherit",
-                }}
-              />
-            </div>
-            {error && <p style={{ color:SG.red, fontSize:12, margin:0 }}>{error}</p>}
-            <button onClick={handleCreate} disabled={loading} style={{
-              background: loading ? "rgba(124,58,237,.4)" : `linear-gradient(135deg, ${SG.accent}, #a855f7)`,
-              color:"#fff", border:"none", borderRadius:12, padding:"13px",
-              fontSize:14, fontWeight:700, cursor:loading?"not-allowed":"pointer",
-              boxShadow: loading ? "none" : "0 4px 16px rgba(124,58,237,.4)",
-            }}>
-              {loading ? "Creating…" : "🚀 Create Group"}
-            </button>
-          </div>
-        )}
-
-        {mode === "join" && (
-          <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-            <button onClick={() => { setMode("menu"); setError(""); }} style={{ background:"none", border:"none", color:SG.muted, cursor:"pointer", fontSize:13, textAlign:"left", padding:0 }}>← Back</button>
-            <div>
-              <label style={{ color:SG.muted, fontSize:11, fontWeight:700, letterSpacing:.8, textTransform:"uppercase" }}>Group Code</label>
-              <input
-                autoFocus
-                value={joinCode}
-                onChange={e => setJoinCode(e.target.value.toUpperCase())}
-                onKeyDown={e => e.key === "Enter" && handleJoin()}
-                placeholder="e.g. A3X7K2"
-                maxLength={6}
-                style={{
-                  width:"100%", marginTop:6, padding:"12px 14px", boxSizing:"border-box",
-                  background:"rgba(255,255,255,.06)", border:`1px solid ${SG.border}`,
-                  borderRadius:10, color:SG.text, fontSize:18, fontWeight:700,
-                  outline:"none", fontFamily:"monospace", letterSpacing:4, textAlign:"center",
-                }}
-              />
-            </div>
-            {error && <p style={{ color:SG.red, fontSize:12, margin:0 }}>{error}</p>}
-            <button onClick={handleJoin} disabled={loading} style={{
-              background: loading ? "rgba(124,58,237,.4)" : `linear-gradient(135deg, ${SG.accent}, #a855f7)`,
-              color:"#fff", border:"none", borderRadius:12, padding:"13px",
-              fontSize:14, fontWeight:700, cursor:loading?"not-allowed":"pointer",
-            }}>
-              {loading ? "Joining…" : "🔗 Join Group"}
-            </button>
-          </div>
-        )}
       </div>
-    </div>
+    </>
   );
 }
-
 // ── Chat message component ────────────────────────────────────────────────────
 function SGChatMessage({ msg, isSelf }) {
   return (
