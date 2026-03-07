@@ -1930,8 +1930,10 @@ function AvatarSwatches({
   customColors, onApply, onApplyCustom, onRemoveCustom,
 }) {
   const saved = customColors[field] || [];
-  const [open,  setOpen]  = useState(false);
-  const [draft, setDraft] = useState(() => ensureHex(ch[field] || vals[0] || "#888888"));
+  const [open, setOpen] = useState(false);
+  // draftRef holds the current picked colour — a ref so handleDone always
+  // reads the latest value no matter when it was last set by handleLivePick
+  const draftRef = useRef(ensureHex(ch[field] || vals[0] || "#888888"));
   const A = "#4361ee";
 
   // Swatch selection ring helper
@@ -1945,20 +1947,22 @@ function AvatarSwatches({
   });
 
   const handleOpen = () => {
-    setDraft(ensureHex(ch[field] || vals[0] || "#888888"));
+    // Seed the draft with the current field value each time picker opens
+    draftRef.current = ensureHex(ch[field] || vals[0] || "#888888");
     setOpen(o => !o);
   };
 
-  // Live preview while dragging — does NOT save yet
+  // Live preview while dragging — store in ref (no re-render needed)
   const handleLivePick = (hex) => {
-    setDraft(hex);
+    draftRef.current = hex;
     onApply(field, hex);
   };
 
-  // "Done" — save custom colour, mark as selected, close picker
+  // Done — read from ref (always the latest picked colour)
   const handleDone = () => {
+    const finalHex = draftRef.current;
     setOpen(false);
-    onApplyCustom(field, draft);  // saves to list + selects
+    onApplyCustom(field, finalHex);  // saves to list + selects
   };
 
   return (
@@ -2044,7 +2048,7 @@ function AvatarSkinSection({
 }) {
   const SKINS = ["#FDDBB4","#F5C89A","#FFCBA4","#E8A87C","#D4956A","#C68642","#A0693A","#8D5524","#6B3A1F","#F4D6C8"];
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [draft, setDraft] = useState(() => ensureHex(ch.skin || "#FDDBB4"));
+  const draftRef = useRef(ensureHex(ch.skin || "#FDDBB4"));
   const saved = customColors["skin"] || [];
   const A = "#4361ee";
 
@@ -2058,12 +2062,12 @@ function AvatarSkinSection({
   });
 
   const handleOpen = () => {
-    setDraft(ensureHex(ch.skin || "#FDDBB4"));
+    draftRef.current = ensureHex(ch.skin || "#FDDBB4");
     setPickerOpen(p => !p);
   };
 
-  const handleLivePick = (hex) => { setDraft(hex); onApply("skin", hex); };
-  const handleDone = () => { setPickerOpen(false); onApplyCustom("skin", draft); };
+  const handleLivePick = (hex) => { draftRef.current = hex; onApply("skin", hex); };
+  const handleDone = () => { setPickerOpen(false); onApplyCustom("skin", draftRef.current); };
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
