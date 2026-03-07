@@ -548,6 +548,7 @@ const GS = `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@3
 *{box-sizing:border-box;margin:0;padding:0} input,textarea,button{font-family:inherit}
 ::-webkit-scrollbar{width:6px} ::-webkit-scrollbar-thumb{background:#D8D4CF;border-radius:3px}
 .hov:hover{opacity:0.82} .card-hov:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.10)!important}
+@keyframes sg-fadein{from{opacity:0;transform:translateX(-50%) translateY(-8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 .card-hov{transition:all .2s} .tab:hover{background:#F0EDE9!important} .row:hover{background:#F7F5F2!important} .row{transition:background .15s}
 @media(max-width:768px){
   .desktop-only{display:none!important}
@@ -6879,11 +6880,33 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
           </div>
         ))}
         {isHost && (
-          <button onClick={endGame} style={{
-            marginTop: 16, width: "100%", background: C.bg,
-            color: C.muted, border: `1px solid ${C.border}`, borderRadius: 12,
-            padding: "11px", fontSize: 13, fontWeight: 700, cursor: "pointer",
-          }}>✓ Close Game</button>
+          <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+            <button onClick={async () => {
+              // Replay same questions with reset scores
+              const initScores = {};
+              Object.keys(members || {}).forEach(uid => { initScores[uid] = 0; });
+              const qs = gameState.questions || [];
+              await updateDoc(doc(db, "studyGroups", groupId), {
+                gameState: {
+                  ...gameState,
+                  phase: "question",
+                  questionIndex: 0,
+                  currentQuestion: qs[0],
+                  scores: initScores,
+                  answers: {},
+                },
+              });
+            }} style={{
+              flex: 1, background: C.accentL, border: `1px solid ${C.accentS}`,
+              color: C.accent, borderRadius: 12, padding: "11px",
+              fontSize: 13, fontWeight: 700, cursor: "pointer",
+            }}>🔄 Play Again</button>
+            <button onClick={endGame} style={{
+              flex: 1, background: C.bg, border: `1px solid ${C.border}`,
+              color: C.muted, borderRadius: 12, padding: "11px",
+              fontSize: 13, fontWeight: 700, cursor: "pointer",
+            }}>✓ Back to Room</button>
+          </div>
         )}
       </div>
     </div>
@@ -7093,10 +7116,11 @@ Make distractors realistic. Return ONLY the JSON array.`,
 }
 
 // ── Host action toolbar ───────────────────────────────────────────────────────
-function SGHostControls({ groupId, db, group, user }) {
-  const [showShare, setShowShare] = useState(false);
-  const [showGame,  setShowGame]  = useState(false);
-
+// SGHostControls renders as a prop-driven toolbar with no local modal state.
+// Modals are lifted to StudyGroupRoom so they always render at the top level
+// regardless of which workspace view is active — preventing them from being
+// clipped or hidden inside a scrolling container.
+function SGHostControls({ groupId, db, group, onShowShare, onShowGame }) {
   const hasShared = !!group?.sharedContent;
   const hasGame   = !!group?.gameState;
 
@@ -7108,76 +7132,79 @@ function SGHostControls({ groupId, db, group, user }) {
   };
 
   return (
-    <>
-      {showShare && (
-        <SGSharePicker user={user} db={db} groupId={groupId} group={group}
-          onClose={() => setShowShare(false)} />
+    <div style={{
+      flexShrink: 0,
+      padding: "10px 14px",
+      borderTop: `1px solid ${C.border}`,
+      background: C.surface,
+      display: "flex", alignItems: "center", gap: 8,
+      // Always on top — never clipped
+      position: "relative", zIndex: 10,
+    }}>
+      {/* HOST label */}
+      <span style={{
+        fontSize: 9, fontWeight: 800, color: C.accent,
+        letterSpacing: 1, textTransform: "uppercase",
+        background: C.accentL, borderRadius: 6, padding: "3px 7px",
+        flexShrink: 0,
+      }}>👑 Host</span>
+
+      {/* Present button */}
+      {hasShared ? (
+        <button onClick={stopSharing} style={{
+          display: "flex", alignItems: "center", gap: 6,
+          background: C.redL, border: `1px solid ${C.red}44`,
+          color: C.red, borderRadius: 9, padding: "8px 14px",
+          fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0,
+        }}>⏹ Stop Presenting</button>
+      ) : (
+        <button onClick={onShowShare} style={{
+          display: "flex", alignItems: "center", gap: 6,
+          background: C.accentL, border: `1px solid ${C.accentS}`,
+          color: C.accent, borderRadius: 9, padding: "8px 14px",
+          fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0,
+          boxShadow: "0 2px 8px rgba(61,90,128,.15)",
+        }}>📺 Present</button>
       )}
-      {showGame && (
-        <SGGameLauncher group={group} db={db} groupId={groupId} user={user}
-          onClose={() => setShowGame(false)} />
+
+      {/* Quiz button */}
+      {hasGame ? (
+        <button onClick={endGame} style={{
+          display: "flex", alignItems: "center", gap: 6,
+          background: C.redL, border: `1px solid ${C.red}44`,
+          color: C.red, borderRadius: 9, padding: "8px 14px",
+          fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0,
+        }}>⏹ End Quiz</button>
+      ) : (
+        <button onClick={onShowGame} style={{
+          display: "flex", alignItems: "center", gap: 6,
+          background: C.greenL, border: `1px solid ${C.green}44`,
+          color: C.green, borderRadius: 9, padding: "8px 14px",
+          fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0,
+          boxShadow: "0 2px 8px rgba(74,124,89,.15)",
+        }}>🎮 Quiz Battle</button>
       )}
 
-      <div style={{
-        flexShrink: 0, padding: "10px 14px",
-        borderTop: `1px solid ${C.border}`,
-        background: C.surface,
-        display: "flex", alignItems: "center", gap: 8,
-      }}>
-        <span style={{ fontSize: 10, fontWeight: 700, color: C.muted,
-          letterSpacing: .8, textTransform: "uppercase", marginRight: 4 }}>Host</span>
-
-        {/* Share / Stop Sharing */}
-        {hasShared ? (
-          <button onClick={stopSharing} style={{
-            display: "flex", alignItems: "center", gap: 6,
-            background: C.redL, border: `1px solid ${C.red}44`,
-            color: C.red, borderRadius: 9, padding: "7px 12px",
-            fontSize: 12, fontWeight: 700, cursor: "pointer",
-          }}>⏹ Stop Sharing</button>
-        ) : (
-          <button onClick={() => setShowShare(true)} style={{
-            display: "flex", alignItems: "center", gap: 6,
-            background: C.accentL, border: `1px solid ${C.accentS}`,
-            color: C.accent, borderRadius: 9, padding: "7px 12px",
-            fontSize: 12, fontWeight: 700, cursor: "pointer",
-          }}>📺 Share</button>
-        )}
-
-        {/* Quiz / Stop Quiz */}
-        {hasGame ? (
-          <button onClick={endGame} style={{
-            display: "flex", alignItems: "center", gap: 6,
-            background: C.redL, border: `1px solid ${C.red}44`,
-            color: C.red, borderRadius: 9, padding: "7px 12px",
-            fontSize: 12, fontWeight: 700, cursor: "pointer",
-          }}>⏹ End Quiz</button>
-        ) : (
-          <button onClick={() => setShowGame(true)} style={{
-            display: "flex", alignItems: "center", gap: 6,
-            background: C.greenL, border: `1px solid ${C.green}44`,
-            color: C.green, borderRadius: 9, padding: "7px 12px",
-            fontSize: 12, fontWeight: 700, cursor: "pointer",
-          }}>🎮 Quiz Battle</button>
-        )}
-
-        {/* Status indicator */}
-        {hasGame && (
-          <span style={{ marginLeft: "auto", fontSize: 11, color: C.green,
-            fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
-            <span style={{ width: 7, height: 7, borderRadius: "50%", background: C.green, display: "inline-block" }} />
-            Quiz Live
-          </span>
-        )}
-        {hasShared && !hasGame && (
-          <span style={{ marginLeft: "auto", fontSize: 11, color: C.accent,
-            fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
-            <span style={{ width: 7, height: 7, borderRadius: "50%", background: C.accent, display: "inline-block" }} />
-            Presenting
-          </span>
-        )}
-      </div>
-    </>
+      {/* Live status pill */}
+      {hasGame && (
+        <span style={{ marginLeft: "auto", fontSize: 11, color: C.green,
+          fontWeight: 700, display: "flex", alignItems: "center", gap: 5 }}>
+          <span style={{ width: 7, height: 7, borderRadius: "50%",
+            background: C.green, display: "inline-block",
+            boxShadow: `0 0 0 3px ${C.greenL}` }} />
+          Quiz Live
+        </span>
+      )}
+      {hasShared && !hasGame && (
+        <span style={{ marginLeft: "auto", fontSize: 11, color: C.accent,
+          fontWeight: 700, display: "flex", alignItems: "center", gap: 5 }}>
+          <span style={{ width: 7, height: 7, borderRadius: "50%",
+            background: C.accent, display: "inline-block",
+            boxShadow: `0 0 0 3px ${C.accentL}` }} />
+          Presenting
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -7188,7 +7215,14 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
   const [chatInput, setChatInput] = useState("");
   const [panel,     setPanel]     = useState("chat");
   const [copied,    setCopied]    = useState(false);
+  // Modals lifted to room level so they always render above the workspace
+  const [showShare, setShowShare] = useState(false);
+  const [showGame,  setShowGame]  = useState(false);
+  // Notification banner when host starts game
+  const [notif,     setNotif]     = useState(null);
+  const notifTimer = useRef(null);
   const chatEndRef = useRef(null);
+  const prevGamePhase = useRef(null);
 
   const isHost  = group?.hostUid === user.uid;
   const members = group?.members || {};
@@ -7221,6 +7255,20 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Show notification banner when host starts a game
+  useEffect(() => {
+    if (!group) return;
+    const phase = group?.gameState?.phase;
+    // Fire when a game just started (prev was null/results, now is question)
+    if (phase === "question" && prevGamePhase.current !== "question" && !isHost) {
+      const topic = group.gameState?.topic || "a quiz";
+      setNotif(`🎮 The host started a quiz: "${topic}" — join now!`);
+      clearTimeout(notifTimer.current);
+      notifTimer.current = setTimeout(() => setNotif(null), 5000);
+    }
+    prevGamePhase.current = phase;
+  }, [group?.gameState?.phase]);
 
   // Presence
   useEffect(() => {
@@ -7278,6 +7326,7 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
   const memberList = Object.values(members).filter(Boolean);
   const showGame    = !!group?.gameState;
   const showContent = !showGame && !!group?.sharedContent;
+  const memberCount = Object.keys(members).length;
 
   return (
     <div style={{
@@ -7287,6 +7336,36 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
       fontFamily: "'DM Sans',sans-serif", overflow: "hidden",
     }}>
       <style>{`@keyframes sg-spin { to { transform:rotate(360deg); } }`}</style>
+
+      {/* Lifted modals — always at room level, never clipped */}
+      {showShare && (
+        <SGSharePicker user={user} db={db} groupId={groupId} group={group}
+          onClose={() => setShowShare(false)} />
+      )}
+      {showGame && (
+        <SGGameLauncher group={group} db={db} groupId={groupId} user={user}
+          onClose={() => setShowGame(false)} />
+      )}
+
+      {/* Game-started notification banner */}
+      {notif && (
+        <div style={{
+          position: "fixed", top: 70, left: "50%", transform: "translateX(-50%)",
+          zIndex: 5000, background: C.accent, color: "#fff",
+          borderRadius: 12, padding: "11px 20px",
+          fontSize: 13, fontWeight: 700,
+          boxShadow: "0 6px 24px rgba(61,90,128,.4)",
+          display: "flex", alignItems: "center", gap: 10,
+          maxWidth: "90vw", animation: "sg-fadein .25s ease",
+        }}>
+          {notif}
+          <button onClick={() => setNotif(null)} style={{
+            background: "rgba(255,255,255,.2)", border: "none", borderRadius: "50%",
+            width: 20, height: 20, color: "#fff", cursor: "pointer", fontSize: 12,
+            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+          }}>×</button>
+        </div>
+      )}
 
       {/* ── Top bar ── */}
       <div style={{
@@ -7350,37 +7429,76 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
           ) : (
             // Empty state
             <div style={{ flex: 1, display: "flex", flexDirection: "column",
-              alignItems: "center", justifyContent: "center", gap: 18, padding: 32 }}>
-              <div style={{ width: 72, height: 72, borderRadius: 20, background: C.accentL,
-                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 34 }}>📚</div>
+              alignItems: "center", justifyContent: "center", gap: 20, padding: "24px 20px",
+              overflowY: "auto" }}>
+              <div style={{ width: 64, height: 64, borderRadius: 18, background: C.accentL,
+                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30 }}>📚</div>
               <div style={{ textAlign: "center" }}>
-                <p style={{ margin: "0 0 6px", fontSize: 17, fontWeight: 700, color: C.text,
+                <p style={{ margin: "0 0 6px", fontSize: 18, fontWeight: 700, color: C.text,
                   fontFamily: "'Fraunces',serif" }}>{group?.name || "Study Group"}</p>
                 <p style={{ margin: 0, fontSize: 13, color: C.muted, maxWidth: 260, lineHeight: 1.5 }}>
-                  {isHost
-                    ? "Use the controls below to present content or start a quiz battle."
-                    : "Waiting for the host to present something…"}
+                  {isHost ? "You're the host — start the session below." : "Waiting for the host to start something…"}
                 </p>
               </div>
+
+              {/* Host CTA cards — big, impossible to miss */}
+              {isHost && (
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center", width: "100%", maxWidth: 380 }}>
+                  <button onClick={() => setShowShare(true)} style={{
+                    flex: "1 1 150px", display: "flex", flexDirection: "column",
+                    alignItems: "center", gap: 10, padding: "20px 14px",
+                    background: C.accentL, border: `2px solid ${C.accentS}`,
+                    borderRadius: 18, cursor: "pointer",
+                    boxShadow: "0 4px 16px rgba(61,90,128,.15)",
+                    transition: "transform .12s",
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.transform = "translateY(-2px)"}
+                  onMouseLeave={e => e.currentTarget.style.transform = "none"}>
+                    <div style={{ width: 48, height: 48, borderRadius: 14, background: C.accent,
+                      display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>📺</div>
+                    <div style={{ textAlign: "center" }}>
+                      <p style={{ margin: "0 0 3px", fontSize: 14, fontWeight: 800, color: C.accent }}>Present</p>
+                      <p style={{ margin: 0, fontSize: 11, color: C.muted, lineHeight: 1.3 }}>Share notes, files or whiteboard</p>
+                    </div>
+                  </button>
+
+                  <button onClick={() => setShowGame(true)} style={{
+                    flex: "1 1 150px", display: "flex", flexDirection: "column",
+                    alignItems: "center", gap: 10, padding: "20px 14px",
+                    background: C.greenL, border: `2px solid ${C.green}33`,
+                    borderRadius: 18, cursor: "pointer",
+                    boxShadow: "0 4px 16px rgba(74,124,89,.12)",
+                    transition: "transform .12s",
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.transform = "translateY(-2px)"}
+                  onMouseLeave={e => e.currentTarget.style.transform = "none"}>
+                    <div style={{ width: 48, height: 48, borderRadius: 14, background: C.green,
+                      display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>🎮</div>
+                    <div style={{ textAlign: "center" }}>
+                      <p style={{ margin: "0 0 3px", fontSize: 14, fontWeight: 800, color: C.green }}>Quiz Battle</p>
+                      <p style={{ margin: 0, fontSize: 11, color: C.muted, lineHeight: 1.3 }}>Launch multiplayer quiz</p>
+                    </div>
+                  </button>
+                </div>
+              )}
+
               {/* Invite card */}
-              <div style={{ background: C.surface, borderRadius: 14, padding: "16px 24px",
+              <div style={{ background: C.surface, borderRadius: 14, padding: "14px 22px",
                 border: `1px solid ${C.border}`, textAlign: "center",
-                boxShadow: "0 2px 12px rgba(0,0,0,.06)" }}>
+                boxShadow: "0 2px 10px rgba(0,0,0,.05)" }}>
                 <p style={{ margin: "0 0 4px", fontSize: 10, fontWeight: 700,
                   color: C.muted, letterSpacing: .8, textTransform: "uppercase" }}>Invite Code</p>
-                <p style={{ margin: 0, fontSize: 28, fontWeight: 900,
+                <p style={{ margin: 0, fontSize: 26, fontWeight: 900,
                   color: C.accent, fontFamily: "monospace", letterSpacing: 5 }}>{groupId}</p>
-                <p style={{ margin: "4px 0 0", fontSize: 11, color: C.muted }}>
-                  Share this with friends to join
-                </p>
+                <p style={{ margin: "3px 0 0", fontSize: 11, color: C.muted }}>Share with friends to join</p>
               </div>
+
               {/* Members row */}
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
                 {memberList.map(m => m && (
                   <SGAvatar key={m.uid} character={m.character}
                     displayName={m.displayName} size={40}
-                    isHost={m.uid === group?.hostUid}
-                    isSelf={m.uid === user.uid} />
+                    isHost={m.uid === group?.hostUid} isSelf={m.uid === user.uid} />
                 ))}
               </div>
             </div>
@@ -7388,7 +7506,11 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
 
           {/* Host toolbar */}
           {isHost && group && (
-            <SGHostControls groupId={groupId} db={db} group={group} user={user} />
+            <SGHostControls
+              groupId={groupId} db={db} group={group}
+              onShowShare={() => setShowShare(true)}
+              onShowGame={() => setShowGame(true)}
+            />
           )}
         </div>
 
