@@ -2031,7 +2031,7 @@ function AvatarSwatches({
         <div style={{ borderRadius:16, overflow:"hidden", background:"#18182a",
           boxShadow:"0 6px 32px rgba(0,0,0,.4)" }}>
           <ColorPicker
-            value={draft}
+            value={draftRef.current}
             onChange={handleLivePick}
             onClose={handleDone}
           />
@@ -2145,7 +2145,7 @@ function AvatarSkinSection({
       {pickerOpen && (
         <div style={{ borderRadius:16, overflow:"hidden", background:"#18182a",
           boxShadow:"0 6px 32px rgba(0,0,0,.4)" }}>
-          <ColorPicker value={draft} onChange={handleLivePick} onClose={handleDone} />
+          <ColorPicker value={draftRef.current} onChange={handleLivePick} onClose={handleDone} />
         </div>
       )}
     </div>
