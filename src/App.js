@@ -6950,6 +6950,510 @@ function SGScreenShareHost({ groupId, db, user, onStop }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// LIVE WHITEBOARD — host draws, all members see strokes in real time
+// Strokes stored in Firestore sharedContent.strokes
+// ═══════════════════════════════════════════════════════════════════════════════
+function SGWhiteboard({ groupId, db, user, group, onClose }) {
+  const canvasRef   = useRef(null);
+  const drawCtxRef  = useRef(null);
+  const drawing     = useRef(false);
+  const lastPt      = useRef(null);
+  const currentPts  = useRef([]);
+  const [color,  setColor]  = useState("#1A1714");
+  const [size,   setSize]   = useState(4);
+  const [eraser, setEraser] = useState(false);
+  const [title,  setTitle]  = useState("Whiteboard");
+  const [saving, setSaving] = useState(false);
+  const [strokes, setStrokes] = useState([]);
+
+  const COLORS = ["#1A1714","#C45C5C","#4A7C59","#3D5A80","#6B4E8A","#C17F5A","#F7F5F2"];
+
+  useEffect(() => {
+    const existing = group?.sharedContent?.strokes || [];
+    setStrokes(existing);
+    redrawAll(existing);
+  }, []);
+
+  const getPos = (e) => {
+    const canvas = canvasRef.current;
+    const r = canvas.getBoundingClientRect();
+    const scaleX = canvas.width  / r.width;
+    const scaleY = canvas.height / r.height;
+    const src = e.touches ? e.touches[0] : e;
+    return { x: (src.clientX - r.left) * scaleX, y: (src.clientY - r.top) * scaleY };
+  };
+
+  const redrawAll = (stks) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    stks.forEach(s => drawStroke(ctx, s));
+  };
+
+  const drawStroke = (ctx, s) => {
+    if (!s.pts || s.pts.length < 2) return;
+    ctx.beginPath();
+    ctx.strokeStyle = s.color; ctx.lineWidth = s.size;
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.globalCompositeOperation = s.eraser ? "destination-out" : "source-over";
+    ctx.moveTo(s.pts[0].x, s.pts[0].y);
+    s.pts.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
+    ctx.stroke();
+    ctx.globalCompositeOperation = "source-over";
+  };
+
+  const onDown = (e) => {
+    e.preventDefault();
+    drawing.current = true;
+    currentPts.current = [getPos(e)];
+    lastPt.current = getPos(e);
+    drawCtxRef.current = canvasRef.current?.getContext("2d");
+  };
+
+  const onMove = (e) => {
+    e.preventDefault();
+    if (!drawing.current) return;
+    const pt = getPos(e);
+    const ctx = drawCtxRef.current;
+    ctx.beginPath();
+    ctx.strokeStyle = eraser ? "#ffffff" : color;
+    ctx.lineWidth   = eraser ? size * 4 : size;
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.globalCompositeOperation = eraser ? "destination-out" : "source-over";
+    ctx.moveTo(lastPt.current.x, lastPt.current.y);
+    ctx.lineTo(pt.x, pt.y);
+    ctx.stroke();
+    ctx.globalCompositeOperation = "source-over";
+    lastPt.current = pt;
+    currentPts.current.push(pt);
+  };
+
+  const onUp = async () => {
+    if (!drawing.current) return;
+    drawing.current = false;
+    const newStroke = { color: eraser ? "#ffffff" : color, size: eraser ? size*4 : size,
+      eraser, pts: currentPts.current };
+    const updated = [...strokes, newStroke];
+    setStrokes(updated);
+    currentPts.current = [];
+    setSaving(true);
+    try {
+      await updateDoc(doc(db,"studyGroups",groupId), {
+        "sharedContent.strokes": updated,
+        "sharedContent.type": "whiteboard",
+        "sharedContent.title": title,
+        lastActivity: Date.now(),
+      });
+    } catch(err) { console.error(err); }
+    setSaving(false);
+  };
+
+  const clearBoard = async () => {
+    canvasRef.current?.getContext("2d").clearRect(0,0,canvasRef.current.width,canvasRef.current.height);
+    setStrokes([]);
+    await updateDoc(doc(db,"studyGroups",groupId),{"sharedContent.strokes":[]}).catch(()=>{});
+  };
+
+  const startPresenting = async () => {
+    setSaving(true);
+    await updateDoc(doc(db,"studyGroups",groupId), {
+      sharedContent: { type:"whiteboard", title, strokes:[],
+        sharedBy: user.displayName?.split(" ")[0] || "Host",
+        sharedByUid: user.uid, sharedAt: Date.now() },
+      lastActivity: Date.now(),
+    });
+    setSaving(false);
+  };
+
+  const isSharing = group?.sharedContent?.type === "whiteboard";
+
+  return (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4600,
+      background:"rgba(26,23,20,.5)", backdropFilter:"blur(3px)",
+      display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div onClick={e=>e.stopPropagation()} style={{
+        width:"100%", maxWidth:820, background:C.surface, borderRadius:20,
+        border:`1px solid ${C.border}`, boxShadow:"0 20px 60px rgba(0,0,0,.18)",
+        display:"flex", flexDirection:"column", maxHeight:"90vh", overflow:"hidden",
+      }}>
+        <div style={{ padding:"12px 16px", borderBottom:`1px solid ${C.border}`,
+          display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
+          <input value={title} onChange={e=>setTitle(e.target.value)}
+            style={{ flex:1, border:"none", outline:"none", fontSize:15, fontWeight:700,
+              color:C.text, background:"transparent", fontFamily:"'Fraunces',serif" }} />
+          {saving && <span style={{ fontSize:11, color:C.muted }}>saving…</span>}
+          {!isSharing && (
+            <button onClick={startPresenting} style={{ background:C.accent, color:"#fff",
+              border:"none", borderRadius:9, padding:"7px 14px", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+              📺 Present to Group
+            </button>
+          )}
+          <button onClick={onClose} style={{ background:C.bg, border:`1px solid ${C.border}`,
+            borderRadius:"50%", width:28, height:28, color:C.muted, cursor:"pointer", fontSize:14,
+            display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
+        </div>
+        <div style={{ padding:"8px 16px", borderBottom:`1px solid ${C.border}`,
+          display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", flexShrink:0, background:C.bg }}>
+          {COLORS.map(c => (
+            <button key={c} onClick={()=>{setEraser(false);setColor(c);}}
+              style={{ width:22, height:22, borderRadius:"50%", background:c, border:"none",
+                cursor:"pointer", flexShrink:0,
+                outline: !eraser && color===c ? `3px solid ${C.accent}` : "2px solid transparent",
+                outlineOffset:2 }} />
+          ))}
+          <div style={{ width:1, height:20, background:C.border, flexShrink:0 }} />
+          {[2,4,8,14].map(s => (
+            <button key={s} onClick={()=>{setEraser(false);setSize(s);}}
+              style={{ width:28, height:28, borderRadius:7,
+                border:`1.5px solid ${!eraser&&size===s?C.accent:C.border}`,
+                background:!eraser&&size===s?C.accentL:"#fff", cursor:"pointer",
+                display:"flex", alignItems:"center", justifyContent:"center" }}>
+              <div style={{ width:s, height:s, borderRadius:"50%", background:color }} />
+            </button>
+          ))}
+          <div style={{ width:1, height:20, background:C.border, flexShrink:0 }} />
+          <button onClick={()=>setEraser(e=>!e)} style={{ padding:"5px 10px", borderRadius:7,
+            fontSize:12, fontWeight:700, border:`1.5px solid ${eraser?C.warm:C.border}`,
+            background:eraser?C.warmL:"#fff", color:eraser?C.warm:C.muted, cursor:"pointer" }}>
+            🧹 Eraser
+          </button>
+          <button onClick={clearBoard} style={{ padding:"5px 10px", borderRadius:7, fontSize:12,
+            border:`1px solid ${C.border}`, background:"#fff", color:C.muted, cursor:"pointer" }}>
+            🗑️ Clear
+          </button>
+        </div>
+        <div style={{ flex:1, overflow:"hidden", background:"#fff", position:"relative" }}>
+          <canvas ref={canvasRef} width={1200} height={700}
+            style={{ width:"100%", height:"100%", display:"block",
+              cursor: eraser ? "cell" : "crosshair", touchAction:"none" }}
+            onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}
+            onTouchStart={onDown} onTouchMove={onMove} onTouchEnd={onUp} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AI FLASHCARD GENERATOR — same flow as CardsTab, for study group sharing
+// ═══════════════════════════════════════════════════════════════════════════════
+function SGAIFlashcardGen({ groupId, db, user, groupFile, onClose }) {
+  const [cardCount, setCardCount] = useState(10);
+  const [cards,     setCards]     = useState([]);
+  const [gen,       setGen]       = useState(false);
+  const [sharing,   setSharing]   = useState(false);
+  const [title,     setTitle]     = useState("");
+  const [topic,     setTopic]     = useState("");
+  const [manualQ,   setManualQ]   = useState("");
+  const [manualA,   setManualA]   = useState("");
+  const [tab,       setTab]       = useState("ai");
+
+  const generate = async () => {
+    if (!groupFile && !topic.trim()) return;
+    setGen(true);
+    try {
+      let fileText = null;
+      if (groupFile?._fileObj) fileText = await extractFileText(groupFile._fileObj).catch(()=>null);
+      const safeText = fileText ? fileText.slice(0,12000) : null;
+      const subject  = groupFile?.name || topic.trim() || "General Study";
+      const userMsg  = safeText
+        ? `Here is the COMPLETE content from "${subject}":\n\n${safeText}\n\nCreate exactly ${cardCount} study flashcards. Return JSON array: [{"question":"…","answer":"…"}]`
+        : `Create exactly ${cardCount} study flashcards for "${topic || subject}". Return JSON array: [{"question":"…","answer":"…"}]`;
+      const txt = await callClaude("Return ONLY valid JSON array. No markdown, no explanation.", userMsg);
+      const parsed = JSON.parse(txt.replace(/```json|```/g,"").trim());
+      setCards(parsed.map((c,i)=>({id:Date.now()+i,...c})));
+      setTitle(groupFile?.name || topic || "AI Flashcards");
+    } catch(e) { console.error(e); }
+    setGen(false);
+  };
+
+  const addManual = () => {
+    if (!manualQ.trim() || !manualA.trim()) return;
+    setCards(p=>[...p,{id:Date.now(),question:manualQ.trim(),answer:manualA.trim()}]);
+    setManualQ(""); setManualA("");
+  };
+
+  const shareCards = async () => {
+    if (!cards.length) return;
+    setSharing(true);
+    await updateDoc(doc(db,"studyGroups",groupId), {
+      sharedContent: { type:"flashcards", title: title||"Flashcards", cards,
+        sharedBy: user.displayName?.split(" ")[0]||"Host",
+        sharedByUid: user.uid, sharedAt: Date.now() },
+      lastActivity: Date.now(),
+    });
+    setSharing(false); onClose();
+  };
+
+  const inp = { width:"100%", padding:"9px 12px", boxSizing:"border-box", background:C.bg,
+    border:`1.5px solid ${C.border}`, borderRadius:9, color:C.text, fontSize:13,
+    outline:"none", fontFamily:"inherit", marginBottom:8 };
+
+  return (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4600,
+      background:"rgba(26,23,20,.5)", backdropFilter:"blur(3px)",
+      display:"flex", alignItems:"flex-end", justifyContent:"center", padding:16 }}>
+      <div onClick={e=>e.stopPropagation()} style={{
+        width:"100%", maxWidth:520, background:C.surface,
+        borderRadius:"20px 20px 16px 16px", border:`1px solid ${C.border}`,
+        boxShadow:"0 -8px 40px rgba(0,0,0,.12)", maxHeight:"88vh", overflowY:"auto",
+      }}>
+        <div style={{ display:"flex", justifyContent:"center", padding:"10px 0 0" }}>
+          <div style={{ width:36, height:4, borderRadius:2, background:C.border }} />
+        </div>
+        <div style={{ padding:"12px 20px 8px", borderBottom:`1px solid ${C.border}`,
+          display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <span style={{ fontSize:15, fontWeight:700, color:C.text }}>🃏 Create Flashcards</span>
+          <button onClick={onClose} style={{ background:C.bg, border:`1px solid ${C.border}`,
+            borderRadius:"50%", width:28, height:28, color:C.muted, cursor:"pointer", fontSize:14,
+            display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
+        </div>
+        <div style={{ padding:"16px 20px" }}>
+          <div style={{ display:"flex", background:C.bg, borderRadius:10, padding:3, marginBottom:14 }}>
+            {[{id:"ai",label:"✨ AI Generate"},{id:"manual",label:"✍️ Manual"}].map(t=>(
+              <button key={t.id} onClick={()=>setTab(t.id)} style={{
+                flex:1, padding:"7px", borderRadius:8, border:"none", cursor:"pointer",
+                background:tab===t.id?C.surface:"transparent", color:tab===t.id?C.accent:C.muted,
+                fontSize:12, fontWeight:700, boxShadow:tab===t.id?"0 1px 4px rgba(0,0,0,.08)":"none",
+              }}>{t.label}</button>
+            ))}
+          </div>
+          {tab==="ai" && (
+            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+              {groupFile ? (
+                <div style={{ padding:"10px 12px", borderRadius:10, background:C.accentL,
+                  border:`1px solid ${C.accentS}`, display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ fontSize:14 }}>📎</span>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.accent }}>Using group file</p>
+                    <p style={{ margin:0, fontSize:11, color:C.muted, overflow:"hidden",
+                      textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{groupFile.name}</p>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label style={{ fontSize:11, fontWeight:700, color:C.muted, textTransform:"uppercase", letterSpacing:.8 }}>Topic</label>
+                  <input value={topic} onChange={e=>setTopic(e.target.value)}
+                    placeholder="e.g. Photosynthesis, World War II…" style={{ ...inp, marginTop:5 }} />
+                </div>
+              )}
+              <div>
+                <label style={{ fontSize:11, fontWeight:700, color:C.muted, textTransform:"uppercase", letterSpacing:.8 }}>Card title</label>
+                <input value={title} onChange={e=>setTitle(e.target.value)}
+                  placeholder={groupFile?.name||topic||"My Flashcards"} style={{ ...inp, marginTop:5 }} />
+              </div>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:4 }}>
+                {[5,8,10,15,20,30].map(n=>(
+                  <button key={n} onClick={()=>setCardCount(n)} style={{
+                    width:44, height:36, borderRadius:8,
+                    border:`1.5px solid ${cardCount===n?C.accent:C.border}`,
+                    background:cardCount===n?C.accent:"#fff",
+                    color:cardCount===n?"#fff":C.text, fontSize:13, fontWeight:700, cursor:"pointer" }}>{n}</button>
+                ))}
+              </div>
+              <button onClick={generate} disabled={gen||(!groupFile&&!topic.trim())} style={{
+                background:C.accent, color:"#fff", border:"none", borderRadius:12,
+                padding:"12px", fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer",
+                display:"flex", alignItems:"center", justifyContent:"center", gap:8,
+                opacity:(!groupFile&&!topic.trim())?.5:1, boxShadow:"0 4px 14px rgba(61,90,128,.3)",
+              }}>
+                {gen?<><SGSpinner color="#fff"/>Generating…</>:`✨ Generate ${cardCount} Cards`}
+              </button>
+            </div>
+          )}
+          {tab==="manual" && (
+            <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+              <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Flashcard set title" style={inp} />
+              <input value={manualQ} onChange={e=>setManualQ(e.target.value)} placeholder="Question" style={inp} />
+              <input value={manualA} onChange={e=>setManualA(e.target.value)} placeholder="Answer"
+                onKeyDown={e=>e.key==="Enter"&&addManual()} style={{ ...inp, marginBottom:4 }} />
+              <button onClick={addManual} style={{ background:C.accentL, border:`1px solid ${C.accentS}`,
+                borderRadius:9, padding:"8px", fontSize:12, fontWeight:700, color:C.accent,
+                cursor:"pointer", marginBottom:8 }}>+ Add Card ({cards.length})</button>
+            </div>
+          )}
+          {cards.length > 0 && (
+            <>
+              <div style={{ maxHeight:180, overflowY:"auto", display:"flex", flexDirection:"column",
+                gap:6, marginTop:8, marginBottom:10 }}>
+                {cards.map((c,i)=>(
+                  <div key={c.id||i} style={{ background:C.bg, border:`1px solid ${C.border}`,
+                    borderRadius:9, padding:"9px 12px", display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <p style={{ margin:"0 0 2px", fontSize:12, fontWeight:700, color:C.text,
+                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.question}</p>
+                      <p style={{ margin:0, fontSize:11, color:C.muted,
+                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.answer}</p>
+                    </div>
+                    <button onClick={()=>setCards(p=>p.filter((_,j)=>j!==i))}
+                      style={{ background:"none", border:"none", color:C.red, cursor:"pointer", fontSize:14, padding:"0 0 0 8px", flexShrink:0 }}>×</button>
+                  </div>
+                ))}
+              </div>
+              <button onClick={shareCards} disabled={sharing} style={{
+                width:"100%", background:C.accent, color:"#fff", border:"none", borderRadius:12,
+                padding:"13px", fontSize:14, fontWeight:700, cursor:sharing?"not-allowed":"pointer",
+                display:"flex", alignItems:"center", justifyContent:"center", gap:8,
+                boxShadow:"0 4px 14px rgba(61,90,128,.3)",
+              }}>
+                {sharing?<><SGSpinner color="#fff"/>Sharing…</>:`📺 Present ${cards.length} Cards`}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AI NOTES GENERATOR — same quality as NotesTab, shared to group
+// ═══════════════════════════════════════════════════════════════════════════════
+function SGAINotesGen({ groupId, db, user, groupFile, onClose }) {
+  const [topic,   setTopic]   = useState("");
+  const [style,   setStyle]   = useState("detailed");
+  const [gen,     setGen]     = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [notes,   setNotes]   = useState("");
+  const [title,   setTitle]   = useState("");
+
+  const STYLES = [
+    { id:"detailed", label:"📚 Detailed",     desc:"Sections + bullet points" },
+    { id:"bullet",   label:"• Bullet Points", desc:"Concise bullet-only format" },
+    { id:"simple",   label:"🧒 Simple",        desc:"Plain language, short sentences" },
+    { id:"exam",     label:"📝 Exam Focus",    desc:"Key terms + likely questions" },
+  ];
+
+  const generate = async () => {
+    setGen(true); setNotes("");
+    try {
+      let fileText = null;
+      if (groupFile?._fileObj) fileText = await extractFileText(groupFile._fileObj).catch(()=>null);
+      const safeText = fileText ? fileText.slice(0,16000) : null;
+      const subject  = groupFile?.name || topic.trim() || "Study Notes";
+      const styleGuide = {
+        detailed:"Write detailed notes split into sections. Each section has a heading in ALL CAPS followed by bullet points.",
+        bullet:  "Write ONLY bullet points grouped under ALL CAPS headings. One fact per line.",
+        simple:  "Write very simple short notes in plain language. Short sentences. No jargon.",
+        exam:    "Write exam revision notes. Include key terms, definitions, possible exam questions, and a checklist.",
+      };
+      const userMsg = safeText
+        ? `Here is the COMPLETE content from "${subject}":\n\n${safeText}\n\nCRITICAL: Cover EVERY section, concept, definition, and fact.`
+        : `Create comprehensive study notes for: "${topic||subject}". Cover all key topics, definitions, formulas, and concepts.`;
+      const txt = await callClaude(
+        `You are a study notes writer. ${styleGuide[style]}
+STRICT RULES: NEVER use asterisks or #. Section headings: ALL CAPS. Bullets: dash (-). Plain text only.
+Math: proper notation (1×10⁻¹⁰ not words, H₂O not words). Units: standard abbreviations.`,
+        userMsg, 4000
+      );
+      setNotes(txt);
+      setTitle(groupFile?.name || topic || "Study Notes");
+    } catch(e) { setNotes("Error: "+e.message); }
+    setGen(false);
+  };
+
+  const shareNotes = async () => {
+    if (!notes.trim()) return;
+    setSharing(true);
+    await updateDoc(doc(db,"studyGroups",groupId), {
+      sharedContent: { type:"notes", title:title||"Notes", body:notes,
+        sharedBy:user.displayName?.split(" ")[0]||"Host",
+        sharedByUid:user.uid, sharedAt:Date.now() },
+      lastActivity:Date.now(),
+    });
+    setSharing(false); onClose();
+  };
+
+  const inp = { width:"100%", padding:"9px 12px", boxSizing:"border-box", background:C.bg,
+    border:`1.5px solid ${C.border}`, borderRadius:9, color:C.text, fontSize:13,
+    outline:"none", fontFamily:"inherit" };
+
+  return (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4600,
+      background:"rgba(26,23,20,.5)", backdropFilter:"blur(3px)",
+      display:"flex", alignItems:"flex-end", justifyContent:"center", padding:16 }}>
+      <div onClick={e=>e.stopPropagation()} style={{
+        width:"100%", maxWidth:520, background:C.surface,
+        borderRadius:"20px 20px 16px 16px", border:`1px solid ${C.border}`,
+        boxShadow:"0 -8px 40px rgba(0,0,0,.12)", maxHeight:"88vh", overflowY:"auto",
+      }}>
+        <div style={{ display:"flex", justifyContent:"center", padding:"10px 0 0" }}>
+          <div style={{ width:36, height:4, borderRadius:2, background:C.border }} />
+        </div>
+        <div style={{ padding:"12px 20px 8px", borderBottom:`1px solid ${C.border}`,
+          display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <span style={{ fontSize:15, fontWeight:700, color:C.text }}>📝 Generate Notes</span>
+          <button onClick={onClose} style={{ background:C.bg, border:`1px solid ${C.border}`,
+            borderRadius:"50%", width:28, height:28, color:C.muted, cursor:"pointer", fontSize:14,
+            display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
+        </div>
+        <div style={{ padding:"16px 20px", display:"flex", flexDirection:"column", gap:10 }}>
+          {groupFile ? (
+            <div style={{ padding:"10px 12px", borderRadius:10, background:C.accentL,
+              border:`1px solid ${C.accentS}`, display:"flex", alignItems:"center", gap:8 }}>
+              <span style={{ fontSize:14 }}>📎</span>
+              <div style={{ flex:1, minWidth:0 }}>
+                <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.accent }}>Using group file</p>
+                <p style={{ margin:0, fontSize:11, color:C.muted, overflow:"hidden",
+                  textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{groupFile.name}</p>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <label style={{ fontSize:11, fontWeight:700, color:C.muted, textTransform:"uppercase", letterSpacing:.8 }}>Topic / subject</label>
+              <input value={topic} onChange={e=>setTopic(e.target.value)}
+                placeholder="e.g. The French Revolution, Calculus derivatives…"
+                style={{ ...inp, marginTop:5 }} />
+            </div>
+          )}
+          <div>
+            <label style={{ fontSize:11, fontWeight:700, color:C.muted, textTransform:"uppercase", letterSpacing:.8 }}>Note style</label>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:7, marginTop:6 }}>
+              {STYLES.map(s=>(
+                <button key={s.id} onClick={()=>setStyle(s.id)} style={{
+                  background:style===s.id?C.accentL:C.bg,
+                  border:`1.5px solid ${style===s.id?C.accentS:C.border}`,
+                  borderRadius:10, padding:"10px", cursor:"pointer", textAlign:"left",
+                }}>
+                  <p style={{ margin:"0 0 2px", fontSize:12, fontWeight:700, color:style===s.id?C.accent:C.text }}>{s.label}</p>
+                  <p style={{ margin:0, fontSize:10, color:C.muted }}>{s.desc}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+          <button onClick={generate} disabled={gen||(!groupFile&&!topic.trim())} style={{
+            background:C.accent, color:"#fff", border:"none", borderRadius:12,
+            padding:"12px", fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer",
+            display:"flex", alignItems:"center", justifyContent:"center", gap:8,
+            opacity:(!groupFile&&!topic.trim())?.5:1, boxShadow:"0 4px 14px rgba(61,90,128,.3)",
+          }}>
+            {gen?<><SGSpinner color="#fff"/>Generating notes…</>:"✨ Generate Notes"}
+          </button>
+          {notes && (
+            <>
+              <div style={{ background:C.bg, borderRadius:12, padding:14, border:`1px solid ${C.border}`,
+                maxHeight:220, overflowY:"auto", fontSize:13, color:C.text, lineHeight:1.7, whiteSpace:"pre-wrap" }}>
+                {notes}
+              </div>
+              <button onClick={shareNotes} disabled={sharing} style={{
+                background:C.accent, color:"#fff", border:"none", borderRadius:12,
+                padding:"13px", fontSize:14, fontWeight:700, cursor:sharing?"not-allowed":"pointer",
+                display:"flex", alignItems:"center", justifyContent:"center", gap:8,
+                boxShadow:"0 4px 14px rgba(61,90,128,.3)",
+              }}>
+                {sharing?<><SGSpinner color="#fff"/>Sharing…</>:"📺 Present Notes to Group"}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // SHARE PICKER — Google Meet style bottom-sheet, all modes in one place
 // ═══════════════════════════════════════════════════════════════════════════════
 function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
