@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot, updateDoc, deleteDoc, serverTimestamp, query, orderBy, limit, getDocs } from "firebase/firestore";
@@ -564,6 +564,7 @@ ins.adsbygoogle{max-height:46px!important;overflow:hidden!important}
 ins.adsbygoogle iframe{max-height:46px!important}
 @keyframes bounce{0%,80%,100%{transform:scale(.8);opacity:.5}40%{transform:scale(1.1);opacity:1}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+@keyframes sg-pulse{0%,100%{box-shadow:0 0 0 0 rgba(74,124,89,.6)}70%{box-shadow:0 0 0 6px rgba(74,124,89,0)}}
 `; 
 
 // Global file object store — survives navigation within the session
@@ -6537,29 +6538,163 @@ function SGChatMessage({ msg, isSelf }) {
   );
 }
 
-// ── Shared content viewer ─────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
 // STUDY GROUP — shared content viewer
-// Types: notes | flashcards | whiteboard | material | screenshare
+// Types: notes | flashcards | whiteboard | material | screenshare | file
 // ═══════════════════════════════════════════════════════════════════════════════
+
+// ── Mini file viewer used inside SGSharedContent for "file" type ──────────────
+// Renders PDFs, images, Word docs, text — same as ViewTab but self-contained.
+function SGFileViewer({ fileData, fileName }) {
+  const ext  = (fileName || "").split(".").pop().toLowerCase();
+  const isPDF   = ext === "pdf";
+  const isImage = ["jpg","jpeg","png","gif","webp","bmp","svg"].includes(ext);
+  const isText  = ["txt","md","csv","json","js","ts","jsx","py","html","css","xml","yaml","yml"].includes(ext);
+  const isWord  = ["doc","docx"].includes(ext);
+  const isPPT   = ["ppt","pptx"].includes(ext);
+
+  // Reconstruct a File/Blob from the stored base64 data-URL
+  const fileObj = useMemo(() => {
+    if (!fileData) return null;
+    try {
+      const [header, b64] = fileData.split(",");
+      const mime = header.match(/:(.*?);/)?.[1] || "application/octet-stream";
+      const binary = atob(b64);
+      const bytes  = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return new File([bytes], fileName || "file", { type: mime });
+    } catch { return null; }
+  }, [fileData, fileName]);
+
+  // PDF rendering
+  const canvasRef = useRef(null);
+  const pdfRef    = useRef(null);
+  const [totalPages, setTotalPages] = useState(0);
+  const [pageNum,    setPageNum]    = useState(1);
+  const [pdfReady,   setPdfReady]   = useState(false);
+
+  useEffect(() => {
+    if (!isPDF || !fileObj) return;
+    (async () => {
+      try {
+        if (!window.pdfjsLib) {
+          await new Promise((res, rej) => {
+            const s = document.createElement("script");
+            s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+            s.onload = res; s.onerror = rej; document.head.appendChild(s);
+          });
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+            "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+        }
+        const buf = await fileObj.arrayBuffer();
+        const pdf = await window.pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+        pdfRef.current = pdf;
+        setTotalPages(pdf.numPages);
+        setPdfReady(true);
+      } catch(e) { console.error("PDF", e); }
+    })();
+  }, [fileObj]);
+
+  useEffect(() => {
+    if (!pdfReady || !pdfRef.current || !canvasRef.current) return;
+    (async () => {
+      const page     = await pdfRef.current.getPage(pageNum);
+      const viewport = page.getViewport({ scale: 1.4 });
+      const canvas   = canvasRef.current;
+      canvas.width   = viewport.width;
+      canvas.height  = viewport.height;
+      await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+    })();
+  }, [pdfReady, pageNum]);
+
+  if (!fileObj) return (
+    <div style={{ padding:40, textAlign:"center", color:C.muted }}>
+      <div style={{ fontSize:40, marginBottom:8 }}>📄</div>
+      <p>Loading file…</p>
+    </div>
+  );
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", height:"100%" }}>
+      {/* Page nav for PDF */}
+      {isPDF && totalPages > 1 && (
+        <div style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 16px",
+          borderBottom:`1px solid ${C.border}`, background:C.bg, flexShrink:0 }}>
+          <button onClick={() => setPageNum(p => Math.max(1,p-1))} disabled={pageNum<=1}
+            style={{ width:28, height:28, borderRadius:6, border:`1px solid ${C.border}`,
+              background:"#fff", cursor:pageNum<=1?"default":"pointer", opacity:pageNum<=1?.4:1, fontSize:18 }}>‹</button>
+          <span style={{ fontSize:13, color:C.text, fontWeight:600 }}>{pageNum} / {totalPages}</span>
+          <button onClick={() => setPageNum(p => Math.min(totalPages,p+1))} disabled={pageNum>=totalPages}
+            style={{ width:28, height:28, borderRadius:6, border:`1px solid ${C.border}`,
+              background:"#fff", cursor:pageNum>=totalPages?"default":"pointer", opacity:pageNum>=totalPages?.4:1, fontSize:18 }}>›</button>
+        </div>
+      )}
+      <div style={{ flex:1, overflow:"auto", background:"#404040",
+        display:"flex", justifyContent:"center", alignItems:"flex-start", padding:20 }}>
+        {isPDF && (
+          <canvas ref={canvasRef}
+            style={{ display:"block", boxShadow:"0 4px 32px rgba(0,0,0,.6)", maxWidth:"100%" }} />
+        )}
+        {isImage && fileObj && (
+          <img src={fileData} alt={fileName}
+            style={{ maxWidth:"100%", borderRadius:6, boxShadow:"0 4px 32px rgba(0,0,0,.5)", background:"#fff" }} />
+        )}
+        {isText && fileObj && <TextViewer fileObj={fileObj} />}
+        {isWord && fileObj && <WordViewer fileObj={fileObj} />}
+        {isPPT  && fileObj && <PPTViewer  fileObj={fileObj} page={1} onTotalPages={()=>{}} onSlidesLoaded={()=>{}} />}
+        {!isPDF && !isImage && !isText && !isWord && !isPPT && (
+          <div style={{ background:C.surface, borderRadius:14, padding:32, textAlign:"center" }}>
+            <div style={{ fontSize:48, marginBottom:12 }}>📄</div>
+            <p style={{ color:C.text, fontWeight:700, fontSize:15 }}>{fileName}</p>
+            <p style={{ color:C.muted, fontSize:13, margin:0 }}>File type preview not available</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Screen share receiver — renders the live video frame broadcast by host ────
+function SGScreenShareViewer({ content }) {
+  // content.frame is a base64 data-URL updated by the host every ~300ms
+  if (!content?.frame) return (
+    <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center",
+      justifyContent:"center", gap:12, padding:32 }}>
+      <div style={{ fontSize:48 }}>🖥️</div>
+      <p style={{ color:C.text, fontWeight:700, fontSize:16, margin:0 }}>{content?.title || "Screen Share"}</p>
+      <p style={{ color:C.muted, fontSize:13, margin:0 }}>Waiting for host's screen…</p>
+      <div style={{ display:"flex", gap:6, marginTop:4 }}>
+        {[0,1,2].map(i => (
+          <div key={i} style={{ width:7, height:7, borderRadius:"50%", background:C.accent,
+            animation:"bounce 1.2s infinite", animationDelay:`${i*.2}s` }} />
+        ))}
+      </div>
+    </div>
+  );
+  return (
+    <div style={{ flex:1, overflow:"auto", background:"#000",
+      display:"flex", justifyContent:"center", alignItems:"center" }}>
+      <img src={content.frame} alt="Screen share"
+        style={{ maxWidth:"100%", maxHeight:"100%", display:"block" }} />
+    </div>
+  );
+}
+
 function SGSharedContent({ content, presenterName, isHost, db, groupId }) {
   // Whiteboard viewer — read-only canvas that mirrors strokes from Firestore
   const viewCanvasRef = useRef(null);
 
-  // Redraw strokes whenever whiteboard strokes update
   useEffect(() => {
     if (content?.type !== "whiteboard" || !viewCanvasRef.current) return;
     const canvas = viewCanvasRef.current;
     const ctx    = canvas.getContext("2d");
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const strokes = content.strokes || [];
-    strokes.forEach(s => {
+    (content.strokes || []).forEach(s => {
       if (!s.pts || s.pts.length < 2) return;
       ctx.beginPath();
       ctx.strokeStyle = s.color || "#1A1714";
       ctx.lineWidth   = s.size  || 3;
-      ctx.lineCap     = "round";
-      ctx.lineJoin    = "round";
+      ctx.lineCap     = "round"; ctx.lineJoin = "round";
       ctx.globalCompositeOperation = s.eraser ? "destination-out" : "source-over";
       ctx.moveTo(s.pts[0].x, s.pts[0].y);
       s.pts.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
@@ -6568,7 +6703,6 @@ function SGSharedContent({ content, presenterName, isHost, db, groupId }) {
     });
   }, [content?.strokes]);
 
-  // Flashcard flip state for viewer
   const [flipped, setFlipped] = useState({});
 
   if (!content) return (
@@ -6577,12 +6711,13 @@ function SGSharedContent({ content, presenterName, isHost, db, groupId }) {
       <div style={{ fontSize:52 }}>📺</div>
       <p style={{ color:C.muted, fontSize:15, fontWeight:600, margin:0 }}>Nothing shared yet</p>
       <p style={{ color:C.muted, fontSize:13, margin:0, textAlign:"center", maxWidth:240 }}>
-        The host can present notes, flashcards, a whiteboard, or study material
+        The host can present notes, flashcards, a whiteboard, screen, or study file
       </p>
     </div>
   );
 
-  const typeIcon = { notes:"📝", flashcards:"🃏", whiteboard:"✏️", material:"📄", screenshare:"🖥️" };
+  const typeIcon = { notes:"📝", flashcards:"🃏", whiteboard:"✏️", material:"📄",
+    screenshare:"🖥️", file:"📎" };
 
   return (
     <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden" }}>
@@ -6605,10 +6740,9 @@ function SGSharedContent({ content, presenterName, isHost, db, groupId }) {
         )}
       </div>
 
-      {/* Content area */}
-      <div style={{ flex:1, overflowY:"auto", padding:20 }}>
-        {/* ── Notes / Material ── */}
-        {(content.type === "notes" || content.type === "material") && (
+      {/* Content */}
+      {(content.type === "notes" || content.type === "material") && (
+        <div style={{ flex:1, overflowY:"auto", padding:20 }}>
           <div style={{ background:C.surface, borderRadius:14, padding:20,
             border:`1px solid ${C.border}`, boxShadow:"0 2px 12px rgba(0,0,0,.06)" }}>
             <h3 style={{ margin:"0 0 14px", color:C.text, fontSize:17, fontWeight:700,
@@ -6616,647 +6750,201 @@ function SGSharedContent({ content, presenterName, isHost, db, groupId }) {
             <div style={{ color:C.text, fontSize:14, lineHeight:1.8,
               whiteSpace:"pre-wrap", wordBreak:"break-word" }}>{content.body}</div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* ── Whiteboard (read-only mirror) ── */}
-        {content.type === "whiteboard" && (
+      {content.type === "whiteboard" && (
+        <div style={{ flex:1, overflowY:"auto", padding:20 }}>
           <div style={{ background:C.surface, borderRadius:14, border:`1px solid ${C.border}`,
-            overflow:"hidden", boxShadow:"0 2px 12px rgba(0,0,0,.06)" }}>
+            overflow:"hidden" }}>
             <div style={{ padding:"10px 16px", borderBottom:`1px solid ${C.border}`,
               display:"flex", alignItems:"center", gap:8 }}>
               <span style={{ fontSize:13, fontWeight:700, color:C.text }}>{content.title || "Whiteboard"}</span>
               <span style={{ fontSize:11, color:C.muted, marginLeft:"auto" }}>Live drawing</span>
             </div>
             <canvas ref={viewCanvasRef} width={800} height={500}
-              style={{ width:"100%", height:"auto", display:"block",
-                background:"#fff", cursor:"default" }} />
+              style={{ width:"100%", height:"auto", display:"block", background:"#fff" }} />
           </div>
-        )}
-
-        {/* ── Flashcards ── */}
-        {content.type === "flashcards" && (
-          <div>
-            <h3 style={{ margin:"0 0 16px", color:C.text, fontSize:17, fontWeight:700,
-              fontFamily:"'Fraunces',serif" }}>{content.title}</h3>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))", gap:14 }}>
-              {(content.cards || []).map((c, i) => (
-                <div key={i} onClick={() => setFlipped(f => ({...f,[i]:!f[i]}))}
-                  style={{ background:flipped[i] ? C.accentL : C.surface,
-                    border:`1.5px solid ${flipped[i] ? C.accentS : C.border}`,
-                    borderRadius:16, padding:20, cursor:"pointer", minHeight:120,
-                    display:"flex", flexDirection:"column", gap:8, transition:"all .18s" }}>
-                  <p style={{ margin:0, fontSize:10, fontWeight:700,
-                    color:flipped[i] ? C.accent : C.muted,
-                    textTransform:"uppercase", letterSpacing:1 }}>
-                    {flipped[i] ? "Answer" : `Card ${i+1}`}
-                  </p>
-                  <p style={{ margin:0, fontSize:14, color:C.text, lineHeight:1.5, flex:1 }}>
-                    {flipped[i] ? c.answer : c.question}
-                  </p>
-                  <p style={{ margin:0, fontSize:11, color:C.muted }}>Tap to flip</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ── Screen share placeholder ── */}
-        {content.type === "screenshare" && (
-          <div style={{ background:C.surface, borderRadius:14, border:`1px solid ${C.border}`,
-            padding:24, textAlign:"center" }}>
-            <div style={{ fontSize:48, marginBottom:12 }}>🖥️</div>
-            <p style={{ color:C.text, fontWeight:700, fontSize:16, margin:"0 0 6px" }}>{content.title}</p>
-            <p style={{ color:C.muted, fontSize:13, margin:0 }}>{content.body}</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// LIVE WHITEBOARD — host draws, all members see strokes in real time
-// Strokes are stored in Firestore sharedContent.strokes as an array
-// ═══════════════════════════════════════════════════════════════════════════════
-function SGWhiteboard({ groupId, db, user, group, onClose }) {
-  const canvasRef   = useRef(null);
-  const drawCtxRef  = useRef(null);
-  const drawing     = useRef(false);
-  const lastPt      = useRef(null);
-  const currentPts  = useRef([]);
-  const [color,  setColor]  = useState("#1A1714");
-  const [size,   setSize]   = useState(4);
-  const [eraser, setEraser] = useState(false);
-  const [title,  setTitle]  = useState("Whiteboard");
-  const [saving, setSaving] = useState(false);
-  const [strokes, setStrokes] = useState([]);
-
-  const COLORS = ["#1A1714","#C45C5C","#4A7C59","#3D5A80","#6B4E8A","#C17F5A","#F7F5F2"];
-
-  // Mirror existing strokes from Firestore (in case user refreshed)
-  useEffect(() => {
-    const existing = group?.sharedContent?.strokes || [];
-    setStrokes(existing);
-    redrawAll(existing);
-  }, []);
-
-  const getPos = (e) => {
-    const canvas = canvasRef.current;
-    const r = canvas.getBoundingClientRect();
-    const scaleX = canvas.width  / r.width;
-    const scaleY = canvas.height / r.height;
-    const src = e.touches ? e.touches[0] : e;
-    return {
-      x: (src.clientX - r.left) * scaleX,
-      y: (src.clientY - r.top)  * scaleY,
-    };
-  };
-
-  const redrawAll = (stks) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    stks.forEach(s => drawStroke(ctx, s));
-  };
-
-  const drawStroke = (ctx, s) => {
-    if (!s.pts || s.pts.length < 2) return;
-    ctx.beginPath();
-    ctx.strokeStyle = s.color;
-    ctx.lineWidth   = s.size;
-    ctx.lineCap     = "round";
-    ctx.lineJoin    = "round";
-    ctx.globalCompositeOperation = s.eraser ? "destination-out" : "source-over";
-    ctx.moveTo(s.pts[0].x, s.pts[0].y);
-    s.pts.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
-    ctx.stroke();
-    ctx.globalCompositeOperation = "source-over";
-  };
-
-  const onDown = (e) => {
-    e.preventDefault();
-    drawing.current  = true;
-    currentPts.current = [getPos(e)];
-    lastPt.current   = getPos(e);
-    const ctx = drawCtxRef.current || canvasRef.current?.getContext("2d");
-    drawCtxRef.current = ctx;
-  };
-
-  const onMove = (e) => {
-    e.preventDefault();
-    if (!drawing.current) return;
-    const pt  = getPos(e);
-    const ctx = drawCtxRef.current;
-    ctx.beginPath();
-    ctx.strokeStyle = eraser ? "#ffffff" : color;
-    ctx.lineWidth   = eraser ? size * 4 : size;
-    ctx.lineCap     = "round";
-    ctx.lineJoin    = "round";
-    ctx.globalCompositeOperation = eraser ? "destination-out" : "source-over";
-    ctx.moveTo(lastPt.current.x, lastPt.current.y);
-    ctx.lineTo(pt.x, pt.y);
-    ctx.stroke();
-    ctx.globalCompositeOperation = "source-over";
-    lastPt.current = pt;
-    currentPts.current.push(pt);
-  };
-
-  const onUp = async (e) => {
-    if (!drawing.current) return;
-    drawing.current = false;
-    const newStroke = { color: eraser ? "#ffffff" : color, size: eraser ? size*4 : size,
-      eraser, pts: currentPts.current };
-    const updated = [...strokes, newStroke];
-    setStrokes(updated);
-    currentPts.current = [];
-    // Push to Firestore so all viewers see it
-    setSaving(true);
-    try {
-      await updateDoc(doc(db,"studyGroups",groupId), {
-        "sharedContent.strokes": updated,
-        "sharedContent.type": "whiteboard",
-        "sharedContent.title": title,
-        lastActivity: Date.now(),
-      });
-    } catch(err) { console.error(err); }
-    setSaving(false);
-  };
-
-  const clearBoard = async () => {
-    const canvas = canvasRef.current;
-    canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
-    setStrokes([]);
-    await updateDoc(doc(db,"studyGroups",groupId), {
-      "sharedContent.strokes": [],
-    }).catch(()=>{});
-  };
-
-  const startPresenting = async () => {
-    setSaving(true);
-    await updateDoc(doc(db,"studyGroups",groupId), {
-      sharedContent: {
-        type:"whiteboard", title, strokes:[],
-        sharedBy: user.displayName?.split(" ")[0] || "Host",
-        sharedByUid: user.uid, sharedAt: Date.now(),
-      },
-      lastActivity: Date.now(),
-    });
-    setSaving(false);
-    // Once shared, redraw stays via useEffect watching group
-  };
-
-  const isSharing = group?.sharedContent?.type === "whiteboard";
-
-  return (
-    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4600,
-      background:"rgba(26,23,20,.5)", backdropFilter:"blur(3px)",
-      display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <div onClick={e=>e.stopPropagation()} style={{
-        width:"100%", maxWidth:820, background:C.surface,
-        borderRadius:20, border:`1px solid ${C.border}`,
-        boxShadow:"0 20px 60px rgba(0,0,0,.18)",
-        display:"flex", flexDirection:"column",
-        maxHeight:"90vh", overflow:"hidden",
-      }}>
-        {/* Header */}
-        <div style={{ padding:"12px 16px", borderBottom:`1px solid ${C.border}`,
-          display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
-          <input value={title} onChange={e=>setTitle(e.target.value)}
-            style={{ flex:1, border:"none", outline:"none", fontSize:15, fontWeight:700,
-              color:C.text, background:"transparent", fontFamily:"'Fraunces',serif" }} />
-          {saving && <span style={{ fontSize:11, color:C.muted }}>saving…</span>}
-          {!isSharing && (
-            <button onClick={startPresenting} style={{
-              background:C.accent, color:"#fff", border:"none", borderRadius:9,
-              padding:"7px 14px", fontSize:12, fontWeight:700, cursor:"pointer" }}>
-              📺 Present to Group
-            </button>
-          )}
-          <button onClick={onClose} style={{ background:C.bg, border:`1px solid ${C.border}`,
-            borderRadius:"50%", width:28, height:28, color:C.muted,
-            cursor:"pointer", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
         </div>
+      )}
 
-        {/* Toolbar */}
-        <div style={{ padding:"8px 16px", borderBottom:`1px solid ${C.border}`,
-          display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", flexShrink:0,
-          background:C.bg }}>
-          {/* Colors */}
-          {COLORS.map(c => (
-            <button key={c} onClick={()=>{setEraser(false);setColor(c);}}
-              style={{ width:22, height:22, borderRadius:"50%", background:c, border:"none",
-                cursor:"pointer", flexShrink:0,
-                outline: !eraser && color===c ? `3px solid ${C.accent}` : "2px solid transparent",
-                outlineOffset:2 }} />
-          ))}
-          <div style={{ width:1, height:20, background:C.border, flexShrink:0 }} />
-          {/* Brush size */}
-          {[2,4,8,14].map(s => (
-            <button key={s} onClick={()=>{setEraser(false);setSize(s);}}
-              style={{ width:28, height:28, borderRadius:7, border:`1.5px solid ${!eraser&&size===s?C.accent:C.border}`,
-                background:!eraser&&size===s?C.accentL:"#fff", cursor:"pointer",
-                display:"flex", alignItems:"center", justifyContent:"center" }}>
-              <div style={{ width:s, height:s, borderRadius:"50%", background:color }} />
-            </button>
-          ))}
-          <div style={{ width:1, height:20, background:C.border, flexShrink:0 }} />
-          <button onClick={()=>setEraser(e=>!e)} style={{
-            padding:"5px 10px", borderRadius:7, fontSize:12, fontWeight:700,
-            border:`1.5px solid ${eraser?C.warm:C.border}`,
-            background:eraser?C.warmL:"#fff", color:eraser?C.warm:C.muted, cursor:"pointer" }}>
-            🧹 Eraser
-          </button>
-          <button onClick={clearBoard} style={{
-            padding:"5px 10px", borderRadius:7, fontSize:12, border:`1px solid ${C.border}`,
-            background:"#fff", color:C.muted, cursor:"pointer" }}>🗑️ Clear</button>
-        </div>
-
-        {/* Canvas */}
-        <div style={{ flex:1, overflow:"hidden", background:"#fff", position:"relative" }}>
-          <canvas ref={canvasRef} width={1200} height={700}
-            style={{ width:"100%", height:"100%", display:"block",
-              cursor: eraser ? "cell" : "crosshair", touchAction:"none" }}
-            onMouseDown={onDown} onMouseMove={onMove}
-            onMouseUp={onUp} onMouseLeave={onUp}
-            onTouchStart={onDown} onTouchMove={onMove} onTouchEnd={onUp} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// AI FLASHCARD GENERATOR — same flow as CardsTab, but for study group sharing
-// ═══════════════════════════════════════════════════════════════════════════════
-function SGAIFlashcardGen({ groupId, db, user, groupFile, onClose }) {
-  const [cardCount, setCardCount] = useState(10);
-  const [cards,     setCards]     = useState([]);
-  const [gen,       setGen]       = useState(false);
-  const [sharing,   setSharing]   = useState(false);
-  const [title,     setTitle]     = useState("");
-  const [topic,     setTopic]     = useState("");
-  const [manualQ,   setManualQ]   = useState("");
-  const [manualA,   setManualA]   = useState("");
-  const [tab,       setTab]       = useState("ai"); // ai | manual
-
-  const generate = async () => {
-    if (!groupFile && !topic.trim()) return;
-    setGen(true);
-    try {
-      let fileText = null;
-      if (groupFile?._fileObj) {
-        fileText = await extractFileText(groupFile._fileObj).catch(() => null);
-      }
-      const safeText = fileText ? fileText.slice(0, 12000) : null;
-      const subject  = groupFile?.name || topic.trim() || "General Study";
-      const userMsg  = safeText
-        ? `Here is the COMPLETE content from "${subject}":\n\n${safeText}\n\nCreate exactly ${cardCount} study flashcards covering the most important concepts from the ENTIRE document. Return JSON array: [{"question":"…","answer":"…"}]`
-        : `Create exactly ${cardCount} study flashcards for the topic "${topic || subject}". Return JSON array: [{"question":"…","answer":"…"}]`;
-      const txt = await callClaude(
-        "Return ONLY valid JSON array. No markdown, no explanation, no extra text.", userMsg
-      );
-      const parsed = JSON.parse(txt.replace(/```json|```/g,"").trim());
-      setCards(parsed.map((c,i) => ({id:Date.now()+i,...c})));
-      setTitle(groupFile?.name || topic || "AI Flashcards");
-    } catch(e) { console.error(e); }
-    setGen(false);
-  };
-
-  const addManual = () => {
-    if (!manualQ.trim() || !manualA.trim()) return;
-    setCards(p => [...p, { id:Date.now(), question:manualQ.trim(), answer:manualA.trim() }]);
-    setManualQ(""); setManualA("");
-  };
-
-  const shareCards = async () => {
-    if (!cards.length) return;
-    setSharing(true);
-    await updateDoc(doc(db,"studyGroups",groupId), {
-      sharedContent: {
-        type:"flashcards",
-        title: title || "Flashcards",
-        cards,
-        sharedBy: user.displayName?.split(" ")[0] || "Host",
-        sharedByUid: user.uid,
-        sharedAt: Date.now(),
-      },
-      lastActivity: Date.now(),
-    });
-    setSharing(false);
-    onClose();
-  };
-
-  const inp = { width:"100%", padding:"9px 12px", boxSizing:"border-box",
-    background:C.bg, border:`1.5px solid ${C.border}`,
-    borderRadius:9, color:C.text, fontSize:13, outline:"none", fontFamily:"inherit", marginBottom:8 };
-
-  return (
-    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4600,
-      background:"rgba(26,23,20,.5)", backdropFilter:"blur(3px)",
-      display:"flex", alignItems:"flex-end", justifyContent:"center", padding:16 }}>
-      <div onClick={e=>e.stopPropagation()} style={{
-        width:"100%", maxWidth:520, background:C.surface,
-        borderRadius:"20px 20px 16px 16px", border:`1px solid ${C.border}`,
-        boxShadow:"0 -8px 40px rgba(0,0,0,.12)",
-        maxHeight:"88vh", overflowY:"auto",
-      }}>
-        <div style={{ display:"flex", justifyContent:"center", padding:"10px 0 0" }}>
-          <div style={{ width:36, height:4, borderRadius:2, background:C.border }} />
-        </div>
-        <div style={{ padding:"12px 20px 8px", borderBottom:`1px solid ${C.border}`,
-          display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-          <span style={{ fontSize:15, fontWeight:700, color:C.text }}>🃏 Create Flashcards</span>
-          <button onClick={onClose} style={{ background:C.bg, border:`1px solid ${C.border}`,
-            borderRadius:"50%", width:28, height:28, color:C.muted, cursor:"pointer", fontSize:14,
-            display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
-        </div>
-
-        <div style={{ padding:"16px 20px" }}>
-          {/* Tab toggle */}
-          <div style={{ display:"flex", background:C.bg, borderRadius:10, padding:3, marginBottom:14 }}>
-            {[{id:"ai",label:"✨ AI Generate"},{id:"manual",label:"✍️ Manual"}].map(t => (
-              <button key={t.id} onClick={()=>setTab(t.id)} style={{
-                flex:1, padding:"7px", borderRadius:8, border:"none", cursor:"pointer",
-                background: tab===t.id ? C.surface : "transparent",
-                color: tab===t.id ? C.accent : C.muted,
-                fontSize:12, fontWeight:700,
-                boxShadow: tab===t.id ? "0 1px 4px rgba(0,0,0,.08)" : "none",
-              }}>{t.label}</button>
+      {content.type === "flashcards" && (
+        <div style={{ flex:1, overflowY:"auto", padding:20 }}>
+          <h3 style={{ margin:"0 0 16px", color:C.text, fontSize:17, fontWeight:700,
+            fontFamily:"'Fraunces',serif" }}>{content.title}</h3>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))", gap:14 }}>
+            {(content.cards || []).map((c, i) => (
+              <div key={i} onClick={() => setFlipped(f => ({...f,[i]:!f[i]}))}
+                style={{ background:flipped[i]?C.accentL:C.surface,
+                  border:`1.5px solid ${flipped[i]?C.accentS:C.border}`,
+                  borderRadius:16, padding:20, cursor:"pointer", minHeight:120,
+                  display:"flex", flexDirection:"column", gap:8, transition:"all .18s" }}>
+                <p style={{ margin:0, fontSize:10, fontWeight:700,
+                  color:flipped[i]?C.accent:C.muted, textTransform:"uppercase", letterSpacing:1 }}>
+                  {flipped[i]?"Answer":`Card ${i+1}`}
+                </p>
+                <p style={{ margin:0, fontSize:14, color:C.text, lineHeight:1.5, flex:1 }}>
+                  {flipped[i]?c.answer:c.question}
+                </p>
+                <p style={{ margin:0, fontSize:11, color:C.muted }}>Tap to flip</p>
+              </div>
             ))}
           </div>
-
-          {tab === "ai" && (
-            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-              {groupFile ? (
-                <div style={{ padding:"10px 12px", borderRadius:10, background:C.accentL,
-                  border:`1px solid ${C.accentS}`, display:"flex", alignItems:"center", gap:8 }}>
-                  <span style={{ fontSize:14 }}>📎</span>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.accent }}>Using group file</p>
-                    <p style={{ margin:0, fontSize:11, color:C.muted, overflow:"hidden",
-                      textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{groupFile.name}</p>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <label style={{ fontSize:11, fontWeight:700, color:C.muted,
-                    textTransform:"uppercase", letterSpacing:.8 }}>Topic</label>
-                  <input value={topic} onChange={e=>setTopic(e.target.value)}
-                    placeholder="e.g. Photosynthesis, World War II…"
-                    style={{ ...inp, marginTop:5 }} />
-                </div>
-              )}
-
-              <div>
-                <label style={{ fontSize:11, fontWeight:700, color:C.muted,
-                  textTransform:"uppercase", letterSpacing:.8 }}>Card title</label>
-                <input value={title} onChange={e=>setTitle(e.target.value)}
-                  placeholder={groupFile?.name || topic || "My Flashcards"}
-                  style={{ ...inp, marginTop:5 }} />
-              </div>
-
-              {/* Count picker */}
-              <div>
-                <label style={{ fontSize:11, fontWeight:700, color:C.muted,
-                  textTransform:"uppercase", letterSpacing:.8 }}>Number of cards</label>
-                <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:6, marginBottom:4 }}>
-                  {[5,8,10,15,20,30].map(n => (
-                    <button key={n} onClick={()=>setCardCount(n)} style={{
-                      width:44, height:36, borderRadius:8,
-                      border:`1.5px solid ${cardCount===n?C.accent:C.border}`,
-                      background:cardCount===n?C.accent:"#fff",
-                      color:cardCount===n?"#fff":C.text,
-                      fontSize:13, fontWeight:700, cursor:"pointer" }}>{n}</button>
-                  ))}
-                </div>
-              </div>
-
-              <button onClick={generate} disabled={gen || (!groupFile && !topic.trim())} style={{
-                background:C.accent, color:"#fff", border:"none", borderRadius:12,
-                padding:"12px", fontSize:14, fontWeight:700,
-                cursor:gen?"not-allowed":"pointer",
-                display:"flex", alignItems:"center", justifyContent:"center", gap:8,
-                opacity: (!groupFile && !topic.trim()) ? .5 : 1,
-                boxShadow:"0 4px 14px rgba(61,90,128,.3)",
-              }}>
-                {gen ? <><SGSpinner color="#fff" /> Generating {cardCount} cards…</> : `✨ Generate ${cardCount} Cards`}
-              </button>
-            </div>
-          )}
-
-          {tab === "manual" && (
-            <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-              <input value={title} onChange={e=>setTitle(e.target.value)}
-                placeholder="Flashcard set title" style={inp} />
-              <input value={manualQ} onChange={e=>setManualQ(e.target.value)}
-                placeholder="Question" style={inp} />
-              <input value={manualA} onChange={e=>setManualA(e.target.value)}
-                placeholder="Answer" onKeyDown={e=>e.key==="Enter"&&addManual()}
-                style={{ ...inp, marginBottom:4 }} />
-              <button onClick={addManual} style={{
-                background:C.accentL, border:`1px solid ${C.accentS}`, borderRadius:9,
-                padding:"8px", fontSize:12, fontWeight:700, color:C.accent, cursor:"pointer", marginBottom:8,
-              }}>+ Add Card ({cards.length})</button>
-            </div>
-          )}
-
-          {/* Preview */}
-          {cards.length > 0 && (
-            <>
-              <div style={{ maxHeight:180, overflowY:"auto", display:"flex", flexDirection:"column",
-                gap:6, marginTop:8, marginBottom:10 }}>
-                {cards.map((c,i) => (
-                  <div key={c.id||i} style={{ background:C.bg, border:`1px solid ${C.border}`,
-                    borderRadius:9, padding:"9px 12px", display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <p style={{ margin:"0 0 2px", fontSize:12, fontWeight:700, color:C.text,
-                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.question}</p>
-                      <p style={{ margin:0, fontSize:11, color:C.muted,
-                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.answer}</p>
-                    </div>
-                    <button onClick={()=>setCards(p=>p.filter((_,j)=>j!==i))}
-                      style={{ background:"none", border:"none", color:C.red,
-                        cursor:"pointer", fontSize:14, padding:"0 0 0 8px", flexShrink:0 }}>×</button>
-                  </div>
-                ))}
-              </div>
-              <button onClick={shareCards} disabled={sharing} style={{
-                width:"100%", background:C.accent, color:"#fff", border:"none",
-                borderRadius:12, padding:"13px", fontSize:14, fontWeight:700,
-                cursor:sharing?"not-allowed":"pointer",
-                display:"flex", alignItems:"center", justifyContent:"center", gap:8,
-                boxShadow:"0 4px 14px rgba(61,90,128,.3)",
-              }}>
-                {sharing ? <><SGSpinner color="#fff"/>Sharing…</> : `📺 Present ${cards.length} Cards`}
-              </button>
-            </>
-          )}
         </div>
-      </div>
+      )}
+
+      {/* ── Real file viewer — same rendering as ViewTab ── */}
+      {content.type === "file" && (
+        <div style={{ flex:1, overflow:"hidden" }}>
+          <SGFileViewer fileData={content.fileData} fileName={content.fileName} />
+        </div>
+      )}
+
+      {/* ── Real screen share — live frames from host ── */}
+      {content.type === "screenshare" && (
+        <SGScreenShareViewer content={content} />
+      )}
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// AI NOTES GENERATOR — same quality as NotesTab, shared to group
+// REAL SCREEN SHARE — host captures screen via getDisplayMedia,
+// captures frames every 300ms and broadcasts as base64 to Firestore.
+// Viewers receive updates via onSnapshot and render the latest frame.
 // ═══════════════════════════════════════════════════════════════════════════════
-function SGAINotesGen({ groupId, db, user, groupFile, onClose }) {
-  const [topic,   setTopic]   = useState("");
-  const [style,   setStyle]   = useState("detailed");
-  const [gen,     setGen]     = useState(false);
-  const [sharing, setSharing] = useState(false);
-  const [notes,   setNotes]   = useState("");
-  const [title,   setTitle]   = useState("");
+function SGScreenShareHost({ groupId, db, user, onStop }) {
+  const videoRef   = useRef(null);
+  const canvasRef  = useRef(null);
+  const streamRef  = useRef(null);
+  const timerRef   = useRef(null);
+  const [active,   setActive]   = useState(false);
+  const [error,    setError]    = useState("");
+  const [fps,      setFps]      = useState(0);
+  const frameCount = useRef(0);
+  const fpsTimer   = useRef(null);
 
-  const STYLES = [
-    { id:"detailed", label:"📚 Detailed",     desc:"Sections + bullet points" },
-    { id:"bullet",   label:"• Bullet Points", desc:"Concise bullet-only format" },
-    { id:"simple",   label:"🧒 Simple",        desc:"Plain language, short sentences" },
-    { id:"exam",     label:"📝 Exam Focus",    desc:"Key terms + likely questions" },
-  ];
-
-  const generate = async () => {
-    setGen(true); setNotes("");
+  const startCapture = async () => {
+    setError("");
     try {
-      let fileText = null;
-      if (groupFile?._fileObj) {
-        fileText = await extractFileText(groupFile._fileObj).catch(() => null);
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: 5, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(()=>{});
       }
-      const safeText = fileText ? fileText.slice(0, 16000) : null;
-      const subject  = groupFile?.name || topic.trim() || "Study Notes";
-      const styleGuide = {
-        detailed: "Write detailed notes split into sections. Each section has a heading in ALL CAPS followed by bullet points.",
-        bullet:   "Write ONLY bullet points grouped under ALL CAPS headings. One fact per line.",
-        simple:   "Write very simple short notes in plain language. Short sentences. No jargon.",
-        exam:     "Write exam revision notes. Include key terms, definitions, possible exam questions, and a checklist.",
-      };
-      const userMsg = safeText
-        ? `Here is the COMPLETE content from "${subject}":\n\n${safeText}\n\nCRITICAL: Cover EVERY section, concept, definition, and fact.`
-        : `Create comprehensive study notes for: "${topic || subject}". Cover all key topics, definitions, formulas, and concepts.`;
-      const txt = await callClaude(
-        `You are a study notes writer. ${styleGuide[style]}
-STRICT RULES: NEVER use asterisks or #. Section headings: ALL CAPS. Bullets: dash (-). Plain text only.
-Math: proper notation (1×10⁻¹⁰ not words, H₂O not words). Units: standard abbreviations.`,
-        userMsg, 4000
-      );
-      setNotes(txt);
-      setTitle(groupFile?.name || topic || "Study Notes");
-    } catch(e) { setNotes("Error: " + e.message); }
-    setGen(false);
+      setActive(true);
+
+      // Write "screenshare" content to Firestore so all members see the banner
+      await updateDoc(doc(db,"studyGroups",groupId), {
+        sharedContent: {
+          type:"screenshare",
+          title: "Screen Share",
+          frame: null,
+          sharedBy: user.displayName?.split(" ")[0] || "Host",
+          sharedByUid: user.uid,
+          sharedAt: Date.now(),
+        },
+        lastActivity: Date.now(),
+      });
+
+      // Frame capture loop — every 300ms
+      const canvas = canvasRef.current;
+      timerRef.current = setInterval(async () => {
+        if (!videoRef.current || !canvas) return;
+        const v = videoRef.current;
+        if (v.readyState < 2) return;
+        canvas.width  = v.videoWidth  || 1280;
+        canvas.height = v.videoHeight || 720;
+        canvas.getContext("2d").drawImage(v, 0, 0, canvas.width, canvas.height);
+        const frame = canvas.toDataURL("image/jpeg", 0.6);   // JPEG 60% = ~40–80KB per frame
+        try {
+          await updateDoc(doc(db,"studyGroups",groupId), {
+            "sharedContent.frame": frame,
+            "sharedContent.lastFrame": Date.now(),
+          });
+          frameCount.current++;
+        } catch(e) { console.error("frame push error", e); }
+      }, 300);
+
+      // FPS counter for UI
+      fpsTimer.current = setInterval(() => {
+        setFps(frameCount.current);
+        frameCount.current = 0;
+      }, 1000);
+
+      // Stop when browser ends the capture (user hits browser's Stop button)
+      stream.getVideoTracks()[0].addEventListener("ended", stopCapture);
+    } catch(e) {
+      if (e.name !== "NotAllowedError") setError(e.message);
+    }
   };
 
-  const shareNotes = async () => {
-    if (!notes.trim()) return;
-    setSharing(true);
-    await updateDoc(doc(db,"studyGroups",groupId), {
-      sharedContent: {
-        type:"notes", title: title || "Notes",
-        body: notes,
-        sharedBy: user.displayName?.split(" ")[0] || "Host",
-        sharedByUid: user.uid, sharedAt: Date.now(),
-      },
-      lastActivity: Date.now(),
-    });
-    setSharing(false);
-    onClose();
+  const stopCapture = async () => {
+    clearInterval(timerRef.current);
+    clearInterval(fpsTimer.current);
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    streamRef.current = null;
+    setActive(false);
+    // Clear shared content
+    await updateDoc(doc(db,"studyGroups",groupId), { sharedContent: null }).catch(()=>{});
+    onStop();
   };
 
-  const inp = { width:"100%", padding:"9px 12px", boxSizing:"border-box",
-    background:C.bg, border:`1.5px solid ${C.border}`,
-    borderRadius:9, color:C.text, fontSize:13, outline:"none", fontFamily:"inherit" };
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      clearInterval(timerRef.current);
+      clearInterval(fpsTimer.current);
+      streamRef.current?.getTracks().forEach(t => t.stop());
+    };
+  }, []);
 
   return (
-    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4600,
-      background:"rgba(26,23,20,.5)", backdropFilter:"blur(3px)",
-      display:"flex", alignItems:"flex-end", justifyContent:"center", padding:16 }}>
-      <div onClick={e=>e.stopPropagation()} style={{
-        width:"100%", maxWidth:520, background:C.surface,
-        borderRadius:"20px 20px 16px 16px", border:`1px solid ${C.border}`,
-        boxShadow:"0 -8px 40px rgba(0,0,0,.12)",
-        maxHeight:"88vh", overflowY:"auto",
-      }}>
-        <div style={{ display:"flex", justifyContent:"center", padding:"10px 0 0" }}>
-          <div style={{ width:36, height:4, borderRadius:2, background:C.border }} />
-        </div>
-        <div style={{ padding:"12px 20px 8px", borderBottom:`1px solid ${C.border}`,
-          display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-          <span style={{ fontSize:15, fontWeight:700, color:C.text }}>📝 Generate Notes</span>
-          <button onClick={onClose} style={{ background:C.bg, border:`1px solid ${C.border}`,
-            borderRadius:"50%", width:28, height:28, color:C.muted, cursor:"pointer", fontSize:14,
-            display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
-        </div>
+    <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+      {/* Hidden video element used for frame capture */}
+      <video ref={videoRef} muted playsInline
+        style={{ display:"none", width:0, height:0 }} />
+      {/* Hidden canvas used for frame encoding */}
+      <canvas ref={canvasRef} style={{ display:"none" }} />
 
-        <div style={{ padding:"16px 20px", display:"flex", flexDirection:"column", gap:10 }}>
-          {groupFile ? (
-            <div style={{ padding:"10px 12px", borderRadius:10, background:C.accentL,
-              border:`1px solid ${C.accentS}`, display:"flex", alignItems:"center", gap:8 }}>
-              <span style={{ fontSize:14 }}>📎</span>
-              <div style={{ flex:1, minWidth:0 }}>
-                <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.accent }}>Using group file</p>
-                <p style={{ margin:0, fontSize:11, color:C.muted, overflow:"hidden",
-                  textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{groupFile.name}</p>
-              </div>
-            </div>
-          ) : (
-            <div>
-              <label style={{ fontSize:11, fontWeight:700, color:C.muted,
-                textTransform:"uppercase", letterSpacing:.8 }}>Topic / subject</label>
-              <input value={topic} onChange={e=>setTopic(e.target.value)}
-                placeholder="e.g. The French Revolution, Calculus derivatives…"
-                style={{ ...inp, marginTop:5 }} />
-            </div>
+      {!active ? (
+        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+          <p style={{ margin:0, fontSize:13, color:C.muted, lineHeight:1.6 }}>
+            Your browser will ask which screen, window, or tab to share.
+            All group members will see a live preview updated ~3 frames/sec.
+          </p>
+          {error && (
+            <div style={{ padding:"8px 12px", borderRadius:9, background:C.redL,
+              border:`1px solid ${C.red}44`, color:C.red, fontSize:12 }}>{error}</div>
           )}
-
-          {/* Style picker */}
-          <div>
-            <label style={{ fontSize:11, fontWeight:700, color:C.muted,
-              textTransform:"uppercase", letterSpacing:.8 }}>Note style</label>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:7, marginTop:6 }}>
-              {STYLES.map(s => (
-                <button key={s.id} onClick={()=>setStyle(s.id)} style={{
-                  background: style===s.id ? C.accentL : C.bg,
-                  border:`1.5px solid ${style===s.id ? C.accentS : C.border}`,
-                  borderRadius:10, padding:"10px 10px", cursor:"pointer", textAlign:"left",
-                }}>
-                  <p style={{ margin:"0 0 2px", fontSize:12, fontWeight:700, color:style===s.id?C.accent:C.text }}>{s.label}</p>
-                  <p style={{ margin:0, fontSize:10, color:C.muted }}>{s.desc}</p>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <button onClick={generate} disabled={gen || (!groupFile && !topic.trim())} style={{
+          <button onClick={startCapture} style={{
             background:C.accent, color:"#fff", border:"none", borderRadius:12,
-            padding:"12px", fontSize:14, fontWeight:700,
-            cursor:gen?"not-allowed":"pointer",
+            padding:"13px", fontSize:14, fontWeight:700, cursor:"pointer",
             display:"flex", alignItems:"center", justifyContent:"center", gap:8,
-            opacity: (!groupFile && !topic.trim()) ? .5 : 1,
             boxShadow:"0 4px 14px rgba(61,90,128,.3)",
-          }}>
-            {gen ? <><SGSpinner color="#fff"/>Generating notes…</> : "✨ Generate Notes"}
-          </button>
-
-          {notes && (
-            <>
-              <div style={{ background:C.bg, borderRadius:12, padding:14,
-                border:`1px solid ${C.border}`, maxHeight:220, overflowY:"auto",
-                fontSize:13, color:C.text, lineHeight:1.7, whiteSpace:"pre-wrap" }}>
-                {notes}
-              </div>
-              <button onClick={shareNotes} disabled={sharing} style={{
-                background:C.accent, color:"#fff", border:"none", borderRadius:12,
-                padding:"13px", fontSize:14, fontWeight:700,
-                cursor:sharing?"not-allowed":"pointer",
-                display:"flex", alignItems:"center", justifyContent:"center", gap:8,
-                boxShadow:"0 4px 14px rgba(61,90,128,.3)",
-              }}>
-                {sharing ? <><SGSpinner color="#fff"/>Sharing…</> : "📺 Present Notes to Group"}
-              </button>
-            </>
-          )}
+          }}>🖥️ Start Screen Share</button>
         </div>
-      </div>
+      ) : (
+        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
+            background:C.greenL, border:`1px solid ${C.green}44`, borderRadius:10 }}>
+            <span style={{ width:9, height:9, borderRadius:"50%", background:C.green,
+              display:"inline-block", boxShadow:`0 0 0 3px ${C.greenL}`,
+              animation:"sg-pulse 1.4s ease infinite" }} />
+            <span style={{ fontSize:13, fontWeight:700, color:C.green }}>Live — sharing screen</span>
+            <span style={{ marginLeft:"auto", fontSize:11, color:C.muted }}>{fps} fps</span>
+          </div>
+          <button onClick={stopCapture} style={{
+            background:C.redL, color:C.red, border:`1px solid ${C.red}44`,
+            borderRadius:12, padding:"12px", fontSize:14, fontWeight:700, cursor:"pointer",
+            display:"flex", alignItems:"center", justifyContent:"center", gap:8,
+          }}>⏹ Stop Sharing</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -7266,10 +6954,8 @@ Math: proper notation (1×10⁻¹⁰ not words, H₂O not words). Units: standar
 // ═══════════════════════════════════════════════════════════════════════════════
 function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
                          onOpenWhiteboard, onOpenFlashcards, onOpenNotes }) {
-  const [sharing, setSharing] = useState(false);
-  const [screenStep, setScreenStep] = useState(false);
-  const [screenTitle, setScreenTitle] = useState("");
-  const [screenBody,  setScreenBody]  = useState("");
+  const [sharing,    setSharing]    = useState(false);
+  const [activeStep, setActiveStep] = useState("pick"); // pick | screenshare
 
   const alreadySharing = !!group?.sharedContent;
   const isPresenting   = group?.sharedContent?.sharedByUid === user.uid;
@@ -7279,39 +6965,30 @@ function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
     onClose();
   };
 
-  const shareScreen = async () => {
-    setSharing(true);
-    await updateDoc(doc(db,"studyGroups",groupId), {
-      sharedContent: {
-        type:"screenshare",
-        title: screenTitle || "Screen Share",
-        body:  screenBody  || "The host is sharing their screen.",
-        sharedBy: user.displayName?.split(" ")[0] || "Host",
-        sharedByUid: user.uid, sharedAt: Date.now(),
-      },
-      lastActivity: Date.now(),
-    });
-    setSharing(false);
-    onClose();
-  };
-
+  // Share the real file — convert to base64 and store in Firestore as type "file"
   const shareFile = async () => {
-    if (!groupFile) return;
+    if (!groupFile?._fileObj) return;
     setSharing(true);
-    let fileText = null;
-    if (groupFile._fileObj) {
-      fileText = await extractFileText(groupFile._fileObj).catch(() => null);
-    }
-    await updateDoc(doc(db,"studyGroups",groupId), {
-      sharedContent: {
-        type:"material",
-        title: groupFile.name,
-        body: fileText ? fileText.slice(0, 8000) : "File content could not be extracted.",
-        sharedBy: user.displayName?.split(" ")[0] || "Host",
-        sharedByUid: user.uid, sharedAt: Date.now(),
-      },
-      lastActivity: Date.now(),
-    });
+    try {
+      const fileData = await new Promise((res, rej) => {
+        const reader = new FileReader();
+        reader.onload  = e => res(e.target.result);
+        reader.onerror = rej;
+        reader.readAsDataURL(groupFile._fileObj);
+      });
+      await updateDoc(doc(db,"studyGroups",groupId), {
+        sharedContent: {
+          type:     "file",
+          fileName: groupFile.name,
+          fileData,                          // full base64 data-URL
+          title:    groupFile.name,
+          sharedBy: user.displayName?.split(" ")[0] || "Host",
+          sharedByUid: user.uid,
+          sharedAt: Date.now(),
+        },
+        lastActivity: Date.now(),
+      });
+    } catch(e) { console.error("shareFile", e); }
     setSharing(false);
     onClose();
   };
@@ -7323,10 +7000,11 @@ function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
       action: () => { onClose(); onOpenFlashcards(); } },
     { id:"whiteboard",  emoji:"✏️", label:"Whiteboard",    desc:"Draw live for everyone to see",
       action: () => { onClose(); onOpenWhiteboard(); } },
-    { id:"file",        emoji:"📄", label:"Study File",    desc: groupFile ? `Share "${groupFile.name}"` : "Upload a file first",
-      action: shareFile, disabled: !groupFile },
-    { id:"screenshare", emoji:"🖥️", label:"Screen Share",  desc:"Share app content description",
-      action: () => setScreenStep(true) },
+    { id:"file",        emoji:"📎", label:"Study File",
+      desc: groupFile ? `Present "${groupFile.name}"` : "Upload a file first",
+      action: shareFile, disabled: !groupFile || sharing },
+    { id:"screenshare", emoji:"🖥️", label:"Screen Share",  desc:"Share your screen live",
+      action: () => setActiveStep("screenshare") },
   ];
 
   return (
@@ -7345,12 +7023,12 @@ function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
         <div style={{ padding:"12px 20px 10px", borderBottom:`1px solid ${C.border}`,
           display:"flex", alignItems:"center", justifyContent:"space-between" }}>
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-            {screenStep && (
-              <button onClick={()=>setScreenStep(false)} style={{
+            {activeStep !== "pick" && (
+              <button onClick={()=>setActiveStep("pick")} style={{
                 background:"none", border:"none", color:C.muted, cursor:"pointer", fontSize:18, padding:0 }}>←</button>
             )}
             <span style={{ fontSize:15, fontWeight:700, color:C.text }}>
-              {screenStep ? "🖥️ Screen Share" : "📺 Present to Group"}
+              {activeStep === "pick" ? "📺 Present to Group" : "🖥️ Screen Share"}
             </span>
           </div>
           <button onClick={onClose} style={{ background:C.bg, border:`1px solid ${C.border}`,
@@ -7359,8 +7037,7 @@ function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
         </div>
 
         <div style={{ padding:"14px 20px" }}>
-          {/* Stop sharing */}
-          {isPresenting && !screenStep && (
+          {isPresenting && activeStep === "pick" && (
             <button onClick={stopSharing} style={{
               width:"100%", marginBottom:10, padding:"10px",
               background:C.redL, border:`1px solid ${C.red}44`,
@@ -7368,7 +7045,7 @@ function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
               display:"flex", alignItems:"center", justifyContent:"center", gap:8,
             }}>⏹ Stop Presenting</button>
           )}
-          {alreadySharing && !isPresenting && !screenStep && (
+          {alreadySharing && !isPresenting && activeStep === "pick" && (
             <div style={{ padding:"10px 14px", borderRadius:10, background:C.warmL,
               border:`1px solid ${C.warm}44`, marginBottom:10 }}>
               <p style={{ margin:0, fontSize:13, color:C.warm, fontWeight:600 }}>
@@ -7377,22 +7054,23 @@ function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
             </div>
           )}
 
-          {/* Mode grid */}
-          {!screenStep && (
+          {activeStep === "pick" && (
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
               {MODES.map(m => (
                 <button key={m.id}
-                  disabled={(alreadySharing && !isPresenting) || m.disabled || sharing}
+                  disabled={(alreadySharing && !isPresenting) || m.disabled}
                   onClick={m.action} style={{
                     background:C.bg, border:`1.5px solid ${C.border}`,
                     borderRadius:14, padding:"14px 12px", cursor:"pointer",
                     textAlign:"left",
-                    opacity: ((alreadySharing && !isPresenting) || m.disabled) ? .4 : 1,
-                    transition:"border-color .15s, transform .12s",
+                    opacity:((alreadySharing && !isPresenting) || m.disabled) ? .4 : 1,
+                    transition:"border-color .15s",
                   }}
-                  onMouseEnter={e=>{if(!m.disabled)e.currentTarget.style.borderColor=C.accentS;}}
+                  onMouseEnter={e=>{if(!m.disabled&&!(alreadySharing&&!isPresenting))e.currentTarget.style.borderColor=C.accentS;}}
                   onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;}}>
-                  <div style={{ fontSize:24, marginBottom:7 }}>{m.emoji}</div>
+                  <div style={{ fontSize:24, marginBottom:7 }}>
+                    {m.id==="file" && sharing ? "⏳" : m.emoji}
+                  </div>
                   <p style={{ margin:"0 0 3px", fontSize:13, fontWeight:700, color:C.text }}>{m.label}</p>
                   <p style={{ margin:0, fontSize:11, color:C.muted, lineHeight:1.3 }}>{m.desc}</p>
                 </button>
@@ -7400,33 +7078,10 @@ function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
             </div>
           )}
 
-          {/* Screen share step */}
-          {screenStep && (
-            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-              <p style={{ margin:"0 0 8px", fontSize:13, color:C.muted, lineHeight:1.5 }}>
-                Screen sharing shows a message to all group members. For real screen capture, use your browser's built-in share feature.
-              </p>
-              <input value={screenTitle} onChange={e=>setScreenTitle(e.target.value)}
-                placeholder="What are you sharing?" style={{
-                  width:"100%", padding:"10px 12px", boxSizing:"border-box",
-                  background:C.bg, border:`1.5px solid ${C.border}`, borderRadius:9,
-                  color:C.text, fontSize:13, outline:"none", fontFamily:"inherit", marginBottom:6 }} />
-              <textarea value={screenBody} onChange={e=>setScreenBody(e.target.value)}
-                placeholder="Description (optional)…" rows={3} style={{
-                  width:"100%", padding:"10px 12px", boxSizing:"border-box",
-                  background:C.bg, border:`1.5px solid ${C.border}`, borderRadius:9,
-                  color:C.text, fontSize:13, outline:"none", fontFamily:"inherit",
-                  resize:"none", marginBottom:10 }} />
-              <button onClick={shareScreen} disabled={sharing||!screenTitle.trim()} style={{
-                background:C.accent, color:"#fff", border:"none", borderRadius:12,
-                padding:"12px", fontSize:14, fontWeight:700, cursor:"pointer",
-                display:"flex", alignItems:"center", justifyContent:"center", gap:8,
-                opacity:!screenTitle.trim()?.5:1,
-                boxShadow:"0 4px 14px rgba(61,90,128,.3)",
-              }}>
-                {sharing ? <><SGSpinner color="#fff"/>Sharing…</> : "🖥️ Start Screen Share"}
-              </button>
-            </div>
+          {/* Real screen share panel */}
+          {activeStep === "screenshare" && (
+            <SGScreenShareHost groupId={groupId} db={db} user={user}
+              onStop={() => { setActiveStep("pick"); onClose(); }} />
           )}
         </div>
       </div>
