@@ -7865,9 +7865,9 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
     setCopied(true); setTimeout(() => setCopied(false), 2000);
   };
 
-  const memberList = Object.values(members).filter(Boolean);
-  const showGame    = !!group?.gameState;
-  const showContent = !showGame && !!group?.sharedContent;
+  const memberList  = Object.values(members).filter(Boolean);
+  const gameActive  = !!group?.gameState;
+  const contentActive = !gameActive && !!group?.sharedContent;
   const memberCount = Object.keys(members).length;
 
   return (
@@ -7980,10 +7980,10 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
 
         {/* Main workspace */}
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          {showGame ? (
+          {gameActive ? (
             <SGQuizGame gameState={group.gameState} isHost={isHost}
               user={user} db={db} groupId={groupId} members={members} />
-          ) : showContent ? (
+          ) : contentActive ? (
             <SGSharedContent content={group.sharedContent}
               presenterName={presenter?.displayName?.split(" ")[0]}
               isHost={isHost} db={db} groupId={groupId} />
