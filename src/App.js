@@ -6566,15 +6566,20 @@ function SGFileViewer({ fileData, fileName }) {
     } catch { return null; }
   }, [fileData, fileName]);
 
-  // PDF rendering
+  // PDF state
   const canvasRef = useRef(null);
   const pdfRef    = useRef(null);
   const [totalPages, setTotalPages] = useState(0);
   const [pageNum,    setPageNum]    = useState(1);
   const [pdfReady,   setPdfReady]   = useState(false);
 
+  // PPT page state
+  const [pptTotal, setPptTotal] = useState(0);
+  const [pptPage,  setPptPage]  = useState(1);
+
   useEffect(() => {
     if (!isPDF || !fileObj) return;
+    setPdfReady(false); pdfRef.current = null; setPageNum(1);
     (async () => {
       try {
         if (!window.pdfjsLib) {
@@ -6614,34 +6619,63 @@ function SGFileViewer({ fileData, fileName }) {
     </div>
   );
 
+  // Shared page nav style
+  const navBtn = (disabled) => ({
+    width:32, height:32, borderRadius:8, border:`1px solid ${C.border}`,
+    background: disabled ? C.bg : C.surface, cursor: disabled ? "default" : "pointer",
+    opacity: disabled ? .35 : 1, fontSize:18, display:"flex",
+    alignItems:"center", justifyContent:"center", flexShrink:0,
+  });
+
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"100%" }}>
-      {/* Page nav for PDF */}
-      {isPDF && totalPages > 1 && (
+      {/* PDF page navigation — always shown for PDFs, loading state handled gracefully */}
+      {isPDF && (
         <div style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 16px",
           borderBottom:`1px solid ${C.border}`, background:C.bg, flexShrink:0 }}>
           <button onClick={() => setPageNum(p => Math.max(1,p-1))} disabled={pageNum<=1}
-            style={{ width:28, height:28, borderRadius:6, border:`1px solid ${C.border}`,
-              background:"#fff", cursor:pageNum<=1?"default":"pointer", opacity:pageNum<=1?.4:1, fontSize:18 }}>‹</button>
-          <span style={{ fontSize:13, color:C.text, fontWeight:600 }}>{pageNum} / {totalPages}</span>
-          <button onClick={() => setPageNum(p => Math.min(totalPages,p+1))} disabled={pageNum>=totalPages}
-            style={{ width:28, height:28, borderRadius:6, border:`1px solid ${C.border}`,
-              background:"#fff", cursor:pageNum>=totalPages?"default":"pointer", opacity:pageNum>=totalPages?.4:1, fontSize:18 }}>›</button>
+            style={navBtn(pageNum<=1)}>‹</button>
+          <span style={{ fontSize:13, color:C.text, fontWeight:600, minWidth:60, textAlign:"center" }}>
+            {pdfReady ? `${pageNum} / ${totalPages}` : "Loading…"}
+          </span>
+          <button onClick={() => setPageNum(p => Math.min(totalPages||p,p+1))}
+            disabled={!pdfReady || pageNum>=totalPages}
+            style={navBtn(!pdfReady || pageNum>=totalPages)}>›</button>
+          <span style={{ marginLeft:"auto", fontSize:11, color:C.muted }}>📄 {fileName}</span>
         </div>
       )}
+
+      {/* PPT page navigation */}
+      {isPPT && pptTotal > 0 && (
+        <div style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 16px",
+          borderBottom:`1px solid ${C.border}`, background:C.bg, flexShrink:0 }}>
+          <button onClick={() => setPptPage(p => Math.max(1,p-1))} disabled={pptPage<=1}
+            style={navBtn(pptPage<=1)}>‹</button>
+          <span style={{ fontSize:13, color:C.text, fontWeight:600, minWidth:60, textAlign:"center" }}>
+            {pptPage} / {pptTotal}
+          </span>
+          <button onClick={() => setPptPage(p => Math.min(pptTotal,p+1))} disabled={pptPage>=pptTotal}
+            style={navBtn(pptPage>=pptTotal)}>›</button>
+          <span style={{ marginLeft:"auto", fontSize:11, color:C.muted }}>📊 {fileName}</span>
+        </div>
+      )}
+
       <div style={{ flex:1, overflow:"auto", background:"#404040",
         display:"flex", justifyContent:"center", alignItems:"flex-start", padding:20 }}>
         {isPDF && (
           <canvas ref={canvasRef}
             style={{ display:"block", boxShadow:"0 4px 32px rgba(0,0,0,.6)", maxWidth:"100%" }} />
         )}
-        {isImage && fileObj && (
+        {isImage && (
           <img src={fileData} alt={fileName}
             style={{ maxWidth:"100%", borderRadius:6, boxShadow:"0 4px 32px rgba(0,0,0,.5)", background:"#fff" }} />
         )}
         {isText && fileObj && <TextViewer fileObj={fileObj} />}
         {isWord && fileObj && <WordViewer fileObj={fileObj} />}
-        {isPPT  && fileObj && <PPTViewer  fileObj={fileObj} page={1} onTotalPages={()=>{}} onSlidesLoaded={()=>{}} />}
+        {isPPT  && fileObj && (
+          <PPTViewer fileObj={fileObj} page={pptPage}
+            onTotalPages={setPptTotal} onSlidesLoaded={()=>{}} />
+        )}
         {!isPDF && !isImage && !isText && !isWord && !isPPT && (
           <div style={{ background:C.surface, borderRadius:14, padding:32, textAlign:"center" }}>
             <div style={{ fontSize:48, marginBottom:12 }}>📄</div>
@@ -6656,7 +6690,7 @@ function SGFileViewer({ fileData, fileName }) {
 
 // ── Screen share receiver — renders the live video frame broadcast by host ────
 function SGScreenShareViewer({ content }) {
-  // content.frame is a base64 data-URL updated by the host every ~300ms
+  // content.frame is a base64 data-URL updated by the host at ~30fps
   if (!content?.frame) return (
     <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center",
       justifyContent:"center", gap:12, padding:32 }}>
@@ -6762,8 +6796,26 @@ function SGSharedContent({ content, presenterName, isHost, db, groupId }) {
               <span style={{ fontSize:13, fontWeight:700, color:C.text }}>{content.title || "Whiteboard"}</span>
               <span style={{ fontSize:11, color:C.muted, marginLeft:"auto" }}>Live drawing</span>
             </div>
-            <canvas ref={viewCanvasRef} width={800} height={500}
-              style={{ width:"100%", height:"auto", display:"block", background:"#fff" }} />
+            {/* Wrapper: relative so cursor dot overlays perfectly */}
+            <div style={{ position:"relative", lineHeight:0 }}>
+              <canvas ref={viewCanvasRef} width={800} height={500}
+                style={{ width:"100%", height:"auto", display:"block", background:"#fff" }} />
+              {/* Gray semi-transparent cursor showing host's live mouse position */}
+              {content.cursor && (
+                <div style={{
+                  position:"absolute",
+                  left:`${content.cursor.x * 100}%`,
+                  top:`${content.cursor.y * 100}%`,
+                  width:22, height:22, borderRadius:"50%",
+                  background:"rgba(80,80,80,0.55)",
+                  border:"2.5px solid rgba(255,255,255,0.8)",
+                  transform:"translate(-50%,-50%)",
+                  pointerEvents:"none",
+                  transition:"left 0.05s linear, top 0.05s linear",
+                  zIndex:10,
+                }} />
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -6810,73 +6862,68 @@ function SGSharedContent({ content, presenterName, isHost, db, groupId }) {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // REAL SCREEN SHARE — host captures screen via getDisplayMedia,
-// captures frames every 300ms and broadcasts as base64 to Firestore.
+// captures frames via RAF at ~30fps and broadcasts as base64 to Firestore.
 // Viewers receive updates via onSnapshot and render the latest frame.
 // ═══════════════════════════════════════════════════════════════════════════════
 function SGScreenShareHost({ groupId, db, user, onStop }) {
-  const videoRef   = useRef(null);
-  const canvasRef  = useRef(null);
-  const streamRef  = useRef(null);
-  const timerRef   = useRef(null);
-  const [active,   setActive]   = useState(false);
-  const [error,    setError]    = useState("");
-  const [fps,      setFps]      = useState(0);
-  const frameCount = useRef(0);
-  const fpsTimer   = useRef(null);
+  const videoRef    = useRef(null);
+  const canvasRef   = useRef(null);
+  const streamRef   = useRef(null);
+  const rafRef      = useRef(null);
+  const fpsTimer    = useRef(null);
+  const lastSendRef = useRef(0);
+  const pendingRef  = useRef(false);
+  const frameCount  = useRef(0);
+  const [active, setActive] = useState(false);
+  const [error,  setError]  = useState("");
+  const [fps,    setFps]    = useState(0);
+
+  // ~30fps = 33ms between frames. Never await inside RAF.
+  const TARGET_MS = 33;
+
+  const captureLoop = () => {
+    rafRef.current = requestAnimationFrame(captureLoop);
+    const now = performance.now();
+    if (now - lastSendRef.current < TARGET_MS) return;
+    const v      = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!v || !canvas || v.readyState < 2 || v.videoWidth === 0) return;
+    if (pendingRef.current) return; // previous write in-flight, skip
+    canvas.width  = v.videoWidth;
+    canvas.height = v.videoHeight;
+    canvas.getContext("2d").drawImage(v, 0, 0);
+    const frame = canvas.toDataURL("image/jpeg", 0.72);
+    lastSendRef.current = now;
+    pendingRef.current  = true;
+    frameCount.current++;
+    updateDoc(doc(db,"studyGroups",groupId), {
+      "sharedContent.frame":     frame,
+      "sharedContent.lastFrame": Date.now(),
+    }).then(() => { pendingRef.current = false; })
+      .catch(() => { pendingRef.current = false; });
+  };
 
   const startCapture = async () => {
     setError("");
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: 5, width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: { frameRate: { ideal: 30, max: 60 }, width: { ideal: 1920 }, height: { ideal: 1080 } },
         audio: false,
       });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play().catch(()=>{});
-      }
+      const video = videoRef.current;
+      if (video) { video.srcObject = stream; await video.play().catch(()=>{}); }
       setActive(true);
 
-      // Write "screenshare" content to Firestore so all members see the banner
       await updateDoc(doc(db,"studyGroups",groupId), {
-        sharedContent: {
-          type:"screenshare",
-          title: "Screen Share",
-          frame: null,
-          sharedBy: user.displayName?.split(" ")[0] || "Host",
-          sharedByUid: user.uid,
-          sharedAt: Date.now(),
-        },
+        sharedContent: { type:"screenshare", title:"Screen Share", frame:null,
+          sharedBy: user.displayName?.split(" ")[0]||"Host",
+          sharedByUid: user.uid, sharedAt: Date.now() },
         lastActivity: Date.now(),
       });
 
-      // Frame capture loop — every 300ms
-      const canvas = canvasRef.current;
-      timerRef.current = setInterval(async () => {
-        if (!videoRef.current || !canvas) return;
-        const v = videoRef.current;
-        if (v.readyState < 2) return;
-        canvas.width  = v.videoWidth  || 1280;
-        canvas.height = v.videoHeight || 720;
-        canvas.getContext("2d").drawImage(v, 0, 0, canvas.width, canvas.height);
-        const frame = canvas.toDataURL("image/jpeg", 0.6);   // JPEG 60% = ~40–80KB per frame
-        try {
-          await updateDoc(doc(db,"studyGroups",groupId), {
-            "sharedContent.frame": frame,
-            "sharedContent.lastFrame": Date.now(),
-          });
-          frameCount.current++;
-        } catch(e) { console.error("frame push error", e); }
-      }, 300);
-
-      // FPS counter for UI
-      fpsTimer.current = setInterval(() => {
-        setFps(frameCount.current);
-        frameCount.current = 0;
-      }, 1000);
-
-      // Stop when browser ends the capture (user hits browser's Stop button)
+      rafRef.current = requestAnimationFrame(captureLoop);
+      fpsTimer.current = setInterval(() => { setFps(frameCount.current); frameCount.current=0; }, 1000);
       stream.getVideoTracks()[0].addEventListener("ended", stopCapture);
     } catch(e) {
       if (e.name !== "NotAllowedError") setError(e.message);
@@ -6884,43 +6931,33 @@ function SGScreenShareHost({ groupId, db, user, onStop }) {
   };
 
   const stopCapture = async () => {
-    clearInterval(timerRef.current);
+    cancelAnimationFrame(rafRef.current);
     clearInterval(fpsTimer.current);
-    streamRef.current?.getTracks().forEach(t => t.stop());
+    streamRef.current?.getTracks().forEach(t=>t.stop());
     streamRef.current = null;
     setActive(false);
-    // Clear shared content
-    await updateDoc(doc(db,"studyGroups",groupId), { sharedContent: null }).catch(()=>{});
+    await updateDoc(doc(db,"studyGroups",groupId),{sharedContent:null}).catch(()=>{});
     onStop();
   };
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      clearInterval(timerRef.current);
-      clearInterval(fpsTimer.current);
-      streamRef.current?.getTracks().forEach(t => t.stop());
-    };
+  useEffect(() => () => {
+    cancelAnimationFrame(rafRef.current);
+    clearInterval(fpsTimer.current);
+    streamRef.current?.getTracks().forEach(t=>t.stop());
   }, []);
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-      {/* Hidden video element used for frame capture */}
-      <video ref={videoRef} muted playsInline
-        style={{ display:"none", width:0, height:0 }} />
-      {/* Hidden canvas used for frame encoding */}
+      <video ref={videoRef} muted playsInline style={{ display:"none", width:0, height:0 }} />
       <canvas ref={canvasRef} style={{ display:"none" }} />
-
       {!active ? (
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
           <p style={{ margin:0, fontSize:13, color:C.muted, lineHeight:1.6 }}>
             Your browser will ask which screen, window, or tab to share.
-            All group members will see a live preview updated ~3 frames/sec.
+            Group members see a live preview at ~30fps.
           </p>
-          {error && (
-            <div style={{ padding:"8px 12px", borderRadius:9, background:C.redL,
-              border:`1px solid ${C.red}44`, color:C.red, fontSize:12 }}>{error}</div>
-          )}
+          {error && <div style={{ padding:"8px 12px", borderRadius:9, background:C.redL,
+            border:`1px solid ${C.red}44`, color:C.red, fontSize:12 }}>{error}</div>}
           <button onClick={startCapture} style={{
             background:C.accent, color:"#fff", border:"none", borderRadius:12,
             padding:"13px", fontSize:14, fontWeight:700, cursor:"pointer",
@@ -6933,8 +6970,7 @@ function SGScreenShareHost({ groupId, db, user, onStop }) {
           <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
             background:C.greenL, border:`1px solid ${C.green}44`, borderRadius:10 }}>
             <span style={{ width:9, height:9, borderRadius:"50%", background:C.green,
-              display:"inline-block", boxShadow:`0 0 0 3px ${C.greenL}`,
-              animation:"sg-pulse 1.4s ease infinite" }} />
+              display:"inline-block", animation:"sg-pulse 1.4s ease infinite" }} />
             <span style={{ fontSize:13, fontWeight:700, color:C.green }}>Live — sharing screen</span>
             <span style={{ marginLeft:"auto", fontSize:11, color:C.muted }}>{fps} fps</span>
           </div>
@@ -6948,6 +6984,7 @@ function SGScreenShareHost({ groupId, db, user, onStop }) {
     </div>
   );
 }
+
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // LIVE WHITEBOARD — host draws, all members see strokes in real time
@@ -7011,10 +7048,34 @@ function SGWhiteboard({ groupId, db, user, group, onClose }) {
     drawCtxRef.current = canvasRef.current?.getContext("2d");
   };
 
+  // Broadcast cursor position (throttled to ~30fps)
+  const cursorThrottle = useRef(0);
+  const broadcastCursor = (pt) => {
+    const now = Date.now();
+    if (now - cursorThrottle.current < 33) return; // ~30fps
+    cursorThrottle.current = now;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    // Store as fraction so viewers can scale to their canvas size
+    const xPct = pt.x / canvas.width;
+    const yPct = pt.y / canvas.height;
+    updateDoc(doc(db,"studyGroups",groupId),{
+      "sharedContent.cursor": { x: xPct, y: yPct, t: now },
+    }).catch(()=>{});
+  };
+
+  // Also broadcast cursor when NOT drawing (hover)
+  const onHover = (e) => {
+    if (drawing.current) return; // onMove handles it during drawing
+    const pt = getPos(e);
+    broadcastCursor(pt);
+  };
+
   const onMove = (e) => {
     e.preventDefault();
-    if (!drawing.current) return;
     const pt = getPos(e);
+    broadcastCursor(pt);
+    if (!drawing.current) return;
     const ctx = drawCtxRef.current;
     ctx.beginPath();
     ctx.strokeStyle = eraser ? "#ffffff" : color;
@@ -7089,7 +7150,14 @@ function SGWhiteboard({ groupId, db, user, group, onClose }) {
               📺 Present to Group
             </button>
           )}
-          <button onClick={onClose} style={{ background:C.bg, border:`1px solid ${C.border}`,
+          <button onClick={async () => {
+              // Stop presenting and clear from Firestore, then close the modal
+              if (group?.sharedContent?.type === "whiteboard" &&
+                  group?.sharedContent?.sharedByUid === user.uid) {
+                await updateDoc(doc(db,"studyGroups",groupId),{sharedContent:null}).catch(()=>{});
+              }
+              onClose();
+            }} style={{ background:C.bg, border:`1px solid ${C.border}`,
             borderRadius:"50%", width:28, height:28, color:C.muted, cursor:"pointer", fontSize:14,
             display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
         </div>
@@ -7127,7 +7195,11 @@ function SGWhiteboard({ groupId, db, user, group, onClose }) {
           <canvas ref={canvasRef} width={1200} height={700}
             style={{ width:"100%", height:"100%", display:"block",
               cursor: eraser ? "cell" : "crosshair", touchAction:"none" }}
-            onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}
+            onMouseDown={onDown} onMouseMove={onMove} onMouseLeave={e=>{
+              updateDoc(doc(db,"studyGroups",groupId),{"sharedContent.cursor":null}).catch(()=>{});
+              onUp(e);
+            }}
+            onMouseUp={onUp}
             onTouchStart={onDown} onTouchMove={onMove} onTouchEnd={onUp} />
         </div>
       </div>
