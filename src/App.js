@@ -1813,15 +1813,248 @@ function MiniAvatar({ character: ch, size = 40, uid = "" }) {
 
 // ─── CHARACTER MODAL ─────────────────────────────────────────────────────────
 // Visual preview: every selector shows mini SVG avatars with the option applied
-function CharacterModal({ character, onChange, onClose }) {
-  // ── Tab state ──────────────────────────────────────────────────────────────
-  const [tab, setTab] = useState("face");
+// ─── AVATAR SWATCHES (top-level — proper hook support) ────────────────────────
+// Receives ch, field, vals, customColors, and all callbacks as props.
+// Never re-created on render — stable component identity = stable hooks.
+function AvatarSwatches({
+  ch, field, vals, sz=26, showCustom=true,
+  customColors, onApply, onApplyCustom, onRemoveCustom,
+}) {
+  const saved       = customColors[field] || [];
+  const [open, setOpen]   = useState(false);
+  const [draft, setDraft] = useState(ch[field] || vals[0] || "#888888");
 
-  // ── Live character alias ───────────────────────────────────────────────────
+  // Sync draft when the active colour changes externally (e.g. preset click)
+  const prevField = useRef(ch[field]);
+  useEffect(() => {
+    if (prevField.current !== ch[field]) {
+      prevField.current = ch[field];
+      if (!open) setDraft(ch[field] || vals[0] || "#888888");
+    }
+  });
+
+  const handleLivePick = (hex) => {
+    setDraft(hex);
+    onApply(field, hex);       // live preview while dragging
+  };
+
+  const handleDone = () => {
+    onApplyCustom(field, draft); // save + select + close
+    setOpen(false);
+  };
+
+  const ACCENT = "#4361ee";
+  const selStyle = (isSelected) => ({
+    outline: isSelected ? `3px solid ${ACCENT}` : "3px solid transparent",
+    outlineOffset: 2,
+    boxShadow: isSelected
+      ? `0 0 0 1.5px #fff, 0 3px 10px rgba(67,97,238,.45)`
+      : "0 1px 4px rgba(0,0,0,.18)",
+    transition: "outline-color .1s, box-shadow .1s",
+  });
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+      {/* ── Swatch row ── */}
+      <div style={{ display:"flex", flexWrap:"wrap", gap:7, alignItems:"center" }}>
+
+        {/* Built-in presets */}
+        {vals.map(v => (
+          <button key={v}
+            onClick={() => { onApply(field, v); setOpen(false); }}
+            style={{
+              width:sz, height:sz, borderRadius:"50%", background:v,
+              cursor:"pointer", flexShrink:0, border:"none", padding:0,
+              ...selStyle(ch[field] === v),
+            }}
+          />
+        ))}
+
+        {/* Saved custom colours */}
+        {showCustom && saved.map((v, i) => (
+          <div key={"c"+i} style={{ position:"relative", flexShrink:0 }}>
+            <button
+              onClick={() => { onApply(field, v); setOpen(false); }}
+              style={{
+                width:sz, height:sz, borderRadius:"50%", background:v,
+                cursor:"pointer", border:"none", padding:0,
+                ...selStyle(ch[field] === v),
+              }}
+            />
+            <button
+              onClick={e => { e.stopPropagation(); onRemoveCustom(field, i); }}
+              style={{
+                position:"absolute", top:-4, right:-4,
+                width:14, height:14, borderRadius:"50%",
+                background:"#e74c3c", border:"2px solid #fff",
+                cursor:"pointer", fontSize:8, color:"#fff",
+                display:"flex", alignItems:"center", justifyContent:"center",
+                padding:0, lineHeight:1,
+              }}
+            >×</button>
+          </div>
+        ))}
+
+        {/* "+" — always last */}
+        {showCustom && (
+          <button
+            onClick={() => { setDraft(ch[field] || vals[0] || "#888888"); setOpen(o => !o); }}
+            title="Custom colour"
+            style={{
+              width:sz, height:sz, borderRadius:"50%", flexShrink:0,
+              cursor:"pointer", border:"2px dashed #bbb",
+              background: open ? ACCENT : "rgba(67,97,238,.06)",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              fontSize: sz > 22 ? 15 : 11,
+              color: open ? "#fff" : "#888",
+              transition:"background .14s, color .14s",
+            }}
+          >{open ? "×" : "+"}</button>
+        )}
+      </div>
+
+      {/* ── Inline picker ── */}
+      {open && (
+        <div style={{ borderRadius:16, overflow:"hidden", background:"#18182a",
+          boxShadow:"0 6px 32px rgba(0,0,0,.4)" }}>
+          <ColorPicker
+            value={draft}
+            onChange={handleLivePick}
+            onClose={handleDone}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── AVATAR SKIN SECTION (top-level — proper hook support) ────────────────────
+function AvatarSkinSection({
+  ch, skinBase, setSkinBase, customColors,
+  onApply, onApplyCustom, onRemoveCustom,
+}) {
+  const SKINS = ["#FDDBB4","#F5C89A","#FFCBA4","#E8A87C","#D4956A","#C68642","#A0693A","#8D5524","#6B3A1F","#F4D6C8"];
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [draft, setDraft] = useState(ch.skin || "#FDDBB4");
+  const saved = customColors["skin"] || [];
+  const ACCENT = "#4361ee";
+
+  const selStyle = (isSelected) => ({
+    outline: isSelected ? `3px solid ${ACCENT}` : "3px solid transparent",
+    outlineOffset: 2,
+    boxShadow: isSelected
+      ? `0 0 0 1.5px #fff, 0 2px 8px rgba(67,97,238,.4)`
+      : "0 1px 4px rgba(0,0,0,.15)",
+    transition: "outline-color .1s",
+  });
+
+  const handleLivePick = (hex) => {
+    setDraft(hex);
+    onApply("skin", hex);
+  };
+
+  const handleDone = () => {
+    onApplyCustom("skin", draft);
+    setPickerOpen(false);
+  };
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+      <p style={{ fontSize:10, fontWeight:800, color:"#aaa", letterSpacing:1.1,
+        margin:0, textTransform:"uppercase" }}>
+        Skin Tone — pick a base then fine-tune
+      </p>
+
+      {/* Base swatches row */}
+      <div style={{ display:"flex", flexWrap:"wrap", gap:7, alignItems:"center" }}>
+        {SKINS.map(v => (
+          <button key={v}
+            onClick={() => {
+              setSkinBase(v);
+              setPickerOpen(false);
+              const { h } = hexToHsv(v);
+              const mid = hsvToHex(h, 0.15 + 0.5*0.70, 0.95 - 0.5*0.63);
+              onApply("skin", mid);
+            }}
+            style={{
+              width:32, height:32, borderRadius:"50%", background:v,
+              cursor:"pointer", border:"none", padding:0, flexShrink:0,
+              ...selStyle(skinBase === v),
+            }}
+          />
+        ))}
+
+        {/* Saved custom skin colours */}
+        {saved.map((v, i) => (
+          <div key={"cs"+i} style={{ position:"relative", flexShrink:0 }}>
+            <button
+              onClick={() => { onApply("skin", v); setPickerOpen(false); }}
+              style={{
+                width:32, height:32, borderRadius:"50%", background:v,
+                cursor:"pointer", border:"none", padding:0,
+                ...selStyle(ch.skin === v),
+              }}
+            />
+            <button
+              onClick={e => { e.stopPropagation(); onRemoveCustom("skin", i); }}
+              style={{
+                position:"absolute", top:-4, right:-4,
+                width:14, height:14, borderRadius:"50%",
+                background:"#e74c3c", border:"2px solid #fff",
+                cursor:"pointer", fontSize:8, color:"#fff",
+                display:"flex", alignItems:"center", justifyContent:"center",
+                padding:0, lineHeight:1,
+              }}
+            >×</button>
+          </div>
+        ))}
+
+        {/* + custom */}
+        <button
+          onClick={() => { setDraft(ch.skin || "#FDDBB4"); setPickerOpen(p => !p); }}
+          style={{
+            width:32, height:32, borderRadius:"50%", flexShrink:0,
+            border:"2px dashed #bbb",
+            background: pickerOpen ? ACCENT : "rgba(67,97,238,.06)",
+            cursor:"pointer", fontSize:14,
+            color: pickerOpen ? "#fff" : "#888",
+            display:"flex", alignItems:"center", justifyContent:"center",
+          }}
+        >{pickerOpen ? "×" : "+"}</button>
+      </div>
+
+      {/* Shade slider */}
+      {!pickerOpen && skinBase && (
+        <SkinSlider
+          base={skinBase}
+          value={ch.skin || "#FDDBB4"}
+          onChange={hex => onApply("skin", hex)}
+        />
+      )}
+
+      {/* Custom picker */}
+      {pickerOpen && (
+        <div style={{ borderRadius:16, overflow:"hidden", background:"#18182a",
+          boxShadow:"0 6px 32px rgba(0,0,0,.4)" }}>
+          <ColorPicker
+            value={draft}
+            onChange={handleLivePick}
+            onClose={handleDone}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── CHARACTER MODAL ──────────────────────────────────────────────────────────
+function CharacterModal({ character, onChange, onClose }) {
   const ch = character;
 
+  // ── Tabs ───────────────────────────────────────────────────────────────────
+  const [tab, setTab] = useState("face");
+
   // ── Colour palettes ────────────────────────────────────────────────────────
-  const SKINS   = ["#FDDBB4","#F5C89A","#FFCBA4","#E8A87C","#D4956A","#C68642","#A0693A","#8D5524","#6B3A1F","#F4D6C8"];
   const HAIRS   = ["#0d0d0d","#1a0a00","#2C1810","#4A2912","#7B4F2C","#B5651D","#C9A96E","#EDD9A3","#F2E6C8","#C0392B","#E74C3C","#F39C12","#8E44AD","#2980B9","#27AE60","#1ABC9C","#fd79a8","#00CED1","#FF6347","#808080"];
   const EYES    = ["#1a3a5c","#2980B9","#74b9ff","#27AE60","#52BE80","#2d6a4f","#8B6914","#C8A84B","#2C2C2C","#6B4226","#C0392B","#8E44AD","#00b894"];
   const TOPS    = ["#1a1a2e","#2C3E50","#34495E","#7f8c8d","#E74C3C","#C0392B","#E67E22","#F39C12","#27AE60","#16A085","#2980B9","#1abc9c","#8E44AD","#fd79a8","#FFFFFF","#ECF0F1"];
@@ -1856,30 +2089,14 @@ function CharacterModal({ character, onChange, onClose }) {
   ];
 
   // ── Custom colours — persisted per-field in localStorage ──────────────────
-  // Shape: { hair: ["#abc","#def"], top: [...], ... }
   const CUSTOM_KEY = "classio_custom_colors_v1";
   const [customColors, setCustomColors] = useState(() => {
     try { return JSON.parse(localStorage.getItem(CUSTOM_KEY) || "{}"); }
     catch { return {}; }
   });
-  const saveCustomColors = (next) => {
-    setCustomColors(next);
-    try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(next)); } catch {}
-  };
-  // Add a custom colour for a field, apply it immediately, close picker
-  const applyCustomColor = (field, hex) => {
-    const prev  = customColors[field] || [];
-    // Deduplicate (case-insensitive) — keep last 8 per field
-    const deduped = [hex, ...prev.filter(c => c.toLowerCase() !== hex.toLowerCase())].slice(0, 8);
-    saveCustomColors({ ...customColors, [field]: deduped });
-    onChange({ ...ch, [field]: hex });
-    setOpenPicker(null);  // close the picker
-  };
 
-  // ── Picker / skin state ────────────────────────────────────────────────────
-  const [openPicker, setOpenPicker] = useState(null); // field name or null
-
-  // skinBase: which SKINS row is selected (controls SkinSlider range)
+  // ── skinBase ───────────────────────────────────────────────────────────────
+  const SKINS = ["#FDDBB4","#F5C89A","#FFCBA4","#E8A87C","#D4956A","#C68642","#A0693A","#8D5524","#6B3A1F","#F4D6C8"];
   const [skinBase, setSkinBase] = useState(() => {
     const cur = hexToHsv(ensureHex(ch.skin || "#FDDBB4"));
     let best = SKINS[0], bestD = 999;
@@ -1891,31 +2108,50 @@ function CharacterModal({ character, onChange, onClose }) {
     return best;
   });
 
-  // ── Shared label map for ColorPicker headings ──────────────────────────────
-  const PICKER_LABELS = {
-    hair:"Hair Colour", top:"Outfit Colour", bg:"Background", eyes:"Eye Colour",
-    hatColor:"Hat Colour", glassesColor:"Glasses Colour",
-    earringColor:"Earring Colour", necklaceColor:"Necklace Colour", lipColor:"Lip Colour",
-    skin:"Skin Tone",
-  };
+  // ── Callbacks ──────────────────────────────────────────────────────────────
+  // Apply one field change to the character
+  const applyField = useCallback((field, value) => {
+    onChange({ ...character, [field]: value });
+  }, [character, onChange]);
 
-  // ── AvatarChip ─────────────────────────────────────────────────────────────
-  // Shows a live avatar preview with one field changed; clear selection ring.
-  const AvatarChip = ({ field, value, label, selected, size = 62 }) => {
+  // Save a custom colour: add to list, auto-select, persist
+  const applyCustomColor = useCallback((field, hex) => {
+    setCustomColors(prev => {
+      const existing = prev[field] || [];
+      const deduped  = [hex, ...existing.filter(c => c.toLowerCase() !== hex.toLowerCase())].slice(0, 8);
+      const next = { ...prev, [field]: deduped };
+      try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+    onChange({ ...character, [field]: hex }); // select it immediately
+  }, [character, onChange]);
+
+  // Remove a saved custom colour by index
+  const removeCustomColor = useCallback((field, idx) => {
+    setCustomColors(prev => {
+      const next = { ...prev, [field]: (prev[field] || []).filter((_, i) => i !== idx) };
+      try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, []);
+
+  // ── AvatarChip — live preview chip ────────────────────────────────────────
+  const AvatarChip = useCallback(({ field, value, label, selected, size=62 }) => {
     const preview = { ...ch, [field]: value };
+    const ACCENT = "#4361ee";
     return (
       <button
-        onClick={() => onChange({ ...ch, [field]: value })}
+        onClick={() => applyField(field, value)}
         title={label}
         style={{
           display:"flex", flexDirection:"column", alignItems:"center", gap:5,
           padding:"7px 6px 6px", borderRadius:14, border:"none", cursor:"pointer",
           flexShrink:0,
           background: selected ? "#eef1ff" : "#f5f6fa",
-          outline: selected ? "2.5px solid #4361ee" : "2px solid transparent",
+          outline: selected ? `2.5px solid ${ACCENT}` : "2px solid transparent",
           outlineOffset:2,
           boxShadow: selected
-            ? "0 3px 12px rgba(67,97,238,.28)"
+            ? "0 0 0 1.5px #fff, 0 3px 12px rgba(67,97,238,.28)"
             : "0 1px 3px rgba(0,0,0,.07)",
           transition:"background .12s, outline-color .12s, box-shadow .12s",
         }}
@@ -1923,198 +2159,69 @@ function CharacterModal({ character, onChange, onClose }) {
         <div style={{
           width:size, height:size, borderRadius:"50%", overflow:"hidden", flexShrink:0,
           boxShadow: selected
-            ? "0 0 0 2.5px #4361ee, 0 2px 8px rgba(67,97,238,.3)"
+            ? `0 0 0 2.5px ${ACCENT}, 0 2px 8px rgba(67,97,238,.3)`
             : "0 1px 4px rgba(0,0,0,.13)",
         }}>
-          <MiniAvatar character={preview} size={size} uid={field + String(value)} />
+          <MiniAvatar character={preview} size={size} uid={field+String(value)} />
         </div>
         <span style={{
           fontSize:9, fontWeight:700, letterSpacing:.2, textAlign:"center",
-          lineHeight:1.25, width:size + 6, display:"block", overflow:"hidden",
-          whiteSpace:"nowrap", textOverflow:"ellipsis",
-          color: selected ? "#4361ee" : "#666",
+          lineHeight:1.25, width:size+6, display:"block",
+          whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
+          color: selected ? ACCENT : "#666",
         }}>{label}</span>
       </button>
     );
-  };
+  }, [ch, applyField]);
 
   // ── ChipGrid ───────────────────────────────────────────────────────────────
-  const ChipGrid = ({ field, items, size = 62 }) => (
+  const ChipGrid = ({ field, items, size=62 }) => (
     <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
       {items.map((item, i) => {
         const value = typeof item === "object" ? item.id : i;
         const label = typeof item === "object" ? item.label : item;
         return (
-          <AvatarChip
-            key={i} field={field} value={value} label={label}
-            selected={ch[field] === value} size={size}
-          />
+          <AvatarChip key={i} field={field} value={value} label={label}
+            selected={ch[field] === value} size={size} />
         );
       })}
     </div>
   );
 
-  // ── Swatches + Custom colour picker ───────────────────────────────────────
-  // • Preset swatches apply immediately on click.
-  // • Custom saved colours appear after presets, each with a delete ×.
-  // • "+" opens the live ColorPicker; Done auto-applies + saves + closes.
-  const Swatches = ({ vals, field, sz = 26, showCustom = true }) => {
-    const isPickerOpen  = openPicker === field;
-    const saved         = customColors[field] || [];
-    // draft colour while picker is open (so avatar updates live)
-    const [draft, setDraft] = useState(ch[field] || vals[0] || "#888888");
-
-    // Keep draft in sync when field value changes externally
-    useEffect(() => { setDraft(ch[field] || vals[0] || "#888888"); }, [ch[field]]);
-
-    const handleDraftChange = (hex) => {
-      setDraft(hex);
-      onChange({ ...ch, [field]: hex }); // live preview
-    };
-
-    const handleDone = () => {
-      applyCustomColor(field, draft); // saves + applies + closes picker
-    };
-
-    return (
-      <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-
-        {/* ── Swatch row ── */}
-        <div style={{ display:"flex", flexWrap:"wrap", gap:7, alignItems:"center" }}>
-
-          {/* Built-in presets */}
-          {vals.map(v => {
-            const sel = ch[field] === v;
-            return (
-              <button
-                key={v}
-                onClick={() => { onChange({ ...ch, [field]: v }); setOpenPicker(null); }}
-                style={{
-                  width:sz, height:sz, borderRadius:"50%", background:v,
-                  cursor:"pointer", flexShrink:0, border:"none", padding:0,
-                  outline: sel ? `3px solid #4361ee` : "3px solid transparent",
-                  outlineOffset:2,
-                  boxShadow: sel
-                    ? `0 0 0 1.5px #fff, 0 2px 8px rgba(67,97,238,.45)`
-                    : "0 1px 4px rgba(0,0,0,.18)",
-                  transition:"outline-color .1s, box-shadow .1s",
-                }}
-              />
-            );
-          })}
-
-          {/* Saved custom colours */}
-          {showCustom && saved.map((v, i) => {
-            const sel = ch[field] === v;
-            return (
-              <div key={"c"+i} style={{ position:"relative", flexShrink:0 }}>
-                <button
-                  onClick={() => { onChange({ ...ch, [field]: v }); setOpenPicker(null); }}
-                  style={{
-                    width:sz, height:sz, borderRadius:"50%", background:v,
-                    cursor:"pointer", border:"none", padding:0,
-                    outline: sel ? `3px solid #4361ee` : "3px solid transparent",
-                    outlineOffset:2,
-                    boxShadow: sel
-                      ? `0 0 0 1.5px #fff, 0 2px 8px rgba(67,97,238,.45)`
-                      : "0 1px 4px rgba(0,0,0,.18)",
-                    transition:"outline-color .1s",
-                  }}
-                />
-                {/* tiny × to remove */}
-                <button
-                  onClick={e => {
-                    e.stopPropagation();
-                    const next = { ...customColors, [field]: saved.filter((_,j)=>j!==i) };
-                    saveCustomColors(next);
-                  }}
-                  style={{
-                    position:"absolute", top:-4, right:-4,
-                    width:13, height:13, borderRadius:"50%",
-                    background:"#e74c3c", border:"none", cursor:"pointer",
-                    fontSize:8, color:"#fff", lineHeight:1,
-                    display:"flex", alignItems:"center", justifyContent:"center",
-                    padding:0,
-                  }}
-                >×</button>
-              </div>
-            );
-          })}
-
-          {/* "+" button — always last */}
-          {showCustom && (
-            <button
-              onClick={() => {
-                setDraft(ch[field] || vals[0] || "#888888");
-                setOpenPicker(isPickerOpen ? null : field);
-              }}
-              title="Custom colour"
-              style={{
-                width:sz, height:sz, borderRadius:"50%", flexShrink:0,
-                cursor:"pointer", border:"2px dashed #bbb",
-                background: isPickerOpen ? "#4361ee" : "rgba(67,97,238,.06)",
-                display:"flex", alignItems:"center", justifyContent:"center",
-                fontSize: sz > 22 ? 15 : 11,
-                color: isPickerOpen ? "#fff" : "#888",
-                transition:"background .14s, color .14s",
-              }}
-            >
-              {isPickerOpen ? "×" : "+"}
-            </button>
-          )}
-        </div>
-
-        {/* ── Inline ColorPicker — shows below swatches ── */}
-        {isPickerOpen && (
-          <div style={{ borderRadius:16, overflow:"hidden", background:"#18182a",
-            boxShadow:"0 6px 32px rgba(0,0,0,.4)" }}>
-            <ColorPicker
-              value={draft}
-              label={PICKER_LABELS[field] || field}
-              onChange={handleDraftChange}
-              onClose={handleDone}
-            />
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  // ── Row layout wrapper ─────────────────────────────────────────────────────
+  // ── Row layout ─────────────────────────────────────────────────────────────
   const Row = ({ label, children }) => (
     <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-      <p style={{
-        fontSize:10, fontWeight:800, color:"#aaa", letterSpacing:1.1,
-        margin:0, textTransform:"uppercase"
-      }}>{label}</p>
+      <p style={{ fontSize:10, fontWeight:800, color:"#aaa", letterSpacing:1.1,
+        margin:0, textTransform:"uppercase" }}>{label}</p>
       <div>{children}</div>
     </div>
   );
 
   // ── TogglePair ─────────────────────────────────────────────────────────────
-  const TogglePair = ({ label, field, onEmoji, offLabel = "Off" }) => (
+  const TogglePair = ({ label, field, onEmoji, offLabel="Off" }) => (
     <Row label={label}>
       <div style={{ display:"flex", gap:10 }}>
         {[false, true].map(val => {
           const sel = !!ch[field] === val;
+          const ACCENT = "#4361ee";
           return (
-            <button key={String(val)} onClick={() => onChange({ ...ch, [field]: val })}
+            <button key={String(val)} onClick={() => applyField(field, val)}
               style={{
                 display:"flex", flexDirection:"column", alignItems:"center", gap:4,
                 padding:"7px 5px 5px", borderRadius:14, border:"none", cursor:"pointer",
                 background: sel ? "#eef1ff" : "#f5f6fa",
-                outline: sel ? "2.5px solid #4361ee" : "2px solid transparent",
+                outline: sel ? `2.5px solid ${ACCENT}` : "2px solid transparent",
                 outlineOffset:2,
                 boxShadow: sel ? "0 2px 12px rgba(67,97,238,.28)" : "0 1px 3px rgba(0,0,0,.07)",
                 transition:"background .12s, outline-color .12s, box-shadow .12s",
               }}>
               <div style={{
                 width:66, height:66, borderRadius:"50%", overflow:"hidden",
-                boxShadow: sel ? "0 0 0 2.5px #4361ee" : "0 1px 4px rgba(0,0,0,.14)",
+                boxShadow: sel ? `0 0 0 2.5px ${ACCENT}` : "0 1px 4px rgba(0,0,0,.14)",
               }}>
-                <MiniAvatar character={{ ...ch, [field]: val }} size={66} uid={field + String(val)} />
+                <MiniAvatar character={{ ...ch, [field]: val }} size={66} uid={field+String(val)} />
               </div>
-              <span style={{ fontSize:10, fontWeight:700, color: sel ? "#4361ee" : "#777" }}>
+              <span style={{ fontSize:10, fontWeight:700, color: sel ? ACCENT : "#777" }}>
                 {val ? `${onEmoji} On` : offLabel}
               </span>
             </button>
@@ -2124,87 +2231,9 @@ function CharacterModal({ character, onChange, onClose }) {
     </Row>
   );
 
-  // ── Skin tone section ──────────────────────────────────────────────────────
-  const SkinSection = () => {
-    const [pickerOpen, setPickerOpen] = useState(false);
-    const [draft, setDraft] = useState(ch.skin || "#FDDBB4");
-
-    const handleDraftChange = (hex) => {
-      setDraft(hex);
-      onChange({ ...ch, skin: hex });
-    };
-    const handleDone = () => {
-      applyCustomColor("skin", draft);
-      setPickerOpen(false);
-    };
-
-    return (
-      <Row label="SKIN TONE — pick a base, then fine-tune the shade">
-        {/* Base swatches */}
-        <div style={{ display:"flex", flexWrap:"wrap", gap:7, marginBottom:2 }}>
-          {SKINS.map(v => {
-            const isSel = skinBase === v;
-            return (
-              <button key={v}
-                onClick={() => {
-                  setSkinBase(v);
-                  setPickerOpen(false);
-                  const { h } = hexToHsv(v);
-                  const mid = hsvToHex(h, 0.15 + 0.5 * 0.70, 0.95 - 0.5 * 0.63);
-                  onChange({ ...ch, skin: mid });
-                }}
-                style={{
-                  width:32, height:32, borderRadius:"50%", background:v,
-                  cursor:"pointer", border:"none", padding:0, flexShrink:0,
-                  outline: isSel ? "3px solid #4361ee" : "3px solid transparent",
-                  outlineOffset:2,
-                  boxShadow: isSel
-                    ? "0 0 0 1.5px #fff, 0 2px 8px rgba(67,97,238,.4)"
-                    : "0 1px 4px rgba(0,0,0,.15)",
-                  transition:"outline-color .1s",
-                }}
-              />
-            );
-          })}
-          {/* + custom */}
-          <button
-            onClick={() => { setDraft(ch.skin || "#FDDBB4"); setPickerOpen(p => !p); }}
-            style={{
-              width:32, height:32, borderRadius:"50%", flexShrink:0,
-              border:"2px dashed #bbb", background: pickerOpen ? "#4361ee" : "rgba(67,97,238,.06)",
-              cursor:"pointer", fontSize:14,
-              color: pickerOpen ? "#fff" : "#888",
-              display:"flex", alignItems:"center", justifyContent:"center",
-            }}
-          >{pickerOpen ? "×" : "+"}</button>
-        </div>
-
-        {/* Shade slider — only when a base is selected and picker is closed */}
-        {!pickerOpen && skinBase && (
-          <SkinSlider
-            base={skinBase}
-            value={ch.skin || "#FDDBB4"}
-            onChange={hex => onChange({ ...ch, skin: hex })}
-          />
-        )}
-
-        {/* Custom colour picker */}
-        {pickerOpen && (
-          <div style={{ marginTop:6, borderRadius:16, overflow:"hidden", background:"#18182a",
-            boxShadow:"0 6px 32px rgba(0,0,0,.4)" }}>
-            <ColorPicker
-              value={draft}
-              label="Skin Tone"
-              onChange={handleDraftChange}
-              onClose={handleDone}
-            />
-          </div>
-        )}
-      </Row>
-    );
-  };
-
-  // ── Modal render ───────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────────────────────────────────────
   return (
     <div
       onClick={onClose}
@@ -2212,45 +2241,34 @@ function CharacterModal({ character, onChange, onClose }) {
         position:"fixed", inset:0, zIndex:3000,
         background:"rgba(0,0,0,.6)",
         display:"flex", alignItems:"center", justifyContent:"center",
-        padding:"16px",                    // keeps modal off edges on all sides
+        padding:16,
       }}
     >
       <div
         onClick={e => e.stopPropagation()}
         style={{
-          /* Fixed size — never changes when switching tabs */
           width:"100%", maxWidth:520,
-          height:"min(640px, calc(100dvh - 32px))",
+          height:`min(650px, calc(100dvh - 32px))`,
           display:"flex", flexDirection:"column",
-          background:"#fff",
-          borderRadius:22,
+          background:"#fff", borderRadius:22,
           boxShadow:"0 24px 80px rgba(0,0,0,.38)",
           overflow:"hidden",
         }}
       >
-
-        {/* ── Header: avatar preview + title + nickname + close ── */}
+        {/* ── Header ── */}
         <div style={{
-          flexShrink:0,
-          display:"flex", alignItems:"center", gap:12,
-          padding:"14px 16px 12px",
-          borderBottom:"1px solid #f0f0f0",
-          background:"#fff",
+          flexShrink:0, display:"flex", alignItems:"center", gap:12,
+          padding:"14px 16px 12px", borderBottom:"1px solid #f0f0f0",
         }}>
-          {/* Live avatar preview */}
           <div style={{
             width:52, height:52, borderRadius:"50%", overflow:"hidden", flexShrink:0,
-            boxShadow:"0 2px 10px rgba(0,0,0,.14)",
-            border:"2px solid #f0f0f0",
+            boxShadow:"0 2px 10px rgba(0,0,0,.14)", border:"2px solid #f0f0f0",
           }}>
             <MiniAvatar character={ch} size={52} />
           </div>
-
           <div style={{ flex:1, minWidth:0 }}>
-            <p style={{
-              fontFamily:"'Fraunces',serif", fontSize:16, fontWeight:900,
-              color:"#111", margin:"0 0 5px", lineHeight:1.2,
-            }}>My Avatar</p>
+            <p style={{ fontFamily:"'Fraunces',serif", fontSize:16, fontWeight:900,
+              color:"#111", margin:"0 0 5px", lineHeight:1.2 }}>My Avatar</p>
             <input
               value={ch.name || ""}
               onChange={e => onChange({ ...ch, name: e.target.value })}
@@ -2263,104 +2281,155 @@ function CharacterModal({ character, onChange, onClose }) {
               }}
             />
           </div>
-
           <button onClick={onClose} style={{
             flexShrink:0, width:30, height:30, borderRadius:"50%",
             background:"#f0f0f0", border:"none", cursor:"pointer",
             fontSize:17, fontWeight:900, color:"#555",
             display:"flex", alignItems:"center", justifyContent:"center",
-            lineHeight:1,
           }}>×</button>
         </div>
 
-        {/* ── Tab bar — never scrolls away ── */}
+        {/* ── Tab bar ── */}
         <div style={{
-          flexShrink:0,
-          display:"flex", background:"#fff",
+          flexShrink:0, display:"flex", background:"#fff",
           borderBottom:"1px solid #f0f0f0",
         }}>
           {TABS.map(t => (
-            <button key={t.id} onClick={() => { setTab(t.id); setOpenPicker(null); }} style={{
-              flex:1,
-              padding:"8px 2px 7px", border:"none", cursor:"pointer", background:"#fff",
-              fontWeight:800, fontSize:10, letterSpacing:.3, lineHeight:1.5,
-              color: tab === t.id ? "#4361ee" : "#bbb",
-              borderBottom:`2.5px solid ${tab === t.id ? "#4361ee" : "transparent"}`,
-              transition:"color .12s, border-color .12s",
-              whiteSpace:"nowrap",
-            }}>{t.emoji}<br />{t.label}</button>
+            <button key={t.id}
+              onClick={() => setTab(t.id)}
+              style={{
+                flex:1, padding:"8px 2px 7px", border:"none", cursor:"pointer",
+                background:"#fff", fontWeight:800, fontSize:10,
+                letterSpacing:.3, lineHeight:1.5, whiteSpace:"nowrap",
+                color: tab === t.id ? "#4361ee" : "#bbb",
+                borderBottom:`2.5px solid ${tab === t.id ? "#4361ee" : "transparent"}`,
+                transition:"color .12s, border-color .12s",
+              }}
+            >{t.emoji}<br />{t.label}</button>
           ))}
         </div>
 
-        {/* ── Scrollable content — minHeight:0 is essential for correct shrink ── */}
+        {/* ── Scroll content ── */}
         <div style={{
-          flex:1, minHeight:0,
-          overflowY:"auto", overflowX:"hidden",
+          flex:1, minHeight:0, overflowY:"auto", overflowX:"hidden",
           padding:"18px 18px 12px",
           display:"flex", flexDirection:"column", gap:22,
           WebkitOverflowScrolling:"touch",
         }}>
 
-          {/* ══ FACE ══════════════════════════════════════════════════════ */}
+          {/* ══ FACE ══ */}
           {tab === "face" && <>
-            <SkinSection />
-            <Row label="Eye Shape"><ChipGrid field="eyeShape" items={EYE_S} size={60} /></Row>
-            <Row label="Eye Colour"><Swatches vals={EYES} field="eyes" sz={26} /></Row>
-            <Row label="Eyebrows"><ChipGrid field="eyebrow" items={BROWS} size={58} /></Row>
-            <Row label="Expression"><ChipGrid field="mouth" items={MOUTHS} size={58} /></Row>
-            <Row label="Facial Hair"><ChipGrid field="facialHair" items={FACIAL_NAMES} size={58} /></Row>
+            <AvatarSkinSection
+              ch={ch} skinBase={skinBase} setSkinBase={setSkinBase}
+              customColors={customColors}
+              onApply={applyField}
+              onApplyCustom={applyCustomColor}
+              onRemoveCustom={removeCustomColor}
+            />
+            <Row label="Eye Shape">
+              <ChipGrid field="eyeShape" items={EYE_S} size={60} />
+            </Row>
+            <Row label="Eye Colour">
+              <AvatarSwatches ch={ch} field="eyes" vals={EYES} sz={26}
+                customColors={customColors}
+                onApply={applyField} onApplyCustom={applyCustomColor} onRemoveCustom={removeCustomColor} />
+            </Row>
+            <Row label="Eyebrows">
+              <ChipGrid field="eyebrow" items={BROWS} size={58} />
+            </Row>
+            <Row label="Expression">
+              <ChipGrid field="mouth" items={MOUTHS} size={58} />
+            </Row>
+            <Row label="Facial Hair">
+              <ChipGrid field="facialHair" items={FACIAL_NAMES} size={58} />
+            </Row>
           </>}
 
-          {/* ══ HAIR ══════════════════════════════════════════════════════ */}
+          {/* ══ HAIR ══ */}
           {tab === "hair" && <>
-            <Row label="Hair Style"><ChipGrid field="hairStyle" items={HAIR_NAMES} size={64} /></Row>
-            <Row label="Hair Colour"><Swatches vals={HAIRS} field="hair" sz={26} /></Row>
+            <Row label="Hair Style">
+              <ChipGrid field="hairStyle" items={HAIR_NAMES} size={64} />
+            </Row>
+            <Row label="Hair Colour">
+              <AvatarSwatches ch={ch} field="hair" vals={HAIRS} sz={26}
+                customColors={customColors}
+                onApply={applyField} onApplyCustom={applyCustomColor} onRemoveCustom={removeCustomColor} />
+            </Row>
           </>}
 
-          {/* ══ FIT ═══════════════════════════════════════════════════════ */}
+          {/* ══ FIT ══ */}
           {tab === "fit" && <>
-            <Row label="Outfit Style"><ChipGrid field="topStyle" items={TOPS_S} size={66} /></Row>
-            <Row label="Outfit Colour"><Swatches vals={TOPS} field="top" sz={26} /></Row>
-            <Row label="Background"><Swatches vals={BG} field="bg" sz={26} /></Row>
+            <Row label="Outfit Style">
+              <ChipGrid field="topStyle" items={TOPS_S} size={66} />
+            </Row>
+            <Row label="Outfit Colour">
+              <AvatarSwatches ch={ch} field="top" vals={TOPS} sz={26}
+                customColors={customColors}
+                onApply={applyField} onApplyCustom={applyCustomColor} onRemoveCustom={removeCustomColor} />
+            </Row>
+            <Row label="Background">
+              <AvatarSwatches ch={ch} field="bg" vals={BG} sz={26}
+                customColors={customColors}
+                onApply={applyField} onApplyCustom={applyCustomColor} onRemoveCustom={removeCustomColor} />
+            </Row>
           </>}
 
-          {/* ══ ACCESSORIES ═══════════════════════════════════════════════ */}
+          {/* ══ ACCESSORIES ══ */}
           {tab === "acc" && <>
             <Row label="Hat">
               <ChipGrid field="hat" items={HAT_NAMES} size={60} />
             </Row>
             {ch.hat > 0 && (
-              <Row label="Hat Colour"><Swatches vals={HAT_C} field="hatColor" sz={26} /></Row>
+              <Row label="Hat Colour">
+                <AvatarSwatches ch={ch} field="hatColor" vals={HAT_C} sz={26}
+                  customColors={customColors}
+                  onApply={applyField} onApplyCustom={applyCustomColor} onRemoveCustom={removeCustomColor} />
+              </Row>
             )}
             <Row label="Glasses">
               <ChipGrid field="glasses" items={GLASS_NAMES} size={60} />
             </Row>
             {ch.glasses > 0 && (
-              <Row label="Glasses Colour"><Swatches vals={GLASS_C} field="glassesColor" sz={26} /></Row>
+              <Row label="Glasses Colour">
+                <AvatarSwatches ch={ch} field="glassesColor" vals={GLASS_C} sz={26}
+                  customColors={customColors}
+                  onApply={applyField} onApplyCustom={applyCustomColor} onRemoveCustom={removeCustomColor} />
+              </Row>
             )}
             <Row label="Earrings">
               <ChipGrid field="earring" items={EARRING_NAMES} size={60} />
             </Row>
             {ch.earring > 0 && (
-              <Row label="Earring Colour"><Swatches vals={JEWEL_C} field="earringColor" sz={26} /></Row>
+              <Row label="Earring Colour">
+                <AvatarSwatches ch={ch} field="earringColor" vals={JEWEL_C} sz={26}
+                  customColors={customColors}
+                  onApply={applyField} onApplyCustom={applyCustomColor} onRemoveCustom={removeCustomColor} />
+              </Row>
             )}
             <Row label="Necklace">
               <ChipGrid field="necklace" items={NECKLACE_NAMES} size={60} />
             </Row>
             {ch.necklace > 0 && (
-              <Row label="Necklace Colour"><Swatches vals={JEWEL_C} field="necklaceColor" sz={26} /></Row>
+              <Row label="Necklace Colour">
+                <AvatarSwatches ch={ch} field="necklaceColor" vals={JEWEL_C} sz={26}
+                  customColors={customColors}
+                  onApply={applyField} onApplyCustom={applyCustomColor} onRemoveCustom={removeCustomColor} />
+              </Row>
             )}
           </>}
 
-          {/* ══ EXTRA ═════════════════════════════════════════════════════ */}
+          {/* ══ EXTRA ══ */}
           {tab === "extra" && <>
             <TogglePair label="Blush" field="blush" onEmoji="🌸" />
             <TogglePair label="Lip Gloss" field="lips" onEmoji="💋" />
             {ch.lips && (
-              <Row label="Lip Colour"><Swatches vals={LIP_C} field="lipColor" sz={26} /></Row>
+              <Row label="Lip Colour">
+                <AvatarSwatches ch={ch} field="lipColor" vals={LIP_C} sz={26}
+                  customColors={customColors}
+                  onApply={applyField} onApplyCustom={applyCustomColor} onRemoveCustom={removeCustomColor} />
+              </Row>
             )}
             <TogglePair label="Freckles" field="freckles" onEmoji="🟤" />
-
             <button
               onClick={() => onChange({
                 skin:"#FDDBB4", hair:"#3D2B1F", hairStyle:0, eyes:"#2980B9",
@@ -2381,13 +2450,11 @@ function CharacterModal({ character, onChange, onClose }) {
 
         </div>
 
-        {/* ── Done — always visible, never overlaps scroll content ── */}
+        {/* ── Done button ── */}
         <div style={{
-          flexShrink:0,
-          padding:"10px 18px",
+          flexShrink:0, padding:"10px 18px",
           paddingBottom:"max(12px, env(safe-area-inset-bottom, 12px))",
-          borderTop:"1px solid #f0f0f0",
-          background:"#fff",
+          borderTop:"1px solid #f0f0f0", background:"#fff",
         }}>
           <button onClick={onClose} style={{
             width:"100%", background:"#111", color:"#fff",
@@ -2400,7 +2467,6 @@ function CharacterModal({ character, onChange, onClose }) {
     </div>
   );
 }
-
 // ─── LINK FILES BUTTON ────────────────────────────────────────────────────────
 function LinkBtn({ file, allFiles, onSave }) {
   const [open, setOpen] = useState(false);
