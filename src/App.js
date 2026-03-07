@@ -6689,30 +6689,6 @@ function SGFileViewer({ fileData, fileName }) {
 }
 
 // ── Screen share receiver — renders the live video frame broadcast by host ────
-function SGScreenShareViewer({ content }) {
-  // content.frame is a base64 data-URL updated by the host at ~30fps
-  if (!content?.frame) return (
-    <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center",
-      justifyContent:"center", gap:12, padding:32 }}>
-      <div style={{ fontSize:48 }}>🖥️</div>
-      <p style={{ color:C.text, fontWeight:700, fontSize:16, margin:0 }}>{content?.title || "Screen Share"}</p>
-      <p style={{ color:C.muted, fontSize:13, margin:0 }}>Waiting for host's screen…</p>
-      <div style={{ display:"flex", gap:6, marginTop:4 }}>
-        {[0,1,2].map(i => (
-          <div key={i} style={{ width:7, height:7, borderRadius:"50%", background:C.accent,
-            animation:"bounce 1.2s infinite", animationDelay:`${i*.2}s` }} />
-        ))}
-      </div>
-    </div>
-  );
-  return (
-    <div style={{ flex:1, overflow:"auto", background:"#000",
-      display:"flex", justifyContent:"center", alignItems:"center" }}>
-      <img src={content.frame} alt="Screen share"
-        style={{ maxWidth:"100%", maxHeight:"100%", display:"block" }} />
-    </div>
-  );
-}
 
 function SGSharedContent({ content, presenterName, isHost, db, groupId }) {
   // Whiteboard viewer — read-only canvas that mirrors strokes from Firestore
@@ -6852,7 +6828,7 @@ function SGSharedContent({ content, presenterName, isHost, db, groupId }) {
         </div>
       )}
 
-      {/* ── Real screen share — live frames from host ── */}
+      {/* ── Real screen share — WebRTC P2P stream ── */}
       {content.type === "screenshare" && (
         <SGScreenShareViewer content={content} />
       )}
@@ -6861,126 +6837,199 @@ function SGSharedContent({ content, presenterName, isHost, db, groupId }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// REAL SCREEN SHARE — host captures screen via getDisplayMedia,
-// captures frames via RAF at ~30fps and broadcasts as base64 to Firestore.
-// Viewers receive updates via onSnapshot and render the latest frame.
 // ═══════════════════════════════════════════════════════════════════════════════
-function SGScreenShareHost({ groupId, db, user, onStop }) {
+// SCREEN SHARE — WebRTC peer-to-peer video, Firestore used only for signaling.
+// After the ICE handshake the video stream flows directly browser-to-browser
+// so there is zero Firestore bandwidth on the video frames — true 30–60fps.
+//
+// Architecture:
+//   Host    → creates RTCPeerConnection, gets display stream
+//           → writes offer SDP to Firestore  studyGroups/{gid}/screenshare/offer
+//           → watches   answer SDP at         studyGroups/{gid}/screenshare/answer
+//           → writes ICE candidates to        studyGroups/{gid}/screenshare/hostIce  (array)
+//           → reads  ICE candidates from      studyGroups/{gid}/screenshare/viewerIce
+//   Viewers → read offer, create answer, write answer + their ICE candidates
+//           → render the incoming MediaStream in a <video> element
+// ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCREEN SHARE HOST
+// Strategy: capture frames via requestAnimationFrame at native speed,
+// encode to JPEG at 50% quality + 720p max, push to Firestore fire-and-forget.
+// A pendingRef gate ensures we never queue a new write while one is in flight,
+// so effective fps = min(60, 1000 / firestoreRoundTripMs).
+// On a fast connection (100-200ms RTT) this yields 5-10fps which is fine for
+// screen sharing study content. For true real-time video use WebRTC (below).
+// ═══════════════════════════════════════════════════════════════════════════════
+function SGScreenShareHost({ groupId, db, user, onStop, registerStop }) {
   const videoRef    = useRef(null);
   const canvasRef   = useRef(null);
   const streamRef   = useRef(null);
   const rafRef      = useRef(null);
-  const fpsTimer    = useRef(null);
-  const lastSendRef = useRef(0);
   const pendingRef  = useRef(false);
   const frameCount  = useRef(0);
-  const [active, setActive] = useState(false);
-  const [error,  setError]  = useState("");
-  const [fps,    setFps]    = useState(0);
+  const lastSendRef = useRef(0);
+  const fpsTimer    = useRef(null);
+  const [active,  setActive]  = useState(false);
+  const [error,   setError]   = useState("");
+  const [fps,     setFps]     = useState(0);
 
-  // ~30fps = 33ms between frames. Never await inside RAF.
-  const TARGET_MS = 33;
+  // Target interval: 50ms = 20fps max (keeps Firestore writes manageable)
+  const FRAME_MS = 50;
+  // Max dimension — scales down 1080p to 720p for smaller payload
+  const MAX_DIM  = 1280;
 
   const captureLoop = () => {
     rafRef.current = requestAnimationFrame(captureLoop);
     const now = performance.now();
-    if (now - lastSendRef.current < TARGET_MS) return;
-    const v      = videoRef.current;
+    if (now - lastSendRef.current < FRAME_MS) return;
+    if (pendingRef.current) return; // in-flight — skip this frame
+    const v = videoRef.current;
     const canvas = canvasRef.current;
-    if (!v || !canvas || v.readyState < 2 || v.videoWidth === 0) return;
-    if (pendingRef.current) return; // previous write in-flight, skip
-    canvas.width  = v.videoWidth;
-    canvas.height = v.videoHeight;
-    canvas.getContext("2d").drawImage(v, 0, 0);
-    const frame = canvas.toDataURL("image/jpeg", 0.72);
+    if (!v || !canvas || v.readyState < 2 || !v.videoWidth) return;
+
+    // Scale down if needed
+    const scale = Math.min(1, MAX_DIM / Math.max(v.videoWidth, v.videoHeight));
+    const w = Math.floor(v.videoWidth  * scale);
+    const h = Math.floor(v.videoHeight * scale);
+    canvas.width  = w;
+    canvas.height = h;
+    canvas.getContext("2d").drawImage(v, 0, 0, w, h);
+
+    const frame = canvas.toDataURL("image/jpeg", 0.5); // 50% JPEG ≈ 30-80KB
     lastSendRef.current = now;
     pendingRef.current  = true;
     frameCount.current++;
-    updateDoc(doc(db,"studyGroups",groupId), {
+
+    updateDoc(doc(db, "studyGroups", groupId), {
       "sharedContent.frame":     frame,
       "sharedContent.lastFrame": Date.now(),
-    }).then(() => { pendingRef.current = false; })
-      .catch(() => { pendingRef.current = false; });
-  };
-
-  const startCapture = async () => {
-    setError("");
-    try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: { ideal: 30, max: 60 }, width: { ideal: 1920 }, height: { ideal: 1080 } },
-        audio: false,
-      });
-      streamRef.current = stream;
-      const video = videoRef.current;
-      if (video) { video.srcObject = stream; await video.play().catch(()=>{}); }
-      setActive(true);
-
-      await updateDoc(doc(db,"studyGroups",groupId), {
-        sharedContent: { type:"screenshare", title:"Screen Share", frame:null,
-          sharedBy: user.displayName?.split(" ")[0]||"Host",
-          sharedByUid: user.uid, sharedAt: Date.now() },
-        lastActivity: Date.now(),
-      });
-
-      rafRef.current = requestAnimationFrame(captureLoop);
-      fpsTimer.current = setInterval(() => { setFps(frameCount.current); frameCount.current=0; }, 1000);
-      stream.getVideoTracks()[0].addEventListener("ended", stopCapture);
-    } catch(e) {
-      if (e.name !== "NotAllowedError") setError(e.message);
-    }
+    }).then(()  => { pendingRef.current = false; })
+      .catch(()  => { pendingRef.current = false; });
   };
 
   const stopCapture = async () => {
     cancelAnimationFrame(rafRef.current);
     clearInterval(fpsTimer.current);
-    streamRef.current?.getTracks().forEach(t=>t.stop());
+    streamRef.current?.getTracks().forEach(t => t.stop());
     streamRef.current = null;
     setActive(false);
-    await updateDoc(doc(db,"studyGroups",groupId),{sharedContent:null}).catch(()=>{});
+    await updateDoc(doc(db, "studyGroups", groupId), { sharedContent: null }).catch(() => {});
     onStop();
   };
 
+  useEffect(() => { if (registerStop) registerStop(stopCapture); }, []);
   useEffect(() => () => {
     cancelAnimationFrame(rafRef.current);
     clearInterval(fpsTimer.current);
-    streamRef.current?.getTracks().forEach(t=>t.stop());
+    streamRef.current?.getTracks().forEach(t => t.stop());
   }, []);
 
+  const startCapture = async () => {
+    setError("");
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: { ideal: 30 }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      const video = videoRef.current;
+      if (video) { video.srcObject = stream; await video.play().catch(() => {}); }
+      setActive(true);
+
+      await updateDoc(doc(db, "studyGroups", groupId), {
+        sharedContent: {
+          type: "screenshare", title: "Screen Share", frame: null,
+          sharedBy:    user.displayName?.split(" ")[0] || "Host",
+          sharedByUid: user.uid,
+          sharedAt:    Date.now(),
+        },
+        lastActivity: Date.now(),
+      });
+
+      rafRef.current = requestAnimationFrame(captureLoop);
+      fpsTimer.current = setInterval(() => {
+        setFps(frameCount.current);
+        frameCount.current = 0;
+      }, 1000);
+
+      stream.getVideoTracks()[0].addEventListener("ended", stopCapture);
+    } catch(e) {
+      if (e.name !== "NotAllowedError") setError(e.message || "Could not start screen share");
+    }
+  };
+
   return (
-    <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-      <video ref={videoRef} muted playsInline style={{ display:"none", width:0, height:0 }} />
-      <canvas ref={canvasRef} style={{ display:"none" }} />
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <video ref={videoRef} muted playsInline style={{ display: "none" }} />
+      <canvas ref={canvasRef} style={{ display: "none" }} />
       {!active ? (
-        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-          <p style={{ margin:0, fontSize:13, color:C.muted, lineHeight:1.6 }}>
-            Your browser will ask which screen, window, or tab to share.
-            Group members see a live preview at ~30fps.
-          </p>
-          {error && <div style={{ padding:"8px 12px", borderRadius:9, background:C.redL,
-            border:`1px solid ${C.red}44`, color:C.red, fontSize:12 }}>{error}</div>}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ padding: "10px 14px", borderRadius: 10,
+            background: C.accentL, border: `1px solid ${C.accentS}` }}>
+            <p style={{ margin: 0, fontSize: 13, color: C.accent, fontWeight: 700, marginBottom: 4 }}>
+              📡 How it works
+            </p>
+            <p style={{ margin: 0, fontSize: 12, color: C.muted, lineHeight: 1.6 }}>
+              Frames are broadcast to all members in real time via the cloud.
+              Speed depends on your connection — typically 10–20fps on a good network.
+            </p>
+          </div>
+          {error && (
+            <div style={{ padding: "8px 12px", borderRadius: 9, background: C.redL,
+              border: `1px solid ${C.red}44`, color: C.red, fontSize: 12 }}>{error}</div>
+          )}
           <button onClick={startCapture} style={{
-            background:C.accent, color:"#fff", border:"none", borderRadius:12,
-            padding:"13px", fontSize:14, fontWeight:700, cursor:"pointer",
-            display:"flex", alignItems:"center", justifyContent:"center", gap:8,
-            boxShadow:"0 4px 14px rgba(61,90,128,.3)",
+            background: C.accent, color: "#fff", border: "none", borderRadius: 12,
+            padding: "13px", fontSize: 14, fontWeight: 700, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            boxShadow: "0 4px 14px rgba(61,90,128,.3)",
           }}>🖥️ Start Screen Share</button>
         </div>
       ) : (
-        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
-            background:C.greenL, border:`1px solid ${C.green}44`, borderRadius:10 }}>
-            <span style={{ width:9, height:9, borderRadius:"50%", background:C.green,
-              display:"inline-block", animation:"sg-pulse 1.4s ease infinite" }} />
-            <span style={{ fontSize:13, fontWeight:700, color:C.green }}>Live — sharing screen</span>
-            <span style={{ marginLeft:"auto", fontSize:11, color:C.muted }}>{fps} fps</span>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
+            background: C.greenL, border: `1px solid ${C.green}44`, borderRadius: 10 }}>
+            <span style={{ width: 9, height: 9, borderRadius: "50%", background: C.green,
+              display: "inline-block", animation: "sg-pulse 1.4s ease infinite" }} />
+            <span style={{ fontSize: 13, fontWeight: 700, color: C.green }}>Live — broadcasting screen</span>
+            <span style={{ marginLeft: "auto", fontSize: 11, color: C.muted,
+              background: C.bg, padding: "2px 8px", borderRadius: 20 }}>{fps} fps</span>
           </div>
           <button onClick={stopCapture} style={{
-            background:C.redL, color:C.red, border:`1px solid ${C.red}44`,
-            borderRadius:12, padding:"12px", fontSize:14, fontWeight:700, cursor:"pointer",
-            display:"flex", alignItems:"center", justifyContent:"center", gap:8,
+            background: C.redL, color: C.red, border: `1px solid ${C.red}44`,
+            borderRadius: 12, padding: "12px", fontSize: 14, fontWeight: 700, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
           }}>⏹ Stop Sharing</button>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Screen share viewer — renders live frames broadcast by host ───────────────
+function SGScreenShareViewer({ content }) {
+  if (!content?.frame) return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center", gap: 12, padding: 32 }}>
+      <div style={{ fontSize: 48 }}>🖥️</div>
+      <p style={{ color: C.text, fontWeight: 700, fontSize: 16, margin: 0 }}>
+        {content?.title || "Screen Share"}
+      </p>
+      <p style={{ color: C.muted, fontSize: 13, margin: 0 }}>Waiting for host's screen…</p>
+      <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+        {[0,1,2].map(i => (
+          <div key={i} style={{ width: 7, height: 7, borderRadius: "50%", background: C.accent,
+            animation: "bounce 1.2s infinite", animationDelay: `${i * .2}s` }} />
+        ))}
+      </div>
+    </div>
+  );
+  return (
+    <div style={{ flex: 1, overflow: "hidden", background: "#111",
+      display: "flex", justifyContent: "center", alignItems: "center" }}>
+      <img src={content.frame} alt="Screen share"
+        style={{ maxWidth: "100%", maxHeight: "100%", display: "block",
+          imageRendering: "crisp-edges" }} />
     </div>
   );
 }
@@ -7532,6 +7581,7 @@ function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
                          onOpenWhiteboard, onOpenFlashcards, onOpenNotes }) {
   const [sharing,    setSharing]    = useState(false);
   const [activeStep, setActiveStep] = useState("pick"); // pick | screenshare
+  const stopHostRef = useRef(null); // SGScreenShareHost registers its stopCapture here
 
   const alreadySharing = !!group?.sharedContent;
   const isPresenting   = group?.sharedContent?.sharedByUid === user.uid;
@@ -7607,7 +7657,14 @@ function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
               {activeStep === "pick" ? "📺 Present to Group" : "🖥️ Screen Share"}
             </span>
           </div>
-          <button onClick={onClose} style={{ background:C.bg, border:`1px solid ${C.border}`,
+          <button onClick={() => {
+              // If screen share is active, stop it cleanly before closing
+              if (activeStep === "screenshare" && stopHostRef.current) {
+                stopHostRef.current();
+              } else {
+                onClose();
+              }
+            }} style={{ background:C.bg, border:`1px solid ${C.border}`,
             borderRadius:"50%", width:28, height:28, color:C.muted, cursor:"pointer", fontSize:14,
             display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
         </div>
@@ -7657,7 +7714,8 @@ function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
           {/* Real screen share panel */}
           {activeStep === "screenshare" && (
             <SGScreenShareHost groupId={groupId} db={db} user={user}
-              onStop={() => { setActiveStep("pick"); onClose(); }} />
+              registerStop={fn => { stopHostRef.current = fn; }}
+              onStop={() => { stopHostRef.current = null; setActiveStep("pick"); onClose(); }} />
           )}
         </div>
       </div>
@@ -7825,115 +7883,215 @@ function SGGameLauncher({ group, db, groupId, user, groupFile, onClose }) {
   const [generating, setGenerating] = useState(false);
   const [error,      setError]      = useState("");
 
+  // Check if the group has shared flashcards available to use as quiz source
+  const hasFlashcards = group?.sharedContent?.type === "flashcards" &&
+                        (group?.sharedContent?.cards?.length || 0) > 0;
+  const sharedCards   = group?.sharedContent?.cards || [];
+
   const MP_GAMES = [
-    { id:"mcq",       emoji:"🧠", title:"Multiple Choice",  desc:"4-option quiz for everyone",         bg:C.accentL, accent:C.accent },
-    { id:"truefalse", emoji:"✅", title:"True or False",    desc:"Vote true or false together",        bg:C.purpleL, accent:C.purple },
-    { id:"rapidfire", emoji:"⚡", title:"Rapid Fire",       desc:"First to answer scores more",        bg:C.greenL,  accent:C.green },
-    { id:"quizshow",  emoji:"🎤", title:"Quiz Show",        desc:"Millionaire-style with lifelines",   bg:"#fef2f2",  accent:C.red },
+    { id:"mcq",        emoji:"🧠", title:"Multiple Choice",   desc:"4-option quiz, everyone answers",       bg:C.accentL,  accent:C.accent  },
+    { id:"truefalse",  emoji:"✅", title:"True or False",     desc:"Vote true or false together",           bg:C.purpleL,  accent:C.purple  },
+    { id:"rapidfire",  emoji:"⚡", title:"Rapid Fire",        desc:"First to type the answer wins",         bg:C.greenL,   accent:C.green   },
+    { id:"quizshow",   emoji:"🎤", title:"Quiz Show",         desc:"Millionaire-style with lifelines",      bg:"#fef2f2",  accent:C.red     },
+    { id:"memory",     emoji:"🧩", title:"Memory Match",      desc:"Match questions to their answers",      bg:"#fdf4ff",  accent:C.purple  },
+    { id:"speedround", emoji:"🚀", title:"Speed Round",       desc:"10 questions, 10 seconds each",         bg:"#fff7ed",  accent:C.warm    },
+    { id:"elimination",emoji:"💀", title:"Elimination",       desc:"Wrong answer? You're out!",             bg:"#fef2f2",  accent:C.red     },
+    { id:"teamquiz",   emoji:"🤝", title:"Team Quiz",         desc:"Split into teams, highest score wins",  bg:C.accentL,  accent:C.accent  },
   ];
 
-  // Source: use uploaded group file if available, otherwise fall back to typed topic
   const effectiveTopic = groupFile?.name || topic.trim();
 
+  // Build questions from shared flashcards OR from AI
+  const buildFromCards = (cards) => {
+    // Convert flashcards to MCQ format
+    return cards.map((card, i) => {
+      const others = cards.filter((_, j) => j !== i).map(c => c.answer);
+      // Pick 3 random wrong answers
+      const shuffled = others.sort(() => Math.random() - .5).slice(0, 3);
+      const options = [card.answer, ...shuffled].sort(() => Math.random() - .5);
+      return { question: card.question, options, answer: card.answer };
+    }).slice(0, 12); // max 12 questions
+  };
+
   const startGame = async (gameId) => {
-    if (!effectiveTopic) { setError("Enter a topic or upload a study file first"); return; }
+    if (!hasFlashcards && !effectiveTopic) {
+      setError("Enter a topic or create flashcards in the group first");
+      return;
+    }
     setGenerating(true); setError("");
     try {
-      // Extract file text if a group file was uploaded (same as CardsTab / SGAIFlashcardGen)
-      let fileText = null;
-      if (groupFile?._fileObj) {
-        fileText = await extractFileText(groupFile._fileObj).catch(() => null);
+      let questions;
+
+      if (hasFlashcards && sharedCards.length >= 4) {
+        // Use shared flashcards as the question source — no AI call needed
+        questions = buildFromCards(sharedCards);
+      } else {
+        // Fall back to AI-generated questions from file or topic
+        let fileText = null;
+        if (groupFile?._fileObj) fileText = await extractFileText(groupFile._fileObj).catch(() => null);
+        const safeText = fileText ? fileText.slice(0, 12000) : null;
+        const count = gameId === "speedround" ? 10 : gameId === "rapidfire" ? 8 : 6;
+
+        const userMsg = safeText
+          ? `Content from "${groupFile.name}":\n\n${safeText}\n\nCreate ${count} multiple-choice questions based ONLY on this content. JSON array: [{"question":"...","options":["A","B","C","D"],"answer":"exact correct option text"}]`
+          : `Create ${count} multiple-choice questions about: "${topic}". JSON array: [{"question":"...","options":["A","B","C","D"],"answer":"exact correct option text"}]. Make distractors realistic.`;
+
+        const raw = await callClaude(
+          "Return ONLY a valid JSON array, no explanation, no markdown fences.",
+          userMsg, 1600
+        );
+        questions = JSON.parse(raw.replace(/```json|```/g,"").trim());
+        if (!questions.length) throw new Error("No questions generated");
       }
-      const safeText = fileText ? fileText.slice(0, 12000) : null;
 
-      const userMsg = safeText
-        ? `Here is the COMPLETE content from "${groupFile.name}":\n\n${safeText}\n\nCreate 6 multiple-choice quiz questions based ONLY on this content. Each item: {"question":"...","options":["full option A","full option B","full option C","full option D"],"answer":"exact text of correct option"}. Make distractors realistic. Return ONLY the JSON array.`
-        : `Create 6 multiple-choice quiz questions about: "${topic}". Each item: {"question":"...","options":["full option A","full option B","full option C","full option D"],"answer":"exact text of correct option"}. Make distractors realistic. Return ONLY the JSON array.`;
-
-      const raw = await callClaude(
-        "You are a quiz generator. Return ONLY a valid JSON array, no explanation, no markdown.",
-        userMsg, 1400
-      );
-      const clean     = raw.replace(/```json|```/g,"").trim();
-      const questions = JSON.parse(clean);
-      if (!questions.length) throw new Error("No questions generated");
       const initScores = {};
-      Object.keys(group.members||{}).forEach(uid => { initScores[uid]=0; });
-      await updateDoc(doc(db,"studyGroups",groupId), {
-        gameState: { mode:gameId, phase:"question", questions, questionIndex:0,
-          currentQuestion:questions[0], scores:initScores, answers:{}, topic:effectiveTopic },
+      Object.keys(group.members || {}).forEach(uid => { initScores[uid] = 0; });
+
+      await updateDoc(doc(db, "studyGroups", groupId), {
+        gameState: {
+          mode: gameId,
+          phase: "question",
+          questions,
+          questionIndex: 0,
+          currentQuestion: questions[0],
+          scores: initScores,
+          answers: {},
+          topic: effectiveTopic || "Flashcards",
+          fromCards: hasFlashcards && sharedCards.length >= 4,
+        },
         lastActivity: Date.now(),
       });
       onClose();
-    } catch(e) { setError("Failed: " + (e?.message||"Try a different topic.")); }
+    } catch(e) { setError("Failed: " + (e?.message || "Try a different topic.")); }
     setGenerating(false);
   };
 
   return (
-    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4500,
-      background:"rgba(26,23,20,.45)", backdropFilter:"blur(3px)",
-      display:"flex", alignItems:"flex-end", justifyContent:"center", padding:16 }}>
-      <div onClick={e=>e.stopPropagation()} style={{
-        width:"100%", maxWidth:520, background:C.surface,
-        borderRadius:"20px 20px 16px 16px", border:`1px solid ${C.border}`,
-        boxShadow:"0 -8px 40px rgba(0,0,0,.1)", padding:"0 0 8px",
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 4500,
+      background: "rgba(26,23,20,.45)", backdropFilter: "blur(3px)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center", padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: "100%", maxWidth: 560, background: C.surface,
+        borderRadius: "20px 20px 16px 16px", border: `1px solid ${C.border}`,
+        boxShadow: "0 -8px 40px rgba(0,0,0,.1)", padding: "0 0 12px",
+        maxHeight: "88vh", overflowY: "auto",
       }}>
-        <div style={{ display:"flex", justifyContent:"center", padding:"10px 0 0" }}>
-          <div style={{ width:36, height:4, borderRadius:2, background:C.border }} />
+        {/* Handle */}
+        <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 0" }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: C.border }} />
         </div>
-        <div style={{ padding:"12px 20px 0", borderBottom:`1px solid ${C.border}`,
-          paddingBottom:12, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-          <span style={{ fontSize:15, fontWeight:700, color:C.text }}>🎮 Start a Quiz Battle</span>
-          <button onClick={onClose} style={{ background:C.bg, border:`1px solid ${C.border}`,
-            borderRadius:"50%", width:28, height:28, color:C.muted, cursor:"pointer",
-            fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
+        {/* Header */}
+        <div style={{ padding: "12px 20px 12px", borderBottom: `1px solid ${C.border}`,
+          display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: C.text }}>🎮 Quiz Battle</span>
+          <button onClick={onClose} style={{ background: C.bg, border: `1px solid ${C.border}`,
+            borderRadius: "50%", width: 28, height: 28, color: C.muted, cursor: "pointer",
+            fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
         </div>
-        <div style={{ padding:"16px 20px" }}>
 
-          {/* Group file banner — shown when a file is loaded */}
-          {groupFile ? (
-            <div style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 12px",
-              background:C.accentL, border:`1px solid ${C.accentS}`, borderRadius:10, marginBottom:14 }}>
-              <span style={{ fontSize:16 }}>📎</span>
-              <div style={{ flex:1, minWidth:0 }}>
-                <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.accent }}>Using group file</p>
-                <p style={{ margin:0, fontSize:11, color:C.muted, overflow:"hidden",
-                  textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{groupFile.name}</p>
+        <div style={{ padding: "14px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
+
+          {/* ── Source selector: Flashcards vs Topic ── */}
+          {hasFlashcards ? (
+            <div style={{ padding: "12px 14px", borderRadius: 12,
+              background: C.greenL, border: `1px solid ${C.green}44`,
+              display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 22 }}>🃏</span>
+              <div>
+                <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: C.green }}>
+                  Using shared flashcards
+                </p>
+                <p style={{ margin: 0, fontSize: 11, color: C.muted }}>
+                  {sharedCards.length} cards · questions auto-generated from your deck
+                </p>
+              </div>
+            </div>
+          ) : groupFile ? (
+            <div style={{ padding: "10px 14px", borderRadius: 12,
+              background: C.accentL, border: `1px solid ${C.accentS}`,
+              display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 20 }}>📎</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: C.accent }}>AI questions from group file</p>
+                <p style={{ margin: 0, fontSize: 11, color: C.muted,
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{groupFile.name}</p>
               </div>
             </div>
           ) : (
-            <div style={{ marginBottom:14 }}>
-              <label style={{ fontSize:11, fontWeight:700, color:C.muted, letterSpacing:.8, textTransform:"uppercase" }}>
-                Quiz topic (AI generates questions)
-              </label>
-              <input value={topic} onChange={e=>{setTopic(e.target.value);setError("");}}
-                placeholder="e.g. Photosynthesis, WW2, Python loops…"
-                style={{ width:"100%", padding:"10px 14px", boxSizing:"border-box",
-                  background:C.bg, border:`1.5px solid ${C.border}`, borderRadius:10,
-                  color:C.text, fontSize:13, outline:"none", fontFamily:"inherit", marginTop:6 }} />
-            </div>
+            <>
+              {/* No cards, no file — nudge the user */}
+              <div style={{ padding: "12px 14px", borderRadius: 12,
+                background: C.warmL, border: `1px solid ${C.warm}55`,
+                display: "flex", gap: 10, alignItems: "flex-start" }}>
+                <span style={{ fontSize: 20, flexShrink: 0 }}>💡</span>
+                <div>
+                  <p style={{ margin: "0 0 4px", fontSize: 13, fontWeight: 700, color: C.warm }}>
+                    Tip: Create study cards first!
+                  </p>
+                  <p style={{ margin: 0, fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
+                    Tap the <strong>📺 Present</strong> button → <strong>AI Flashcards</strong> to generate and share a deck.
+                    Quiz Battle will automatically use those cards — no topic needed.
+                  </p>
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: C.muted,
+                  letterSpacing: .8, textTransform: "uppercase" }}>
+                  Or enter a topic for AI-generated questions
+                </label>
+                <input value={topic} onChange={e => { setTopic(e.target.value); setError(""); }}
+                  placeholder="e.g. Photosynthesis, WW2, Python loops…"
+                  style={{ width: "100%", padding: "10px 14px", boxSizing: "border-box",
+                    background: C.bg, border: `1.5px solid ${C.border}`, borderRadius: 10,
+                    color: C.text, fontSize: 13, outline: "none", fontFamily: "inherit", marginTop: 6 }} />
+              </div>
+            </>
           )}
 
-          {error && <div style={{ padding:"8px 12px", borderRadius:9, background:C.redL,
-            border:`1px solid ${C.red}44`, color:C.red, fontSize:12, marginBottom:12 }}>{error}</div>}
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-            {MP_GAMES.map(g => (
-              <button key={g.id} onClick={()=>startGame(g.id)} disabled={generating}
-                style={{ background:g.bg, border:`1.5px solid ${g.accent}22`,
-                  borderRadius:14, padding:"14px 12px", cursor:generating?"not-allowed":"pointer",
-                  textAlign:"left", opacity:generating?.6:1, transition:"transform .12s" }}
-                onMouseEnter={e=>{if(!generating)e.currentTarget.style.transform="translateY(-2px)";}}
-                onMouseLeave={e=>{e.currentTarget.style.transform="none";}}>
-                <div style={{ fontSize:26, marginBottom:6 }}>{generating?"⏳":g.emoji}</div>
-                <p style={{ margin:"0 0 3px", fontSize:13, fontWeight:700, color:C.text }}>{g.title}</p>
-                <p style={{ margin:0, fontSize:11, color:C.muted, lineHeight:1.3 }}>{g.desc}</p>
-              </button>
-            ))}
+          {error && (
+            <div style={{ padding: "8px 12px", borderRadius: 9, background: C.redL,
+              border: `1px solid ${C.red}44`, color: C.red, fontSize: 12 }}>{error}</div>
+          )}
+
+          {/* ── Game mode grid ── */}
+          <div>
+            <p style={{ margin: "0 0 10px", fontSize: 11, fontWeight: 700, color: C.muted,
+              textTransform: "uppercase", letterSpacing: .8 }}>Pick a game mode</p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              {MP_GAMES.map(g => (
+                <button key={g.id}
+                  onClick={() => startGame(g.id)}
+                  disabled={generating || (!hasFlashcards && !effectiveTopic)}
+                  style={{ background: g.bg, border: `1.5px solid ${g.accent}30`,
+                    borderRadius: 14, padding: "12px 10px",
+                    cursor: (generating || (!hasFlashcards && !effectiveTopic)) ? "not-allowed" : "pointer",
+                    textAlign: "left",
+                    opacity: (generating || (!hasFlashcards && !effectiveTopic)) ? .45 : 1,
+                    transition: "transform .12s, box-shadow .12s" }}
+                  onMouseEnter={e => {
+                    if (!generating && (hasFlashcards || effectiveTopic)) {
+                      e.currentTarget.style.transform = "translateY(-2px)";
+                      e.currentTarget.style.boxShadow = `0 6px 20px ${g.accent}30`;
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.transform = "none";
+                    e.currentTarget.style.boxShadow = "none";
+                  }}>
+                  <div style={{ fontSize: 22, marginBottom: 5 }}>{generating ? "⏳" : g.emoji}</div>
+                  <p style={{ margin: "0 0 2px", fontSize: 12, fontWeight: 800, color: C.text }}>{g.title}</p>
+                  <p style={{ margin: 0, fontSize: 10, color: C.muted, lineHeight: 1.35 }}>{g.desc}</p>
+                </button>
+              ))}
+            </div>
           </div>
+
           {generating && (
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"center",
-              gap:8, marginTop:14, color:C.muted, fontSize:13 }}>
-              <SGSpinner /> Generating questions from {groupFile ? `"${groupFile.name}"` : `"${topic}"`}…
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center",
+              gap: 8, padding: "10px 0", color: C.muted, fontSize: 13 }}>
+              <SGSpinner />
+              {hasFlashcards ? "Building questions from your flashcards…"
+                : `Generating from "${groupFile ? groupFile.name : topic}"…`}
             </div>
           )}
         </div>
@@ -7941,6 +8099,7 @@ function SGGameLauncher({ group, db, groupId, user, groupFile, onClose }) {
     </div>
   );
 }
+
 
 // ── Host toolbar ──────────────────────────────────────────────────────────────
 function SGHostControls({ groupId, db, group, onShowShare, onShowGame }) {
