@@ -6277,117 +6277,103 @@ function Modal({ children, onClose }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ── Palette ───────────────────────────────────────────────────────────────────
-const SG = {
-  bg:       "#0f0f1a",
-  surface:  "#16162a",
-  card:     "#1e1e35",
-  border:   "rgba(255,255,255,.08)",
-  accent:   "#7c3aed",
-  accentL:  "rgba(124,58,237,.18)",
-  green:    "#22c55e",
-  red:      "#ef4444",
-  text:     "#f1f5f9",
-  muted:    "#94a3b8",
-  gold:     "#fbbf24",
-};
 
-// ── Tiny avatar bubble for participants list ──────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// STUDY GROUP SYSTEM — fully unified with app design system (C.* palette)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── Spinner (used in lobby and controls) ──────────────────────────────────────
+function SGSpinner({ size = 16, color = "currentColor" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      style={{ animation: "sg-spin 0.7s linear infinite", flexShrink: 0 }}>
+      <circle cx="12" cy="12" r="10" stroke={color} strokeWidth="3"
+        strokeDasharray="40 20" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// ── Tiny member avatar bubble ─────────────────────────────────────────────────
 function SGAvatar({ character, displayName, size = 36, isHost = false, isSelf = false }) {
   return (
-    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4, flexShrink:0 }}>
-      <div style={{ position:"relative" }}>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, flexShrink: 0 }}>
+      <div style={{ position: "relative" }}>
         <div style={{
-          width:size, height:size, borderRadius:"50%", overflow:"hidden",
-          border: isSelf ? `2px solid ${SG.accent}` : isHost ? `2px solid ${SG.gold}` : `2px solid ${SG.border}`,
-          boxShadow: isSelf ? `0 0 0 2px ${SG.accentL}` : "none",
-          flexShrink:0,
+          width: size, height: size, borderRadius: "50%", overflow: "hidden",
+          border: isSelf ? `2px solid ${C.accent}` : isHost ? `2px solid ${C.warm}` : `2px solid ${C.border}`,
+          boxShadow: isSelf ? `0 0 0 3px ${C.accentL}` : "none",
         }}>
           <MiniAvatar character={character || {}} size={size} />
         </div>
         {isHost && (
           <div style={{
-            position:"absolute", bottom:-2, right:-2,
-            width:14, height:14, borderRadius:"50%",
-            background:SG.gold, border:`2px solid ${SG.bg}`,
-            display:"flex", alignItems:"center", justifyContent:"center",
-            fontSize:7,
+            position: "absolute", bottom: -2, right: -2,
+            width: 14, height: 14, borderRadius: "50%",
+            background: C.warm, border: `2px solid ${C.surface}`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 7,
           }}>👑</div>
         )}
       </div>
-      <span style={{ fontSize:9, color: isSelf ? SG.accent : SG.muted, fontWeight:600,
-        maxWidth:50, textAlign:"center", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+      <span style={{
+        fontSize: 9, fontWeight: 700,
+        color: isSelf ? C.accent : C.muted,
+        maxWidth: 50, textAlign: "center",
+        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+      }}>
         {isSelf ? "You" : (displayName || "User").split(" ")[0]}
       </span>
     </div>
   );
 }
 
-// ── Study Group Lobby — create or join ────────────────────────────────────────
+// ── Lobby — create or join ────────────────────────────────────────────────────
 function StudyGroupLobby({ user, db, onJoin, onClose }) {
-  const [mode,      setMode]      = useState("menu"); // menu | create | join
+  const [mode,      setMode]      = useState("menu");
   const [joinCode,  setJoinCode]  = useState("");
   const [groupName, setGroupName] = useState("");
   const [loading,   setLoading]   = useState(false);
   const [error,     setError]     = useState("");
 
-  // ── Create ─────────────────────────────────────────────────────────────────
-  // Key fix: call onJoin ONLY after setLoading(false) so state updates on the
-  // still-mounted component before we transition screens.
   const handleCreate = async () => {
     if (!groupName.trim()) { setError("Enter a group name"); return; }
-    setLoading(true);
-    setError("");
+    setLoading(true); setError("");
     try {
       const gid = Math.random().toString(36).slice(2, 8).toUpperCase();
       const member = {
-        uid:         user.uid,
-        displayName: user.displayName || "User",
-        photoURL:    user.photoURL    || null,
-        character:   (() => { try { return JSON.parse(localStorage.getItem("classio_char") || "{}"); } catch { return {}; } })(),
-        joinedAt:    Date.now(),
+        uid: user.uid, displayName: user.displayName || "User",
+        photoURL: user.photoURL || null,
+        character: (() => { try { return JSON.parse(localStorage.getItem("classio_char") || "{}"); } catch { return {}; } })(),
+        joinedAt: Date.now(),
       };
       await setDoc(doc(db, "studyGroups", gid), {
-        id:            gid,
-        name:          groupName.trim(),
-        hostUid:       user.uid,
-        createdAt:     Date.now(),
-        members:       { [user.uid]: member },
-        sharedContent: null,
-        gameState:     null,
-        lastActivity:  Date.now(),
+        id: gid, name: groupName.trim(), hostUid: user.uid,
+        createdAt: Date.now(), members: { [user.uid]: member },
+        sharedContent: null, gameState: null, lastActivity: Date.now(),
       });
-      // Success — stop loading FIRST, then navigate
       setLoading(false);
       onJoin(gid);
     } catch (e) {
       setLoading(false);
-      setError("Failed to create group: " + (e?.message || "Check your connection and Firestore rules."));
+      setError("Failed to create: " + (e?.message || "Check Firestore rules."));
     }
   };
 
-  // ── Join ───────────────────────────────────────────────────────────────────
   const handleJoin = async () => {
     const code = joinCode.trim().toUpperCase();
-    if (code.length < 4) { setError("Enter a valid group code"); return; }
-    setLoading(true);
-    setError("");
+    if (code.length < 4) { setError("Enter a valid code"); return; }
+    setLoading(true); setError("");
     try {
       const snap = await getDoc(doc(db, "studyGroups", code));
-      if (!snap.exists()) {
-        setLoading(false);
-        setError("Group not found. Double-check the code.");
-        return;
-      }
+      if (!snap.exists()) { setLoading(false); setError("Group not found. Check the code."); return; }
       const member = {
-        uid:         user.uid,
-        displayName: user.displayName || "User",
-        photoURL:    user.photoURL    || null,
-        character:   (() => { try { return JSON.parse(localStorage.getItem("classio_char") || "{}"); } catch { return {}; } })(),
-        joinedAt:    Date.now(),
+        uid: user.uid, displayName: user.displayName || "User",
+        photoURL: user.photoURL || null,
+        character: (() => { try { return JSON.parse(localStorage.getItem("classio_char") || "{}"); } catch { return {}; } })(),
+        joinedAt: Date.now(),
       };
       await updateDoc(doc(db, "studyGroups", code), {
-        [`members.${user.uid}`]: member,
-        lastActivity: Date.now(),
+        [`members.${user.uid}`]: member, lastActivity: Date.now(),
       });
       setLoading(false);
       onJoin(code);
@@ -6397,101 +6383,61 @@ function StudyGroupLobby({ user, db, onJoin, onClose }) {
     }
   };
 
-  // ── Shared input style ─────────────────────────────────────────────────────
-  const inputStyle = {
-    width: "100%", marginTop: 6, padding: "11px 14px", boxSizing: "border-box",
+  const inp = {
+    width: "100%", padding: "11px 14px", boxSizing: "border-box",
     background: C.bg, border: `1.5px solid ${C.border}`,
     borderRadius: 10, color: C.text, fontSize: 14, outline: "none",
-    fontFamily: "inherit", transition: "border-color .15s",
+    fontFamily: "inherit", marginTop: 6,
   };
-
-  // ── Spinner SVG ────────────────────────────────────────────────────────────
-  const Spinner = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-      style={{ animation: "sg-spin 0.7s linear infinite", flexShrink: 0 }}>
-      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="40 20" strokeLinecap="round"/>
-    </svg>
-  );
 
   return (
     <>
-      {/* Spinner keyframe — injected once */}
-      <style>{`@keyframes sg-spin { to { transform: rotate(360deg); } }`}</style>
-
+      <style>{`@keyframes sg-spin { to { transform:rotate(360deg); } }`}</style>
       <div onClick={onClose} style={{
         position: "fixed", inset: 0, zIndex: 4000,
-        background: "rgba(26,23,20,.55)", backdropFilter: "blur(4px)",
+        background: "rgba(26,23,20,.5)", backdropFilter: "blur(4px)",
         display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
       }}>
         <div onClick={e => e.stopPropagation()} style={{
-          width: "100%", maxWidth: 400,
-          background: C.surface,
-          borderRadius: 20,
-          boxShadow: "0 20px 60px rgba(0,0,0,.18)",
-          border: `1px solid ${C.border}`,
-          overflow: "hidden",
+          width: "100%", maxWidth: 400, background: C.surface,
+          borderRadius: 20, border: `1px solid ${C.border}`,
+          boxShadow: "0 20px 60px rgba(0,0,0,.15)", overflow: "hidden",
         }}>
-
-          {/* ── Header ── */}
-          <div style={{
-            padding: "20px 24px 16px",
-            borderBottom: `1px solid ${C.border}`,
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-          }}>
+          {/* Header */}
+          <div style={{ padding: "20px 24px 16px", borderBottom: `1px solid ${C.border}`,
+            display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div>
-              <h2 style={{
-                margin: 0, fontSize: 18, fontWeight: 700,
-                fontFamily: "'Fraunces',serif", color: C.text,
-              }}>👥 Study Group</h2>
-              <p style={{ margin: "3px 0 0", fontSize: 13, color: C.muted }}>
-                Study together in real time
-              </p>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700,
+                fontFamily: "'Fraunces',serif", color: C.text }}>👥 Study Group</h2>
+              <p style={{ margin: "3px 0 0", fontSize: 13, color: C.muted }}>Study together in real time</p>
             </div>
-            <button onClick={onClose} style={{
-              background: C.bg, border: `1px solid ${C.border}`,
-              borderRadius: "50%", width: 30, height: 30,
-              color: C.muted, cursor: "pointer", fontSize: 16,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              flexShrink: 0,
-            }}>×</button>
+            <button onClick={onClose} style={{ background: C.bg, border: `1px solid ${C.border}`,
+              borderRadius: "50%", width: 30, height: 30, color: C.muted, cursor: "pointer",
+              fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
           </div>
 
-          {/* ── Body ── */}
           <div style={{ padding: "20px 24px 24px" }}>
-
-            {/* MENU */}
             {mode === "menu" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <button onClick={() => { setMode("create"); setError(""); }} style={{
                   display: "flex", alignItems: "center", gap: 14,
                   background: C.accentL, border: `1.5px solid ${C.accentS}`,
-                  borderRadius: 14, padding: "14px 18px",
-                  cursor: "pointer", textAlign: "left",
-                  transition: "opacity .15s",
+                  borderRadius: 14, padding: "14px 18px", cursor: "pointer", textAlign: "left",
                 }}>
-                  <div style={{
-                    width: 40, height: 40, borderRadius: 12, flexShrink: 0,
-                    background: C.accent, display: "flex", alignItems: "center",
-                    justifyContent: "center", fontSize: 18,
-                  }}>✨</div>
+                  <div style={{ width: 40, height: 40, borderRadius: 12, background: C.accent,
+                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>✨</div>
                   <div>
                     <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.text }}>Create a Study Group</p>
                     <p style={{ margin: "2px 0 0", fontSize: 12, color: C.muted }}>Start a new room and invite friends</p>
                   </div>
                 </button>
-
                 <button onClick={() => { setMode("join"); setError(""); }} style={{
                   display: "flex", alignItems: "center", gap: 14,
                   background: C.surface, border: `1.5px solid ${C.border}`,
-                  borderRadius: 14, padding: "14px 18px",
-                  cursor: "pointer", textAlign: "left",
-                  transition: "opacity .15s",
+                  borderRadius: 14, padding: "14px 18px", cursor: "pointer", textAlign: "left",
                 }}>
-                  <div style={{
-                    width: 40, height: 40, borderRadius: 12, flexShrink: 0,
-                    background: C.warmL, display: "flex", alignItems: "center",
-                    justifyContent: "center", fontSize: 18,
-                  }}>🔗</div>
+                  <div style={{ width: 40, height: 40, borderRadius: 12, background: C.warmL,
+                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>🔗</div>
                   <div>
                     <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.text }}>Join a Study Group</p>
                     <p style={{ margin: "2px 0 0", fontSize: 12, color: C.muted }}>Enter a code from a friend</p>
@@ -6500,169 +6446,386 @@ function StudyGroupLobby({ user, db, onJoin, onClose }) {
               </div>
             )}
 
-            {/* CREATE */}
             {mode === "create" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 <button onClick={() => { setMode("menu"); setError(""); setGroupName(""); }}
-                  style={{ background: "none", border: "none", color: C.muted, cursor: "pointer",
-                    fontSize: 13, textAlign: "left", padding: 0, display: "flex", alignItems: "center", gap: 4 }}>
-                  ← Back
-                </button>
-
+                  style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0 }}>← Back</button>
                 <div>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: C.muted,
-                    letterSpacing: .8, textTransform: "uppercase" }}>Group Name</label>
-                  <input
-                    autoFocus
-                    value={groupName}
+                  <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: .8, textTransform: "uppercase" }}>Group Name</label>
+                  <input autoFocus value={groupName} disabled={loading}
                     onChange={e => { setGroupName(e.target.value); setError(""); }}
                     onKeyDown={e => e.key === "Enter" && !loading && handleCreate()}
-                    placeholder="e.g. Physics Study Squad"
-                    disabled={loading}
-                    style={{ ...inputStyle, opacity: loading ? .6 : 1 }}
-                  />
+                    placeholder="e.g. Physics Study Squad" style={{ ...inp, opacity: loading ? .6 : 1 }} />
                 </div>
-
-                {error && (
-                  <div style={{
-                    padding: "10px 12px", borderRadius: 10,
-                    background: C.redL, border: `1px solid ${C.red}44`,
-                    color: C.red, fontSize: 12, fontWeight: 600,
-                  }}>{error}</div>
-                )}
-
+                {error && <div style={{ padding: "10px 12px", borderRadius: 10, background: C.redL,
+                  border: `1px solid ${C.red}44`, color: C.red, fontSize: 12, fontWeight: 600 }}>{error}</div>}
                 <button onClick={handleCreate} disabled={loading} style={{
                   display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                  background: loading ? C.accentS : C.accent,
-                  color: "#fff", border: "none", borderRadius: 12, padding: "13px",
-                  fontSize: 14, fontWeight: 700,
+                  background: loading ? C.accentS : C.accent, color: "#fff", border: "none",
+                  borderRadius: 12, padding: "13px", fontSize: 14, fontWeight: 700,
                   cursor: loading ? "not-allowed" : "pointer",
-                  transition: "background .15s",
-                  boxShadow: loading ? "none" : "0 4px 14px rgba(61,90,128,.35)",
+                  boxShadow: loading ? "none" : "0 4px 14px rgba(61,90,128,.3)",
                 }}>
-                  {loading ? <><Spinner /> Creating…</> : "Create Group →"}
+                  {loading ? <><SGSpinner color="#fff" /> Creating…</> : "Create Group →"}
                 </button>
               </div>
             )}
 
-            {/* JOIN */}
             {mode === "join" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 <button onClick={() => { setMode("menu"); setError(""); setJoinCode(""); }}
-                  style={{ background: "none", border: "none", color: C.muted, cursor: "pointer",
-                    fontSize: 13, textAlign: "left", padding: 0 }}>
-                  ← Back
-                </button>
-
+                  style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0 }}>← Back</button>
                 <div>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: C.muted,
-                    letterSpacing: .8, textTransform: "uppercase" }}>Group Code</label>
-                  <input
-                    autoFocus
-                    value={joinCode}
+                  <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: .8, textTransform: "uppercase" }}>Group Code</label>
+                  <input autoFocus value={joinCode} disabled={loading} maxLength={6}
                     onChange={e => { setJoinCode(e.target.value.toUpperCase()); setError(""); }}
                     onKeyDown={e => e.key === "Enter" && !loading && handleJoin()}
                     placeholder="A3X7K2"
-                    maxLength={6}
-                    disabled={loading}
-                    style={{
-                      ...inputStyle,
-                      fontSize: 22, fontWeight: 800, letterSpacing: 5,
-                      textAlign: "center", fontFamily: "monospace",
-                      opacity: loading ? .6 : 1,
-                    }}
-                  />
+                    style={{ ...inp, fontSize: 22, fontWeight: 800, letterSpacing: 5, textAlign: "center", fontFamily: "monospace", opacity: loading ? .6 : 1 }} />
                 </div>
-
-                {error && (
-                  <div style={{
-                    padding: "10px 12px", borderRadius: 10,
-                    background: C.redL, border: `1px solid ${C.red}44`,
-                    color: C.red, fontSize: 12, fontWeight: 600,
-                  }}>{error}</div>
-                )}
-
+                {error && <div style={{ padding: "10px 12px", borderRadius: 10, background: C.redL,
+                  border: `1px solid ${C.red}44`, color: C.red, fontSize: 12, fontWeight: 600 }}>{error}</div>}
                 <button onClick={handleJoin} disabled={loading} style={{
                   display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                  background: loading ? C.accentS : C.accent,
-                  color: "#fff", border: "none", borderRadius: 12, padding: "13px",
-                  fontSize: 14, fontWeight: 700,
+                  background: loading ? C.accentS : C.accent, color: "#fff", border: "none",
+                  borderRadius: 12, padding: "13px", fontSize: 14, fontWeight: 700,
                   cursor: loading ? "not-allowed" : "pointer",
-                  transition: "background .15s",
-                  boxShadow: loading ? "none" : "0 4px 14px rgba(61,90,128,.35)",
+                  boxShadow: loading ? "none" : "0 4px 14px rgba(61,90,128,.3)",
                 }}>
-                  {loading ? <><Spinner /> Joining…</> : "Join Group →"}
+                  {loading ? <><SGSpinner color="#fff" /> Joining…</> : "Join Group →"}
                 </button>
               </div>
             )}
-
           </div>
         </div>
       </div>
     </>
   );
 }
-// ── Chat message component ────────────────────────────────────────────────────
+
+// ── Chat message ──────────────────────────────────────────────────────────────
 function SGChatMessage({ msg, isSelf }) {
+  const isSystem = msg.uid === "system";
+  if (isSystem) return (
+    <div style={{ textAlign: "center", padding: "4px 0" }}>
+      <span style={{ fontSize: 11, color: C.muted, background: C.bg,
+        border: `1px solid ${C.border}`, borderRadius: 20, padding: "3px 10px" }}>{msg.text}</span>
+    </div>
+  );
   return (
-    <div style={{ display:"flex", flexDirection: isSelf ? "row-reverse" : "row", gap:8, alignItems:"flex-end" }}>
+    <div style={{ display: "flex", flexDirection: isSelf ? "row-reverse" : "row", gap: 6, alignItems: "flex-end" }}>
       <div style={{
-        maxWidth:"72%",
-        background: isSelf ? `linear-gradient(135deg, ${SG.accent}, #a855f7)` : SG.card,
+        maxWidth: "74%",
+        background: isSelf ? C.accent : C.bg,
         borderRadius: isSelf ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
-        padding:"9px 13px",
-        boxShadow: isSelf ? "0 4px 12px rgba(124,58,237,.3)" : "none",
-        border: isSelf ? "none" : `1px solid ${SG.border}`,
+        padding: "9px 13px",
+        border: isSelf ? "none" : `1px solid ${C.border}`,
+        boxShadow: isSelf ? "0 2px 8px rgba(61,90,128,.25)" : "none",
       }}>
         {!isSelf && (
-          <p style={{ margin:"0 0 3px", fontSize:10, fontWeight:700, color: SG.accent, letterSpacing:.3 }}>
+          <p style={{ margin: "0 0 3px", fontSize: 10, fontWeight: 700, color: C.accent, letterSpacing: .3 }}>
             {(msg.displayName || "User").split(" ")[0]}
           </p>
         )}
-        <p style={{ margin:0, fontSize:13, color:SG.text, lineHeight:1.45, wordBreak:"break-word" }}>{msg.text}</p>
-        <p style={{ margin:"3px 0 0", fontSize:9, color: isSelf ? "rgba(255,255,255,.55)" : SG.muted, textAlign:"right" }}>
-          {msg.createdAt?.toDate ? msg.createdAt.toDate().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}) : ""}
+        <p style={{ margin: 0, fontSize: 13, color: isSelf ? "#fff" : C.text, lineHeight: 1.45, wordBreak: "break-word" }}>{msg.text}</p>
+        <p style={{ margin: "3px 0 0", fontSize: 9, color: isSelf ? "rgba(255,255,255,.6)" : C.muted, textAlign: "right" }}>
+          {msg.createdAt?.toDate ? msg.createdAt.toDate().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
         </p>
       </div>
     </div>
   );
 }
 
-// ── Shared Content Viewer ─────────────────────────────────────────────────────
-function SGSharedContent({ content }) {
+// ── Shared content viewer ─────────────────────────────────────────────────────
+function SGSharedContent({ content, presenterName }) {
+  const typeIcon = { notes: "📝", flashcards: "🃏", whiteboard: "✏️", quiz: "🧠", material: "📄" };
   if (!content) return (
-    <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:12, opacity:.4 }}>
-      <div style={{ fontSize:48 }}>📺</div>
-      <p style={{ color:SG.muted, fontSize:14, margin:0 }}>No content shared yet</p>
-      <p style={{ color:SG.muted, fontSize:12, margin:0 }}>The host can share notes or start a game</p>
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
+      justifyContent: "center", gap: 12, padding: 32, opacity: .45 }}>
+      <div style={{ fontSize: 52 }}>📺</div>
+      <p style={{ color: C.muted, fontSize: 15, fontWeight: 600, margin: 0 }}>Nothing shared yet</p>
+      <p style={{ color: C.muted, fontSize: 13, margin: 0, textAlign: "center", maxWidth: 240 }}>
+        The host can present notes, flashcards, or a whiteboard
+      </p>
     </div>
   );
   return (
-    <div style={{ flex:1, overflowY:"auto", padding:"16px" }}>
-      <div style={{ background:SG.card, borderRadius:16, padding:20, border:`1px solid ${SG.border}` }}>
-        <p style={{ margin:"0 0 8px", fontSize:10, fontWeight:700, color:SG.accent, letterSpacing:.8, textTransform:"uppercase" }}>
-          📺 {content.sharedBy} is sharing
-        </p>
-        <h3 style={{ margin:"0 0 12px", color:SG.text, fontSize:16, fontWeight:700 }}>{content.title}</h3>
-        <div style={{ color:SG.text, fontSize:14, lineHeight:1.7, whiteSpace:"pre-wrap" }}>{content.body}</div>
+    <div style={{ flex: 1, overflowY: "auto", padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
+      {/* Presenter banner */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px",
+        background: C.accentL, borderRadius: 10, border: `1px solid ${C.accentS}` }}>
+        <span style={{ fontSize: 14 }}>📺</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: C.accent }}>
+          {presenterName || content.sharedBy} is presenting
+        </span>
+        <span style={{ marginLeft: "auto", fontSize: 11, color: C.muted }}>
+          {typeIcon[content.type] || "📄"} {content.type}
+        </span>
+      </div>
+      {/* Content */}
+      <div style={{ background: C.surface, borderRadius: 14, padding: 20,
+        border: `1px solid ${C.border}`, boxShadow: "0 2px 12px rgba(0,0,0,.06)" }}>
+        <h3 style={{ margin: "0 0 14px", color: C.text, fontSize: 17, fontWeight: 700,
+          fontFamily: "'Fraunces',serif" }}>{content.title}</h3>
+        {content.type === "whiteboard" ? (
+          <pre style={{ margin: 0, fontFamily: "inherit", color: C.text, fontSize: 14,
+            lineHeight: 1.8, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{content.body}</pre>
+        ) : content.type === "flashcards" ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {(content.cards || []).map((c, i) => (
+              <div key={i} style={{ background: C.bg, borderRadius: 10, padding: "12px 16px",
+                border: `1px solid ${C.border}` }}>
+                <p style={{ margin: "0 0 6px", fontSize: 12, fontWeight: 700, color: C.accent }}>Q{i+1}</p>
+                <p style={{ margin: "0 0 4px", fontSize: 14, fontWeight: 600, color: C.text }}>{c.question}</p>
+                <p style={{ margin: 0, fontSize: 13, color: C.muted }}>{c.answer}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ color: C.text, fontSize: 14, lineHeight: 1.8, whiteSpace: "pre-wrap",
+            wordBreak: "break-word" }}>{content.body}</div>
+        )}
       </div>
     </div>
   );
 }
 
-// ── Multiplayer Quiz Game ─────────────────────────────────────────────────────
+// ── Share picker modal (Google Meet style) ────────────────────────────────────
+// Presenter chooses what type of app content to share.
+function SGSharePicker({ user, db, groupId, group, onClose }) {
+  const [step,       setStep]       = useState("pick");   // pick | notes | whiteboard | flashcards
+  const [title,      setTitle]      = useState("");
+  const [body,       setBody]       = useState("");
+  const [sharing,    setSharing]    = useState(false);
+
+  const alreadySharing = !!group?.sharedContent;
+  const isPresenting   = group?.sharedContent?.sharedByUid === user.uid;
+
+  const doShare = async (type, extra = {}) => {
+    if (!title.trim() && !body.trim() && !extra.cards) return;
+    setSharing(true);
+    await updateDoc(doc(db, "studyGroups", groupId), {
+      sharedContent: {
+        type, title: title || "Shared Content",
+        body: body || "",
+        ...extra,
+        sharedBy: user.displayName?.split(" ")[0] || "Host",
+        sharedByUid: user.uid,
+        sharedAt: Date.now(),
+      },
+      lastActivity: Date.now(),
+    });
+    setSharing(false);
+    onClose();
+  };
+
+  const stopSharing = async () => {
+    await updateDoc(doc(db, "studyGroups", groupId), { sharedContent: null });
+    onClose();
+  };
+
+  const inpS = {
+    width: "100%", padding: "10px 12px", boxSizing: "border-box",
+    background: C.bg, border: `1.5px solid ${C.border}`,
+    borderRadius: 9, color: C.text, fontSize: 13,
+    outline: "none", fontFamily: "inherit", marginBottom: 8,
+  };
+
+  const SHARE_TYPES = [
+    { id: "notes",      emoji: "📝", label: "Notes",       desc: "Share written or generated notes" },
+    { id: "flashcards", emoji: "🃏", label: "Flashcards",  desc: "Present study card Q&A pairs" },
+    { id: "whiteboard", emoji: "✏️", label: "Whiteboard",  desc: "Write explanations live" },
+    { id: "material",   emoji: "📄", label: "Study Material", desc: "Paste any text content" },
+  ];
+
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, zIndex: 4500,
+      background: "rgba(26,23,20,.45)", backdropFilter: "blur(3px)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center", padding: 16,
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: "100%", maxWidth: 500, background: C.surface,
+        borderRadius: "20px 20px 16px 16px", border: `1px solid ${C.border}`,
+        boxShadow: "0 -8px 40px rgba(0,0,0,.12)", paddingBottom: 8,
+        maxHeight: "80vh", overflowY: "auto",
+      }}>
+        {/* Handle bar */}
+        <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 0" }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: C.border }} />
+        </div>
+
+        {/* Header */}
+        <div style={{ padding: "14px 20px 12px", borderBottom: `1px solid ${C.border}`,
+          display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {step !== "pick" && (
+              <button onClick={() => { setStep("pick"); setTitle(""); setBody(""); }}
+                style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontSize: 18, padding: 0 }}>←</button>
+            )}
+            <span style={{ fontSize: 15, fontWeight: 700, color: C.text }}>
+              {step === "pick" ? "📺 Present to Group" : `Present ${step}`}
+            </span>
+          </div>
+          <button onClick={onClose} style={{ background: C.bg, border: `1px solid ${C.border}`,
+            borderRadius: "50%", width: 28, height: 28, color: C.muted,
+            cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+        </div>
+
+        <div style={{ padding: "16px 20px" }}>
+          {/* Stop sharing option if already presenting */}
+          {isPresenting && step === "pick" && (
+            <button onClick={stopSharing} style={{
+              width: "100%", marginBottom: 12, padding: "11px",
+              background: C.redL, border: `1px solid ${C.red}44`,
+              borderRadius: 12, color: C.red, fontSize: 13, fontWeight: 700, cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            }}>⏹ Stop Presenting</button>
+          )}
+
+          {/* Someone else is sharing */}
+          {alreadySharing && !isPresenting && step === "pick" && (
+            <div style={{ padding: "10px 14px", borderRadius: 10, background: C.warmL,
+              border: `1px solid ${C.warm}44`, marginBottom: 12 }}>
+              <p style={{ margin: 0, fontSize: 13, color: C.warm, fontWeight: 600 }}>
+                ⚠️ {group.sharedContent.sharedBy} is currently presenting. Only one person can present at a time.
+              </p>
+            </div>
+          )}
+
+          {step === "pick" && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              {SHARE_TYPES.map(t => (
+                <button key={t.id}
+                  disabled={alreadySharing && !isPresenting}
+                  onClick={() => setStep(t.id)} style={{
+                    background: C.bg, border: `1.5px solid ${C.border}`,
+                    borderRadius: 14, padding: "14px 12px", cursor: alreadySharing && !isPresenting ? "not-allowed" : "pointer",
+                    textAlign: "left", opacity: alreadySharing && !isPresenting ? .45 : 1,
+                    transition: "border-color .15s",
+                  }}>
+                  <div style={{ fontSize: 24, marginBottom: 6 }}>{t.emoji}</div>
+                  <p style={{ margin: "0 0 3px", fontSize: 13, fontWeight: 700, color: C.text }}>{t.label}</p>
+                  <p style={{ margin: 0, fontSize: 11, color: C.muted, lineHeight: 1.3 }}>{t.desc}</p>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {(step === "notes" || step === "material" || step === "whiteboard") && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <input value={title} onChange={e => setTitle(e.target.value)}
+                placeholder="Title" style={inpS} />
+              <textarea value={body} onChange={e => setBody(e.target.value)}
+                placeholder={step === "whiteboard"
+                  ? "Write your explanation here…"
+                  : "Paste notes or study content…"}
+                rows={8} style={{ ...inpS, resize: "vertical", marginBottom: 12 }} />
+              <button onClick={() => doShare(step)} disabled={sharing || (!title.trim() && !body.trim())}
+                style={{
+                  background: C.accent, color: "#fff", border: "none", borderRadius: 12,
+                  padding: "12px", fontSize: 14, fontWeight: 700,
+                  cursor: sharing ? "not-allowed" : "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                  boxShadow: "0 4px 14px rgba(61,90,128,.3)",
+                  opacity: (!title.trim() && !body.trim()) ? .5 : 1,
+                }}>
+                {sharing ? <><SGSpinner color="#fff" /> Sharing…</> : "📺 Present Now"}
+              </button>
+            </div>
+          )}
+
+          {step === "flashcards" && (
+            <SGFlashcardSharePicker user={user} db={db} groupId={groupId}
+              onShare={(cards, t) => doShare("flashcards", { cards, title: t })}
+              sharing={sharing} />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Flashcard share sub-picker ────────────────────────────────────────────────
+function SGFlashcardSharePicker({ onShare, sharing }) {
+  const [q, setQ] = useState("");
+  const [a, setA] = useState("");
+  const [cards, setCards] = useState([]);
+  const [title, setTitle] = useState("Flashcards");
+
+  const addCard = () => {
+    if (!q.trim() || !a.trim()) return;
+    setCards(prev => [...prev, { question: q.trim(), answer: a.trim() }]);
+    setQ(""); setA("");
+  };
+
+  const inpS = {
+    width: "100%", padding: "9px 12px", boxSizing: "border-box",
+    background: C.bg, border: `1.5px solid ${C.border}`,
+    borderRadius: 9, color: C.text, fontSize: 13,
+    outline: "none", fontFamily: "inherit", marginBottom: 8,
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <input value={title} onChange={e => setTitle(e.target.value)}
+        placeholder="Set title" style={inpS} />
+      <p style={{ margin: "0 0 4px", fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: .8 }}>Add Cards</p>
+      <input value={q} onChange={e => setQ(e.target.value)} placeholder="Question" style={inpS} />
+      <input value={a} onChange={e => setA(e.target.value)} placeholder="Answer"
+        onKeyDown={e => e.key === "Enter" && addCard()}
+        style={{ ...inpS, marginBottom: 4 }} />
+      <button onClick={addCard} style={{
+        background: C.accentL, border: `1px solid ${C.accentS}`, borderRadius: 9,
+        padding: "8px", fontSize: 12, fontWeight: 700, color: C.accent,
+        cursor: "pointer", marginBottom: 10,
+      }}>+ Add Card ({cards.length})</button>
+      {cards.length > 0 && (
+        <>
+          <div style={{ maxHeight: 140, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
+            {cards.map((c, i) => (
+              <div key={i} style={{ background: C.bg, border: `1px solid ${C.border}`,
+                borderRadius: 8, padding: "8px 10px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: C.text }}>{c.question}</p>
+                  <p style={{ margin: 0, fontSize: 11, color: C.muted }}>{c.answer}</p>
+                </div>
+                <button onClick={() => setCards(prev => prev.filter((_, j) => j !== i))}
+                  style={{ background: "none", border: "none", color: C.red, cursor: "pointer", fontSize: 14, padding: "0 0 0 8px" }}>×</button>
+              </div>
+            ))}
+          </div>
+          <button onClick={() => onShare(cards, title)} disabled={sharing}
+            style={{
+              background: C.accent, color: "#fff", border: "none", borderRadius: 12,
+              padding: "12px", fontSize: 14, fontWeight: 700, cursor: sharing ? "not-allowed" : "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              boxShadow: "0 4px 14px rgba(61,90,128,.3)",
+            }}>
+            {sharing ? <><SGSpinner color="#fff" /> Sharing…</> : `📺 Present ${cards.length} Cards`}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Multiplayer Quiz — synced via Firestore gameState ─────────────────────────
 function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
-  const [answer, setAnswer] = useState(null);
+  const [localAnswer, setLocalAnswer] = useState(null);
   const myScore = gameState?.scores?.[user.uid] || 0;
   const q = gameState?.currentQuestion;
 
+  // Reset local answer when question changes
+  useEffect(() => { setLocalAnswer(null); }, [gameState?.questionIndex]);
+
   const submitAnswer = async (choice) => {
-    if (answer !== null || !q) return;
-    setAnswer(choice);
+    if (localAnswer !== null || !q) return;
+    setLocalAnswer(choice);
     const correct = choice === q.answer;
-    const pts = correct ? (gameState?.scores?.[user.uid] || 0) + 10 : (gameState?.scores?.[user.uid] || 0);
+    const current = gameState?.scores?.[user.uid] || 0;
     await updateDoc(doc(db, "studyGroups", groupId), {
-      [`gameState.scores.${user.uid}`]: pts,
+      [`gameState.scores.${user.uid}`]: correct ? current + 10 : current,
       [`gameState.answers.${user.uid}`]: choice,
     });
   };
@@ -6671,9 +6834,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
     const questions = gameState.questions || [];
     const next = (gameState.questionIndex || 0) + 1;
     if (next >= questions.length) {
-      await updateDoc(doc(db, "studyGroups", groupId), {
-        "gameState.phase": "results",
-      });
+      await updateDoc(doc(db, "studyGroups", groupId), { "gameState.phase": "results" });
     } else {
       await updateDoc(doc(db, "studyGroups", groupId), {
         "gameState.questionIndex": next,
@@ -6688,108 +6849,122 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
     await updateDoc(doc(db, "studyGroups", groupId), { gameState: null });
   };
 
-  // Sort scoreboard
   const scores = gameState?.scores || {};
   const board = Object.entries(scores)
     .map(([uid, pts]) => ({ uid, pts, name: members[uid]?.displayName || "User" }))
-    .sort((a,b) => b.pts - a.pts);
+    .sort((a, b) => b.pts - a.pts);
 
   const answerCount = Object.keys(gameState?.answers || {}).length;
   const memberCount = Object.keys(members || {}).length;
 
-  if (gameState?.phase === "results") {
-    return (
-      <div style={{ flex:1, overflowY:"auto", padding:16 }}>
-        <div style={{ background:SG.card, borderRadius:20, padding:20, border:`1px solid ${SG.border}` }}>
-          <h2 style={{ color:SG.gold, margin:"0 0 16px", textAlign:"center", fontSize:22 }}>🏆 Final Results</h2>
-          {board.map((entry, i) => (
-            <div key={entry.uid} style={{
-              display:"flex", alignItems:"center", gap:12,
-              background: i===0 ? "rgba(251,191,36,.12)" : "rgba(255,255,255,.04)",
-              borderRadius:12, padding:"12px 16px", marginBottom:8,
-              border: i===0 ? `1px solid ${SG.gold}44` : `1px solid ${SG.border}`,
-            }}>
-              <span style={{ fontSize:20, width:28, textAlign:"center" }}>
-                {i===0?"🥇":i===1?"🥈":i===2?"🥉":"  "}
-              </span>
-              <span style={{ flex:1, color:SG.text, fontWeight:700 }}>{entry.name}</span>
-              <span style={{ color:SG.gold, fontWeight:800, fontSize:18 }}>{entry.pts}</span>
-              <span style={{ color:SG.muted, fontSize:11 }}>pts</span>
-            </div>
-          ))}
-          {isHost && (
-            <button onClick={endGame} style={{
-              marginTop:16, width:"100%", background:"rgba(255,255,255,.08)",
-              color:SG.text, border:`1px solid ${SG.border}`, borderRadius:12,
-              padding:"11px", fontSize:13, fontWeight:700, cursor:"pointer",
-            }}>✓ Close Game</button>
-          )}
-        </div>
+  if (gameState?.phase === "results") return (
+    <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
+      <div style={{ background: C.surface, borderRadius: 18, padding: 24,
+        border: `1px solid ${C.border}`, boxShadow: "0 4px 20px rgba(0,0,0,.07)", maxWidth: 480, margin: "0 auto" }}>
+        <h2 style={{ color: C.warm, margin: "0 0 20px", textAlign: "center",
+          fontSize: 22, fontFamily: "'Fraunces',serif" }}>🏆 Final Results</h2>
+        {board.map((entry, i) => (
+          <div key={entry.uid} style={{
+            display: "flex", alignItems: "center", gap: 12,
+            background: i === 0 ? C.warmL : C.bg,
+            borderRadius: 12, padding: "12px 16px", marginBottom: 8,
+            border: i === 0 ? `1px solid ${C.warm}55` : `1px solid ${C.border}`,
+          }}>
+            <span style={{ fontSize: 20, width: 28, textAlign: "center" }}>
+              {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i+1}.`}
+            </span>
+            <span style={{ flex: 1, color: C.text, fontWeight: 700 }}>{entry.name}</span>
+            <span style={{ color: C.warm, fontWeight: 800, fontSize: 18 }}>{entry.pts}</span>
+            <span style={{ color: C.muted, fontSize: 11 }}>pts</span>
+          </div>
+        ))}
+        {isHost && (
+          <button onClick={endGame} style={{
+            marginTop: 16, width: "100%", background: C.bg,
+            color: C.muted, border: `1px solid ${C.border}`, borderRadius: 12,
+            padding: "11px", fontSize: 13, fontWeight: 700, cursor: "pointer",
+          }}>✓ Close Game</button>
+        )}
       </div>
-    );
-  }
+    </div>
+  );
 
   if (!q) return (
-    <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center" }}>
-      <p style={{ color:SG.muted }}>Waiting for game to start…</p>
+    <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <p style={{ color: C.muted }}>Waiting for game to start…</p>
     </div>
   );
 
   return (
-    <div style={{ flex:1, overflowY:"auto", padding:16, display:"flex", flexDirection:"column", gap:12 }}>
-      {/* Progress */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-        <span style={{ color:SG.muted, fontSize:12 }}>Q {(gameState.questionIndex||0)+1} / {gameState.questions?.length||"?"}</span>
-        <span style={{ color:SG.accent, fontSize:12, fontWeight:700 }}>Your score: {myScore} pts</span>
+    <div style={{ flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+      {/* Progress bar */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ color: C.muted, fontSize: 12 }}>
+          Question {(gameState.questionIndex || 0) + 1} / {gameState.questions?.length || "?"}
+        </span>
+        <span style={{ color: C.accent, fontSize: 12, fontWeight: 700 }}>Score: {myScore} pts</span>
+      </div>
+      <div style={{ height: 4, borderRadius: 2, background: C.border }}>
+        <div style={{
+          height: "100%", borderRadius: 2, background: C.accent,
+          width: `${(((gameState.questionIndex||0)+1) / (gameState.questions?.length||1)) * 100}%`,
+          transition: "width .3s",
+        }} />
       </div>
 
       {/* Question */}
-      <div style={{ background:SG.card, borderRadius:16, padding:20, border:`1px solid ${SG.border}` }}>
-        <p style={{ color:SG.text, fontSize:16, fontWeight:700, margin:0, lineHeight:1.5 }}>{q.question}</p>
+      <div style={{ background: C.surface, borderRadius: 14, padding: "18px 20px",
+        border: `1px solid ${C.border}`, boxShadow: "0 2px 10px rgba(0,0,0,.06)" }}>
+        <p style={{ color: C.text, fontSize: 16, fontWeight: 700, margin: 0, lineHeight: 1.5 }}>{q.question}</p>
       </div>
 
-      {/* Options */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+      {/* Answer options */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         {(q.options || []).map((opt, i) => {
-          const chosen = answer === opt;
-          const correct = answer !== null && opt === q.answer;
+          const chosen  = localAnswer === opt;
+          const correct = localAnswer !== null && opt === q.answer;
           const wrong   = chosen && opt !== q.answer;
           return (
             <button key={i} onClick={() => submitAnswer(opt)}
-              disabled={answer !== null}
+              disabled={localAnswer !== null}
               style={{
-                padding:"14px 12px", borderRadius:14, border:"none", cursor: answer!==null?"default":"pointer",
-                fontWeight:700, fontSize:13, textAlign:"left", lineHeight:1.4,
-                background: correct ? "rgba(34,197,94,.2)" : wrong ? "rgba(239,68,68,.2)" : chosen ? SG.accentL : "rgba(255,255,255,.06)",
-                color: correct ? SG.green : wrong ? SG.red : SG.text,
-                outline: correct ? `2px solid ${SG.green}` : wrong ? `2px solid ${SG.red}` : chosen ? `2px solid ${SG.accent}` : "2px solid transparent",
-                transition:"all .15s",
+                padding: "14px 12px", borderRadius: 13, border: "none",
+                cursor: localAnswer !== null ? "default" : "pointer",
+                fontWeight: 700, fontSize: 13, textAlign: "left", lineHeight: 1.4,
+                background: correct ? C.greenL : wrong ? C.redL : chosen ? C.accentL : C.bg,
+                color: correct ? C.green : wrong ? C.red : chosen ? C.accent : C.text,
+                outline: correct ? `2px solid ${C.green}` : wrong ? `2px solid ${C.red}` : chosen ? `2px solid ${C.accent}` : `2px solid transparent`,
+                transition: "all .12s",
               }}>
-              <span style={{ opacity:.6, marginRight:6 }}>{["A","B","C","D"][i]}.</span>{opt}
+              <span style={{ opacity: .5, marginRight: 6 }}>{["A","B","C","D"][i]}.</span>{opt}
             </button>
           );
         })}
       </div>
 
-      {/* Waiting indicator */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 0" }}>
-        <span style={{ color:SG.muted, fontSize:12 }}>⏳ {answerCount}/{memberCount} answered</span>
-        {isHost && answer !== null && (
+      {/* Status + next */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0" }}>
+        <span style={{ color: C.muted, fontSize: 12 }}>⏳ {answerCount}/{memberCount} answered</span>
+        {isHost && localAnswer !== null && (
           <button onClick={nextQuestion} style={{
-            background:SG.accent, color:"#fff", border:"none", borderRadius:10,
-            padding:"8px 16px", fontSize:13, fontWeight:700, cursor:"pointer",
+            background: C.accent, color: "#fff", border: "none", borderRadius: 10,
+            padding: "8px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer",
+            boxShadow: "0 3px 10px rgba(61,90,128,.3)",
           }}>Next →</button>
         )}
       </div>
 
-      {/* Live scoreboard sidebar */}
-      <div style={{ background:SG.card, borderRadius:14, padding:14, border:`1px solid ${SG.border}` }}>
-        <p style={{ margin:"0 0 10px", fontSize:10, fontWeight:700, color:SG.muted, letterSpacing:.8, textTransform:"uppercase" }}>Live Scores</p>
+      {/* Live scoreboard */}
+      <div style={{ background: C.surface, borderRadius: 12, padding: "12px 14px", border: `1px solid ${C.border}` }}>
+        <p style={{ margin: "0 0 8px", fontSize: 10, fontWeight: 700, color: C.muted,
+          letterSpacing: .8, textTransform: "uppercase" }}>🏆 Live Scores</p>
         {board.map((entry, i) => (
-          <div key={entry.uid} style={{ display:"flex", justifyContent:"space-between", padding:"4px 0",
-            borderBottom: i < board.length-1 ? `1px solid ${SG.border}` : "none" }}>
-            <span style={{ color:SG.text, fontSize:13 }}>{entry.name.split(" ")[0]}</span>
-            <span style={{ color:SG.gold, fontWeight:700, fontSize:13 }}>{entry.pts}</span>
+          <div key={entry.uid} style={{
+            display: "flex", justifyContent: "space-between", padding: "5px 0",
+            borderBottom: i < board.length - 1 ? `1px solid ${C.border}` : "none",
+          }}>
+            <span style={{ color: C.text, fontSize: 13 }}>{entry.name.split(" ")[0]}</span>
+            <span style={{ color: C.warm, fontWeight: 700, fontSize: 13 }}>{entry.pts}</span>
           </div>
         ))}
       </div>
@@ -6797,162 +6972,244 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
   );
 }
 
-// ── Host Controls for starting a game ────────────────────────────────────────
-function SGHostControls({ groupId, db, group, user }) {
-  const [showShareModal, setShowShareModal]   = useState(false);
-  const [shareText, setShareText]             = useState("");
-  const [shareTitle, setShareTitle]           = useState("");
-  const [showGameModal, setShowGameModal]     = useState(false);
-  const [gameQuestions, setGameQuestions]     = useState("");
-  const [generatingGame, setGeneratingGame]   = useState(false);
-  const [gameTopic, setGameTopic]             = useState("");
+// ── Game launcher modal (reuses app's game mode list) ────────────────────────
+function SGGameLauncher({ group, db, groupId, user, onClose }) {
+  const [topic,      setTopic]      = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [error,      setError]      = useState("");
 
-  const shareContent = async () => {
-    if (!shareText.trim()) return;
-    await updateDoc(doc(db, "studyGroups", groupId), {
-      sharedContent: {
-        title: shareTitle || "Shared Notes",
-        body: shareText,
-        sharedBy: user.displayName?.split(" ")[0] || "Host",
-        sharedAt: Date.now(),
-      },
-      lastActivity: Date.now(),
-    });
-    setShowShareModal(false); setShareText(""); setShareTitle("");
-  };
+  // Same game entries as GameTab — multiplayer-compatible ones
+  const MP_GAMES = [
+    { id: "mcq",       emoji: "🧠", title: "Multiple Choice",  desc: "4-option quiz for everyone",           bg: C.accentL, accent: C.accent },
+    { id: "truefalse", emoji: "✅", title: "True or False",    desc: "Vote true or false together",          bg: C.purpleL, accent: C.purple },
+    { id: "rapidfire", emoji: "⚡", title: "Rapid Fire",       desc: "First to answer scores more",          bg: C.greenL,  accent: C.green },
+    { id: "quizshow",  emoji: "🎤", title: "Quiz Show",        desc: "Millionaire-style with lifelines",     bg: "#fef2f2",  accent: C.red },
+  ];
 
-  const clearContent = async () => {
-    await updateDoc(doc(db, "studyGroups", groupId), { sharedContent: null });
-  };
-
-  const startGame = async () => {
-    let questions = [];
+  const startGame = async (gameId) => {
+    if (!topic.trim()) { setError("Enter a topic first"); return; }
+    setGenerating(true); setError("");
     try {
-      const parsed = JSON.parse(gameQuestions);
-      questions = parsed;
-    } catch {
-      // Try auto-generate from topic
-      if (!gameTopic.trim()) return;
-      setGeneratingGame(true);
-      try {
-        const raw = await callClaude(
-          "You are a quiz generator. Return ONLY a JSON array, no explanation.",
-          `Create 6 multiple-choice quiz questions about: "${gameTopic}".
-Each question: {"question":"...","options":["A","B","C","D"],"answer":"exact option text"}.
-Make options realistic and tricky. Return ONLY the JSON array.`,
-          1200
-        );
-        const clean = raw.replace(/```json|```/g,"").trim();
-        questions = JSON.parse(clean);
-      } catch(e) { setGeneratingGame(false); return; }
-      setGeneratingGame(false);
+      const raw = await callClaude(
+        "You are a quiz generator. Return ONLY a valid JSON array, no explanation, no markdown.",
+        `Create 6 multiple-choice quiz questions about: "${topic}".
+Each item: {"question":"...","options":["full option A text","full option B text","full option C text","full option D text"],"answer":"exact text of correct option"}.
+Make distractors realistic. Return ONLY the JSON array.`,
+        1400
+      );
+      const clean = raw.replace(/```json|```/g, "").trim();
+      const questions = JSON.parse(clean);
+      if (!questions.length) throw new Error("No questions generated");
+      const initScores = {};
+      Object.keys(group.members || {}).forEach(uid => { initScores[uid] = 0; });
+      await updateDoc(doc(db, "studyGroups", groupId), {
+        gameState: {
+          mode: gameId,
+          phase: "question",
+          questions,
+          questionIndex: 0,
+          currentQuestion: questions[0],
+          scores: initScores,
+          answers: {},
+          topic,
+        },
+        lastActivity: Date.now(),
+      });
+      onClose();
+    } catch (e) {
+      setError("Failed to generate: " + (e?.message || "Try a different topic."));
     }
-    if (!questions.length) return;
-    const initScores = {};
-    Object.keys(group.members || {}).forEach(uid => { initScores[uid] = 0; });
-    await updateDoc(doc(db, "studyGroups", groupId), {
-      gameState: {
-        phase: "question",
-        questions,
-        questionIndex: 0,
-        currentQuestion: questions[0],
-        scores: initScores,
-        answers: {},
-      },
-      lastActivity: Date.now(),
-    });
-    setShowGameModal(false); setGameQuestions(""); setGameTopic("");
+    setGenerating(false);
   };
 
   return (
-    <div style={{ padding:"10px 12px", borderTop:`1px solid ${SG.border}`, display:"flex", flexDirection:"column", gap:8 }}>
-      <p style={{ margin:0, fontSize:9, fontWeight:800, color:SG.muted, letterSpacing:1, textTransform:"uppercase" }}>Host Controls</p>
-      <div style={{ display:"flex", gap:8 }}>
-        <button onClick={() => setShowShareModal(true)} style={{
-          flex:1, background:"rgba(255,255,255,.06)", border:`1px solid ${SG.border}`,
-          color:SG.text, borderRadius:10, padding:"8px 6px", fontSize:12, fontWeight:700, cursor:"pointer",
-          display:"flex", alignItems:"center", justifyContent:"center", gap:5,
-        }}>📺 Share</button>
-        <button onClick={() => { if(group?.sharedContent) clearContent(); else setShowShareModal(true); }} style={{
-          flex:1, background: group?.sharedContent ? "rgba(239,68,68,.15)" : "rgba(255,255,255,.06)",
-          border:`1px solid ${group?.sharedContent ? SG.red+"44" : SG.border}`,
-          color: group?.sharedContent ? SG.red : SG.muted,
-          borderRadius:10, padding:"8px 6px", fontSize:12, fontWeight:700, cursor:"pointer",
-          display: group?.sharedContent ? "flex" : "none", alignItems:"center", justifyContent:"center", gap:5,
-        }}>✕ Stop</button>
-        <button onClick={() => group?.gameState ? null : setShowGameModal(true)}
-          disabled={!!group?.gameState}
-          style={{
-            flex:1, background: group?.gameState ? "rgba(34,197,94,.12)" : "rgba(124,58,237,.2)",
-            border:`1px solid ${group?.gameState ? SG.green+"44" : SG.accent+"44"}`,
-            color: group?.gameState ? SG.green : SG.accent,
-            borderRadius:10, padding:"8px 6px", fontSize:12, fontWeight:700, cursor: group?.gameState?"default":"pointer",
-            display:"flex", alignItems:"center", justifyContent:"center", gap:5,
-          }}>🎮 {group?.gameState ? "Live" : "Quiz"}</button>
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, zIndex: 4500,
+      background: "rgba(26,23,20,.45)", backdropFilter: "blur(3px)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center", padding: 16,
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: "100%", maxWidth: 520, background: C.surface,
+        borderRadius: "20px 20px 16px 16px", border: `1px solid ${C.border}`,
+        boxShadow: "0 -8px 40px rgba(0,0,0,.1)", padding: "0 0 8px",
+      }}>
+        <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 0" }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: C.border }} />
+        </div>
+        <div style={{ padding: "12px 20px 0", borderBottom: `1px solid ${C.border}`, paddingBottom: 12,
+          display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: C.text }}>🎮 Start a Quiz Battle</span>
+          <button onClick={onClose} style={{ background: C.bg, border: `1px solid ${C.border}`,
+            borderRadius: "50%", width: 28, height: 28, color: C.muted, cursor: "pointer",
+            fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+        </div>
+
+        <div style={{ padding: "16px 20px" }}>
+          {/* Topic input */}
+          <label style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: .8, textTransform: "uppercase" }}>
+            Quiz Topic (AI generates questions)
+          </label>
+          <input value={topic} onChange={e => { setTopic(e.target.value); setError(""); }}
+            placeholder="e.g. Photosynthesis, WW2, Python loops…"
+            style={{
+              width: "100%", padding: "10px 14px", boxSizing: "border-box",
+              background: C.bg, border: `1.5px solid ${C.border}`, borderRadius: 10,
+              color: C.text, fontSize: 13, outline: "none", fontFamily: "inherit",
+              marginTop: 6, marginBottom: 14,
+            }} />
+
+          {error && <div style={{ padding: "8px 12px", borderRadius: 9, background: C.redL,
+            border: `1px solid ${C.red}44`, color: C.red, fontSize: 12, marginBottom: 12 }}>{error}</div>}
+
+          {/* Game mode grid */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {MP_GAMES.map(g => (
+              <button key={g.id} onClick={() => startGame(g.id)}
+                disabled={generating}
+                style={{
+                  background: g.bg, border: `1.5px solid ${g.accent}22`,
+                  borderRadius: 14, padding: "14px 12px", cursor: generating ? "not-allowed" : "pointer",
+                  textAlign: "left", opacity: generating ? .6 : 1, transition: "transform .12s",
+                }}
+                onMouseEnter={e => { if (!generating) e.currentTarget.style.transform = "translateY(-2px)"; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = "none"; }}>
+                <div style={{ fontSize: 26, marginBottom: 6 }}>{generating ? "⏳" : g.emoji}</div>
+                <p style={{ margin: "0 0 3px", fontSize: 13, fontWeight: 700, color: C.text }}>{g.title}</p>
+                <p style={{ margin: 0, fontSize: 11, color: C.muted, lineHeight: 1.3 }}>{g.desc}</p>
+              </button>
+            ))}
+          </div>
+
+          {generating && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              marginTop: 14, color: C.muted, fontSize: 13 }}>
+              <SGSpinner /> Generating questions for "{topic}"…
+            </div>
+          )}
+        </div>
       </div>
-
-      {/* Share modal */}
-      {showShareModal && (
-        <div style={{ background:SG.bg, border:`1px solid ${SG.border}`, borderRadius:14, padding:14, marginTop:4 }}>
-          <input value={shareTitle} onChange={e=>setShareTitle(e.target.value)} placeholder="Title (optional)"
-            style={{ width:"100%", marginBottom:8, padding:"8px 10px", boxSizing:"border-box", background:"rgba(255,255,255,.06)", border:`1px solid ${SG.border}`, borderRadius:8, color:SG.text, fontSize:12, outline:"none", fontFamily:"inherit" }} />
-          <textarea value={shareText} onChange={e=>setShareText(e.target.value)} placeholder="Paste notes or content to share with the group…"
-            rows={5} style={{ width:"100%", padding:"8px 10px", boxSizing:"border-box", background:"rgba(255,255,255,.06)", border:`1px solid ${SG.border}`, borderRadius:8, color:SG.text, fontSize:12, resize:"vertical", outline:"none", fontFamily:"inherit" }} />
-          <div style={{ display:"flex", gap:8, marginTop:8 }}>
-            <button onClick={() => setShowShareModal(false)} style={{ flex:1, background:"rgba(255,255,255,.06)", border:`1px solid ${SG.border}`, color:SG.muted, borderRadius:8, padding:"7px", fontSize:12, cursor:"pointer" }}>Cancel</button>
-            <button onClick={shareContent} style={{ flex:2, background:SG.accent, border:"none", color:"#fff", borderRadius:8, padding:"7px", fontSize:12, fontWeight:700, cursor:"pointer" }}>Share</button>
-          </div>
-        </div>
-      )}
-
-      {/* Game modal */}
-      {showGameModal && (
-        <div style={{ background:SG.bg, border:`1px solid ${SG.border}`, borderRadius:14, padding:14, marginTop:4 }}>
-          <p style={{ margin:"0 0 8px", color:SG.text, fontSize:12, fontWeight:700 }}>🎮 Start a Quiz Battle</p>
-          <input value={gameTopic} onChange={e=>setGameTopic(e.target.value)} placeholder="Topic for AI to generate questions (e.g. Photosynthesis)"
-            style={{ width:"100%", padding:"8px 10px", boxSizing:"border-box", background:"rgba(255,255,255,.06)", border:`1px solid ${SG.border}`, borderRadius:8, color:SG.text, fontSize:12, outline:"none", fontFamily:"inherit", marginBottom:6 }} />
-          <p style={{ margin:"0 0 4px", color:SG.muted, fontSize:10 }}>— or paste your own JSON questions —</p>
-          <textarea value={gameQuestions} onChange={e=>setGameQuestions(e.target.value)} placeholder='[{"question":"...","options":["A","B","C","D"],"answer":"A"}]'
-            rows={3} style={{ width:"100%", padding:"8px 10px", boxSizing:"border-box", background:"rgba(255,255,255,.06)", border:`1px solid ${SG.border}`, borderRadius:8, color:SG.text, fontSize:11, resize:"vertical", outline:"none", fontFamily:"monospace" }} />
-          <div style={{ display:"flex", gap:8, marginTop:8 }}>
-            <button onClick={() => setShowGameModal(false)} style={{ flex:1, background:"rgba(255,255,255,.06)", border:`1px solid ${SG.border}`, color:SG.muted, borderRadius:8, padding:"7px", fontSize:12, cursor:"pointer" }}>Cancel</button>
-            <button onClick={startGame} disabled={generatingGame} style={{ flex:2, background:SG.accent, border:"none", color:"#fff", borderRadius:8, padding:"7px", fontSize:12, fontWeight:700, cursor:generatingGame?"not-allowed":"pointer" }}>
-              {generatingGame ? "⏳ Generating…" : "🚀 Start Quiz"}
-            </button>
-          </div>
-        </div>
-      )}
     </div>
+  );
+}
+
+// ── Host action toolbar ───────────────────────────────────────────────────────
+function SGHostControls({ groupId, db, group, user }) {
+  const [showShare, setShowShare] = useState(false);
+  const [showGame,  setShowGame]  = useState(false);
+
+  const hasShared = !!group?.sharedContent;
+  const hasGame   = !!group?.gameState;
+
+  const stopSharing = async () => {
+    await updateDoc(doc(db, "studyGroups", groupId), { sharedContent: null });
+  };
+  const endGame = async () => {
+    await updateDoc(doc(db, "studyGroups", groupId), { gameState: null });
+  };
+
+  return (
+    <>
+      {showShare && (
+        <SGSharePicker user={user} db={db} groupId={groupId} group={group}
+          onClose={() => setShowShare(false)} />
+      )}
+      {showGame && (
+        <SGGameLauncher group={group} db={db} groupId={groupId} user={user}
+          onClose={() => setShowGame(false)} />
+      )}
+
+      <div style={{
+        flexShrink: 0, padding: "10px 14px",
+        borderTop: `1px solid ${C.border}`,
+        background: C.surface,
+        display: "flex", alignItems: "center", gap: 8,
+      }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: C.muted,
+          letterSpacing: .8, textTransform: "uppercase", marginRight: 4 }}>Host</span>
+
+        {/* Share / Stop Sharing */}
+        {hasShared ? (
+          <button onClick={stopSharing} style={{
+            display: "flex", alignItems: "center", gap: 6,
+            background: C.redL, border: `1px solid ${C.red}44`,
+            color: C.red, borderRadius: 9, padding: "7px 12px",
+            fontSize: 12, fontWeight: 700, cursor: "pointer",
+          }}>⏹ Stop Sharing</button>
+        ) : (
+          <button onClick={() => setShowShare(true)} style={{
+            display: "flex", alignItems: "center", gap: 6,
+            background: C.accentL, border: `1px solid ${C.accentS}`,
+            color: C.accent, borderRadius: 9, padding: "7px 12px",
+            fontSize: 12, fontWeight: 700, cursor: "pointer",
+          }}>📺 Share</button>
+        )}
+
+        {/* Quiz / Stop Quiz */}
+        {hasGame ? (
+          <button onClick={endGame} style={{
+            display: "flex", alignItems: "center", gap: 6,
+            background: C.redL, border: `1px solid ${C.red}44`,
+            color: C.red, borderRadius: 9, padding: "7px 12px",
+            fontSize: 12, fontWeight: 700, cursor: "pointer",
+          }}>⏹ End Quiz</button>
+        ) : (
+          <button onClick={() => setShowGame(true)} style={{
+            display: "flex", alignItems: "center", gap: 6,
+            background: C.greenL, border: `1px solid ${C.green}44`,
+            color: C.green, borderRadius: 9, padding: "7px 12px",
+            fontSize: 12, fontWeight: 700, cursor: "pointer",
+          }}>🎮 Quiz Battle</button>
+        )}
+
+        {/* Status indicator */}
+        {hasGame && (
+          <span style={{ marginLeft: "auto", fontSize: 11, color: C.green,
+            fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: C.green, display: "inline-block" }} />
+            Quiz Live
+          </span>
+        )}
+        {hasShared && !hasGame && (
+          <span style={{ marginLeft: "auto", fontSize: 11, color: C.accent,
+            fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: C.accent, display: "inline-block" }} />
+            Presenting
+          </span>
+        )}
+      </div>
+    </>
   );
 }
 
 // ── Main Study Group Room ─────────────────────────────────────────────────────
 function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
-  const [group,    setGroup]    = useState(null);
-  const [messages, setMessages] = useState([]);
+  const [group,     setGroup]     = useState(null);
+  const [messages,  setMessages]  = useState([]);
   const [chatInput, setChatInput] = useState("");
-  const [panel,    setPanel]    = useState("chat"); // chat | participants
-  const [copied,   setCopied]   = useState(false);
+  const [panel,     setPanel]     = useState("chat");
+  const [copied,    setCopied]    = useState(false);
   const chatEndRef = useRef(null);
 
-  const isHost = group?.hostUid === user.uid;
+  const isHost  = group?.hostUid === user.uid;
   const members = group?.members || {};
+  const presenter = group?.sharedContent
+    ? Object.values(members).find(m => m?.uid === group.sharedContent.sharedByUid)
+    : null;
 
-  // ── Subscribe to group doc ─────────────────────────────────────────────────
+  // Subscribe to group doc
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "studyGroups", groupId), snap => {
       if (snap.exists()) setGroup({ id: snap.id, ...snap.data() });
-      else onLeave(); // group was deleted
+      else onLeave();
     });
     return () => unsub();
   }, [groupId, db]);
 
-  // ── Subscribe to messages ──────────────────────────────────────────────────
+  // Subscribe to messages
   useEffect(() => {
     const q = query(
       collection(db, "studyGroups", groupId, "messages"),
-      orderBy("createdAt", "asc"),
-      limit(200)
+      orderBy("createdAt", "asc"), limit(300)
     );
     const unsub = onSnapshot(q, snap => {
       setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -6960,37 +7217,28 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
     return () => unsub();
   }, [groupId, db]);
 
-  // ── Auto-scroll chat ───────────────────────────────────────────────────────
+  // Auto-scroll chat
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior:"smooth" });
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // ── Keep member presence alive ─────────────────────────────────────────────
+  // Presence
   useEffect(() => {
     const me = {
-      uid: user.uid,
-      displayName: user.displayName || "User",
+      uid: user.uid, displayName: user.displayName || "User",
       photoURL: user.photoURL || null,
-      character: JSON.parse(localStorage.getItem("classio_char") || "{}"),
+      character: (() => { try { return JSON.parse(localStorage.getItem("classio_char") || "{}"); } catch { return {}; } })(),
       joinedAt: Date.now(),
-      emoji: "😊",
     };
     updateDoc(doc(db, "studyGroups", groupId), {
-      [`members.${user.uid}`]: me,
-      lastActivity: Date.now(),
+      [`members.${user.uid}`]: me, lastActivity: Date.now(),
     }).catch(() => {});
-
-    // Remove self on unmount
     return () => {
-      const updated = { ...((group?.members) || {}) };
-      delete updated[user.uid];
-      if (Object.keys(updated).length === 0 || isHost) {
-        // Host leaving = delete group
-        if (isHost) deleteDoc(doc(db, "studyGroups", groupId)).catch(() => {});
+      if (isHost) {
+        deleteDoc(doc(db, "studyGroups", groupId)).catch(() => {});
       } else {
         updateDoc(doc(db, "studyGroups", groupId), {
-          [`members.${user.uid}`]: null,
-          lastActivity: Date.now(),
+          [`members.${user.uid}`]: null, lastActivity: Date.now(),
         }).catch(() => {});
       }
     };
@@ -7001,8 +7249,7 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
     if (!text) return;
     setChatInput("");
     await addDoc(collection(db, "studyGroups", groupId, "messages"), {
-      text,
-      uid: user.uid,
+      text, uid: user.uid,
       displayName: user.displayName || "User",
       createdAt: serverTimestamp(),
     });
@@ -7010,18 +7257,14 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
 
   const handleLeave = async () => {
     if (isHost) {
-      // Host ending session — send system message then delete
       await addDoc(collection(db, "studyGroups", groupId, "messages"), {
-        text: "👋 The host ended the session.",
-        uid: "system",
-        displayName: "Classio",
-        createdAt: serverTimestamp(),
+        text: "👋 The host ended the session.", uid: "system",
+        displayName: "Classio", createdAt: serverTimestamp(),
       }).catch(() => {});
       await deleteDoc(doc(db, "studyGroups", groupId)).catch(() => {});
     } else {
       await updateDoc(doc(db, "studyGroups", groupId), {
-        [`members.${user.uid}`]: null,
-        lastActivity: Date.now(),
+        [`members.${user.uid}`]: null, lastActivity: Date.now(),
       }).catch(() => {});
     }
     onLeave();
@@ -7029,96 +7272,121 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
 
   const copyCode = () => {
     navigator.clipboard?.writeText(groupId).catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setCopied(true); setTimeout(() => setCopied(false), 2000);
   };
 
-  const showGame = group?.gameState;
-  const showContent = !showGame && group?.sharedContent;
+  const memberList = Object.values(members).filter(Boolean);
+  const showGame    = !!group?.gameState;
+  const showContent = !showGame && !!group?.sharedContent;
 
   return (
     <div style={{
-      height:"100dvh", width:"100%",
-      background:SG.bg, color:SG.text,
-      display:"flex", flexDirection:"column",
-      fontFamily:"'DM Sans',sans-serif",
-      overflow:"hidden",
+      height: "100dvh", width: "100%",
+      background: C.bg, color: C.text,
+      display: "flex", flexDirection: "column",
+      fontFamily: "'DM Sans',sans-serif", overflow: "hidden",
     }}>
+      <style>{`@keyframes sg-spin { to { transform:rotate(360deg); } }`}</style>
 
       {/* ── Top bar ── */}
       <div style={{
-        flexShrink:0, height:54,
-        background:SG.surface, borderBottom:`1px solid ${SG.border}`,
-        display:"flex", alignItems:"center", gap:10, padding:"0 14px",
+        flexShrink: 0, height: 56,
+        background: C.surface, borderBottom: `1px solid ${C.border}`,
+        display: "flex", alignItems: "center", gap: 10, padding: "0 16px",
+        boxShadow: "0 1px 4px rgba(0,0,0,.06)",
       }}>
-        {/* Group name + code */}
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-            <span style={{ fontSize:16, fontWeight:800, color:SG.text, fontFamily:"'Fraunces',serif",
-              whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
-              👥 {group?.name || "Study Group"}
-            </span>
-            <button onClick={copyCode} style={{
-              background:"rgba(255,255,255,.08)", border:"none", borderRadius:7,
-              padding:"3px 9px", fontSize:11, fontWeight:700, cursor:"pointer",
-              color: copied ? SG.green : SG.accent, letterSpacing:.8, fontFamily:"monospace",
-              flexShrink:0,
-            }}>
-              {copied ? "✓ Copied!" : groupId}
-            </button>
+        {/* Logo + name */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ width: 30, height: 30, background: C.accent, borderRadius: 9,
+            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <span style={{ fontSize: 14 }}>👥</span>
           </div>
-          <p style={{ margin:0, fontSize:10, color:SG.muted }}>
-            {Object.keys(members).length} member{Object.keys(members).length!==1?"s":""}
-          </p>
+          <div style={{ minWidth: 0 }}>
+            <p style={{ margin: 0, fontSize: 15, fontWeight: 800, color: C.text,
+              fontFamily: "'Fraunces',serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {group?.name || "Study Group"}
+            </p>
+            <p style={{ margin: 0, fontSize: 10, color: C.muted }}>
+              {memberList.length} member{memberList.length !== 1 ? "s" : ""}
+            </p>
+          </div>
         </div>
 
-        {/* Leave / End button */}
+        {/* Code chip */}
+        <button onClick={copyCode} style={{
+          background: C.accentL, border: `1px solid ${C.accentS}`,
+          borderRadius: 8, padding: "4px 10px",
+          fontSize: 12, fontWeight: 800, cursor: "pointer",
+          color: copied ? C.green : C.accent,
+          fontFamily: "monospace", letterSpacing: 1.5, flexShrink: 0,
+        }}>
+          {copied ? "✓ Copied" : groupId}
+        </button>
+
+        <div style={{ flex: 1 }} />
+
+        {/* Leave / End */}
         <button onClick={handleLeave} style={{
-          background: isHost ? "rgba(239,68,68,.18)" : "rgba(255,255,255,.06)",
-          border:`1px solid ${isHost ? SG.red+"44" : SG.border}`,
-          color: isHost ? SG.red : SG.muted,
-          borderRadius:10, padding:"7px 13px", fontSize:12, fontWeight:700, cursor:"pointer",
-          flexShrink:0,
+          background: isHost ? C.redL : C.bg,
+          border: `1px solid ${isHost ? C.red + "55" : C.border}`,
+          color: isHost ? C.red : C.muted,
+          borderRadius: 10, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer",
         }}>
           {isHost ? "🔴 End Session" : "Leave"}
         </button>
       </div>
 
-      {/* ── Body — main content left, sidebar right ── */}
-      <div style={{ flex:1, minHeight:0, display:"flex", overflow:"hidden" }}>
+      {/* ── Body ── */}
+      <div style={{ flex: 1, minHeight: 0, display: "flex", overflow: "hidden" }}>
 
-        {/* ── Main content area ── */}
-        <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", overflow:"hidden" }}>
+        {/* Main workspace */}
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {showGame ? (
-            <SGQuizGame
-              gameState={group.gameState}
-              isHost={isHost}
-              user={user}
-              db={db}
-              groupId={groupId}
-              members={members}
-            />
+            <SGQuizGame gameState={group.gameState} isHost={isHost}
+              user={user} db={db} groupId={groupId} members={members} />
           ) : showContent ? (
-            <SGSharedContent content={group.sharedContent} />
+            <SGSharedContent content={group.sharedContent}
+              presenterName={presenter?.displayName?.split(" ")[0]} />
           ) : (
-            <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:16, padding:24, opacity:.5 }}>
-              <div style={{ fontSize:64 }}>📚</div>
-              <p style={{ color:SG.muted, fontSize:16, fontWeight:700, margin:0, textAlign:"center" }}>{group?.name || "Study Group"}</p>
-              <p style={{ color:SG.muted, fontSize:13, margin:0, textAlign:"center", maxWidth:260 }}>
-                {isHost
-                  ? "Use the controls below to share content or start a quiz battle."
-                  : "Waiting for the host to share something…"}
-              </p>
-              {/* Share code card */}
-              <div style={{ background:SG.card, borderRadius:14, padding:"14px 20px", border:`1px solid ${SG.border}`, textAlign:"center" }}>
-                <p style={{ margin:"0 0 4px", fontSize:10, fontWeight:700, color:SG.muted, letterSpacing:.8, textTransform:"uppercase" }}>Invite Code</p>
-                <p style={{ margin:0, fontSize:26, fontWeight:900, color:SG.accent, fontFamily:"monospace", letterSpacing:4 }}>{groupId}</p>
-                <p style={{ margin:"4px 0 0", fontSize:11, color:SG.muted }}>Share this code to invite friends</p>
+            // Empty state
+            <div style={{ flex: 1, display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center", gap: 18, padding: 32 }}>
+              <div style={{ width: 72, height: 72, borderRadius: 20, background: C.accentL,
+                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 34 }}>📚</div>
+              <div style={{ textAlign: "center" }}>
+                <p style={{ margin: "0 0 6px", fontSize: 17, fontWeight: 700, color: C.text,
+                  fontFamily: "'Fraunces',serif" }}>{group?.name || "Study Group"}</p>
+                <p style={{ margin: 0, fontSize: 13, color: C.muted, maxWidth: 260, lineHeight: 1.5 }}>
+                  {isHost
+                    ? "Use the controls below to present content or start a quiz battle."
+                    : "Waiting for the host to present something…"}
+                </p>
+              </div>
+              {/* Invite card */}
+              <div style={{ background: C.surface, borderRadius: 14, padding: "16px 24px",
+                border: `1px solid ${C.border}`, textAlign: "center",
+                boxShadow: "0 2px 12px rgba(0,0,0,.06)" }}>
+                <p style={{ margin: "0 0 4px", fontSize: 10, fontWeight: 700,
+                  color: C.muted, letterSpacing: .8, textTransform: "uppercase" }}>Invite Code</p>
+                <p style={{ margin: 0, fontSize: 28, fontWeight: 900,
+                  color: C.accent, fontFamily: "monospace", letterSpacing: 5 }}>{groupId}</p>
+                <p style={{ margin: "4px 0 0", fontSize: 11, color: C.muted }}>
+                  Share this with friends to join
+                </p>
+              </div>
+              {/* Members row */}
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
+                {memberList.map(m => m && (
+                  <SGAvatar key={m.uid} character={m.character}
+                    displayName={m.displayName} size={40}
+                    isHost={m.uid === group?.hostUid}
+                    isSelf={m.uid === user.uid} />
+                ))}
               </div>
             </div>
           )}
 
-          {/* Host controls — only for host */}
+          {/* Host toolbar */}
           {isHost && group && (
             <SGHostControls groupId={groupId} db={db} group={group} user={user} />
           )}
@@ -7126,33 +7394,33 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
 
         {/* ── Right sidebar ── */}
         <div style={{
-          width:260, flexShrink:0,
-          background:SG.surface, borderLeft:`1px solid ${SG.border}`,
-          display:"flex", flexDirection:"column",
-          overflow:"hidden",
+          width: 264, flexShrink: 0,
+          background: C.surface, borderLeft: `1px solid ${C.border}`,
+          display: "flex", flexDirection: "column", overflow: "hidden",
         }}>
-          {/* Sidebar tab switcher */}
-          <div style={{ flexShrink:0, display:"flex", borderBottom:`1px solid ${SG.border}` }}>
-            {[{id:"chat",label:"💬 Chat"},{id:"participants",label:"👥 Members"}].map(t => (
+          {/* Tab bar */}
+          <div style={{ flexShrink: 0, display: "flex", borderBottom: `1px solid ${C.border}` }}>
+            {[{ id: "chat", label: "💬 Chat" }, { id: "members", label: "👥 Members" }].map(t => (
               <button key={t.id} onClick={() => setPanel(t.id)} style={{
-                flex:1, padding:"10px 6px", border:"none", cursor:"pointer",
-                background: panel===t.id ? SG.accentL : "transparent",
-                color: panel===t.id ? SG.accent : SG.muted,
-                fontSize:11, fontWeight:700, letterSpacing:.3,
-                borderBottom:`2px solid ${panel===t.id ? SG.accent : "transparent"}`,
-                transition:"all .12s",
+                flex: 1, padding: "10px 6px", border: "none", cursor: "pointer",
+                background: panel === t.id ? C.accentL : "transparent",
+                color: panel === t.id ? C.accent : C.muted,
+                fontSize: 11, fontWeight: 700, letterSpacing: .3,
+                borderBottom: `2px solid ${panel === t.id ? C.accent : "transparent"}`,
+                transition: "all .12s",
               }}>{t.label}</button>
             ))}
           </div>
 
-          {/* Chat panel */}
+          {/* Chat */}
           {panel === "chat" && (
             <>
-              <div style={{ flex:1, minHeight:0, overflowY:"auto", padding:"12px 10px", display:"flex", flexDirection:"column", gap:10 }}>
+              <div style={{ flex: 1, minHeight: 0, overflowY: "auto",
+                padding: "12px 10px", display: "flex", flexDirection: "column", gap: 8 }}>
                 {messages.length === 0 && (
-                  <div style={{ textAlign:"center", padding:"30px 0", opacity:.4 }}>
-                    <p style={{ color:SG.muted, fontSize:12, margin:0 }}>No messages yet</p>
-                    <p style={{ color:SG.muted, fontSize:11, margin:"4px 0 0" }}>Say hi! 👋</p>
+                  <div style={{ textAlign: "center", padding: "32px 0", opacity: .4 }}>
+                    <p style={{ color: C.muted, fontSize: 13, margin: 0 }}>No messages yet</p>
+                    <p style={{ color: C.muted, fontSize: 11, margin: "4px 0 0" }}>Say hi! 👋</p>
                   </div>
                 )}
                 {messages.map(msg => (
@@ -7160,52 +7428,51 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
                 ))}
                 <div ref={chatEndRef} />
               </div>
-              <div style={{ flexShrink:0, padding:"10px", borderTop:`1px solid ${SG.border}`, display:"flex", gap:8 }}>
+              <div style={{ flexShrink: 0, padding: 10, borderTop: `1px solid ${C.border}`, display: "flex", gap: 8 }}>
                 <input
                   value={chatInput}
                   onChange={e => setChatInput(e.target.value)}
-                  onKeyDown={e => { if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); sendMessage(); }}}
+                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
                   placeholder="Message…"
                   style={{
-                    flex:1, padding:"9px 12px", background:"rgba(255,255,255,.06)",
-                    border:`1px solid ${SG.border}`, borderRadius:10,
-                    color:SG.text, fontSize:13, outline:"none", fontFamily:"inherit",
+                    flex: 1, padding: "9px 12px",
+                    background: C.bg, border: `1px solid ${C.border}`,
+                    borderRadius: 10, color: C.text, fontSize: 13,
+                    outline: "none", fontFamily: "inherit",
                   }}
                 />
                 <button onClick={sendMessage} style={{
-                  background:SG.accent, border:"none", borderRadius:10,
-                  width:36, height:36, cursor:"pointer", display:"flex",
-                  alignItems:"center", justifyContent:"center", flexShrink:0,
-                  fontSize:15,
+                  background: C.accent, border: "none", borderRadius: 10,
+                  width: 36, height: 36, cursor: "pointer", flexShrink: 0,
+                  display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15,
+                  boxShadow: "0 2px 8px rgba(61,90,128,.3)",
                 }}>➤</button>
               </div>
             </>
           )}
 
-          {/* Participants panel */}
-          {panel === "participants" && (
-            <div style={{ flex:1, minHeight:0, overflowY:"auto", padding:"12px 10px" }}>
-              {Object.values(members).filter(Boolean).map(m => (
+          {/* Members */}
+          {panel === "members" && (
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "12px 10px" }}>
+              {memberList.map(m => !m ? null : (
                 <div key={m.uid} style={{
-                  display:"flex", alignItems:"center", gap:10, padding:"10px 8px",
-                  borderRadius:12, marginBottom:4,
-                  background: m.uid===user.uid ? SG.accentL : "rgba(255,255,255,.03)",
-                  border:`1px solid ${m.uid===user.uid ? SG.accent+"33" : SG.border}`,
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: "10px 8px", borderRadius: 12, marginBottom: 4,
+                  background: m.uid === user.uid ? C.accentL : C.bg,
+                  border: `1px solid ${m.uid === user.uid ? C.accentS : C.border}`,
                 }}>
-                  <SGAvatar
-                    character={m.character}
-                    displayName={m.displayName}
-                    size={34}
-                    isHost={m.uid === group?.hostUid}
-                    isSelf={m.uid === user.uid}
-                  />
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <p style={{ margin:0, fontSize:13, fontWeight:700, color:SG.text,
-                      whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
-                      {m.displayName || "User"} {m.uid===user.uid ? "(You)" : ""}
+                  <SGAvatar character={m.character} displayName={m.displayName}
+                    size={34} isHost={m.uid === group?.hostUid} isSelf={m.uid === user.uid} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: C.text,
+                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {m.displayName || "User"}{m.uid === user.uid ? " (You)" : ""}
                     </p>
                     {m.uid === group?.hostUid && (
-                      <p style={{ margin:0, fontSize:10, color:SG.gold }}>👑 Host</p>
+                      <p style={{ margin: 0, fontSize: 10, color: C.warm }}>👑 Host</p>
+                    )}
+                    {group?.sharedContent?.sharedByUid === m.uid && (
+                      <p style={{ margin: 0, fontSize: 10, color: C.accent }}>📺 Presenting</p>
                     )}
                   </div>
                 </div>
@@ -7213,7 +7480,6 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
             </div>
           )}
         </div>
-
       </div>
     </div>
   );
