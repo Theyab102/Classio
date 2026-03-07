@@ -1931,12 +1931,12 @@ function AvatarSwatches({
 }) {
   const saved = customColors[field] || [];
   const [open, setOpen] = useState(false);
-  // draftRef holds the current picked colour — a ref so handleDone always
-  // reads the latest value no matter when it was last set by handleLivePick
-  const draftRef = useRef(ensureHex(ch[field] || vals[0] || "#888888"));
+  // pickerSeed: the colour the picker opens with (state so picker re-renders correctly)
+  const [pickerSeed, setPickerSeed] = useState(() => ensureHex(ch[field] || vals[0] || "#888888"));
+  // latestRef: always holds the most recent dragged colour — no stale closure on Done
+  const latestRef = useRef(pickerSeed);
   const A = "#4361ee";
 
-  // Swatch selection ring helper
   const ring = (isSel) => ({
     outline: isSel ? `3px solid ${A}` : "3px solid transparent",
     outlineOffset: 2,
@@ -1947,22 +1947,24 @@ function AvatarSwatches({
   });
 
   const handleOpen = () => {
-    // Seed the draft with the current field value each time picker opens
-    draftRef.current = ensureHex(ch[field] || vals[0] || "#888888");
+    // Seed picker with the current applied colour each time it opens
+    const seed = ensureHex(ch[field] || vals[0] || "#888888");
+    latestRef.current = seed;
+    setPickerSeed(seed);  // causes picker to remount with correct initial value
     setOpen(o => !o);
   };
 
-  // Live preview while dragging — store in ref (no re-render needed)
+  // Each drag event: update avatar live + store latest in ref
   const handleLivePick = (hex) => {
-    draftRef.current = hex;
+    latestRef.current = hex;
     onApply(field, hex);
   };
 
-  // Done — read from ref (always the latest picked colour)
+  // Done: read ref (latest drag position) — no stale closure possible
   const handleDone = () => {
-    const finalHex = draftRef.current;
+    const finalHex = latestRef.current;
     setOpen(false);
-    onApplyCustom(field, finalHex);  // saves to list + selects
+    onApplyCustom(field, finalHex);
   };
 
   return (
@@ -2031,7 +2033,7 @@ function AvatarSwatches({
         <div style={{ borderRadius:16, overflow:"hidden", background:"#18182a",
           boxShadow:"0 6px 32px rgba(0,0,0,.4)" }}>
           <ColorPicker
-            value={draftRef.current}
+            value={pickerSeed}
             onChange={handleLivePick}
             onClose={handleDone}
           />
@@ -2048,7 +2050,8 @@ function AvatarSkinSection({
 }) {
   const SKINS = ["#FDDBB4","#F5C89A","#FFCBA4","#E8A87C","#D4956A","#C68642","#A0693A","#8D5524","#6B3A1F","#F4D6C8"];
   const [pickerOpen, setPickerOpen] = useState(false);
-  const draftRef = useRef(ensureHex(ch.skin || "#FDDBB4"));
+  const [pickerSeed, setPickerSeed] = useState(() => ensureHex(ch.skin || "#FDDBB4"));
+  const latestRef = useRef(pickerSeed);
   const saved = customColors["skin"] || [];
   const A = "#4361ee";
 
@@ -2062,12 +2065,14 @@ function AvatarSkinSection({
   });
 
   const handleOpen = () => {
-    draftRef.current = ensureHex(ch.skin || "#FDDBB4");
+    const seed = ensureHex(ch.skin || "#FDDBB4");
+    latestRef.current = seed;
+    setPickerSeed(seed);
     setPickerOpen(p => !p);
   };
 
-  const handleLivePick = (hex) => { draftRef.current = hex; onApply("skin", hex); };
-  const handleDone = () => { setPickerOpen(false); onApplyCustom("skin", draftRef.current); };
+  const handleLivePick = (hex) => { latestRef.current = hex; onApply("skin", hex); };
+  const handleDone = () => { setPickerOpen(false); onApplyCustom("skin", latestRef.current); };
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
@@ -2145,7 +2150,7 @@ function AvatarSkinSection({
       {pickerOpen && (
         <div style={{ borderRadius:16, overflow:"hidden", background:"#18182a",
           boxShadow:"0 6px 32px rgba(0,0,0,.4)" }}>
-          <ColorPicker value={draftRef.current} onChange={handleLivePick} onClose={handleDone} />
+          <ColorPicker value={pickerSeed} onChange={handleLivePick} onClose={handleDone} />
         </div>
       )}
     </div>
@@ -3699,9 +3704,15 @@ Context (for fixing mis-heard words only — do NOT add this as content): ${cont
   });
 
   const generatePodcast = async () => {
-    // Get the most recent notes — prefer saved notes from localStorage if editor is empty
+    // Read notes fresh from every possible source — never use stale prop
+    // 1. Named saved notes (NotesTab saves here: "saved_notes_<id>")
     const savedArr = (() => { try { return JSON.parse(localStorage.getItem("saved_notes_" + file.id) || "[]"); } catch { return []; } })();
-    const notesText = file.notes || (savedArr.length > 0 ? savedArr[0].text : "");
+    // 2. App state in classio_v2 (the file object's notes field persisted by the save system)
+    const appState = (() => { try { return JSON.parse(localStorage.getItem("classio_v2") || "{}"); } catch { return {}; } })();
+    const fileFromApp = (appState.folders || []).flatMap(f => f.files || []).find(f => f.id === file.id);
+    const appNotes = fileFromApp?.notes || "";
+    // Pick the longest / most recent source
+    const notesText = (savedArr.length > 0 ? savedArr[0].text : "") || appNotes || file.notes || "";
     if (!notesText.trim()) {
       setVoiceStatus("⚠️ No notes found. Go to the Notes tab, generate or write notes, then Save them — then come back here.");
       return;
