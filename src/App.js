@@ -6559,17 +6559,32 @@ function SGFileViewer({ fileData, fileURL, fileRtdbKey, fileName }) {
   const isPPT   = ["ppt","pptx"].includes(ext);
 
   // Fetch from Realtime Database if a key is provided
-  const [rtdbData, setRtdbData] = useState(null);
+  const [rtdbData,    setRtdbData]    = useState(null);
+  const [rtdbLoading, setRtdbLoading] = useState(false);
+  const [rtdbError,   setRtdbError]   = useState("");
   useEffect(() => {
     if (!fileRtdbKey) return;
     setRtdbData(null);
+    setRtdbError("");
+    setRtdbLoading(true);
     dbGet(dbRef(rtdb, fileRtdbKey))
-      .then(snap => { if (snap.exists()) setRtdbData(snap.val().data); })
-      .catch(e => console.error("RTDB fetch", e));
+      .then(snap => {
+        if (snap.exists()) {
+          setRtdbData(snap.val().data);
+        } else {
+          setRtdbError("File not found in database.");
+        }
+      })
+      .catch(e => {
+        console.error("RTDB fetch error:", e);
+        setRtdbError("Could not load file: " + e.message);
+      })
+      .finally(() => setRtdbLoading(false));
   }, [fileRtdbKey]);
 
-  // The source URL — RTDB base64 takes priority, then Storage URL, then legacy base64
+  // The source — RTDB base64 takes priority, then Storage URL, then legacy base64
   const srcURL = rtdbData || fileURL || fileData || "";
+  const isLoading = fileRtdbKey && rtdbLoading;
 
   // For PDF.js we need an ArrayBuffer — fetch with no-cors workaround via proxy param
   const canvasRef = useRef(null);
@@ -6647,10 +6662,37 @@ function SGFileViewer({ fileData, fileURL, fileRtdbKey, fileName }) {
   const gdocsURL = (url) =>
     `https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`;
 
+  if (isLoading) return (
+    <div style={{ flex:1, display:"flex", flexDirection:"column",
+      alignItems:"center", justifyContent:"center", gap:14,
+      background:"#404040", color:"#fff" }}>
+      <div style={{ width:44, height:44, border:"4px solid rgba(255,255,255,.2)",
+        borderTop:"4px solid #fff", borderRadius:"50%",
+        animation:"sg-spin 1s linear infinite" }} />
+      <p style={{ margin:0, fontSize:14, fontWeight:600, opacity:.8 }}>Loading file…</p>
+      <p style={{ margin:0, fontSize:11, opacity:.5 }}>{fileName}</p>
+    </div>
+  );
+
+  if (rtdbError) return (
+    <div style={{ flex:1, display:"flex", flexDirection:"column",
+      alignItems:"center", justifyContent:"center", gap:12,
+      background:"#404040", color:"#fff", padding:32 }}>
+      <div style={{ fontSize:44 }}>⚠️</div>
+      <p style={{ margin:0, fontSize:15, fontWeight:700 }}>Failed to load file</p>
+      <p style={{ margin:0, fontSize:12, opacity:.6, textAlign:"center", maxWidth:300 }}>{rtdbError}</p>
+      <p style={{ margin:0, fontSize:11, opacity:.4 }}>
+        Make sure Realtime Database rules allow read access.
+      </p>
+    </div>
+  );
+
   if (!srcURL) return (
-    <div style={{ padding:40, textAlign:"center", color:C.muted }}>
-      <div style={{ fontSize:40, marginBottom:8 }}>📄</div>
-      <p>Loading file…</p>
+    <div style={{ flex:1, display:"flex", flexDirection:"column",
+      alignItems:"center", justifyContent:"center", gap:10,
+      background:"#404040", color:"#fff" }}>
+      <div style={{ fontSize:40 }}>📄</div>
+      <p style={{ margin:0, fontSize:14, opacity:.7 }}>Waiting for file…</p>
     </div>
   );
 
