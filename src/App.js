@@ -8948,7 +8948,7 @@ function SGGameLauncher({ group, db, groupId, user, groupFile, onClose }) {
 // Center: host controls (Present / Stop / Quiz / End Quiz)
 // Right:  status pill
 // ═══════════════════════════════════════════════════════════════════════════════
-function SGBottomBar({ groupId, db, group, user, isHost, voiceState,
+function SGBottomBar({ groupId, db, group, user, isHost, canPresent, voiceState,
                        onToggleMute, onToggleDeafen,
                        onShowShare, onShowGame }) {
   const muted    = voiceState?.muted    ?? false;
@@ -9080,11 +9080,11 @@ function SGBottomBar({ groupId, db, group, user, isHost, voiceState,
         </div>
       </div>
 
-      {/* ── CENTER: Host controls ── */}
-      {isHost && (
+      {/* ── CENTER: Host + presenter controls ── */}
+      {canPresent && (
         <div style={{ display:"flex", alignItems:"center", gap:10, position:"absolute",
           left:"50%", transform:"translateX(-50%)" }}>
-          {/* Present / Stop Presenting */}
+          {/* Present / Stop Presenting — available to host AND granted presenter */}
           {hasShared ? (
             <button onClick={stopSharing} style={hostBtn(C.red, "rgba(196,92,92,.2)", C.red+"44")}
               onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"}
@@ -9099,8 +9099,8 @@ function SGBottomBar({ groupId, db, group, user, isHost, voiceState,
             </button>
           )}
 
-          {/* Quiz / End Quiz */}
-          {hasGame ? (
+          {/* Quiz / End Quiz — host only */}
+          {isHost && (hasGame ? (
             <button onClick={endGame} style={hostBtn(C.red, "rgba(196,92,92,.2)", C.red+"44")}
               onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"}
               onMouseLeave={e=>e.currentTarget.style.transform="none"}>
@@ -9112,7 +9112,7 @@ function SGBottomBar({ groupId, db, group, user, isHost, voiceState,
               onMouseLeave={e=>e.currentTarget.style.transform="none"}>
               <span style={{ fontSize:16 }}>🎮</span> Quiz Battle
             </button>
-          )}
+          ))}
         </div>
       )}
 
@@ -9165,7 +9165,8 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
   const chatEndRef = useRef(null);
   const prevGamePhase = useRef(null);
 
-  const isHost  = group?.hostUid === user.uid;
+  const isHost      = group?.hostUid === user.uid;
+  const canPresent  = isHost || group?.presenterUid === user.uid;
   const members = group?.members || {};
   const presenter = group?.sharedContent
     ? Object.values(members).find(m => m?.uid === group.sharedContent.sharedByUid)
@@ -9508,7 +9509,8 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
           {/* Bottom bar — Google Meet style, visible to ALL users */}
           {group && (
             <SGBottomBar
-              groupId={groupId} db={db} group={group} user={user} isHost={isHost}
+              groupId={groupId} db={db} group={group} user={user}
+              isHost={isHost} canPresent={canPresent}
               voiceState={voiceState}
               onToggleMute={() => voiceState.toggleMute?.()}
               onToggleDeafen={() => voiceState.toggleDeafen?.()}
@@ -9607,12 +9609,15 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
                         whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {m.displayName || "User"}{m.uid === user.uid ? " (You)" : ""}
                       </p>
-                      <div style={{ display:"flex", gap:6, alignItems:"center", marginTop:2 }}>
+                      <div style={{ display:"flex", gap:6, alignItems:"center", marginTop:2, flexWrap:"wrap" }}>
                         {m.uid === group?.hostUid && (
                           <span style={{ fontSize: 10, color: C.warm }}>👑 Host</span>
                         )}
+                        {group?.presenterUid === m.uid && m.uid !== group?.hostUid && (
+                          <span style={{ fontSize: 10, color: C.accent }}>📺 Can Present</span>
+                        )}
                         {group?.sharedContent?.sharedByUid === m.uid && (
-                          <span style={{ fontSize: 10, color: C.accent }}>📺 Presenting</span>
+                          <span style={{ fontSize: 10, color: C.accent }}>🔴 Live</span>
                         )}
                         {inVoice && (
                           <span style={{ fontSize:10, color:isSpeaking?C.green:C.muted }}>
@@ -9621,6 +9626,26 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
                         )}
                       </div>
                     </div>
+                    {/* Host-only: grant or revoke presenter rights */}
+                    {isHost && m.uid !== user.uid && (
+                      group?.presenterUid === m.uid ? (
+                        <button onClick={() =>
+                          updateDoc(doc(db,"studyGroups",groupId),{presenterUid:null}).catch(()=>{})
+                        } style={{
+                          flexShrink:0, fontSize:10, fontWeight:700, cursor:"pointer",
+                          background:C.redL, border:`1px solid ${C.red}44`,
+                          color:C.red, borderRadius:8, padding:"4px 8px",
+                        }}>↩ Revoke</button>
+                      ) : (
+                        <button onClick={() =>
+                          updateDoc(doc(db,"studyGroups",groupId),{presenterUid:m.uid}).catch(()=>{})
+                        } style={{
+                          flexShrink:0, fontSize:10, fontWeight:700, cursor:"pointer",
+                          background:C.accentL, border:`1px solid ${C.accentS}`,
+                          color:C.accent, borderRadius:8, padding:"4px 8px",
+                        }}>📺 Present</button>
+                      )
+                    )}
                   </div>
                 );
               })}
