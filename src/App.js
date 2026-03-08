@@ -1128,7 +1128,7 @@ export default function App() {
               color:"#fff", border:"none", borderRadius:12, padding:"10px 18px",
               fontSize:14, fontWeight:600, cursor:"pointer",
               boxShadow:"0 4px 14px rgba(124,58,237,.35)" }}>
-            👥 Study Group
+            Study Group
           </button>
           {homeTab==="folders" && (
             <button onClick={()=>setShowNewFolder(true)} className="hov"
@@ -1306,7 +1306,7 @@ function Header({ user, saveStatus, isGuest, onSignOut, character, onOpenCharact
               color:"#fff", border:"none", borderRadius:10, padding:"6px 14px",
               fontSize:13, fontWeight:700, cursor:"pointer",
               boxShadow:"0 2px 10px rgba(99,102,241,.4)" }}>
-            🤖 AI Assistant
+            AI Assistant
           </button>
         </div>
       )}
@@ -6793,7 +6793,7 @@ function StudyGroupLobby({ user, db, onJoin, onClose }) {
             display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div>
               <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700,
-                fontFamily: "'Fraunces',serif", color: C.text }}>👥 Study Group</h2>
+                fontFamily: "'Fraunces',serif", color: C.text }}>Study Group</h2>
               <p style={{ margin: "3px 0 0", fontSize: 13, color: C.muted }}>Study together in real time</p>
             </div>
             <button onClick={onClose} style={{ background: C.bg, border: `1px solid ${C.border}`,
