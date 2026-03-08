@@ -6635,10 +6635,14 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
     sentenceEndProgRef.current   = endProg;
     timerRef.current = setInterval(() => {
       const elapsed = Date.now() - sentenceStartTimeRef.current;
-      const frac = Math.min(1, elapsed / Math.max(durationMs, 1));
+      const frac = Math.min(0.97, elapsed / Math.max(durationMs, 1)); // cap at 97% — onend snaps to exact
       const interp = startProg + (endProg - startProg) * frac;
-      setProgress(interp); currentProgressRef.current = interp;
-      if (frac >= 1) stopProgressTimer();
+      // Only update if timer is still valid (not cleared by pause/stop)
+      if (timerRef.current) {
+        setProgress(interp);
+        currentProgressRef.current = interp;
+      }
+      if (frac >= 0.97) stopProgressTimer();
     }, 80);
   };
   const stopProgressTimer = () => {
@@ -6777,12 +6781,19 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
   };
 
   const pause = () => {
-    // Save exact position, then cancel everything — don't use speechSynthesis.pause()
-    // because it keeps running silently in the background
+    // 1. Stop timer FIRST so it can't overwrite currentProgressRef anymore
+    stopProgressTimer();
+    // 2. Read position after timer is dead
     const savedProg = currentProgressRef.current;
-    stopAll();
-    setProgress(savedProg);
+    // 3. Cancel speech engine
+    puterGenRef.current += 1;
+    window.speechSynthesis.cancel();
+    puterAudiosRef.current.forEach(a => { try { a.pause(); a.currentTime = 0; a.src = ""; } catch(e){} });
+    puterAudiosRef.current = [];
+    setPuterLoading(false);
+    // 4. Restore saved position
     currentProgressRef.current = savedProg;
+    setProgress(savedProg);
     setPaused(true);
     setPlaying(false);
   };
