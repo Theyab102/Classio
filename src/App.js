@@ -6662,7 +6662,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
     setCurrentTime(0); setDuration(0);
 
     if (persona.engine === "puter") {
-      // Puter: generate full script as one request
+      // Puter returns an HTMLAudioElement directly — use it, don't copy src
       try {
         const puter = await loadPuter();
         if (!puter) throw new Error("Puter unavailable");
@@ -6671,21 +6671,46 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
           engine: "neural",
           language: "en-US"
         });
-        // result is an HTMLAudioElement — grab its src
-        const src = result.src || result.currentSrc || "";
-        if (!src) throw new Error("No audio src from Puter");
-        audio.src = src;
-        audio.playbackRate = speed;
-        audio.load();
-        await new Promise((res, rej) => {
-          audio.oncanplaythrough = res;
-          audio.onerror = rej;
-          setTimeout(res, 8000); // fallback
-        });
-        setDuration(audio.duration || 0);
+        // result IS the audio element — wire up our event listeners to it
+        // and store it as our audioRef so controls work on it directly
+        const puterAudio = result;
+        puterAudio.playbackRate = speed;
+
+        // Swap audioRef to point to the puter audio element
+        // (detach listeners from old element first)
+        const oldAudio = audioRef.current;
+        if (oldAudio && oldAudio !== puterAudio) {
+          oldAudio.pause();
+          ["timeupdate","durationchange","play","pause","ended"].forEach(ev => {
+            oldAudio.removeEventListener(ev, oldAudio["_cl_"+ev]);
+          });
+        }
+
+        // Attach our state listeners to the puter audio element
+        const onTime  = () => setCurrentTime(puterAudio.currentTime);
+        const onDur   = () => setDuration(puterAudio.duration);
+        const onPlay  = () => setPlaying(true);
+        const onPause = () => setPlaying(false);
+        const onEnded = () => { setPlaying(false); setCurrentTime(0); puterAudio.currentTime = 0; };
+        puterAudio._cl_timeupdate     = onTime;
+        puterAudio._cl_durationchange = onDur;
+        puterAudio._cl_play           = onPlay;
+        puterAudio._cl_pause          = onPause;
+        puterAudio._cl_ended          = onEnded;
+        puterAudio.addEventListener("timeupdate",     onTime);
+        puterAudio.addEventListener("durationchange", onDur);
+        puterAudio.addEventListener("play",           onPlay);
+        puterAudio.addEventListener("pause",          onPause);
+        puterAudio.addEventListener("ended",          onEnded);
+
+        audioRef.current = puterAudio;
+        setDuration(puterAudio.duration || 0);
         setAudioReady(true);
         setGenerating(false);
-        audio.play().catch(console.warn);
+        puterAudio.play().catch(e => {
+          console.warn("Puter play failed:", e);
+          setGenError("Could not play neural audio. Try pressing play again.");
+        });
       } catch(e) {
         console.warn("Puter TTS failed:", e);
         setGenError("Neural voice failed — try a browser voice instead.");
@@ -6864,7 +6889,39 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
   // Switch voice — reset audio
   const switchVoice = (i) => {
     handleStop();
-    if (isPuter && audioRef.current) { audioRef.current.src = ""; setAudioReady(false); }
+    const newPersona = GLOBAL_PERSONAS[i];
+    // If switching away from puter, restore a plain Audio element
+    if (persona.engine === "puter") {
+      const oldAudio = audioRef.current;
+      if (oldAudio) {
+        oldAudio.pause();
+        ["timeupdate","durationchange","play","pause","ended"].forEach(ev => {
+          oldAudio.removeEventListener(ev, oldAudio["_cl_"+ev]);
+        });
+      }
+      // Create a fresh plain audio element
+      const fresh = new Audio();
+      fresh.preload = "auto";
+      const onTime  = () => setCurrentTime(fresh.currentTime);
+      const onDur   = () => setDuration(fresh.duration);
+      const onPlay  = () => setPlaying(true);
+      const onPause = () => setPlaying(false);
+      const onEnded = () => { setPlaying(false); setCurrentTime(0); fresh.currentTime = 0; };
+      fresh._cl_timeupdate     = onTime;
+      fresh._cl_durationchange = onDur;
+      fresh._cl_play           = onPlay;
+      fresh._cl_pause          = onPause;
+      fresh._cl_ended          = onEnded;
+      fresh.addEventListener("timeupdate",     onTime);
+      fresh.addEventListener("durationchange", onDur);
+      fresh.addEventListener("play",           onPlay);
+      fresh.addEventListener("pause",          onPause);
+      fresh.addEventListener("ended",          onEnded);
+      audioRef.current = fresh;
+    }
+    setAudioReady(false);
+    setCurrentTime(0); setDuration(0); setGenError(null);
+    browserTimeRef.current = 0; setBrowserTime(0);
     setPersonaIdx(i);
     setShowPicker(false);
   };
