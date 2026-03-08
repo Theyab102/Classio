@@ -6548,26 +6548,29 @@ function SGChatMessage({ msg, isSelf }) {
 // ── Mini file viewer used inside SGSharedContent for "file" type ──────────────
 // Renders PDFs, images, Word docs, text — same as ViewTab but self-contained.
 function SGFileViewer({ fileData, fileURL, fileName }) {
-  const ext  = (fileName || "").split(".").pop().toLowerCase();
+  const ext     = (fileName || "").split(".").pop().toLowerCase();
   const isPDF   = ext === "pdf";
   const isImage = ["jpg","jpeg","png","gif","webp","bmp","svg"].includes(ext);
   const isText  = ["txt","md","csv","json","js","ts","jsx","py","html","css","xml","yaml","yml"].includes(ext);
   const isWord  = ["doc","docx"].includes(ext);
   const isPPT   = ["ppt","pptx"].includes(ext);
 
-  // Load file: fetch from Storage URL (new) or reconstruct from base64 (legacy)
-  const [fetchedBlob, setFetchedBlob] = useState(null);
-  useEffect(() => {
-    if (!fileURL) return;
-    setFetchedBlob(null);
-    fetch(fileURL)
-      .then(r => r.blob())
-      .then(blob => setFetchedBlob(new File([blob], fileName||"file", {type:blob.type})))
-      .catch(e => console.error("fetch file", e));
-  }, [fileURL]);
+  // The source URL — Firebase Storage URL takes priority over legacy base64
+  const srcURL = fileURL || fileData || "";
 
+  // For PDF.js we need an ArrayBuffer — fetch with no-cors workaround via proxy param
+  const canvasRef = useRef(null);
+  const pdfRef    = useRef(null);
+  const [totalPages, setTotalPages] = useState(0);
+  const [pageNum,    setPageNum]    = useState(1);
+  const [pdfReady,   setPdfReady]   = useState(false);
+
+  // PPT page state (only used when rendering from local fileObj)
+  const [pptTotal, setPptTotal] = useState(0);
+  const [pptPage,  setPptPage]  = useState(1);
+
+  // For text/word/ppt we still need a File object — build from base64 if available
   const fileObj = useMemo(() => {
-    if (fileURL) return fetchedBlob;
     if (!fileData) return null;
     try {
       const [header, b64] = fileData.split(",");
@@ -6577,21 +6580,11 @@ function SGFileViewer({ fileData, fileURL, fileName }) {
       for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
       return new File([bytes], fileName || "file", { type: mime });
     } catch { return null; }
-  }, [fileData, fileURL, fetchedBlob, fileName]);
+  }, [fileData, fileName]);
 
-  // PDF state
-  const canvasRef = useRef(null);
-  const pdfRef    = useRef(null);
-  const [totalPages, setTotalPages] = useState(0);
-  const [pageNum,    setPageNum]    = useState(1);
-  const [pdfReady,   setPdfReady]   = useState(false);
-
-  // PPT page state
-  const [pptTotal, setPptTotal] = useState(0);
-  const [pptPage,  setPptPage]  = useState(1);
-
+  // Load PDF — use PDF.js with the direct Firebase Storage URL (CORS-enabled by Firebase)
   useEffect(() => {
-    if (!isPDF || !fileObj) return;
+    if (!isPDF || !srcURL) return;
     setPdfReady(false); pdfRef.current = null; setPageNum(1);
     (async () => {
       try {
@@ -6604,14 +6597,19 @@ function SGFileViewer({ fileData, fileURL, fileName }) {
           window.pdfjsLib.GlobalWorkerOptions.workerSrc =
             "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
         }
-        const buf = await fileObj.arrayBuffer();
-        const pdf = await window.pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+        // PDF.js load with CORS-friendly options for Firebase Storage URLs
+        const pdf = await window.pdfjsLib.getDocument({
+          url: srcURL,
+          withCredentials: false,
+          cMapUrl: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/",
+          cMapPacked: true,
+        }).promise;
         pdfRef.current = pdf;
         setTotalPages(pdf.numPages);
         setPdfReady(true);
-      } catch(e) { console.error("PDF", e); }
+      } catch(e) { console.error("PDF load error", e); }
     })();
-  }, [fileObj]);
+  }, [srcURL, isPDF]);
 
   useEffect(() => {
     if (!pdfReady || !pdfRef.current || !canvasRef.current) return;
@@ -6625,14 +6623,6 @@ function SGFileViewer({ fileData, fileURL, fileName }) {
     })();
   }, [pdfReady, pageNum]);
 
-  if (!fileObj) return (
-    <div style={{ padding:40, textAlign:"center", color:C.muted }}>
-      <div style={{ fontSize:40, marginBottom:8 }}>📄</div>
-      <p>Loading file…</p>
-    </div>
-  );
-
-  // Shared page nav style
   const navBtn = (disabled) => ({
     width:32, height:32, borderRadius:8, border:`1px solid ${C.border}`,
     background: disabled ? C.bg : C.surface, cursor: disabled ? "default" : "pointer",
@@ -6640,15 +6630,27 @@ function SGFileViewer({ fileData, fileURL, fileName }) {
     alignItems:"center", justifyContent:"center", flexShrink:0,
   });
 
+  // Google Docs viewer works for PPT/Word when we have a public URL
+  const gdocsURL = (url) =>
+    `https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`;
+
+  if (!srcURL) return (
+    <div style={{ padding:40, textAlign:"center", color:C.muted }}>
+      <div style={{ fontSize:40, marginBottom:8 }}>📄</div>
+      <p>Loading file…</p>
+    </div>
+  );
+
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"100%" }}>
-      {/* PDF page navigation — always shown for PDFs, loading state handled gracefully */}
+
+      {/* PDF navigation bar */}
       {isPDF && (
         <div style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 16px",
           borderBottom:`1px solid ${C.border}`, background:C.bg, flexShrink:0 }}>
           <button onClick={() => setPageNum(p => Math.max(1,p-1))} disabled={pageNum<=1}
             style={navBtn(pageNum<=1)}>‹</button>
-          <span style={{ fontSize:13, color:C.text, fontWeight:600, minWidth:60, textAlign:"center" }}>
+          <span style={{ fontSize:13, color:C.text, fontWeight:600, minWidth:70, textAlign:"center" }}>
             {pdfReady ? `${pageNum} / ${totalPages}` : "Loading…"}
           </span>
           <button onClick={() => setPageNum(p => Math.min(totalPages||p,p+1))}
@@ -6658,8 +6660,8 @@ function SGFileViewer({ fileData, fileURL, fileName }) {
         </div>
       )}
 
-      {/* PPT page navigation */}
-      {isPPT && pptTotal > 0 && (
+      {/* PPT navigation bar (local fileObj only) */}
+      {isPPT && !fileURL && pptTotal > 0 && (
         <div style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 16px",
           borderBottom:`1px solid ${C.border}`, background:C.bg, flexShrink:0 }}>
           <button onClick={() => setPptPage(p => Math.max(1,p-1))} disabled={pptPage<=1}
@@ -6675,25 +6677,59 @@ function SGFileViewer({ fileData, fileURL, fileName }) {
 
       <div style={{ flex:1, overflow:"auto", background:"#404040",
         display:"flex", justifyContent:"center", alignItems:"flex-start", padding:20 }}>
+
+        {/* PDF — rendered by PDF.js directly from URL */}
         {isPDF && (
           <canvas ref={canvasRef}
             style={{ display:"block", boxShadow:"0 4px 32px rgba(0,0,0,.6)", maxWidth:"100%" }} />
         )}
+
+        {/* Image — direct URL works fine */}
         {isImage && (
-          <img src={fileURL || fileData} alt={fileName}
-            style={{ maxWidth:"100%", borderRadius:6, boxShadow:"0 4px 32px rgba(0,0,0,.5)", background:"#fff" }} />
+          <img src={srcURL} alt={fileName}
+            style={{ maxWidth:"100%", borderRadius:6,
+              boxShadow:"0 4px 32px rgba(0,0,0,.5)", background:"#fff" }} />
         )}
-        {isText && fileObj && <TextViewer fileObj={fileObj} />}
-        {isWord && fileObj && <WordViewer fileObj={fileObj} />}
-        {isPPT  && fileObj && (
+
+        {/* PPT / Word — use Google Docs viewer for URL-based files (no CORS issue) */}
+        {(isPPT || isWord) && fileURL && (
+          <iframe
+            src={gdocsURL(fileURL)}
+            title={fileName}
+            style={{ width:"100%", height:"100%", minHeight:500, border:"none",
+              borderRadius:8, background:"#fff" }}
+            allow="autoplay"
+          />
+        )}
+
+        {/* PPT / Word — local fileObj fallback (host side before upload completes) */}
+        {isPPT && !fileURL && fileObj && (
           <PPTViewer fileObj={fileObj} page={pptPage}
             onTotalPages={setPptTotal} onSlidesLoaded={()=>{}} />
         )}
+        {isWord && !fileURL && fileObj && <WordViewer fileObj={fileObj} />}
+
+        {/* Plain text */}
+        {isText && fileObj && <TextViewer fileObj={fileObj} />}
+        {isText && !fileObj && fileURL && (
+          <iframe src={fileURL} title={fileName}
+            style={{ width:"100%", height:"100%", border:"none", background:"#fff", borderRadius:8 }} />
+        )}
+
+        {/* Unsupported */}
         {!isPDF && !isImage && !isText && !isWord && !isPPT && (
           <div style={{ background:C.surface, borderRadius:14, padding:32, textAlign:"center" }}>
             <div style={{ fontSize:48, marginBottom:12 }}>📄</div>
             <p style={{ color:C.text, fontWeight:700, fontSize:15 }}>{fileName}</p>
-            <p style={{ color:C.muted, fontSize:13, margin:0 }}>File type preview not available</p>
+            <p style={{ color:C.muted, fontSize:13, margin:0 }}>Preview not available</p>
+            {fileURL && (
+              <a href={fileURL} target="_blank" rel="noreferrer"
+                style={{ display:"inline-block", marginTop:14, padding:"8px 18px",
+                  background:C.accent, color:"#fff", borderRadius:10, fontSize:13,
+                  fontWeight:700, textDecoration:"none" }}>
+                ⬇️ Download File
+              </a>
+            )}
           </div>
         )}
       </div>
@@ -7073,41 +7109,52 @@ function SGWhiteboard({ groupId, db, user, group, onClose }) {
     redrawAll(existing);
   }, []);
 
+  // getPos: always read bounding rect fresh at call time.
+  // Canvas buffer equals CSS pixels (no DPR scaling), so subtract
+  // rect offset only — no further scaling needed.
   const getPos = (e) => {
     const canvas = canvasRef.current;
-    const r = canvas.getBoundingClientRect();
-    // Return CSS pixel coords — canvas buffer is CSS-sized (no DPR scaling on context),
-    // so raw offset from bounding rect is exactly right.
-    const src = e.touches ? e.touches[0] : e;
+    const r      = canvas.getBoundingClientRect();
+    const src    = e.touches ? e.touches[0] : e;
+    // canvas.width should equal r.width at all times (syncCanvasSize ensures this)
     return {
-      x: src.clientX - r.left,
-      y: src.clientY - r.top,
+      x: (src.clientX - r.left) * (canvas.width  / r.width),
+      y: (src.clientY - r.top)  * (canvas.height / r.height),
     };
   };
 
-  // Resize canvas buffer to match CSS display size exactly.
-  // We do NOT scale the context by DPR here — instead we keep the canvas
-  // buffer in CSS pixels so getPos coords map 1:1 with no offset drift.
+  // Keep a ref to strokes so syncCanvasSize never has a stale closure
+  const strokesRef = useRef([]);
+  useEffect(() => { strokesRef.current = strokes; }, [strokes]);
+
+  // Sync canvas pixel buffer to its CSS display size.
+  // Called on mount AND whenever the element is resized.
   const syncCanvasSize = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const r = canvas.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return; // not yet laid out
     const w = Math.round(r.width);
     const h = Math.round(r.height);
-    if (canvas.width !== w || canvas.height !== h) {
-      const prevStrokes = [...strokes];
-      canvas.width  = w;
-      canvas.height = h;
-      redrawAll(prevStrokes);
-    }
-  }, [strokes]);
+    if (canvas.width === w && canvas.height === h) return; // already correct
+    canvas.width  = w;
+    canvas.height = h;
+    redrawAll(strokesRef.current); // use ref — never stale
+  }, []); // no deps — safe because we use strokesRef
 
+  // Run immediately after first paint so the buffer is right before any drawing
   useEffect(() => {
-    syncCanvasSize();
-    const ro = new ResizeObserver(syncCanvasSize);
+    // rAF ensures the browser has done layout so getBoundingClientRect is accurate
+    const id = requestAnimationFrame(() => syncCanvasSize());
+    return () => cancelAnimationFrame(id);
+  }, []);
+
+  // Also watch for resize (e.g. window resize, modal open animation)
+  useEffect(() => {
+    const ro = new ResizeObserver(() => syncCanvasSize());
     if (canvasRef.current) ro.observe(canvasRef.current);
     return () => ro.disconnect();
-  }, [syncCanvasSize]);
+  }, []);
 
   const redrawAll = (stks) => {
     const canvas = canvasRef.current;
@@ -7859,6 +7906,8 @@ function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
                          onOpenWhiteboard, onOpenFlashcards, onOpenNotes }) {
   const [sharing,    setSharing]    = useState(false);
   const [activeStep, setActiveStep] = useState("pick"); // pick | screenshare
+  const [noFileWarning, setNoFileWarning] = useState(false); // show upload-file nudge
+  const [bypassWarning, setBypassWarning] = useState(false); // user clicked "I understand"
   const stopHostRef = useRef(null); // SGScreenShareHost registers its stopCapture here
 
   const alreadySharing = !!group?.sharedContent;
@@ -7906,14 +7955,19 @@ function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
     { id:"whiteboard",  emoji:"✏️", label:"Whiteboard",    desc:"Draw live for everyone to see",
       action: () => { onClose(); onOpenWhiteboard(); } },
     { id:"file",        emoji:"📎", label:"Study File",
-      desc: groupFile ? `Present "${groupFile.name}"` : "Upload a file first",
-      action: shareFile, disabled: !groupFile || sharing },
+      desc: groupFile ? `Present "${groupFile.name}"` : "No file uploaded yet",
+      action: () => {
+        if (!groupFile && !bypassWarning) { setNoFileWarning(true); return; }
+        shareFile();
+      },
+      disabled: sharing },
     { id:"screenshare", emoji:"🖥️", label:"Screen Share",  desc:"Share your screen live",
       action: () => setActiveStep("screenshare") },
   ];
 
   return (
-    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4500,
+    <div onClick={() => { if (activeStep !== "screenshare") onClose(); }}
+      style={{ position:"fixed", inset:0, zIndex:4500,
       background:"rgba(26,23,20,.45)", backdropFilter:"blur(3px)",
       display:"flex", alignItems:"flex-end", justifyContent:"center", padding:16 }}>
       <div onClick={e=>e.stopPropagation()} style={{
@@ -7960,6 +8014,35 @@ function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
             </div>
           )}
 
+          {/* No-file warning banner */}
+          {noFileWarning && !bypassWarning && activeStep === "pick" && (
+            <div style={{ marginBottom:12, padding:"14px 16px",
+              background:C.warmL, border:`1.5px solid ${C.warm}55`,
+              borderRadius:14 }}>
+              <p style={{ margin:"0 0 4px", fontSize:14, fontWeight:700, color:C.warm }}>
+                📎 No study file uploaded
+              </p>
+              <p style={{ margin:"0 0 12px", fontSize:13, color:C.text, lineHeight:1.5 }}>
+                For the best experience, upload a study file so AI can generate notes,
+                flashcards, and quizzes from it. You can still use all features manually without one.
+              </p>
+              <div style={{ display:"flex", gap:8 }}>
+                <button onClick={() => { setBypassWarning(true); setNoFileWarning(false); }}
+                  style={{ flex:1, padding:"9px", borderRadius:10,
+                    background:C.bg, border:`1px solid ${C.border}`,
+                    color:C.text, fontSize:13, fontWeight:700, cursor:"pointer" }}>
+                  I understand, continue
+                </button>
+                <button onClick={() => setNoFileWarning(false)}
+                  style={{ padding:"9px 14px", borderRadius:10,
+                    background:"none", border:`1px solid ${C.border}`,
+                    color:C.muted, fontSize:13, cursor:"pointer" }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
           {activeStep === "pick" && (
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
               {MODES.map(m => (
@@ -7988,7 +8071,7 @@ function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
           {activeStep === "screenshare" && (
             <SGScreenShareHost groupId={groupId} db={db} user={user}
               registerStop={fn => { stopHostRef.current = fn; }}
-              onStop={() => { stopHostRef.current = null; setActiveStep("pick"); onClose(); }} />
+              onStop={() => { stopHostRef.current = null; setActiveStep("pick"); }} />
           )}
         </div>
       </div>
