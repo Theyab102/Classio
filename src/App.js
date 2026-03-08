@@ -6569,10 +6569,23 @@ function SGFileViewer({ fileData, fileURL, fileRtdbKey, fileName }) {
     setRtdbLoading(true);
     dbGet(dbRef(rtdb, fileRtdbKey))
       .then(snap => {
-        if (snap.exists()) {
-          setRtdbData(snap.val().data);
-        } else {
+        if (!snap.exists()) {
           setRtdbError("File not found in database.");
+          return;
+        }
+        const val = snap.val();
+        // Reassemble chunks: c0, c1, c2...
+        if (val.total !== undefined) {
+          let assembled = "";
+          for (let i = 0; i < val.total; i++) {
+            assembled += (val[`c${i}`] || "");
+          }
+          setRtdbData(assembled);
+        } else if (val.data) {
+          // Legacy single-chunk format
+          setRtdbData(val.data);
+        } else {
+          setRtdbError("File data missing in database.");
         }
       })
       .catch(e => {
@@ -7988,9 +8001,18 @@ function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });
-      // Store file data in Realtime Database under a unique key
+      // Store file in Realtime Database — split into 500KB chunks to avoid node limits
       const fileKey = `sgfiles/${groupId}/${Date.now()}`;
-      await dbSet(dbRef(rtdb, fileKey), { data: fileData, name: file.name });
+      const CHUNK = 500000; // 500KB per chunk
+      const chunks = {};
+      for (let i = 0; i * CHUNK < fileData.length; i++) {
+        chunks[`c${i}`] = fileData.slice(i * CHUNK, (i + 1) * CHUNK);
+      }
+      await dbSet(dbRef(rtdb, fileKey), {
+        name: file.name,
+        total: Object.keys(chunks).length,
+        ...chunks,
+      });
       // Store only the reference key in Firestore (tiny — no size issue)
       await updateDoc(doc(db,"studyGroups",groupId), {
         sharedContent: {
