@@ -6619,39 +6619,58 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
           {/* Transport controls */}
           <div style={{ padding:"8px 22px 14px" }}>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:14, marginBottom:14 }}>
+
               {/* Stop */}
               <button onClick={stop} title="Stop"
-                style={{ width:40, height:40, borderRadius:"50%", background:"rgba(255,255,255,.08)", border:"none", color:"#a5b4fc", fontSize:18, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", opacity:(!playing&&!paused)?.4:1 }}>
-                ⏹
+                style={{ width:40, height:40, borderRadius:"50%", background:"rgba(255,255,255,.08)", border:"none", color:"#a5b4fc", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", opacity:(!playing&&!paused)?.35:1 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
               </button>
-              {/* Skip back 10% */}
-              <button onClick={() => skip(-1)} title="Skip back"
-                style={{ width:40, height:40, borderRadius:"50%", background:"rgba(255,255,255,.08)", border:"none", color:"#a5b4fc", fontSize:15, cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:0 }}>
-                <span style={{ fontSize:14, lineHeight:1 }}>⏪</span>
-                <span style={{ fontSize:8, color:"#818cf8", lineHeight:1 }}>5s</span>
+
+              {/* Skip back 5s */}
+              <button onClick={() => skip(-1)} title="Skip back 5s"
+                style={{ width:40, height:40, borderRadius:"50%", background:"rgba(255,255,255,.08)", border:"none", color:"#a5b4fc", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:2 }}>
+                <svg width="18" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
+                  <text x="12" y="15" textAnchor="middle" fontSize="7" fill="currentColor" fontWeight="bold" fontFamily="sans-serif">5</text>
+                </svg>
+                <span style={{ fontSize:8, color:"#818cf8", lineHeight:1, letterSpacing:.3 }}>5s</span>
               </button>
+
               {/* Play / Pause */}
               {!playing ? (
                 <button onClick={play} disabled={!script}
-                  style={{ width:64, height:64, borderRadius:"50%", background:"linear-gradient(135deg,#6366f1,#a855f7)", border:"none", color:"#fff", fontSize:28, cursor:script?"pointer":"not-allowed", boxShadow:"0 6px 24px rgba(99,102,241,.6)", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  {progress===100 ? "↺" : "▶"}
+                  style={{ width:64, height:64, borderRadius:"50%", background:"linear-gradient(135deg,#6366f1,#a855f7)", border:"none", color:"#fff", cursor:script?"pointer":"not-allowed", boxShadow:"0 6px 24px rgba(99,102,241,.6)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  {progress===100
+                    ? <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+                    : <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                  }
                 </button>
               ) : (
                 <button onClick={pause}
-                  style={{ width:64, height:64, borderRadius:"50%", background:"linear-gradient(135deg,#6366f1,#a855f7)", border:"none", color:"#fff", fontSize:26, cursor:"pointer", boxShadow:"0 6px 24px rgba(99,102,241,.6)", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  ⏸
+                  style={{ width:64, height:64, borderRadius:"50%", background:"linear-gradient(135deg,#6366f1,#a855f7)", border:"none", color:"#fff", cursor:"pointer", boxShadow:"0 6px 24px rgba(99,102,241,.6)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
                 </button>
               )}
-              {/* Skip forward 10% */}
-              <button onClick={() => skip(1)} title="Skip forward"
-                style={{ width:40, height:40, borderRadius:"50%", background:"rgba(255,255,255,.08)", border:"none", color:"#a5b4fc", fontSize:15, cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:0 }}>
-                <span style={{ fontSize:14, lineHeight:1 }}>⏩</span>
-                <span style={{ fontSize:8, color:"#818cf8", lineHeight:1 }}>5s</span>
+
+              {/* Skip forward 5s */}
+              <button onClick={() => skip(1)} title="Skip forward 5s"
+                style={{ width:40, height:40, borderRadius:"50%", background:"rgba(255,255,255,.08)", border:"none", color:"#a5b4fc", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:2 }}>
+                <svg width="18" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 5V1l5 5-5 5V7c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6h2c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8z"/>
+                  <text x="12" y="15" textAnchor="middle" fontSize="7" fill="currentColor" fontWeight="bold" fontFamily="sans-serif">5</text>
+                </svg>
+                <span style={{ fontSize:8, color:"#818cf8", lineHeight:1, letterSpacing:.3 }}>5s</span>
               </button>
+
               {/* Voice picker */}
               <button onClick={() => setShowPicker(v => !v)} title="Choose voice"
-                style={{ width:40, height:40, borderRadius:"50%", background:showPicker?"rgba(99,102,241,.5)":"rgba(255,255,255,.08)", border:`1.5px solid ${showPicker?"#6366f1":"rgba(255,255,255,.15)"}`, color:"#a5b4fc", fontSize:18, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                🎤
+                style={{ width:40, height:40, borderRadius:"50%", background:showPicker?"rgba(99,102,241,.5)":"rgba(255,255,255,.08)", border:`1.5px solid ${showPicker?"#6366f1":"rgba(255,255,255,.15)"}`, color:"#a5b4fc", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                  <line x1="12" y1="19" x2="12" y2="23"/>
+                  <line x1="8" y1="23" x2="16" y2="23"/>
+                </svg>
               </button>
             </div>
 
