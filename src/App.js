@@ -6439,15 +6439,19 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
   const [playing,   setPlaying]   = useState(false);
   const [paused,    setPaused]    = useState(false);
   const [progress,  setProgress]  = useState(0);
-  const [speed,     setSpeed]     = useState(0.9);
+  const [speed,     setSpeed]     = useState(1.0);
   const [allVoices, setAllVoices] = useState([]);
   const [personaIdx,setPersonaIdx]= useState(0);
   const [showPicker,setShowPicker]= useState(false);
+  const [isDragging,setIsDragging]= useState(false);
   const totalChars  = useRef(1);
   const personaRef  = useRef(null);
+  const sentencesRef = useRef([]);
+  const charPosRef   = useRef([]);
+  const progressBarRef = useRef(null);
+  const currentProgressRef = useRef(0);
 
-  // ── Uses shared GLOBAL_PERSONAS + getSmartVoice / getSmartVoiceLabel ────────
-  const SPEEDS = [0.75, 0.9, 1.0, 1.1, 1.25, 1.5];
+  const SPEEDS = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
 
   useEffect(() => {
     const load = () => setAllVoices(window.speechSynthesis.getVoices());
@@ -6455,57 +6459,88 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
     return () => { window.speechSynthesis.cancel(); };
   }, [lang]);
 
-  // Set personaRef whenever personaIdx changes
   useEffect(() => { personaRef.current = GLOBAL_PERSONAS[personaIdx]; }, [personaIdx]);
   if (!personaRef.current) personaRef.current = GLOBAL_PERSONAS[0];
 
-  const stop = () => { window.speechSynthesis.cancel(); setPlaying(false); setPaused(false); setProgress(0); };
+  const stop = () => { window.speechSynthesis.cancel(); setPlaying(false); setPaused(false); setProgress(0); currentProgressRef.current = 0; };
+
+  const playFromProgress = (startProgress) => {
+    if (!script || loading) return;
+    window.speechSynthesis.cancel();
+    totalChars.current = script.length || 1;
+    const p = personaRef.current || GLOBAL_PERSONAS[0];
+    const voice = getSmartVoice(p, allVoices, lang);
+    const processed = script.replace(/[\r\n]{2,}/g, "  ").replace(/\.\s+([A-Z])/g, ". $1").trim();
+    const rawSents = processed.match(/[^.!?]+[.!?]+(\s|$)/g) || [processed];
+    const sentences = rawSents.filter(s => s.trim().length > 0);
+    sentencesRef.current = sentences;
+
+    // Build char positions
+    let cp = 0;
+    const positions = sentences.map(s => { const start = cp; cp += s.length; return start; });
+    charPosRef.current = positions;
+
+    // Find which sentence to start from
+    const startChar = Math.floor((startProgress / 100) * totalChars.current);
+    const startIdx = Math.max(0, positions.findIndex((pos, i) => pos >= startChar || i === sentences.length - 1));
+
+    const speakFrom = (idx) => {
+      sentences.slice(idx).forEach((sen, relIdx) => {
+        const absIdx = idx + relIdx;
+        const u = new SpeechSynthesisUtterance(sen.trim());
+        u.rate   = speed * (p.rate || 0.93);
+        u.pitch  = p.pitch || 1.0;
+        u.volume = 1.0;
+        u.lang   = lang;
+        if (voice) u.voice = voice;
+        const myEnd = positions[absIdx] + sen.length;
+        u.onstart = () => {
+          const prog = Math.round((positions[absIdx] / totalChars.current) * 100);
+          setProgress(prog); currentProgressRef.current = prog;
+          setPlaying(true); setPaused(false);
+        };
+        u.onend = () => {
+          const prog = Math.round((myEnd / totalChars.current) * 100);
+          setProgress(prog); currentProgressRef.current = prog;
+          if (absIdx === sentences.length - 1) { setPlaying(false); setPaused(false); setProgress(100); }
+        };
+        u.onerror = () => { setPlaying(false); setPaused(false); };
+        window.speechSynthesis.speak(u);
+      });
+    };
+    speakFrom(startIdx);
+    setPlaying(true); setPaused(false);
+  };
 
   const play = () => {
     if (!script || loading) return;
     if (paused) { window.speechSynthesis.resume(); setPlaying(true); setPaused(false); return; }
-    window.speechSynthesis.cancel();
-    totalChars.current = script.length || 1;
-
-    const p = personaRef.current || GLOBAL_PERSONAS[0];
-    const voice = getSmartVoice(p, allVoices, lang);
-
-    // Pre-process for natural rhythm: paragraph breaks → pause, clean spacing
-    const processed = script
-      .replace(/[\r\n]{2,}/g, "  ")
-      .replace(/\.\s+([A-Z])/g, ". $1")
-      .trim();
-
-    // Split into sentence-length chunks for smoother progress tracking
-    const rawSents = processed.match(/[^.!?]+[.!?]+(\s|$)/g) || [processed];
-    const sentences = rawSents.filter(s => s.trim().length > 0);
-
-    let charPos = 0;
-    const utterances = sentences.map((sen, idx) => {
-      const u = new SpeechSynthesisUtterance(sen.trim());
-      u.rate   = speed * (p.rate || 0.93);
-      u.pitch  = p.pitch || 1.0;
-      u.volume = 1.0;
-      u.lang   = lang;
-      if (voice) u.voice = voice;
-      const myStart = charPos; charPos += sen.length; const myEnd = charPos;
-      u.onstart = () => { setPlaying(true); setPaused(false); setProgress(Math.round((myStart / totalChars.current) * 100)); };
-      u.onend   = () => {
-        setProgress(Math.round((myEnd / totalChars.current) * 100));
-        if (idx === utterances.length - 1) { setPlaying(false); setPaused(false); setProgress(100); }
-      };
-      u.onerror = () => { setPlaying(false); setPaused(false); };
-      return u;
-    });
-    utterances.forEach(u => window.speechSynthesis.speak(u));
-    setPlaying(true); setPaused(false);
+    playFromProgress(progress >= 100 ? 0 : progress);
   };
 
   const pause = () => {
     if (window.speechSynthesis.speaking) { window.speechSynthesis.pause(); setPaused(true); setPlaying(false); }
   };
 
-  const changeSpeed = (s) => { setSpeed(s); if (playing || paused) stop(); };
+  // Skip forward/back by roughly 10% of the script
+  const skip = (dir) => {
+    const newProg = Math.min(100, Math.max(0, currentProgressRef.current + dir * 10));
+    setProgress(newProg); currentProgressRef.current = newProg;
+    if (playing || paused) playFromProgress(newProg);
+  };
+
+  // Seek by clicking/dragging the progress bar
+  const seekFromEvent = (e) => {
+    const bar = progressBarRef.current;
+    if (!bar) return;
+    const rect = bar.getBoundingClientRect();
+    const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+    const pct = Math.min(100, Math.max(0, Math.round((x / rect.width) * 100)));
+    setProgress(pct); currentProgressRef.current = pct;
+    if (playing || paused) playFromProgress(pct);
+  };
+
+  const changeSpeed = (s) => { setSpeed(s); if (playing || paused) { const p = currentProgressRef.current; stop(); setTimeout(() => playFromProgress(p), 50); } };
 
   const wordCount = script ? script.trim().split(/\s+/).length : 0;
   const estMins   = Math.max(1, Math.round((wordCount / 150) / speed));
@@ -6540,12 +6575,30 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
         </div>
       ) : (
         <>
-          {/* Progress bar */}
+          {/* Seekable progress bar */}
           <div style={{ padding:"0 22px 8px" }}>
-            <div style={{ height:5, background:"rgba(255,255,255,.12)", borderRadius:3 }}>
-              <div style={{ height:"100%", width:`${progress}%`, background:"linear-gradient(90deg,#6366f1,#a855f7)", borderRadius:3, transition:"width .35s" }}/>
+            <div ref={progressBarRef}
+              onClick={seekFromEvent}
+              onMouseDown={e => { setIsDragging(true); seekFromEvent(e); }}
+              onMouseMove={e => { if (isDragging) seekFromEvent(e); }}
+              onMouseUp={() => setIsDragging(false)}
+              onMouseLeave={() => setIsDragging(false)}
+              onTouchStart={e => seekFromEvent(e)}
+              onTouchMove={e => seekFromEvent(e)}
+              style={{ height:6, background:"rgba(255,255,255,.15)", borderRadius:3,
+                cursor:"pointer", position:"relative" }}>
+              <div style={{ height:"100%", width:`${progress}%`,
+                background:"linear-gradient(90deg,#6366f1,#a855f7)",
+                borderRadius:3, transition:isDragging?"none":"width .2s",
+                pointerEvents:"none" }}/>
+              {/* Scrubber thumb */}
+              <div style={{ position:"absolute", top:"50%", left:`${progress}%`,
+                transform:"translate(-50%,-50%)",
+                width:14, height:14, borderRadius:"50%",
+                background:"#fff", boxShadow:"0 0 6px rgba(99,102,241,.8)",
+                pointerEvents:"none" }}/>
             </div>
-            <div style={{ display:"flex", justifyContent:"space-between", marginTop:5 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", marginTop:6 }}>
               <span style={{ fontSize:11, color:"#818cf8" }}>{progress}%</span>
               <span style={{ fontSize:11, color:"#818cf8" }}>~{estMins} min · {wordCount} words</span>
             </div>
@@ -6553,11 +6606,19 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
 
           {/* Transport controls */}
           <div style={{ padding:"8px 22px 14px" }}>
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:18, marginBottom:14 }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:14, marginBottom:14 }}>
+              {/* Stop */}
               <button onClick={stop} title="Stop"
                 style={{ width:40, height:40, borderRadius:"50%", background:"rgba(255,255,255,.08)", border:"none", color:"#a5b4fc", fontSize:18, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", opacity:(!playing&&!paused)?.4:1 }}>
                 ⏹
               </button>
+              {/* Skip back 10% */}
+              <button onClick={() => skip(-1)} title="Skip back" disabled={!playing && !paused}
+                style={{ width:40, height:40, borderRadius:"50%", background:"rgba(255,255,255,.08)", border:"none", color:"#a5b4fc", fontSize:15, cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:0, opacity:(!playing&&!paused)?.3:1 }}>
+                <span style={{ fontSize:14, lineHeight:1 }}>⏪</span>
+                <span style={{ fontSize:8, color:"#818cf8", lineHeight:1 }}>10%</span>
+              </button>
+              {/* Play / Pause */}
               {!playing ? (
                 <button onClick={play} disabled={!script}
                   style={{ width:64, height:64, borderRadius:"50%", background:"linear-gradient(135deg,#6366f1,#a855f7)", border:"none", color:"#fff", fontSize:28, cursor:script?"pointer":"not-allowed", boxShadow:"0 6px 24px rgba(99,102,241,.6)", display:"flex", alignItems:"center", justifyContent:"center" }}>
@@ -6569,6 +6630,13 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
                   ⏸
                 </button>
               )}
+              {/* Skip forward 10% */}
+              <button onClick={() => skip(1)} title="Skip forward" disabled={!playing && !paused}
+                style={{ width:40, height:40, borderRadius:"50%", background:"rgba(255,255,255,.08)", border:"none", color:"#a5b4fc", fontSize:15, cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:0, opacity:(!playing&&!paused)?.3:1 }}>
+                <span style={{ fontSize:14, lineHeight:1 }}>⏩</span>
+                <span style={{ fontSize:8, color:"#818cf8", lineHeight:1 }}>10%</span>
+              </button>
+              {/* Voice picker */}
               <button onClick={() => setShowPicker(v => !v)} title="Choose voice"
                 style={{ width:40, height:40, borderRadius:"50%", background:showPicker?"rgba(99,102,241,.5)":"rgba(255,255,255,.08)", border:`1.5px solid ${showPicker?"#6366f1":"rgba(255,255,255,.15)"}`, color:"#a5b4fc", fontSize:18, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
                 🎤
