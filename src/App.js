@@ -7977,6 +7977,34 @@ function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
     onClose();
   };
 
+  // Re-present the already-stored file (for granted presenters who have no local file)
+  const reShareFile = async () => {
+    const fileName = group?.hostFileName || group?.sharedContent?.fileName;
+    const chunks   = group?.sharedContent?.fileChunks;
+    if (!fileName || !chunks) return;
+    setSharing(true);
+    try {
+      await updateDoc(doc(db,"studyGroups",groupId), {
+        sharedContent: {
+          type:        "file",
+          fileName:    fileName,
+          fileChunks:  chunks,
+          fileData:    null,
+          fileURL:     null,
+          title:       fileName,
+          sharedBy:    user.displayName?.split(" ")[0] || "Presenter",
+          sharedByUid: user.uid,
+          sharedAt:    Date.now(),
+        },
+        lastActivity: Date.now(),
+      });
+    } catch(e) {
+      console.error("reShareFile", e);
+    }
+    setSharing(false);
+    onClose();
+  };
+
   // Share file — split base64 across Firestore sub-documents (750KB each)
   // No Firebase Storage or RTDB needed — works on free Spark plan
   const shareFile = async () => {
@@ -8036,10 +8064,19 @@ function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
     { id:"whiteboard",  emoji:"✏️", label:"Whiteboard",    desc:"Draw live for everyone to see",
       action: () => { onClose(); onOpenWhiteboard(); } },
     { id:"file",        emoji:"📎", label:"Study File",
-      desc: groupFile ? `Present "${groupFile.name}"` : "No file uploaded yet",
+      desc: (() => {
+        if (groupFile) return `Present "${groupFile.name}"`;
+        const hostFile = group?.hostFileName || group?.sharedContent?.fileName;
+        if (hostFile && group?.sharedContent?.fileChunks) return `Present "${hostFile}"`;
+        return "No file uploaded yet";
+      })(),
       action: () => {
-        if (!groupFile && !bypassWarning) { setNoFileWarning(true); return; }
-        shareFile();
+        if (groupFile) { shareFile(); return; }
+        // No local file — use already-stored chunks if available
+        const hasChunks = !!(group?.sharedContent?.fileChunks || 0);
+        const hostFile  = group?.hostFileName;
+        if (hasChunks || hostFile) { reShareFile(); return; }
+        if (!bypassWarning) { setNoFileWarning(true); return; }
       },
       disabled: sharing },
     { id:"screenshare", emoji:"🖥️", label:"Screen Share",  desc:"Share your screen live",
@@ -9438,7 +9475,13 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
                       </div>
                       <input type="file" style={{ display:"none" }} onChange={e => {
                         const f = e.target.files?.[0];
-                        if (f) setGroupFile({ name:f.name, _fileObj:f });
+                        if (f) {
+                          setGroupFile({ name:f.name, _fileObj:f });
+                          // Persist filename so granted presenters can see it too
+                          updateDoc(doc(db,"studyGroups",groupId),{
+                            hostFileName: f.name
+                          }).catch(()=>{});
+                        }
                       }} />
                     </label>
                   )}
