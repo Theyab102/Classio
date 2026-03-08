@@ -96,25 +96,25 @@ async function callClaudeVision(system, messages, imageBase64) {
 // even when the OS only provides 1–2 physical voices.
 const GLOBAL_PERSONAS = [
   // ── Female ──────────────────────────────────────────────────────────────────
-  { id:"aria",    label:"Aria",    gender:"female", emoji:"🟤", desc:"Warm & conversational",  pitch:1.02, rate:0.95,
+  { id:"aria",    label:"Aria",    gender:"female", color:"#92400e", desc:"Warm & conversational",  pitch:1.02, rate:0.95,
     targets:["microsoft aria online","aria online","jenny online","microsoft jenny online","zira","google us english","samantha","karen","victoria","fiona"] },
-  { id:"nova",    label:"Nova",    gender:"female", emoji:"🟣", desc:"Bright & upbeat",         pitch:1.08, rate:0.97,
+  { id:"nova",    label:"Nova",    gender:"female", color:"#7c3aed", desc:"Bright & upbeat",         pitch:1.08, rate:0.97,
     targets:["microsoft ava online","ava online","microsoft amber online","amber online","michelle online","microsoft michelle online","moira","google uk english female","tessa","kate"] },
-  { id:"sage",    label:"Sage",    gender:"female", emoji:"🟡", desc:"Calm & clear",             pitch:0.96, rate:0.92,
+  { id:"sage",    label:"Sage",    gender:"female", color:"#ca8a04", desc:"Calm & clear",             pitch:0.96, rate:0.92,
     targets:["microsoft emma online","emma online","microsoft sara online","sara online","microsoft jane online","jane online","fiona","google uk english female","karen","victoria"] },
-  { id:"luna",    label:"Luna",    gender:"female", emoji:"🌙", desc:"Soft & soothing",          pitch:1.0,  rate:0.90,
+  { id:"luna",    label:"Luna",    gender:"female", color:"#4f46e5", desc:"Soft & soothing",          pitch:1.0,  rate:0.90,
     targets:["microsoft ashley online","ashley online","microsoft ana online","ana online","siri","google us english","samantha","veena","allison","ting-ting"] },
   // ── Male ────────────────────────────────────────────────────────────────────
-  { id:"echo",    label:"Echo",    gender:"male",   emoji:"🔵", desc:"Steady & professional",   pitch:0.98, rate:0.93,
+  { id:"echo",    label:"Echo",    gender:"male",   color:"#2563eb", desc:"Steady & professional",   pitch:0.98, rate:0.93,
     targets:["microsoft guy online","guy online","microsoft eric online","eric online","microsoft davis online","davis online","daniel","google uk english male","alex","mark"] },
-  { id:"onyx",    label:"Onyx",    gender:"male",   emoji:"⚫", desc:"Deep & authoritative",     pitch:0.88, rate:0.90,
+  { id:"onyx",    label:"Onyx",    gender:"male",   color:"#111827", desc:"Deep & authoritative",     pitch:0.88, rate:0.90,
     targets:["microsoft christopher online","christopher online","microsoft roger online","roger online","microsoft steffan online","steffan online","fred","google uk english male","lee","tom"] },
-  { id:"fable",   label:"Fable",   gender:"male",   emoji:"🟢", desc:"Friendly & casual",        pitch:1.04, rate:0.95,
+  { id:"fable",   label:"Fable",   gender:"male",   color:"#16a34a", desc:"Friendly & casual",        pitch:1.04, rate:0.95,
     targets:["microsoft ryan online","ryan online","microsoft liam online","liam online","microsoft noah online","noah online","rishi","thomas","oliver","google uk english male"] },
-  { id:"atlas",   label:"Atlas",   gender:"male",   emoji:"🔶", desc:"Bold & energetic",         pitch:0.94, rate:1.00,
+  { id:"atlas",   label:"Atlas",   gender:"male",   color:"#ea580c", desc:"Bold & energetic",         pitch:0.94, rate:1.00,
     targets:["microsoft brian online","brian online","microsoft reed online","reed online","microsoft andrew online","andrew online","alex","david","mark","google us english"] },
   // ── Neutral ─────────────────────────────────────────────────────────────────
-  { id:"river",   label:"River",   gender:"neutral",emoji:"🌊", desc:"Smooth & neutral",         pitch:1.0,  rate:0.93,
+  { id:"river",   label:"River",   gender:"neutral",color:"#0891b2", desc:"Smooth & neutral",         pitch:1.0,  rate:0.93,
     targets:["microsoft jenny online","jenny online","microsoft guy online","guy online","google us english","google uk english","default","en-us","en-gb"] },
 ];
 
@@ -748,7 +748,7 @@ function StandaloneAI({ onClose }) {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8M12 5V3"/><circle cx="12" cy="3" r="1"/></svg>
           </div>
           <div style={{ flex:1 }}>
-            <p style={{ margin:0, fontSize:16, fontWeight:700, color:C.text }}>🤖 AI Assistant</p>
+            <p style={{ margin:0, fontSize:16, fontWeight:700, color:C.text }}>AI Assistant</p>
             <p style={{ margin:0, fontSize:12, color:C.muted }}>Ask anything · Attach images · Replies in your language</p>
           </div>
           <button onClick={onClose} style={{ background:C.surface, border:`1px solid ${C.border}`,
@@ -768,13 +768,13 @@ function StandaloneAI({ onClose }) {
                 Ask me anything! Solve problems, explain concepts, or send a photo of a question.
               </p>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, maxWidth:360, margin:"0 auto", textAlign:"left" }}>
-                {[["📸","Photo of a question","Take a photo — I'll solve it"],
-                  ["🧮","Math & Science","Step-by-step solutions"],
-                  ["📝","Explain concepts","Clear simple explanations"],
-                  ["🌍","Any language","Reply in your language"]].map(([ic,ti,de])=>(
+                {[["⬡","Photo of a question","Take a photo — I'll solve it"],
+                  ["∑","Math & Science","Step-by-step solutions"],
+                  ["✎","Explain concepts","Clear simple explanations"],
+                  ["◎","Any language","Reply in your language"]].map(([ic,ti,de])=>(
                   <div key={ti} style={{ background:C.surface, border:`1px solid ${C.border}`,
                     borderRadius:12, padding:"12px 14px" }}>
-                    <p style={{ margin:"0 0 4px", fontSize:20 }}>{ic}</p>
+                    <p style={{ margin:"0 0 4px", fontSize:16, fontWeight:700, color:C.accent }}>{ic}</p>
                     <p style={{ margin:"0 0 2px", fontSize:12, fontWeight:700, color:C.text }}>{ti}</p>
                     <p style={{ margin:0, fontSize:11, color:C.muted, lineHeight:1.4 }}>{de}</p>
                   </div>
@@ -868,30 +868,30 @@ function StandaloneAI({ onClose }) {
 // ─── ABOUT / GUIDE TAB ────────────────────────────────────────────────────────
 function AboutTab() {
   const features = [
-    { icon:"📁", title:"Folders & Files", desc:"Organise study materials into folders. Upload PDFs, Word docs, PowerPoints, images, and text files. Everything is saved to your account." },
-    { icon:"🤖", title:"🤖 AI Assistant", desc:"Ask the AI anything — type a question or attach a photo of a problem. No file needed. Replies in whatever language you write in." },
-    { icon:"📝", title:"AI Notes", desc:"Generate notes from any file in 4 styles: Summary, Detailed, Bullet Points, or Q&A. The AI reads your file and writes structured notes instantly." },
-    { icon:"🃏", title:"Study Cards", desc:"Auto-generate up to 50 flashcards from your files. Flip to reveal answers. Great for memorising key concepts fast." },
-    { icon:"🎮", title:"14+ Study Games", desc:"MCQ, Speed Round, Elimination, Memory Match, True/False, Listening Game, Quiz Show, and more — all generated from your material." },
-    { icon:"👥", title:"👥 Study Groups", desc:"Create or join a live session. Present files, share whiteboards, run multiplayer quizzes, and voice chat with friends in real time." },
-    { icon:"🎙️", title:"Voice Notes", desc:"Record yourself or a lecture — the app transcribes it into written notes automatically." },
-    { icon:"🎧", title:"AI Podcast", desc:"Turn any file into a spoken podcast. Two AI hosts discuss your material so you can learn while listening." },
-    { icon:"✏️", title:"Annotations", desc:"Highlight and annotate any file directly inside the app. Add comments and review them later." },
-    { icon:"🌍", title:"16 Languages", desc:"Full support for Arabic, French, Spanish, German, Chinese, Japanese, and 10 more. The AI always replies in the language you write in." },
+    { icon:"▤", title:"Folders & Files", desc:"Organise study materials into folders. Upload PDFs, Word docs, PowerPoints, images, and text files. Everything is saved to your account." },
+    { icon:"◉", title:"AI Assistant", desc:"Ask the AI anything — type a question or attach a photo of a problem. No file needed. Replies in whatever language you write in." },
+    { icon:"✎", title:"AI Notes", desc:"Generate notes from any file in 4 styles: Summary, Detailed, Bullet Points, or Q&A. The AI reads your file and writes structured notes instantly." },
+    { icon:"▣", title:"Study Cards", desc:"Auto-generate up to 50 flashcards from your files. Flip to reveal answers. Great for memorising key concepts fast." },
+    { icon:"▷", title:"14+ Study Games", desc:"MCQ, Speed Round, Elimination, Memory Match, True/False, Listening Game, Quiz Show, and more — all generated from your material." },
+    { icon:"◎", title:"Study Groups", desc:"Create or join a live session. Present files, share whiteboards, run multiplayer quizzes, and voice chat with friends in real time." },
+    { icon:"♪", title:"Voice Notes", desc:"Record yourself or a lecture — the app transcribes it into written notes automatically." },
+    { icon:"◐", title:"AI Podcast", desc:"Turn any file into a spoken podcast. Two AI hosts discuss your material so you can learn while listening." },
+    { icon:"✐", title:"Annotations", desc:"Highlight and annotate any file directly inside the app. Add comments and review them later." },
+    { icon:"◑", title:"16 Languages", desc:"Full support for Arabic, French, Spanish, German, Chinese, Japanese, and 10 more. The AI always replies in the language you write in." },
   ];
   const steps = [
     { n:"1", title:"Create a folder", desc:"Tap New Folder and name it after your subject — Physics, Maths, History, etc." },
     { n:"2", title:"Upload your file", desc:"Open the folder, upload your study material: PDF, PowerPoint, Word doc, or image." },
     { n:"3", title:"Generate with AI", desc:"Open the file and go to the AI tab to instantly create notes, flashcards, or a quiz game." },
-    { n:"4", title:"Study with friends", desc:"Tap 👥 Study Group, share your invite code, and study together with live voice chat and shared content." },
-    { n:"5", title:"Ask AI anything", desc:"Hit the 🤖 AI Assistant button on the home screen to ask any question or send a photo of a problem — no file needed." },
+    { n:"4", title:"Study with friends", desc:"Tap Study Group, share your invite code, and study together with live voice chat and shared content." },
+    { n:"5", title:"Ask AI anything", desc:"Hit the AI Assistant button on the home screen to ask any question or send a photo of a problem — no file needed." },
   ];
   return (
     <div style={{ paddingBottom:40 }}>
       <div style={{ textAlign:"center", padding:"36px 20px 28px",
         background:`linear-gradient(135deg,${C.accentL} 0%,${C.bg} 100%)`,
         borderRadius:20, marginBottom:28, border:`1px solid ${C.accentS}` }}>
-        <div style={{ fontSize:52, marginBottom:12 }}>📚</div>
+        <div style={{ width:64,height:64,borderRadius:20,background:C.accentL,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px" }}><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="{C.accent}}" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 0 3-3h7z"/></svg></div>
         <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:26, fontWeight:700,
           color:C.text, margin:"0 0 10px" }}>Welcome to Classio</h2>
         <p style={{ fontSize:14, color:C.muted, maxWidth:460, margin:"0 auto", lineHeight:1.7 }}>
@@ -899,7 +899,7 @@ function AboutTab() {
           play study games, and collaborate with friends — all in one place.
         </p>
       </div>
-      <h3 style={{ fontFamily:"'Fraunces',serif", fontSize:18, fontWeight:700, color:C.text, marginBottom:14 }}>🚀 How to get started</h3>
+      <h3 style={{ fontFamily:"'Fraunces',serif", fontSize:18, fontWeight:700, color:C.text, marginBottom:14 }}>How to get started</h3>
       <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:32 }}>
         {steps.map(s=>(
           <div key={s.n} style={{ display:"flex", alignItems:"flex-start", gap:14,
@@ -914,7 +914,7 @@ function AboutTab() {
           </div>
         ))}
       </div>
-      <h3 style={{ fontFamily:"'Fraunces',serif", fontSize:18, fontWeight:700, color:C.text, marginBottom:14 }}>✨ All Features</h3>
+      <h3 style={{ fontFamily:"'Fraunces',serif", fontSize:18, fontWeight:700, color:C.text, marginBottom:14 }}>All Features</h3>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(250px,1fr))", gap:12, marginBottom:28 }}>
         {features.map(f=>(
           <div key={f.title} style={{ background:C.surface, border:`1px solid ${C.border}`,
@@ -927,10 +927,10 @@ function AboutTab() {
       </div>
       <div style={{ background:C.warmL, border:`1px solid ${C.warm}44`,
         borderRadius:16, padding:"16px 18px" }}>
-        <p style={{ margin:"0 0 10px", fontSize:14, fontWeight:700, color:C.warm }}>💡 Pro Tips</p>
+        <p style={{ margin:"0 0 10px", fontSize:14, fontWeight:700, color:C.warm }}>Pro Tips</p>
         <div style={{ display:"flex", flexDirection:"column", gap:7 }}>
           {["Link related files (e.g. lecture notes + past paper) so the AI reads both at once.",
-            "In 👥 Study Groups, give a friend presenter rights so they can run AI tools too.",
+            "In Study Groups, give a friend presenter rights so they can run AI tools too.",
             "Send a photo of a handwritten question — the AI will read and solve it.",
             "The AI always replies in your language. Write in Arabic, get Arabic answers.",
             "Use the AI Podcast feature to listen to your notes while commuting or exercising."
@@ -1144,7 +1144,7 @@ export default function App() {
       />}
       <AdBanner />
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 14px" }}>
-        {/* ── Action buttons row (👥 Study Group + New Folder) ── */}
+        {/* ── Action buttons row ── */}
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:20, justifyContent:"flex-end" }}>
           <button onClick={()=>setShowStudyGroupLobby(true)} className="hov"
             style={{ display:"flex", alignItems:"center", gap:7, background:"#7c3aed",
@@ -1313,7 +1313,7 @@ function Header({ user, saveStatus, isGuest, onSignOut, character, onOpenCharact
         <div style={{ display:"flex", alignItems:"center", gap:8, flex:1 }}>
           {/* Tab switcher */}
           <div style={{ display:"flex", background:C.bg, borderRadius:10, border:`1px solid ${C.border}`, padding:3, gap:2 }}>
-            {[["folders","📁 Folders"],["about","ℹ️ About"]].map(([id,label])=>(
+            {[["folders","Folders"],["about","About"]].map(([id,label])=>(
               <button key={id} onClick={()=>onSetHomeTab(id)}
                 style={{ padding:"5px 16px", borderRadius:7, fontSize:13, fontWeight:700,
                   border:"none", cursor:"pointer", transition:"all .15s",
@@ -1323,7 +1323,7 @@ function Header({ user, saveStatus, isGuest, onSignOut, character, onOpenCharact
               </button>
             ))}
           </div>
-          {/* 🤖 AI Assistant */}
+          {/* AI Assistant */}
           <button onClick={onOpenAI}
             style={{ display:"flex", alignItems:"center", gap:6,
               background:"linear-gradient(135deg,#6366f1,#8b5cf6)",
@@ -1609,10 +1609,10 @@ function SkinSlider({ base, value, onChange }) {
       {/* Labels */}
       <div style={{display:'flex',justifyContent:'space-between',marginTop:5,
         fontSize:10,color:'#999',fontWeight:700,letterSpacing:.4}}>
-        <span>☀️ Lighter</span>
+        <span>Lighter</span>
         <span style={{background:thumbColor,color:'#fff',padding:'2px 8px',borderRadius:10,
           fontSize:10,fontWeight:800,boxShadow:'0 1px 4px rgba(0,0,0,.3)'}}>{thumbColor.toUpperCase()}</span>
-        <span>🌑 Darker</span>
+        <span>Darker</span>
       </div>
     </div>
   );
@@ -2559,11 +2559,11 @@ function CharacterModal({ character, onChange, onClose }) {
     {id:9,label:"Dress"},{id:10,label:"Blazer"},{id:11,label:"Graphic Tee"},
   ];
   const TABS = [
-    {id:"face",  emoji:"😊", label:"FACE"},
-    {id:"hair",  emoji:"💇", label:"HAIR"},
-    {id:"fit",   emoji:"👕", label:"FIT"},
-    {id:"acc",   emoji:"💍", label:"ACCS"},
-    {id:"extra", emoji:"✨", label:"EXTRA"},
+    {id:"face",  label:"FACE"},
+    {id:"hair",  label:"HAIR"},
+    {id:"fit",   label:"FIT"},
+    {id:"acc",   label:"ACCS"},
+    {id:"extra", label:"EXTRA"},
   ];
 
   // ── Custom colours — persisted per-field in localStorage ──────────────────
@@ -2785,14 +2785,14 @@ function CharacterModal({ character, onChange, onClose }) {
 
           {/* ══ EXTRA ══ */}
           {tab === "extra" && <>
-            <AvatarTogglePair ch={ch} field="blush"    label="Blush"     onEmoji="🌸" onApply={applyField} />
-            <AvatarTogglePair ch={ch} field="lips"     label="Lip Gloss" onEmoji="💋" onApply={applyField} />
+            <AvatarTogglePair ch={ch} field="blush"    label="Blush"      onApply={applyField} />
+            <AvatarTogglePair ch={ch} field="lips"     label="Lip Gloss"  onApply={applyField} />
             {ch.lips && (
               <AvatarRow label="Lip Colour">
                 <AvatarSwatches {...swatchProps} field="lipColor" vals={LIP_C} sz={26} />
               </AvatarRow>
             )}
-            <AvatarTogglePair ch={ch} field="freckles" label="Freckles"  onEmoji="🟤" onApply={applyField} />
+            <AvatarTogglePair ch={ch} field="freckles" label="Freckles"   onApply={applyField} />
             <button
               onClick={() => onChange({
                 skin:"#FDDBB4", hair:"#3D2B1F", hairStyle:0, eyes:"#2980B9",
@@ -2808,7 +2808,7 @@ function CharacterModal({ character, onChange, onClose }) {
                 borderRadius:20, fontSize:12, fontWeight:700, cursor:"pointer",
                 color:"#555", alignSelf:"flex-start",
               }}
-            >🔄 Reset to Default</button>
+            >Reset to Default</button>
           </>}
 
         </div>
@@ -2823,7 +2823,7 @@ function CharacterModal({ character, onChange, onClose }) {
             width:"100%", background:"#111", color:"#fff",
             border:"none", borderRadius:14, padding:"13px",
             fontSize:14, fontWeight:900, cursor:"pointer", letterSpacing:.4,
-          }}>Done ✓</button>
+          }}>Done</button>
         </div>
 
       </div>
@@ -2842,7 +2842,7 @@ function LinkBtn({ file, allFiles, onSave }) {
     <>
       <button onClick={() => setOpen(true)} className="hov"
         style={{ display:"flex", alignItems:"center", gap:5, background:linked.length>0?C.accentL:"none", color:C.accent, border:`1px solid ${C.border}`, borderRadius:8, padding:"5px 10px", fontSize:12, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap" }}>
-        🔗 {linked.length > 0 ? `${linked.length} linked` : "Link files"}
+        {linked.length > 0 ? `${linked.length} linked` : "Link files"}
       </button>
       {open && (
         <div onClick={() => setOpen(false)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.45)", zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
@@ -2858,7 +2858,7 @@ function LinkBtn({ file, allFiles, onSave }) {
                     onSave(next);
                   }}
                     style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", borderRadius:10, border:`1.5px solid ${isLinked?C.accent:C.border}`, background:isLinked?C.accentL:"#fff", cursor:"pointer", textAlign:"left" }}>
-                    <span style={{ fontSize:18 }}>{isLinked?"✅":"⬜"}</span>
+                    <span style={{ fontSize:18 }}>{isLinked?"✓":"○"}</span>
                     <span style={{ fontSize:13, fontWeight:600, color:isLinked?C.accent:C.text, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name}</span>
                   </button>
                 );
@@ -2899,7 +2899,7 @@ function SignIn({ onSignIn, onGuest }) {
       <style>{GS}</style>
       <div style={{ background:C.surface, borderRadius:28, padding:"56px 48px", width:"100%", maxWidth:440, boxShadow:"0 8px 40px rgba(0,0,0,.08)", textAlign:"center" }}>
         <div style={{ width:68, height:68, background:C.warmL, borderRadius:22, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 24px" }}>
-          <span style={{ fontSize:32 }}>👤</span>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         </div>
         <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:28, fontWeight:700, color:C.text, marginBottom:8 }}>Continue as Guest</h2>
         <p style={{ fontSize:14, color:C.muted, marginBottom:28, lineHeight:1.6 }}>Your folders will not be saved when you leave.<br/>Sign in with Google to keep your data.</p>
@@ -3026,7 +3026,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
     onUpdate({ ...folder, files: [...folder.files, ...added] });
   };
 
-  const TABS = [{ id:"files", label:"Files", icon:I.file },{ id:"ai", label:"🤖 AI Assistant", icon:I.ai }];
+  const TABS = [{ id:"files", label:"Files", icon:I.file },{ id:"ai", label:"AI Assistant", icon:I.ai }];
 
   return (
     <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif" }}>
@@ -3117,7 +3117,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
                             <p style={{ fontSize:14, fontWeight:600, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{file.name}</p>
                             <p style={{ fontSize:12, color:C.muted }}>
                               {(file.size/1024).toFixed(1)} KB · {file.uploadedAt}
-                              {(file.linkedFileIds||[]).length > 0 && <span style={{ marginLeft:8, color:C.accent }}>🔗 {(file.linkedFileIds||[]).length} linked</span>}
+                              {(file.linkedFileIds||[]).length > 0 && <span style={{ marginLeft:8, color:C.accent }}>{(file.linkedFileIds||[]).length} linked</span>}
                             </p>
                           </div>
                           <FileColorPicker file={file}
@@ -3363,7 +3363,7 @@ ${text}`
 
   if (!fileObj) return (
     <div style={{ textAlign:"center", padding:"60px 24px" }}>
-      <div style={{ fontSize:48, marginBottom:12 }}>📂</div>
+      <div style={{ width:56,height:56,borderRadius:16,background:C.accentL,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:12 }}><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="{C.accent}" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div>
       <p style={{ fontSize:16, fontWeight:600, color:C.text, marginBottom:8 }}>File not loaded</p>
       <p style={{ fontSize:13, color:C.muted, marginBottom:20 }}>Files need to be re-uploaded once after a full page refresh.</p>
       <label style={{ display:"inline-flex", alignItems:"center", gap:8, background:C.accent, color:"#fff", borderRadius:10, padding:"11px 22px", cursor:"pointer", fontSize:14, fontWeight:600 }}>
@@ -3725,12 +3725,12 @@ function DownloadViewer({ fileObj, fileName }) {
   const sizeKB = Math.round((fileObj?.size||0)/1024);
   return (
     <div style={{ textAlign:"center", color:"#fff", padding:"60px 20px" }}>
-      <div style={{ fontSize:72, marginBottom:20 }}>📎</div>
+      <div style={{ width:72,height:72,borderRadius:20,background:C.accentL,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:20 }}><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="{C.accent}" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
       <p style={{ fontSize:20, fontWeight:700, marginBottom:8 }}>{fileName}</p>
       <p style={{ opacity:.6, fontSize:13, marginBottom:28 }}>{sizeKB} KB · Preview not available in browser</p>
       {url && <a href={url} download={fileName}
         style={{ display:"inline-flex", alignItems:"center", gap:8, background:C.accent, color:"#fff", borderRadius:10, padding:"12px 24px", fontSize:15, fontWeight:600, textDecoration:"none" }}>
-        ⬇️ Download File
+        Download File
       </a>}
     </div>
   );
@@ -3831,7 +3831,7 @@ ${fileContext}`
               <p style={{ fontSize:11, fontWeight:800, color:C.muted, letterSpacing:.8, marginBottom:12 }}>CHOOSE FILES FOR AI</p>
 
               {groups.length > 0 && <>
-                <p style={{ fontSize:11, fontWeight:700, color:C.accent, marginBottom:8 }}>🔗 LINKED PAIRS</p>
+                <p style={{ fontSize:11, fontWeight:700, color:C.accent, marginBottom:8 }}>LINKED PAIRS</p>
                 {groups.map((grp, gi) => {
                   const allSel = grp.every(f => selectedFileIds.includes(f.id));
                   const someSel = grp.some(f => selectedFileIds.includes(f.id));
@@ -3851,7 +3851,7 @@ ${fileContext}`
                         return (
                           <button key={f.id} onClick={() => setSelectedFileIds(prev => sel ? prev.filter(id=>id!==f.id) : [...prev, f.id])}
                             style={{ display:"flex", alignItems:"center", gap:8, width:"100%", padding:"6px 8px", borderRadius:8, border:`1.5px solid ${sel?C.accent:C.border}`, background:sel?C.accentL:"#f8f8f8", cursor:"pointer", textAlign:"left", marginBottom:4 }}>
-                            <span>{sel?"✅":"⬜"}</span>
+                            <span style={{fontWeight:700}}>{sel?"✓":"○"}</span>
                             <span style={{ fontSize:12, fontWeight:600, color:sel?C.accent:C.text, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name}</span>
                           </button>
                         );
@@ -3862,13 +3862,13 @@ ${fileContext}`
               </>}
 
               {standalone.length > 0 && <>
-                <p style={{ fontSize:11, fontWeight:700, color:C.muted, marginBottom:8, marginTop: groups.length>0?8:0 }}>📄 INDIVIDUAL FILES</p>
+                <p style={{ fontSize:11, fontWeight:700, color:C.muted, marginBottom:8, marginTop: groups.length>0?8:0 }}>INDIVIDUAL FILES</p>
                 {standalone.map(f => {
                   const sel = selectedFileIds.includes(f.id);
                   return (
                     <button key={f.id} onClick={() => setSelectedFileIds(prev => sel ? prev.filter(id=>id!==f.id) : [...prev, f.id])}
                       style={{ display:"flex", alignItems:"center", gap:8, width:"100%", padding:"7px 10px", borderRadius:9, border:`1.5px solid ${sel?C.accent:C.border}`, background:sel?C.accentL:"#fff", cursor:"pointer", textAlign:"left", marginBottom:5 }}>
-                      <span>{sel?"✅":"⬜"}</span>
+                      <span style={{fontWeight:700}}>{sel?"✓":"○"}</span>
                       <span style={{ fontSize:13, fontWeight:600, color:sel?C.accent:C.text, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name}</span>
                     </button>
                   );
@@ -3876,7 +3876,7 @@ ${fileContext}`
               </>}
 
               {selectedFileIds.length > 0 && (
-                <p style={{ fontSize:11, color:C.accent, marginTop:8, fontWeight:700 }}>✓ AI will read {selectedFileIds.length} file{selectedFileIds.length>1?"s":""}</p>
+                <p style={{ fontSize:11, color:C.accent, marginTop:8, fontWeight:700 }}>AI will read {selectedFileIds.length} file{selectedFileIds.length>1?"s":""}</p>
               )}
             </div>
           );
@@ -3938,9 +3938,9 @@ ${fileContext}`
           style={{ flexShrink:0, width:42, height:42, borderRadius:12,
             border:`1.5px solid ${attachedImage ? C.accent : C.border}`,
             background: attachedImage ? C.accentL : C.bg,
-            cursor:"pointer", fontSize:20, display:"flex",
-            alignItems:"center", justifyContent:"center" }}>
-          📷
+            cursor:"pointer", display:"flex",
+            alignItems:"center", justifyContent:"center", color:attachedImage?C.accent:C.muted }}>
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
         </button>
         <input ref={imgInputRef} type="file" accept="image/*" style={{ display:"none" }}
           onChange={e => { attachImage(e.target.files?.[0]); e.target.value=""; }} />
@@ -3964,7 +3964,7 @@ ${fileContext}`
 
 
 // ─── LANGUAGE OPTIONS ─────────────────────────────────────────────────────────
-const LANG_OPTIONS = [["en-US","🇺🇸 English (US)"],["en-GB","🇬🇧 English (UK)"],["ar-SA","🇸🇦 Arabic"],["ar-EG","🇪🇬 Arabic (Egypt)"],["es-ES","🇪🇸 Spanish"],["es-MX","🇲🇽 Spanish (Mexico)"],["fr-FR","🇫🇷 French"],["de-DE","🇩🇪 German"],["it-IT","🇮🇹 Italian"],["pt-BR","🇧🇷 Portuguese"],["zh-CN","🇨🇳 Chinese"],["ja-JP","🇯🇵 Japanese"],["ko-KR","🇰🇷 Korean"],["hi-IN","🇮🇳 Hindi"],["ru-RU","🇷🇺 Russian"],["tr-TR","🇹🇷 Turkish"]];
+const LANG_OPTIONS = [["en-US","English (US)"],["en-GB","English (UK)"],["ar-SA","Arabic"],["ar-EG","Arabic (Egypt)"],["es-ES","Spanish"],["es-MX","Spanish (Mexico)"],["fr-FR","French"],["de-DE","German"],["it-IT","Italian"],["pt-BR","Portuguese"],["zh-CN","Chinese"],["ja-JP","Japanese"],["ko-KR","Korean"],["hi-IN","Hindi"],["ru-RU","Russian"],["tr-TR","Turkish"]];
 
 // ─── VOICE & PODCAST TAB ─────────────────────────────────────────────────────
 // All audio features: Voice Notes recording + Podcast player
@@ -4034,8 +4034,8 @@ function VoicePodcastTab({ file, user, isGuest, onUpdate }) {
       setVoiceStatus("" + (preview ? preview.slice(-90) + "…" : "Listening… speak now"));
     };
     recognition.onerror = (e) => {
-      if (e.error === "not-allowed") setVoiceStatus("❌ Microphone access denied. Allow mic in browser settings.");
-      else if (e.error === "audio-capture") setVoiceStatus("❌ No microphone found.");
+      if (e.error === "not-allowed") setVoiceStatus("Microphone access denied. Allow mic in browser settings.");
+      else if (e.error === "audio-capture") setVoiceStatus("No microphone found.");
       else if (e.error !== "no-speech") setVoiceStatus("Mic error: " + e.error);
     };
     recognition.onend = () => {
@@ -4059,9 +4059,9 @@ function VoicePodcastTab({ file, user, isGuest, onUpdate }) {
     const raw = transcriptRef.current.trim();
     if (!raw) { setVoiceStatus("Nothing was recorded. Make sure your mic is working and try again."); setTimeout(() => setVoiceStatus(""), 4000); return; }
     setProcessing(true);
-    setVoiceStatus("✨ Organising your notes…");
+    setVoiceStatus("Organising your notes…");
     try {
-      const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[🇺🇸🇬🇧🇸🇦🇪🇬🇪🇸🇲🇽🇫🇷🇩🇪🇮🇹🇧🇷🇨🇳🇯🇵🇰🇷🇮🇳🇷🇺🇹🇷]\s*/g,'') || lang;
+      const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[^\x00-\x7F\s]+\s*/g,'') || lang;
       const context = `File: "${file.name}". Topic context (for fixing speech recognition errors): ${(file.notes || "").slice(0, 300) || "none"}.`;
       const result = await callClaude(
         `You are an expert note-taker. A student has just spoken aloud — your job is to turn their speech into clean, well-organised study notes.
@@ -4103,7 +4103,7 @@ Context (for fixing mis-heard words only — do NOT add this as content): ${cont
         date: new Date().toLocaleDateString("en-GB", {day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}),
         words: fixedResult.trim().split(/\s+/).length, lang
       });
-      setVoiceStatus("✅ Notes saved!");
+      setVoiceStatus("Notes saved!");
       setTimeout(() => setVoiceStatus(""), 3000);
     } catch(e) { setVoiceStatus("Error: " + e.message); }
     setProcessing(false);
@@ -4154,13 +4154,13 @@ Context (for fixing mis-heard words only — do NOT add this as content): ${cont
     // Pick the longest / most recent source
     const notesText = (savedArr.length > 0 ? savedArr[0].text : "") || appNotes || file.notes || "";
     if (!notesText.trim()) {
-      setVoiceStatus("⚠️ No notes found. Go to the Notes tab, generate or write notes, then Save them — then come back here.");
+      setVoiceStatus("No notes found. Go to the Notes tab, generate or write notes, then Save them — then come back here.");
       return;
     }
     setPodcastLoading(true);
     setShowPodcast(true);
     setPodcastScript("");
-    const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[🇺🇸🇬🇧🇸🇦🇪🇬🇪🇸🇲🇽🇫🇷🇩🇪🇮🇹🇧🇷🇨🇳🇯🇵🇰🇷🇮🇳🇷🇺🇹🇷]\s*/g,'') || lang;
+    const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[^\x00-\x7F\s]+\s*/g,'') || lang;
     try {
       const script = await callClaude(
         `You are a podcast host reading study notes aloud as a natural lesson.
@@ -4202,7 +4202,7 @@ ${notesText.slice(0, 10000)}`,
         </div>
         {/* Language selector */}
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <span style={{ fontSize:12, fontWeight:600, color:C.muted }}>🌍 Language:</span>
+          <span style={{ fontSize:12, fontWeight:600, color:C.muted }}>Language:</span>
           <select value={lang} onChange={e => setLang(e.target.value)}
             style={{ border:`1.5px solid ${C.border}`, borderRadius:10, padding:"6px 10px", fontSize:13, outline:"none", color:C.text, background:"#fff", cursor:"pointer" }}>
             {LANG_OPTIONS.map(([code, label]) => (
@@ -4214,7 +4214,7 @@ ${notesText.slice(0, 10000)}`,
 
       {/* Sub-tabs */}
       <div style={{ display:"flex", gap:8, marginBottom:22, borderBottom:`1.5px solid ${C.border}`, paddingBottom:12 }}>
-        {[{id:"record",label:"Voice Notes"},{id:"podcast",label:"🎧 Study Podcast"}].map(t => (
+        {[{id:"record",label:"Voice Notes"},{id:"podcast",label:"Study Podcast"}].map(t => (
           <button key={t.id} onClick={() => setSubTab(t.id)} style={{
             padding:"8px 20px", borderRadius:20, border:"none", cursor:"pointer",
             fontWeight:700, fontSize:13,
@@ -4231,7 +4231,7 @@ ${notesText.slice(0, 10000)}`,
         <div dir={isRTL ? "rtl" : "ltr"}>
           {(isGuest || !user) && (
             <div style={{ background:C.warmL, border:`1.5px solid ${C.warm}33`, borderRadius:12, padding:"14px 18px", marginBottom:20, fontSize:13, color:C.warm, fontWeight:500 }}>
-              🎙️ Voice Notes requires a Google account — sign in to use this feature.
+              Voice Notes requires a Google account — sign in to use this feature.
             </div>
           )}
 
@@ -4239,7 +4239,7 @@ ${notesText.slice(0, 10000)}`,
             <div style={{ background: recording?"#fff0f0":C.surface, border:`2px solid ${recording?C.red+"55":C.border}`, borderRadius:18, padding:"26px 24px", marginBottom:20, textAlign:"center", transition:"all .3s" }}>
               {recording && <style>{`@keyframes vpulse{0%,100%{opacity:1}50%{opacity:.5}}`}</style>}
               <div style={{ fontSize:54, marginBottom:12, animation:recording?"vpulse 1.4s infinite":"none" }}>
-                {recording?"🔴":"🎙️"}
+                {recording ? <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>}
               </div>
               <p style={{ fontSize:15, fontWeight:700, color:recording?C.red:C.text, marginBottom:5 }}>
                 {recording?"Recording…":processing?"Processing…":"Tap to start recording"}
@@ -4248,10 +4248,10 @@ ${notesText.slice(0, 10000)}`,
                 {recording ? `Speaking in ${LANG_OPTIONS.find(l=>l[0]===lang)?.[1] || lang} — AI will clean up and format as notes` : "Lecture, study session, or revision — record it and AI converts it to notes"}
               </p>
               {voiceStatus && (
-                <div style={{ background:voiceStatus.startsWith("✅")?C.greenL:voiceStatus.startsWith("🎙️")?"#fff0f0":voiceStatus.startsWith("✨")?C.accentL:C.redL,
-                  border:`1px solid ${voiceStatus.startsWith("✅")?C.green:voiceStatus.startsWith("🎙️")?C.red:voiceStatus.startsWith("✨")?C.accentS:C.red}44`,
+                <div style={{ background:voiceStatus.startsWith("✓")?C.greenL:voiceStatus.startsWith("Listening") || voiceStatus.startsWith("Mic")?"#fff0f0":voiceStatus.startsWith("Organising")?C.accentL:C.redL,
+                  border:`1px solid ${voiceStatus.startsWith("✓")?C.green:voiceStatus.startsWith("Listening") || voiceStatus.startsWith("Mic")?C.red:voiceStatus.startsWith("Organising")?C.accentS:C.red}44`,
                   borderRadius:10, padding:"8px 14px", marginBottom:16, fontSize:13, fontWeight:500, textAlign:"left",
-                  color:voiceStatus.startsWith("✅")?C.green:voiceStatus.startsWith("🎙️")?C.red:C.text }}>
+                  color:voiceStatus.startsWith("✓")?C.green:voiceStatus.startsWith("Listening") || voiceStatus.startsWith("Mic")?C.red:C.text }}>
                   {voiceStatus}
                 </div>
               )}
@@ -4271,10 +4271,10 @@ ${notesText.slice(0, 10000)}`,
           {/* Playback voice picker */}
           {voiceRecordings.length > 0 && (
             <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:14, flexWrap:"wrap" }}>
-              <span style={{ fontSize:11, fontWeight:700, color:C.muted }}>🎧 Playback voice:</span>
+              <span style={{ fontSize:11, fontWeight:700, color:C.muted }}>Playback voice:</span>
               <button onClick={() => setShowPlaybackPicker(v => !v)}
                 style={{ display:"flex", alignItems:"center", gap:5, background:"#fff", border:`1.5px solid ${showPlaybackPicker?C.accent:C.border}`, borderRadius:20, padding:"5px 12px", fontSize:12, fontWeight:700, cursor:"pointer", color:showPlaybackPicker?C.accent:C.text }}>
-                {GLOBAL_PERSONAS[playbackPersonaIdx]?.emoji} {GLOBAL_PERSONAS[playbackPersonaIdx]?.label} {GLOBAL_PERSONAS[playbackPersonaIdx]?.gender==="female"?"♀":GLOBAL_PERSONAS[playbackPersonaIdx]?.gender==="male"?"♂":"⚥"} ▾
+                {GLOBAL_PERSONAS[playbackPersonaIdx]?.label} {GLOBAL_PERSONAS[playbackPersonaIdx]?.gender==="female"?"♀":GLOBAL_PERSONAS[playbackPersonaIdx]?.gender==="male"?"♂":"⚥"} ▾
               </button>
               {showPlaybackPicker && (
                 <div style={{ width:"100%", background:"#fff", border:`1.5px solid ${C.border}`, borderRadius:14, padding:"10px 12px", display:"flex", flexWrap:"wrap", gap:7, marginTop:4 }}>
@@ -4283,7 +4283,7 @@ ${notesText.slice(0, 10000)}`,
                       style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:20, border:"none", cursor:"pointer", fontSize:12, fontWeight:700,
                         background: playbackPersonaIdx===i ? C.accent : C.surface,
                         color: playbackPersonaIdx===i ? "#fff" : C.text }}>
-                      {p.emoji} {p.label} <span style={{ fontSize:10, opacity:.7 }}>{p.gender==="female"?"♀":"♂"}</span>
+                      <span style={{width:10,height:10,borderRadius:"50%",background:p.color,display:"inline-block",marginRight:4,flexShrink:0}}></span>{p.label}
                     </button>
                   ))}
                   <p style={{ width:"100%", fontSize:10, color:C.muted, marginTop:2 }}>
@@ -4315,7 +4315,7 @@ ${notesText.slice(0, 10000)}`,
                         <button onClick={() => { const n=notes?notes+"\n\n---\n\n"+rec.text:rec.text; setNotes(n); onUpdate({...file,notes:n}); }}
                           style={{ fontSize:11, fontWeight:700, padding:"5px 10px", borderRadius:8, border:`1px solid ${C.accentS}`, background:C.accentL, color:C.accent, cursor:"pointer" }}>+ Notes</button>
                         <button onClick={() => deleteRec(idx)}
-                          style={{ fontSize:12, padding:"5px 10px", borderRadius:8, border:`1px solid ${C.border}`, background:"#fff", color:C.muted, cursor:"pointer" }}>🗑</button>
+                          style={{ padding:"5px 8px", borderRadius:8, border:`1px solid ${C.border}`, background:"#fff", color:C.muted, cursor:"pointer", display:"flex", alignItems:"center" }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
                       </div>
                     </div>
                     <p style={{ fontSize:13, color:C.text, lineHeight:1.55, background:"#f9fafb", borderRadius:8, padding:"8px 10px", maxHeight:80, overflowY:"auto", margin:0, direction:rec.lang?.startsWith("ar")?"rtl":"ltr" }}>
@@ -4329,7 +4329,7 @@ ${notesText.slice(0, 10000)}`,
 
           {voiceRecordings.length === 0 && !isGuest && user && (
             <div style={{ textAlign:"center", padding:"40px 0", color:C.muted }}>
-              <div style={{ fontSize:40, marginBottom:12 }}>🎤</div>
+              <div style={{ width:52,height:52,borderRadius:16,background:C.accentL,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:12 }}><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="{C.accent}" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></div>
               <p style={{ fontSize:14, fontWeight:600 }}>No recordings yet</p>
               <p style={{ fontSize:13 }}>Start recording above — your saved voice notes will appear here</p>
             </div>
@@ -4353,7 +4353,7 @@ ${notesText.slice(0, 10000)}`,
               {podcastScript && !podcastLoading && (
                 <button onClick={() => { setPodcastScript(""); setShowPodcast(false); try { localStorage.removeItem(PODCAST_KEY); } catch {} }}
                   style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:12, padding:"11px 18px", fontSize:13, fontWeight:600, color:C.muted, cursor:"pointer" }}>
-                  🗑 Clear
+                  Clear
                 </button>
               )}
             </div>
@@ -4424,7 +4424,7 @@ function NotesTab({ file, onUpdate, user, isGuest }) {
     };
     persistSaved([entry, ...savedNotes.filter(n => n.name !== entry.name)]);
     setNewNoteName(""); setShowSaveModal(false); setUnsaved(false);
-    setSavedFeedback("✅ Saved as \"" + entry.name + "\"");
+    setSavedFeedback("Saved as \"" + entry.name + "\"");
     setTimeout(() => setSavedFeedback(""), 2500);
   };
   const loadNote  = (entry) => { setNotes(entry.text); setUnsaved(false); setShowDropdown(false); };
@@ -4439,10 +4439,10 @@ function NotesTab({ file, onUpdate, user, isGuest }) {
   const [customStyle,    setCustomStyle]    = useState("");
   const [useCustomStyle, setUseCustomStyle] = useState(false);
   const NOTE_STYLES = [
-    { id:"detailed", label:"📋 Detailed",    desc:"Full notes with headings & examples" },
+    { id:"detailed", label:"Detailed",    desc:"Full notes with headings & examples" },
     { id:"bullet",   label:"• Bullets",      desc:"Bullet points only, grouped by topic" },
-    { id:"simple",   label:"🧒 Simple",       desc:"Plain English, easy to understand" },
-    { id:"exam",     label:"📝 Exam Focused", desc:"Key terms, questions & checklist" },
+    { id:"simple",   label:"Simple",       desc:"Plain English, easy to understand" },
+    { id:"exam",     label:"Exam Focused", desc:"Key terms, questions & checklist" },
   ];
 
   // ── AI generate ───────────────────────────────────────────────────────────
@@ -4554,7 +4554,7 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
             <div style={{ position:"relative" }}>
               <button onClick={() => setShowDropdown(d => !d)} className="hov"
                 style={{ display:"flex", alignItems:"center", gap:5, background:C.greenL, color:C.green, border:`1px solid ${C.green}44`, borderRadius:10, padding:"8px 13px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
-                📂 Saved ({savedNotes.length}) ▾
+                Saved ({savedNotes.length}) ▾
               </button>
               {showDropdown && (
                 <div style={{ position:"absolute", top:"110%", right:0, zIndex:300, background:"#fff", border:`1.5px solid ${C.border}`, borderRadius:14, width:290, boxShadow:"0 10px 36px rgba(0,0,0,.17)", overflow:"hidden" }}>
@@ -4577,7 +4577,7 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
                       </div>
                     ))}
                   </div>
-                  <div style={{ padding:"7px 12px", borderTop:`1px solid ${C.border}`, fontSize:10, color:C.muted, fontStyle:"italic" }}>Click to load · 🗑 to delete</div>
+                  <div style={{ padding:"7px 12px", borderTop:`1px solid ${C.border}`, fontSize:10, color:C.muted, fontStyle:"italic" }}>Click to load · tap trash to delete</div>
                 </div>
               )}
             </div>
@@ -4654,14 +4654,14 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
             style={{ flex:1, border:`1.5px solid ${C.accentS}`, borderRadius:8, padding:"9px 12px", fontSize:14, outline:"none", color:C.text, background:C.surface }}/>
           <button onClick={() => customTopic.trim() && generateWithTopic(customTopic.trim())} disabled={!customTopic.trim()}
             style={{ background:C.accent, color:"#fff", border:"none", borderRadius:8, padding:"9px 14px", fontSize:14, fontWeight:600, cursor:customTopic.trim()?"pointer":"not-allowed" }}>Go</button>
-          <button onClick={() => setShowTopicInput(false)} style={{ background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:18 }}>✕</button>
+          <button onClick={() => setShowTopicInput(false)} style={{ background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:18 }}>×</button>
         </div>
       )}
 
       {/* ── Notes textarea ──────────────────────────────────────────────────── */}
       {unsaved && notes.trim() && (
         <div style={{ background:"#fffbeb", border:"1px solid #f59e0b33", borderRadius:8, padding:"6px 12px", marginBottom:8, fontSize:12, color:"#b45309", fontWeight:600, display:"flex", alignItems:"center", gap:6 }}>
-          ⚠️ Unsaved — click Save to keep these notes
+          Unsaved — click Save to keep these notes
         </div>
       )}
       <textarea value={notes} onChange={e => { setNotes(e.target.value); setUnsaved(true); }}
@@ -4746,7 +4746,7 @@ function CardsTab({ file, onUpdate }) {
               Generate {cardCount} Cards
             </button>
             <button onClick={() => setShowCountPicker(false)}
-              style={{ background:"none", border:"none", cursor:"pointer", color:C.muted, padding:"9px 6px" }}>✕</button>
+              style={{ background:"none", border:"none", cursor:"pointer", color:C.muted, padding:"9px 6px" }}>×</button>
           </div>
         </div>
       )}
@@ -4836,21 +4836,21 @@ function GameTab({ file }) {
   if (activeGame==="wordfill") return <WordFill cards={cards} onBack={()=>setActiveGame(null)} />;
 
   const GAMES = [
-    {id:"mcq",emoji:"🧠",title:"Multiple Choice",desc:"4 options — pick the right one",bg:C.accentL,accent:C.accent},
-    {id:"voice",emoji:"🎙️",title:"Voice Answer",desc:"Speak your answer out loud — AI grades it",bg:"#f5f3ff",accent:"#7c3aed"},
-    {id:"flashcard",emoji:"🃏",title:"Flashcard Flip",desc:"Flip cards and track what you know",bg:"#f5f3ff",accent:"#7c3aed"},
-    {id:"quizshow",emoji:"🎤",title:"Quiz Show",desc:"Who Wants to Be a Millionaire style with lifelines",bg:"#fef2f2",accent:"#dc2626"},
-    {id:"fillblank",emoji:"✏️",title:"Fill in the Blank",desc:"Complete the sentence with the right answer",bg:"#ecfeff",accent:"#0694a2"},
-    {id:"rapidfire",emoji:"⚡",title:"Rapid Fire",desc:"Type as many correct answers as you can in 45s",bg:"#f0fdf4",accent:"#059669"},
-    {id:"truefalse",emoji:"✅",title:"True or False",desc:"Decide if the statement is true or false",bg:"#FAF5FF",accent:"#6B46C1"},
-    {id:"memory",emoji:"🎴",title:"Memory Flip",desc:"Match question cards to answer cards",bg:"#FFF5F5",accent:"#C53030"},
-    {id:"match",emoji:"🔗",title:"Matching Pairs",desc:"Connect each term to its definition",bg:C.greenL,accent:C.green},
-    {id:"scramble",emoji:"🔀",title:"Word Scramble",desc:"AI scrambles a key word — rearrange the letter tiles",bg:C.warmL,accent:C.warm},
-    {id:"speedrun",emoji:"🏃",title:"Speed Run",desc:"Answer as many as you can in 60 seconds",bg:"#FFFFF0",accent:"#D69E2E"},
-    {id:"tower",emoji:"🏗️",title:"Answer Tower",desc:"Build a tower — answer correctly to stack blocks",bg:"#E6FFFA",accent:"#2C7A7B"},
-    {id:"falling",emoji:"🧱",title:"Falling Blocks",desc:"Type the answer before the block falls",bg:C.purpleL,accent:C.purple},
-    {id:"listening",emoji:"🎧",title:"Listening Quiz",desc:"Listen to the question — answer without reading it",bg:"#f0fdf4",accent:"#059669"},
-    {id:"wordfill",emoji:"🔤",title:"Word Fill",desc:"Key words are blanked out — tap tiles to fill them in",bg:"#fff7ed",accent:"#ea580c"},
+    {id:"mcq",emoji:"◉",title:"Multiple Choice",desc:"4 options — pick the right one",bg:C.accentL,accent:C.accent},
+    {id:"voice",emoji:"♪",title:"Voice Answer",desc:"Speak your answer out loud — AI grades it",bg:"#f5f3ff",accent:"#7c3aed"},
+    {id:"flashcard",emoji:"▣",title:"Flashcard Flip",desc:"Flip cards and track what you know",bg:"#f5f3ff",accent:"#7c3aed"},
+    {id:"quizshow",emoji:"◈",title:"Quiz Show",desc:"Who Wants to Be a Millionaire style with lifelines",bg:"#fef2f2",accent:"#dc2626"},
+    {id:"fillblank",emoji:"✐",title:"Fill in the Blank",desc:"Complete the sentence with the right answer",bg:"#ecfeff",accent:"#0694a2"},
+    {id:"rapidfire",emoji:"▷",title:"Rapid Fire",desc:"Type as many correct answers as you can in 45s",bg:"#f0fdf4",accent:"#059669"},
+    {id:"truefalse",emoji:"✓",title:"True or False",desc:"Decide if the statement is true or false",bg:"#FAF5FF",accent:"#6B46C1"},
+    {id:"memory",emoji:"▦",title:"Memory Flip",desc:"Match question cards to answer cards",bg:"#FFF5F5",accent:"#C53030"},
+    {id:"match",emoji:"⊞",title:"Matching Pairs",desc:"Connect each term to its definition",bg:C.greenL,accent:C.green},
+    {id:"scramble",emoji:"⇄",title:"Word Scramble",desc:"AI scrambles a key word — rearrange the letter tiles",bg:C.warmL,accent:C.warm},
+    {id:"speedrun",emoji:"▶",title:"Speed Run",desc:"Answer as many as you can in 60 seconds",bg:"#FFFFF0",accent:"#D69E2E"},
+    {id:"tower",emoji:"⬆",title:"Answer Tower",desc:"Build a tower — answer correctly to stack blocks",bg:"#E6FFFA",accent:"#2C7A7B"},
+    {id:"falling",emoji:"▨",title:"Falling Blocks",desc:"Type the answer before the block falls",bg:C.purpleL,accent:C.purple},
+    {id:"listening",emoji:"◐",title:"Listening Quiz",desc:"Listen to the question — answer without reading it",bg:"#f0fdf4",accent:"#059669"},
+    {id:"wordfill",emoji:"≡",title:"Word Fill",desc:"Key words are blanked out — tap tiles to fill them in",bg:"#fff7ed",accent:"#ea580c"},
   ];
 
   return (
@@ -4863,7 +4863,7 @@ function GameTab({ file }) {
             style={{ background:g.bg, border:`1.5px solid ${g.accent}22`, borderRadius:18, padding:"20px 18px", textAlign:"left", cursor:"pointer", transition:"transform .15s,box-shadow .15s" }}
             onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-3px)";e.currentTarget.style.boxShadow=`0 8px 24px ${g.accent}33`;}}
             onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow="none";}}>
-            <div style={{ fontSize:32, marginBottom:10 }}>{g.emoji}</div>
+            <div style={{ fontSize:32, marginBottom:10 }}><span style={{fontSize:16,lineHeight:1}}>{g.emoji}</span></div>
             <p style={{ fontSize:15, fontWeight:700, color:C.text, marginBottom:5 }}>{g.title}</p>
             <p style={{ fontSize:12, color:C.muted, lineHeight:1.4 }}>{g.desc}</p>
           </button>
@@ -4898,12 +4898,12 @@ function GResults({ score, total, onBack, msg }) {
   const pct = Math.round(score/total*100);
   return (
     <div style={{ maxWidth:420, margin:"0 auto", textAlign:"center", padding:"40px 0" }}>
-      <div style={{ fontSize:56, marginBottom:16 }}>{pct>=80?"🎉":pct>=50?"👍":"📚"}</div>
+      <div style={{ fontSize:56, marginBottom:16 }}>{pct>=80?"★":pct>=50?"↑":"↺"}</div>
       <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:28, fontWeight:700, color:C.text, marginBottom:6 }}>{msg||"Round Complete!"}</h2>
       <p style={{ fontSize:48, fontWeight:700, color:C.accent, marginBottom:4 }}>{score}/{total}</p>
       <p style={{ fontSize:16, color:C.muted, marginBottom:8 }}>{pct}% correct</p>
       <p style={{ fontSize:14, color:pct>=80?C.green:pct>=50?C.warm:C.red, fontWeight:600, marginBottom:32 }}>
-        {pct>=80?"Excellent! 🌟":pct>=50?"Good effort! Keep studying.":"Keep practicing — you've got this!"}
+        {pct>=80?"Excellent!":pct>=50?"Good effort! Keep studying.":"Keep practicing — you've got this!"}
       </p>
       <button onClick={onBack} style={{ background:C.accent, color:"#fff", border:"none", borderRadius:14, padding:"13px 32px", fontSize:15, fontWeight:700, cursor:"pointer" }}>← Back to Games</button>
     </div>
@@ -4919,7 +4919,7 @@ function AILoadingScreen({ title, message, accent }) {
   }, []);
   return (
     <div style={{ maxWidth:480, margin:"0 auto", textAlign:"center", padding:"60px 20px" }}>
-      <div style={{ fontSize:52, marginBottom:18 }}>🧠</div>
+      <div style={{ width:64,height:64,borderRadius:20,background:"#ede9fe",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 18px" }}><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.46 2.5 2.5 0 0 1-1.98-3 2.5 2.5 0 0 1-1.32-4.24 3 3 0 0 1 .34-5.58 2.5 2.5 0 0 1 1.96-3.41A2.5 2.5 0 0 1 9.5 2zM14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.46 2.5 2.5 0 0 0 1.98-3 2.5 2.5 0 0 0 1.32-4.24 3 3 0 0 0-.34-5.58 2.5 2.5 0 0 0-1.96-3.41A2.5 2.5 0 0 0 14.5 2z"/></svg></div>
       <p style={{ fontSize:20, fontWeight:800, color:"#111", marginBottom:8 }}>{title}</p>
       <p style={{ fontSize:15, color:"#555", marginBottom:32 }}>{message}{dots}</p>
       <div style={{ display:"flex", gap:8, justifyContent:"center" }}>
@@ -5042,7 +5042,7 @@ Reply ONLY with this JSON array (no markdown):
 
   if (!simplified) return (
     <div style={{ textAlign:"center", padding:"60px 20px" }}>
-      <div style={{ fontSize:40, marginBottom:16 }}>✨</div>
+      <div style={{ width:52,height:52,borderRadius:16,background:C.accentL,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px" }}><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="{C.accent}" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
       <p style={{ fontSize:16, fontWeight:700, color:C.text, marginBottom:8 }}>Preparing your puzzle…</p>
       <p style={{ fontSize:13, color:C.muted }}>AI is simplifying the cards for you</p>
     </div>
@@ -5125,7 +5125,7 @@ function ScrambleGame({ deck, onBack }) {
         <div style={{ textAlign:"center", marginBottom:12, padding:"10px", borderRadius:12,
           background:result==="correct"?"#f0fdf4":"#fff1f1" }}>
           <span style={{ fontSize:16, fontWeight:800, color:result==="correct"?"#16a34a":C.red }}>
-            {result==="correct" ? "✓ Correct!" : `✗ The word was: ${item.word}`}
+            {result==="correct" ? "Correct!" : `Wrong: ${item.word}`}
           </span>
         </div>
       )}
@@ -5178,7 +5178,7 @@ function ScrambleGame({ deck, onBack }) {
         </div>
       ) : (
         <button onClick={next} style={{ width:"100%", background:C.warm, color:"#fff", border:"none", borderRadius:12, padding:"14px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
-          {curr+1>=deck.length ? "See Results 🎉" : "Next →"}
+          {curr+1>=deck.length ? "See Results" : "Next →"}
         </button>
       )}
     </div>
@@ -5234,7 +5234,7 @@ function Falling({ cards, onBack }) {
     <div style={{ maxWidth:520, margin:"0 auto" }}>
       <GHeader title="Falling Blocks" score={score} curr={curr} total={deck.length} onBack={onBack} accent={C.purple} />
       <div style={{ display:"flex", justifyContent:"space-between", marginBottom:12 }}>
-        <span style={{ fontSize:14, color:C.muted }}>{"❤️".repeat(lives)}{"🖤".repeat(Math.max(0,3-lives))}</span>
+        <span style={{ fontSize:14, color:C.muted }}>{"♥".repeat(lives)}{" ♡".repeat(Math.max(0,3-lives))}</span>
         <span style={{ fontSize:13, color:C.muted }}>Type fast!</span>
       </div>
       <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:20, height:300, position:"relative", overflow:"hidden", marginBottom:16 }}>
@@ -5245,7 +5245,7 @@ function Falling({ cards, onBack }) {
           <p style={{ fontSize:15, color:C.text, lineHeight:1.4 }}>{card.question}</p>
         </div>
         {res && <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", background:res==="correct"?C.greenL+"cc":C.redL+"cc", borderRadius:20 }}>
-          <p style={{ fontSize:32, fontWeight:700, color:res==="correct"?C.green:C.red }}>{res==="correct"?"✓ Correct!":res==="wrong"?`✗ ${card.answer}`:"💨 Too slow!"}</p>
+          <p style={{ fontSize:32, fontWeight:700, color:res==="correct"?C.green:C.red }}>{res==="correct"?"Correct!":res==="wrong"?card.answer:"Too slow!"}</p>
         </div>}
       </div>
       <div style={{ display:"flex", gap:10 }}>
@@ -5289,7 +5289,7 @@ function Tower({ cards, onBack }) {
         </div>
         <input value={inp} onChange={e=>{if(!res)setInp(e.target.value);}} onKeyDown={e=>{if(e.key==="Enter"&&inp.trim()&&!res)check();}}
           placeholder="Type answer…" style={{ width:"100%", border:`1.5px solid ${res==="correct"?teal:res==="wrong"?C.red:C.border}`, borderRadius:10, padding:"11px 14px", fontSize:15, outline:"none", background:res==="correct"?"#E6FFFA":res==="wrong"?C.redL:C.bg, marginBottom:10 }} />
-        {res&&<p style={{ fontSize:14, fontWeight:600, color:res==="correct"?teal:C.red, marginBottom:10 }}>{res==="correct"?"🧱 Block added!":"✗ "+deck[curr].answer}</p>}
+        {res&&<p style={{ fontSize:14, fontWeight:600, color:res==="correct"?teal:C.red, marginBottom:10 }}>{res==="correct"?"Block added!":"✗ "+deck[curr].answer}</p>}
         <button onClick={()=>inp.trim()&&!res&&check()} disabled={!inp.trim()||!!res}
           style={{ width:"100%", background:inp.trim()&&!res?teal:"#ccc", color:"#fff", border:"none", borderRadius:10, padding:"12px", fontSize:15, fontWeight:700, cursor:"pointer" }}>Stack Block</button>
       </div>
@@ -5328,7 +5328,7 @@ function Speedrun({ cards, onBack }) {
     setTimeout(()=>setFlash(null),300);
     setCurr(c=>c+1);setInp("");
   };
-  if(done) return <GResults score={score} total={Math.min(curr,deck.length*3)} onBack={onBack} msg={`Time's up! ${score} correct ⚡`} />;
+  if(done) return <GResults score={score} total={Math.min(curr,deck.length*3)} onBack={onBack} msg={`Time's up! ${score} correct`} />;
   const card=deck[curr%deck.length];
   const pct=(time/60)*100;
   return (
@@ -5343,7 +5343,7 @@ function Speedrun({ cards, onBack }) {
       </div>
       {!started?(
         <div style={{ textAlign:"center", padding:"40px 0" }}>
-          <p style={{ fontSize:48, marginBottom:16 }}>⚡</p>
+          <div style={{ width:56,height:56,borderRadius:16,background:"#fef9c3",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px" }}><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ca8a04" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
           <p style={{ fontSize:18, fontWeight:700, color:C.text, marginBottom:8 }}>Speed Run</p>
           <p style={{ fontSize:14, color:C.muted, marginBottom:24 }}>Answer as many as you can in 60 seconds!</p>
           <button onClick={()=>setStarted(true)} style={{ background:gold, color:"#fff", border:"none", borderRadius:14, padding:"14px 40px", fontSize:16, fontWeight:700, cursor:"pointer" }}>Start!</button>
@@ -5448,7 +5448,7 @@ Return ONLY: [{"id":"<same id>","wrong":"<plausible wrong answer>"}, ...]`
         <p style={{ fontSize:15, color:C.text, lineHeight:1.7 }}>{card.statement}</p>
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
-        {[{val:true,label:"✅ True",bg:"#E6FFFA",color:"#2C7A7B"},{val:false,label:"❌ False",bg:C.redL,color:C.red}].map(opt=>{
+        {[{val:true,label:"True",bg:"#E6FFFA",color:"#2C7A7B"},{val:false,label:"False",bg:C.redL,color:C.red}].map(opt=>{
           let bg=opt.bg; let border=`1.5px solid ${opt.color}33`;
           if(res){
             if(opt.val===card.correct){ bg="#E6FFFA"; border="2px solid #2C7A7B"; }
@@ -5458,7 +5458,7 @@ Return ONLY: [{"id":"<same id>","wrong":"<plausible wrong answer>"}, ...]`
             style={{ background:bg, border, borderRadius:14, padding:"20px", fontSize:18, fontWeight:700, color:opt.color, cursor:res?"default":"pointer", transition:"all .2s" }}>{opt.label}</button>;
         })}
       </div>
-      {res&&<p style={{ textAlign:"center", marginTop:14, fontSize:14, fontWeight:600, color:res.ok?"#2C7A7B":C.red }}>{res.ok?"✓ Correct!":"✗ The answer was: "+card.orig.answer}</p>}
+      {res&&<p style={{ textAlign:"center", marginTop:14, fontSize:14, fontWeight:600, color:res.ok?"#2C7A7B":C.red }}>{res.ok?"Correct!":"Answer: "+card.orig.answer}</p>}
     </div>
   );
 }
@@ -5490,7 +5490,7 @@ function Memory({ cards, onBack }) {
       } else setTimeout(()=>setFlipped([]),900);
     }
   };
-  if(done) return <GResults score={count} total={count} onBack={onBack} msg={`Matched all in ${moves} moves! 🃏`} />;
+  if(done) return <GResults score={count} total={count} onBack={onBack} msg={`Matched all in ${moves} moves!`} />;
   return (
     <div style={{ maxWidth:640, margin:"0 auto" }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20 }}>
@@ -5508,7 +5508,7 @@ function Memory({ cards, onBack }) {
               <div style={{ width:"100%", height:"100%", position:"relative", transition:"transform .4s", transformStyle:"preserve-3d", transform:isFlipped||isMatched?"rotateY(180deg)":"none" }}>
                 {/* Back */}
                 <div style={{ position:"absolute", inset:0, backfaceVisibility:"hidden", background:isMatched?C.greenL:red, borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  <span style={{ fontSize:24, color:"#fff" }}>🃏</span>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/></svg>
                 </div>
                 {/* Front */}
                 <div style={{ position:"absolute", inset:0, backfaceVisibility:"hidden", transform:"rotateY(180deg)", background:card.type==="q"?C.accentL:C.warmL, border:`1.5px solid ${card.type==="q"?C.accentS:C.warm}44`, borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", padding:8 }}>
@@ -5579,7 +5579,7 @@ function FillBlank({ cards, onBack }) {
         </div>
       ) : (
         <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 44, marginBottom: 10 }}>{result ? "✅" : "❌"}</div>
+          <div style={{ fontSize: 44, marginBottom: 10 }}>{result ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg> : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.red} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>}</div>
           {!result && <p style={{ color: C.red, fontSize: 15, marginBottom: 6 }}>Correct answer: <strong>{card.answer}</strong></p>}
           <button onClick={next} style={{ background: accent, color: "#fff", border: "none", borderRadius: 12, padding: "12px 32px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
             {curr + 1 >= deck.length ? "See Results" : "Next →"}
@@ -5611,7 +5611,7 @@ function FlashcardFlip({ cards, onBack }) {
 
   if (done) return (
     <div style={{ maxWidth: 480, margin: "0 auto", textAlign: "center", padding: "40px 0" }}>
-      <div style={{ fontSize: 56, marginBottom: 12 }}>{known >= deck.length * .8 ? "🌟" : "📚"}</div>
+      <div style={{ fontSize: 56, marginBottom: 12 }}>{known >= deck.length * .8 ? "★" : "↺"}</div>
       <h2 style={{ fontFamily: "'Fraunces',serif", fontSize: 26, fontWeight: 700, color: C.text, marginBottom: 8 }}>Done!</h2>
       <p style={{ fontSize: 32, fontWeight: 700, color: accent, marginBottom: 4 }}>{known}/{deck.length} known</p>
       <p style={{ fontSize: 14, color: C.muted, marginBottom: 28 }}>{reviewing.length > 0 ? `${reviewing.length} cards to review again` : "You knew them all!"}</p>
@@ -5639,8 +5639,8 @@ function FlashcardFlip({ cards, onBack }) {
       </div>
       {flipped && (
         <div style={{ display: "flex", gap: 12 }}>
-          <button onClick={() => respond(false)} style={{ flex: 1, background: "#FFF5F5", color: C.red, border: `2px solid ${C.red}33`, borderRadius: 14, padding: "14px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>😕 Still learning</button>
-          <button onClick={() => respond(true)} style={{ flex: 1, background: "#f0fdf4", color: "#16a34a", border: "2px solid #16a34a33", borderRadius: 14, padding: "14px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>✅ Got it!</button>
+          <button onClick={() => respond(false)} style={{ flex: 1, background: "#FFF5F5", color: C.red, border: `2px solid ${C.red}33`, borderRadius: 14, padding: "14px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg> Still learning</button>
+          <button onClick={() => respond(true)} style={{ flex: 1, background: "#f0fdf4", color: "#16a34a", border: "2px solid #16a34a33", borderRadius: 14, padding: "14px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg> Got it!</button>
         </div>
       )}
       {!flipped && <p style={{ textAlign: "center", color: C.muted, fontSize: 13 }}>Tap the card to reveal the answer</p>}
@@ -5698,14 +5698,14 @@ function QuizShow({ cards, onBack }) {
   };
 
   if (qs_loading) return <AILoadingScreen title="Quiz Show" message="Preparing smart answer choices" accent={accent} />;
-  if (done) return <GResults score={score} total={deck.length} onBack={onBack} msg="Quiz Show Complete! 🎤" />;
+  if (done) return <GResults score={score} total={deck.length} onBack={onBack} msg="Quiz Show Complete!" />;
 
   const OPTION_LABELS = ["A", "B", "C", "D"];
 
   return (
     <div style={{ maxWidth: 580, margin: "0 auto" }}>
       <GHeader title="Quiz Show" score={score} curr={curr} total={deck.length} onBack={onBack} accent={accent} />
-      {streak >= 3 && <div style={{ background: "#fef9c3", border: "1.5px solid #ca8a04", borderRadius: 10, padding: "6px 14px", marginBottom: 12, fontSize: 13, fontWeight: 700, color: "#92400e", textAlign: "center" }}>🔥 {streak} in a row! Double points!</div>}
+      {streak >= 3 && <div style={{ background: "#fef9c3", border: "1.5px solid #ca8a04", borderRadius: 10, padding: "6px 14px", marginBottom: 12, fontSize: 13, fontWeight: 700, color: "#92400e", textAlign: "center" }}>{streak} in a row! Double points!</div>}
       <div style={{ background: "linear-gradient(135deg,#fef2f2,#fee2e2)", border: `2px solid ${accent}22`, borderRadius: 18, padding: "26px 24px", marginBottom: 20, textAlign: "center" }}>
         <p style={{ fontSize: 12, fontWeight: 700, color: accent, letterSpacing: 1, marginBottom: 12 }}>QUESTION {curr + 1}</p>
         <p style={{ fontSize: 19, fontWeight: 600, color: C.text, lineHeight: 1.5 }}>{card.question}</p>
@@ -5780,7 +5780,7 @@ function RapidFire({ cards, onBack }) {
 
   if (done) return (
     <div style={{ maxWidth: 420, margin: "0 auto", textAlign: "center", padding: "40px 0" }}>
-      <div style={{ fontSize: 56, marginBottom: 12 }}>⚡</div>
+      <div style={{ width:64,height:64,borderRadius:20,background:"#fef9c3",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px" }}><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ca8a04" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
       <h2 style={{ fontFamily: "'Fraunces',serif", fontSize: 28, fontWeight: 700, color: C.text, marginBottom: 8 }}>Time Up!</h2>
       <p style={{ fontSize: 48, fontWeight: 700, color: accent, marginBottom: 4 }}>{score}</p>
       <p style={{ fontSize: 16, color: C.muted, marginBottom: 28 }}>correct answers in {TOTAL_TIME}s</p>
@@ -5962,7 +5962,7 @@ Is the student correct? Reply only YES or NO.`
     setResult(null);
   };
 
-  if (done) return <GResults score={score} total={deck.length} onBack={onBack} msg="Voice Round Done! 🎙️" />;
+  if (done) return <GResults score={score} total={deck.length} onBack={onBack} msg="Voice Round Done!" />;
 
   return (
     <div style={{ maxWidth: 560, margin: "0 auto" }}>
@@ -6000,7 +6000,7 @@ Is the student correct? Reply only YES or NO.`
               transition: "all .3s", margin: "0 auto",
               animation: listening ? "pulse 1.2s infinite" : "none",
             }}>
-            {listening ? "⏹" : "🎙️"}
+            {listening ? <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>}
           </button>
           <p style={{ marginTop: 14, fontSize: 13, color: listening ? "#dc2626" : voiceCountdown !== null ? "#7c3aed" : "#6b7280", fontWeight: 600 }}>
             {listening ? "Listening… tap to stop" : voiceCountdown !== null ? "Tap mic to speak again" : "Tap to speak your answer"}
@@ -6028,7 +6028,7 @@ Is the student correct? Reply only YES or NO.`
               <div style={{ marginTop: 12 }}>
                 <button onClick={() => { clearInterval(countdownRef.current); setVoiceCountdown(null); setTranscript(""); }}
                   style={{ background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 10, padding: "8px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-                  🔄 Redo answer
+                  Redo answer
                 </button>
               </div>
             </div>
@@ -6049,7 +6049,7 @@ Is the student correct? Reply only YES or NO.`
       {/* Result */}
       {result !== null && (
         <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 52, marginBottom: 12 }}>{result.ok ? "✅" : "❌"}</div>
+          <div style={{ fontSize: 52, marginBottom: 12 }}>{result.ok ? <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg> : <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.red} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>}</div>
           <p style={{ fontSize: 18, fontWeight: 700, color: result.ok ? "#16a34a" : "#dc2626", marginBottom: 8 }}>
             {result.ok ? "Correct!" : "Not quite"}
           </p>
@@ -6066,7 +6066,7 @@ Is the student correct? Reply only YES or NO.`
           <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
             <button onClick={() => { clearInterval(countdownRef.current); setVoiceCountdown(null); setResult(null); setTranscript(""); }}
               style={{ background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 12, padding: "11px 22px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
-              🔄 Try again
+              Try again
             </button>
             <button onClick={next}
               style={{ background: accent, color: "#fff", border: "none", borderRadius: 12, padding: "11px 22px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
@@ -6205,7 +6205,7 @@ Return ONLY this JSON: {"word":"THEWORD","sentence":"The answer with _____ where
             )}
           </p>
         )}
-        {loading && <div style={{ textAlign: "center", padding: "20px 0", color: "#999", fontSize: 13 }}>✨ Preparing puzzle…</div>}
+        {loading && <div style={{ textAlign: "center", padding: "20px 0", color: "#999", fontSize: 13 }}>Preparing puzzle…</div>}
       </div>
 
       {/* Answer tray */}
@@ -6230,7 +6230,7 @@ Return ONLY this JSON: {"word":"THEWORD","sentence":"The answer with _____ where
 
           {result && (
             <p style={{ textAlign: "center", marginBottom: 10, fontSize: 15, fontWeight: 700, color: result === "correct" ? "#16a34a" : "#dc2626" }}>
-              {result === "correct" ? "✓ Correct!" : `✗ Answer: ${puzzle.word}`}
+              {result === "correct" ? "Correct!" : `Answer: ${puzzle.word}`}
             </p>
           )}
 
@@ -6257,7 +6257,7 @@ Return ONLY this JSON: {"word":"THEWORD","sentence":"The answer with _____ where
             </div>
           ) : (
             <button onClick={next} style={{ width: "100%", background: accent, color: "#fff", border: "none", borderRadius: 12, padding: "13px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
-              {curr + 1 >= deck.length ? "See Results 🎉" : "Next →"}
+              {curr + 1 >= deck.length ? "See Results" : "Next →"}
             </button>
           )}
         </>
@@ -6360,7 +6360,7 @@ function ListeningGame({ cards, onBack }) {
       <div style={{ marginBottom:14 }}>
         <button onClick={() => setShowVoicePick(v => !v)}
           style={{ display:"flex", alignItems:"center", gap:7, background:"#fff", border:`1.5px solid ${showVoicePick?accent:"#e5e7eb"}`, borderRadius:20, padding:"6px 14px", fontSize:12, fontWeight:700, cursor:"pointer", color:showVoicePick?accent:"#6b7280" }}>
-          🎤 Voice: {persona.label} {persona.gender === "female" ? "♀" : "♂"} ▾
+          Voice: {persona.label} ▾
         </button>
         {showVoicePick && (
           <div style={{ marginTop:8, background:"#fff", border:"1.5px solid #e5e7eb", borderRadius:14, padding:"10px 12px", display:"flex", flexWrap:"wrap", gap:8 }}>
@@ -6370,7 +6370,7 @@ function ListeningGame({ cards, onBack }) {
                   background: personaIdx===i ? accent : "#f3f4f6",
                   color: personaIdx===i ? "#fff" : "#374151",
                   boxShadow: personaIdx===i ? `0 2px 10px ${accent}44` : "none" }}>
-                {p.emoji} {p.label} {p.gender === "female" ? "♀" : "♂"}
+                <span style={{width:10,height:10,borderRadius:"50%",background:p.color,display:"inline-block",marginRight:4}}></span>{p.label}
               </button>
             ))}
             <p style={{ width:"100%", fontSize:10, color:"#9ca3af", marginTop:4 }}>Using: {getSmartVoiceLabel(personaIdx, allVoices, "en-US")} · ♀ = Female · ♂ = Male</p>
@@ -6380,19 +6380,19 @@ function ListeningGame({ cards, onBack }) {
 
       {/* Audio card */}
       <div style={{ background: speaking?"#ecfdf5":accentL, border:`2px solid ${speaking?accent:accent+"33"}`, borderRadius:20, padding:"28px 24px", marginBottom:18, textAlign:"center", transition:"all .3s" }}>
-        <div style={{ fontSize:46, marginBottom:12 }}>{speaking ? "🔊" : "🎧"}</div>
+        <div style={{ fontSize:46, marginBottom:12 }}>{speaking ? <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg> : <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>}</div>
         <p style={{ fontSize:14, color:speaking?accent:"#6b7280", fontWeight:600, marginBottom:16 }}>
           {speaking ? "Listen carefully…" : hasPlayed ? "Choose the correct answer below" : "Press play to hear the question"}
         </p>
         <div style={{ display:"flex", gap:10, justifyContent:"center", flexWrap:"wrap" }}>
           <button onClick={() => speak(card.question)} disabled={speaking}
             style={{ background:accent, color:"#fff", border:"none", borderRadius:12, padding:"10px 22px", fontSize:14, fontWeight:700, cursor:speaking?"not-allowed":"pointer", opacity:speaking?.6:1, display:"flex", alignItems:"center", gap:7 }}>
-            {speaking ? "🔊 Playing…" : "▶ Play Question"}
+            {speaking ? "Playing…" : "Play Question"}
           </button>
           {hasPlayed && !result && (
             <button onClick={() => setRevealed(r => !r)}
               style={{ background:"#fff", color:"#6b7280", border:"1.5px solid #e5e7eb", borderRadius:12, padding:"10px 16px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
-              {revealed ? "🙈 Hide" : "👁 Peek"}
+              {revealed ? "Hide" : "Peek"}
             </button>
           )}
         </div>
@@ -6406,7 +6406,7 @@ function ListeningGame({ cards, onBack }) {
       {/* A/B/C/D choices */}
       {!hasPlayed ? (
         <div style={{ textAlign:"center", padding:"18px", background:"#f9fafb", borderRadius:16, color:"#9ca3af", fontSize:14, fontWeight:600 }}>
-          🎧 Listen to the question first, then choose your answer
+          Listen to the question first, then choose your answer
         </div>
       ) : (
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
@@ -6431,8 +6431,8 @@ function ListeningGame({ cards, onBack }) {
                   {LABELS[idx]}
                 </span>
                 <span style={{ fontSize:14, fontWeight:600, color:col, flex:1 }}>{choice}</span>
-                {result && isCorrect && <span style={{ fontSize:18 }}>✅</span>}
-                {result && isSelected && !isCorrect && <span style={{ fontSize:18 }}>❌</span>}
+                {result && isCorrect && <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>}
+                {result && isSelected && !isCorrect && <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.red} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>}
               </button>
             );
           })}
@@ -6443,7 +6443,7 @@ function ListeningGame({ cards, onBack }) {
       {result && (
         <div style={{ marginTop:14, background:result==="correct"?"#f0fdf4":"#fff1f1", border:`1.5px solid ${result==="correct"?"#16a34a":"#dc2626"}33`, borderRadius:14, padding:"16px 18px", textAlign:"center" }}>
           <p style={{ fontSize:16, fontWeight:700, color:result==="correct"?"#16a34a":"#dc2626", marginBottom:result==="correct"?0:8 }}>
-            {result === "correct" ? "✅ Correct!" : "❌ Not quite"}
+            {result === "correct" ? "Correct!" : "Not quite"}
           </p>
           {result !== "correct" && (
             <>
@@ -6456,7 +6456,7 @@ function ListeningGame({ cards, onBack }) {
 
       {result && (
         <button onClick={next} style={{ marginTop:12, width:"100%", background:accent, color:"#fff", border:"none", borderRadius:12, padding:"13px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
-          {curr + 1 >= deck.length ? "See Results 🎉" : "Next →"}
+          {curr + 1 >= deck.length ? "See Results" : "Next →"}
         </button>
       )}
     </div>
@@ -6596,7 +6596,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
       <div style={{ padding:"18px 22px 14px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
           <div style={{ width:44, height:44, borderRadius:14, background:"linear-gradient(135deg,#7c3aed,#a855f7)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, boxShadow:"0 4px 14px rgba(124,58,237,.55)", flexShrink:0 }}>
-            🎙️
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
           </div>
           <div>
             <p style={{ fontSize:11, color:"#a5b4fc", fontWeight:700, letterSpacing:1, textTransform:"uppercase", marginBottom:2 }}>Study Podcast</p>
@@ -6735,7 +6735,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
             {/* Current voice badge */}
             {!showPicker && (
               <p style={{ fontSize:11, color:"#818cf8", textAlign:"center", marginBottom:10 }}>
-                {persona.emoji} <strong style={{color:"#c7d2fe"}}>{persona.label}</strong> · {persona.gender==="female"?"♀ Female":"♂ Male"} · {persona.desc} · <span style={{color:"#6366f1"}}>{getSmartVoiceLabel(personaIdx, allVoices, lang)}</span>
+                <span style={{width:10,height:10,borderRadius:"50%",background:persona.color,display:"inline-block",marginRight:4}}></span><strong style={{color:"#c7d2fe"}}>{persona.label}</strong> · {persona.gender==="female"?"♀ Female":"♂ Male"} · {persona.desc} · <span style={{color:"#6366f1"}}>{getSmartVoiceLabel(personaIdx, allVoices, lang)}</span>
               </p>
             )}
 
@@ -6754,7 +6754,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
           {/* Script viewer */}
           <details style={{ borderTop:"1px solid rgba(255,255,255,.06)" }}>
             <summary style={{ padding:"10px 22px", color:"#6366f1", fontSize:12, fontWeight:700, cursor:"pointer", userSelect:"none", letterSpacing:.5 }}>
-              📄 READ SCRIPT
+              READ SCRIPT
             </summary>
             <div style={{ padding:"0 22px 20px", maxHeight:240, overflowY:"auto" }}>
               <p style={{ fontSize:13, color:"#c7d2fe", lineHeight:1.9, whiteSpace:"pre-wrap" }}>{script}</p>
@@ -6827,7 +6827,7 @@ function SGAvatar({ character, displayName, size = 36, isHost = false, isSelf = 
             background: C.warm, border: `2px solid ${C.surface}`,
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: 7,
-          }}>👑</div>
+          }}><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M2 20h20v2H2zM3 8l4 8h10l4-8-6 4-3-6-3 6-6-4z"/></svg></div>
         )}
       </div>
       <span style={{
@@ -6923,7 +6923,7 @@ function StudyGroupLobby({ user, db, onJoin, onClose }) {
             display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div>
               <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700,
-                fontFamily: "'Fraunces',serif", color: C.text }}>👥 Study Group</h2>
+                fontFamily: "'Fraunces',serif", color: C.text }}>Study Group</h2>
               <p style={{ margin: "3px 0 0", fontSize: 13, color: C.muted }}>Study together in real time</p>
             </div>
             <button onClick={onClose} style={{ background: C.bg, border: `1px solid ${C.border}`,
@@ -6940,9 +6940,9 @@ function StudyGroupLobby({ user, db, onJoin, onClose }) {
                   borderRadius: 14, padding: "14px 18px", cursor: "pointer", textAlign: "left",
                 }}>
                   <div style={{ width: 40, height: 40, borderRadius: 12, background: C.accent,
-                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>✨</div>
+                    display: "flex", alignItems: "center", justifyContent: "center", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
                   <div>
-                    <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.text }}>Create a 👥 Study Group</p>
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.text }}>Create a Study Group</p>
                     <p style={{ margin: "2px 0 0", fontSize: 12, color: C.muted }}>Start a new room and invite friends</p>
                   </div>
                 </button>
@@ -6952,9 +6952,9 @@ function StudyGroupLobby({ user, db, onJoin, onClose }) {
                   borderRadius: 14, padding: "14px 18px", cursor: "pointer", textAlign: "left",
                 }}>
                   <div style={{ width: 40, height: 40, borderRadius: 12, background: C.warmL,
-                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>🔗</div>
+                    display: "flex", alignItems: "center", justifyContent: "center", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></div>
                   <div>
-                    <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.text }}>Join a 👥 Study Group</p>
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.text }}>Join a Study Group</p>
                     <p style={{ margin: "2px 0 0", fontSize: 12, color: C.muted }}>Enter a code from a friend</p>
                   </div>
                 </button>
@@ -7218,7 +7218,7 @@ function SGFileViewer({ fileData, fileURL, fileChunks, groupId, fileName }) {
     <div style={{ flex:1, display:"flex", flexDirection:"column",
       alignItems:"center", justifyContent:"center", gap:12,
       background:"#404040", color:"#fff", padding:32 }}>
-      <div style={{ fontSize:44 }}>⚠️</div>
+      <div style={{ width:52,height:52,borderRadius:16,background:"#fef9c3",display:"flex",alignItems:"center",justifyContent:"center" }}><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ca8a04" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
       <p style={{ margin:0, fontSize:15, fontWeight:700 }}>Failed to load file</p>
       <p style={{ margin:0, fontSize:12, opacity:.6, textAlign:"center", maxWidth:300 }}>{chunkError}</p>
     </div>
@@ -7228,7 +7228,7 @@ function SGFileViewer({ fileData, fileURL, fileChunks, groupId, fileName }) {
     <div style={{ flex:1, display:"flex", flexDirection:"column",
       alignItems:"center", justifyContent:"center", gap:10,
       background:"#404040", color:"#fff" }}>
-      <div style={{ fontSize:40 }}>📄</div>
+      <div style={{ width:48,height:48,borderRadius:14,background:C.accentL,display:"flex",alignItems:"center",justifyContent:"center" }}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="{C.accent}" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
       <p style={{ margin:0, fontSize:14, opacity:.7 }}>Waiting for file…</p>
     </div>
   );
@@ -7248,7 +7248,7 @@ function SGFileViewer({ fileData, fileURL, fileChunks, groupId, fileName }) {
           <button onClick={() => setPageNum(p => Math.min(totalPages||p,p+1))}
             disabled={!pdfReady || pageNum>=totalPages}
             style={navBtn(!pdfReady || pageNum>=totalPages)}>›</button>
-          <span style={{ marginLeft:"auto", fontSize:11, color:C.muted }}>📄 {fileName}</span>
+          <span style={{ marginLeft:"auto", fontSize:11, color:C.muted }}>{fileName}</span>
         </div>
       )}
 
@@ -7263,7 +7263,7 @@ function SGFileViewer({ fileData, fileURL, fileChunks, groupId, fileName }) {
           </span>
           <button onClick={() => setPptPage(p => Math.min(pptTotal,p+1))} disabled={pptPage>=pptTotal}
             style={navBtn(pptPage>=pptTotal)}>›</button>
-          <span style={{ marginLeft:"auto", fontSize:11, color:C.muted }}>📊 {fileName}</span>
+          <span style={{ marginLeft:"auto", fontSize:11, color:C.muted }}>{fileName}</span>
         </div>
       )}
 
@@ -7310,7 +7310,7 @@ function SGFileViewer({ fileData, fileURL, fileChunks, groupId, fileName }) {
         {/* Unsupported */}
         {!isPDF && !isImage && !isText && !isWord && !isPPT && (
           <div style={{ background:C.surface, borderRadius:14, padding:32, textAlign:"center" }}>
-            <div style={{ fontSize:48, marginBottom:12 }}>📄</div>
+            <div style={{ width:56,height:56,borderRadius:16,background:C.accentL,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:12 }}><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="{C.accent}" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
             <p style={{ color:C.text, fontWeight:700, fontSize:15 }}>{fileName}</p>
             <p style={{ color:C.muted, fontSize:13, margin:0 }}>Preview not available</p>
             {fileURL && (
@@ -7318,7 +7318,7 @@ function SGFileViewer({ fileData, fileURL, fileChunks, groupId, fileName }) {
                 style={{ display:"inline-block", marginTop:14, padding:"8px 18px",
                   background:C.accent, color:"#fff", borderRadius:10, fontSize:13,
                   fontWeight:700, textDecoration:"none" }}>
-                ⬇️ Download File
+                Download File
               </a>
             )}
           </div>
@@ -7358,7 +7358,7 @@ function SGSharedContent({ content, presenterName, isHost, db, groupId }) {
   if (!content) return (
     <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center",
       justifyContent:"center", gap:12, padding:32, opacity:.45 }}>
-      <div style={{ fontSize:52 }}>📺</div>
+      <div style={{ width:60,height:60,borderRadius:18,background:C.accentL,display:"flex",alignItems:"center",justifyContent:"center" }}><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="{C.accent}" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><polyline points="17 2 12 7 7 2"/></svg></div>
       <p style={{ color:C.muted, fontSize:15, fontWeight:600, margin:0 }}>Nothing shared yet</p>
       <p style={{ color:C.muted, fontSize:13, margin:0, textAlign:"center", maxWidth:240 }}>
         The host can present notes, flashcards, a whiteboard, screen, or study file
@@ -7366,20 +7366,19 @@ function SGSharedContent({ content, presenterName, isHost, db, groupId }) {
     </div>
   );
 
-  const typeIcon = { notes:"📝", flashcards:"🃏", whiteboard:"✏️", material:"📄",
-    screenshare:"🖥️", file:"📎" };
+  const typeIcon = { notes:"✎", flashcards:"▣", whiteboard:"✐", material:"▤", screenshare:"▨", file:"▤" };
 
   return (
     <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden" }}>
       {/* Presenter banner */}
       <div style={{ flexShrink:0, display:"flex", alignItems:"center", gap:8,
         padding:"8px 16px", background:C.accentL, borderBottom:`1px solid ${C.accentS}` }}>
-        <span style={{ fontSize:13 }}>📺</span>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><polyline points="17 2 12 7 7 2"/></svg>
         <span style={{ fontSize:13, fontWeight:700, color:C.accent }}>
           {presenterName || content.sharedBy} is presenting
         </span>
         <span style={{ marginLeft:"auto", fontSize:11, color:C.muted }}>
-          {typeIcon[content.type] || "📄"} {content.type}
+          {typeIcon[content.type] || "▤"} {content.type}
         </span>
         {isHost && (
           <button onClick={() => updateDoc(doc(db,"studyGroups",groupId),{sharedContent:null})}
@@ -7609,7 +7608,7 @@ function SGScreenShareHost({ groupId, db, user, onStop, registerStop }) {
           <div style={{ padding: "10px 14px", borderRadius: 10,
             background: C.accentL, border: `1px solid ${C.accentS}` }}>
             <p style={{ margin: 0, fontSize: 13, color: C.accent, fontWeight: 700, marginBottom: 4 }}>
-              📡 How it works
+              How it works
             </p>
             <p style={{ margin: 0, fontSize: 12, color: C.muted, lineHeight: 1.6 }}>
               Frames are broadcast to all members in real time via the cloud.
@@ -7625,7 +7624,7 @@ function SGScreenShareHost({ groupId, db, user, onStop, registerStop }) {
             padding: "13px", fontSize: 14, fontWeight: 700, cursor: "pointer",
             display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
             boxShadow: "0 4px 14px rgba(61,90,128,.3)",
-          }}>🖥️ Start Screen Share</button>
+          }}>Start Screen Share</button>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -7653,7 +7652,7 @@ function SGScreenShareViewer({ content }) {
   if (!content?.frame) return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column",
       alignItems: "center", justifyContent: "center", gap: 12, padding: 32 }}>
-      <div style={{ fontSize: 48 }}>🖥️</div>
+      <div style={{ width:56,height:56,borderRadius:16,background:C.accentL,display:"flex",alignItems:"center",justifyContent:"center" }}><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="{C.accent}" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div>
       <p style={{ color: C.text, fontWeight: 700, fontSize: 16, margin: 0 }}>
         {content?.title || "Screen Share"}
       </p>
@@ -7876,7 +7875,7 @@ function SGWhiteboard({ groupId, db, user, group, onClose }) {
           {!isSharing && (
             <button onClick={startPresenting} style={{ background:C.accent, color:"#fff",
               border:"none", borderRadius:9, padding:"7px 14px", fontSize:12, fontWeight:700, cursor:"pointer" }}>
-              📺 Present to Group
+              Present to Group
             </button>
           )}
           <button onClick={onClose}
@@ -7907,11 +7906,11 @@ function SGWhiteboard({ groupId, db, user, group, onClose }) {
           <button onClick={()=>setEraser(e=>!e)} style={{ padding:"5px 10px", borderRadius:7,
             fontSize:12, fontWeight:700, border:`1.5px solid ${eraser?C.warm:C.border}`,
             background:eraser?C.warmL:"#fff", color:eraser?C.warm:C.muted, cursor:"pointer" }}>
-            🧹 Eraser
+            Eraser
           </button>
           <button onClick={clearBoard} style={{ padding:"5px 10px", borderRadius:7, fontSize:12,
             border:`1px solid ${C.border}`, background:"#fff", color:C.muted, cursor:"pointer" }}>
-            🗑️ Clear
+            Clear
           </button>
           <div style={{ width:1, height:20, background:C.border, flexShrink:0 }} />
           <button onClick={async () => {
@@ -7920,7 +7919,7 @@ function SGWhiteboard({ groupId, db, user, group, onClose }) {
               const noteText  = `WHITEBOARD: ${noteTitle}\n\n` +
                 `Saved on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}\n` +
                 `Strokes: ${strokes.length}\n\n` +
-                `[Whiteboard content — view in 👥 Study Group to see the drawing]`;
+                `[Whiteboard content — view in Study Group to see the drawing]`;
               try {
                 const key = `saved_notes_wb_${Date.now()}`;
                 const existing = JSON.parse(localStorage.getItem("classio_saved_whiteboards") || "[]");
@@ -7933,7 +7932,7 @@ function SGWhiteboard({ groupId, db, user, group, onClose }) {
             }} style={{ padding:"5px 12px", borderRadius:7, fontSize:12, fontWeight:700,
             border:`1px solid ${C.green}44`, background:C.greenL, color:C.green, cursor:"pointer",
             display:"flex", alignItems:"center", gap:5 }}>
-            💾 Save
+            Save
           </button>
         </div>
         <div style={{ flex:1, overflow:"hidden", background:"#fff", position:"relative" }}>
@@ -8021,14 +8020,14 @@ function SGAIFlashcardGen({ groupId, db, user, groupFile, onClose }) {
         </div>
         <div style={{ padding:"12px 20px 8px", borderBottom:`1px solid ${C.border}`,
           display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-          <span style={{ fontSize:15, fontWeight:700, color:C.text }}>🃏 Create Flashcards</span>
+          <span style={{ fontSize:15, fontWeight:700, color:C.text }}>Create Flashcards</span>
           <button onClick={onClose} style={{ background:C.bg, border:`1px solid ${C.border}`,
             borderRadius:"50%", width:28, height:28, color:C.muted, cursor:"pointer", fontSize:14,
             display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
         </div>
         <div style={{ padding:"16px 20px" }}>
           <div style={{ display:"flex", background:C.bg, borderRadius:10, padding:3, marginBottom:14 }}>
-            {[{id:"ai",label:"✨ AI Generate"},{id:"manual",label:"✍️ Manual"}].map(t=>(
+            {[{id:"ai",label:"AI Generate"},{id:"manual",label:"Manual"}].map(t=>(
               <button key={t.id} onClick={()=>setTab(t.id)} style={{
                 flex:1, padding:"7px", borderRadius:8, border:"none", cursor:"pointer",
                 background:tab===t.id?C.surface:"transparent", color:tab===t.id?C.accent:C.muted,
@@ -8041,7 +8040,7 @@ function SGAIFlashcardGen({ groupId, db, user, groupFile, onClose }) {
               {groupFile ? (
                 <div style={{ padding:"10px 12px", borderRadius:10, background:C.accentL,
                   border:`1px solid ${C.accentS}`, display:"flex", alignItems:"center", gap:8 }}>
-                  <span style={{ fontSize:14 }}>📎</span>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                   <div style={{ flex:1, minWidth:0 }}>
                     <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.accent }}>Using group file</p>
                     <p style={{ margin:0, fontSize:11, color:C.muted, overflow:"hidden",
@@ -8075,7 +8074,7 @@ function SGAIFlashcardGen({ groupId, db, user, groupFile, onClose }) {
                 display:"flex", alignItems:"center", justifyContent:"center", gap:8,
                 opacity:(!groupFile&&!topic.trim())?.5:1, boxShadow:"0 4px 14px rgba(61,90,128,.3)",
               }}>
-                {gen?<><SGSpinner color="#fff"/>Generating…</>:`✨ Generate ${cardCount} Cards`}
+                {gen?<><SGSpinner color="#fff"/>Generating…</>:`Generate ${cardCount} Cards`}
               </button>
             </div>
           )}
@@ -8114,7 +8113,7 @@ function SGAIFlashcardGen({ groupId, db, user, groupFile, onClose }) {
                 display:"flex", alignItems:"center", justifyContent:"center", gap:8,
                 boxShadow:"0 4px 14px rgba(61,90,128,.3)",
               }}>
-                {sharing?<><SGSpinner color="#fff"/>Sharing…</>:`📺 Present ${cards.length} Cards`}
+                {sharing?<><SGSpinner color="#fff"/>Sharing…</>:`Present ${cards.length} Cards`}
               </button>
             </>
           )}
@@ -8136,10 +8135,10 @@ function SGAINotesGen({ groupId, db, user, groupFile, onClose }) {
   const [title,   setTitle]   = useState("");
 
   const STYLES = [
-    { id:"detailed", label:"📚 Detailed",     desc:"Sections + bullet points" },
+    { id:"detailed", label:"Detailed",     desc:"Sections + bullet points" },
     { id:"bullet",   label:"• Bullet Points", desc:"Concise bullet-only format" },
-    { id:"simple",   label:"🧒 Simple",        desc:"Plain language, short sentences" },
-    { id:"exam",     label:"📝 Exam Focus",    desc:"Key terms + likely questions" },
+    { id:"simple",   label:"Simple",        desc:"Plain language, short sentences" },
+    { id:"exam",     label:"Exam Focus",    desc:"Key terms + likely questions" },
   ];
 
   const generate = async () => {
@@ -8200,7 +8199,7 @@ Math: proper notation (1×10⁻¹⁰ not words, H₂O not words). Units: standar
         </div>
         <div style={{ padding:"12px 20px 8px", borderBottom:`1px solid ${C.border}`,
           display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-          <span style={{ fontSize:15, fontWeight:700, color:C.text }}>📝 Generate Notes</span>
+          <span style={{ fontSize:15, fontWeight:700, color:C.text }}>Generate Notes</span>
           <button onClick={onClose} style={{ background:C.bg, border:`1px solid ${C.border}`,
             borderRadius:"50%", width:28, height:28, color:C.muted, cursor:"pointer", fontSize:14,
             display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
@@ -8209,7 +8208,7 @@ Math: proper notation (1×10⁻¹⁰ not words, H₂O not words). Units: standar
           {groupFile ? (
             <div style={{ padding:"10px 12px", borderRadius:10, background:C.accentL,
               border:`1px solid ${C.accentS}`, display:"flex", alignItems:"center", gap:8 }}>
-              <span style={{ fontSize:14 }}>📎</span>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
               <div style={{ flex:1, minWidth:0 }}>
                 <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.accent }}>Using group file</p>
                 <p style={{ margin:0, fontSize:11, color:C.muted, overflow:"hidden",
@@ -8245,7 +8244,7 @@ Math: proper notation (1×10⁻¹⁰ not words, H₂O not words). Units: standar
             display:"flex", alignItems:"center", justifyContent:"center", gap:8,
             opacity:(!groupFile&&!topic.trim())?.5:1, boxShadow:"0 4px 14px rgba(61,90,128,.3)",
           }}>
-            {gen?<><SGSpinner color="#fff"/>Generating notes…</>:"✨ Generate Notes"}
+            {gen?<><SGSpinner color="#fff"/>Generating notes…</>:"Generate Notes"}
           </button>
           {notes && (
             <>
@@ -8259,7 +8258,7 @@ Math: proper notation (1×10⁻¹⁰ not words, H₂O not words). Units: standar
                 display:"flex", alignItems:"center", justifyContent:"center", gap:8,
                 boxShadow:"0 4px 14px rgba(61,90,128,.3)",
               }}>
-                {sharing?<><SGSpinner color="#fff"/>Sharing…</>:"📺 Present Notes to Group"}
+                {sharing?<><SGSpinner color="#fff"/>Sharing…</>:"Present Notes to Group"}
               </button>
             </>
           )}
@@ -8592,13 +8591,13 @@ function SGSharePicker({ user, db, groupId, group, groupFile, isHost, onClose,
   };
 
   const MODES = [
-    { id:"notes",       emoji:"📝", label:"AI Notes",      desc:"Generate & share notes with AI",
+    { id:"notes",       emoji:"✎", label:"AI Notes",      desc:"Generate & share notes with AI",
       action: () => { onClose(); onOpenNotes(); } },
-    { id:"flashcards",  emoji:"🃏", label:"AI Flashcards", desc:"Generate & present study cards",
+    { id:"flashcards",  emoji:"▣", label:"AI Flashcards", desc:"Generate & present study cards",
       action: () => { onClose(); onOpenFlashcards(); } },
-    { id:"whiteboard",  emoji:"✏️", label:"Whiteboard",    desc:"Draw live for everyone to see",
+    { id:"whiteboard",  emoji:"✐", label:"Whiteboard",    desc:"Draw live for everyone to see",
       action: () => { onClose(); onOpenWhiteboard(); } },
-    { id:"file",        emoji:"📎", label:"Study File",
+    { id:"file",        emoji:"▤", label:"Study File",
       desc: (() => {
         if (groupFile) return `Present "${groupFile.name}"`;
         const hostFile = group?.hostFileName || group?.sharedContent?.fileName;
@@ -8611,7 +8610,7 @@ function SGSharePicker({ user, db, groupId, group, groupFile, isHost, onClose,
         reShareFile();
       },
       disabled: sharing || (!groupFile && !group?.sharedContent?.fileChunks && !group?.hostFileName) },
-    { id:"screenshare", emoji:"🖥️", label:"Screen Share",  desc:"Share your screen live",
+    { id:"screenshare", emoji:"▨", label:"Screen Share",  desc:"Share your screen live",
       action: () => setActiveStep("screenshare") },
   ];
 
@@ -8637,7 +8636,7 @@ function SGSharePicker({ user, db, groupId, group, groupFile, isHost, onClose,
                 background:"none", border:"none", color:C.muted, cursor:"pointer", fontSize:18, padding:0 }}>←</button>
             )}
             <span style={{ fontSize:15, fontWeight:700, color:C.text }}>
-              {activeStep === "pick" ? "📺 Present to Group" : "🖥️ Screen Share"}
+              {activeStep === "pick" ? "Present to Group" : "Screen Share"}
             </span>
           </div>
           <button onClick={onClose}
@@ -8659,7 +8658,7 @@ function SGSharePicker({ user, db, groupId, group, groupFile, isHost, onClose,
             <div style={{ padding:"10px 14px", borderRadius:10, background:C.warmL,
               border:`1px solid ${C.warm}44`, marginBottom:10 }}>
               <p style={{ margin:0, fontSize:13, color:C.warm, fontWeight:600 }}>
-                ⚠️ {group.sharedContent.sharedBy} is currently presenting.
+                {group.sharedContent.sharedBy} is currently presenting.
               </p>
             </div>
           )}
@@ -8670,7 +8669,7 @@ function SGSharePicker({ user, db, groupId, group, groupFile, isHost, onClose,
               background:C.warmL, border:`1.5px solid ${C.warm}55`,
               borderRadius:14 }}>
               <p style={{ margin:"0 0 4px", fontSize:14, fontWeight:700, color:C.warm }}>
-                📎 No study file uploaded
+                No study file uploaded
               </p>
               <p style={{ margin:"0 0 12px", fontSize:13, color:C.text, lineHeight:1.5 }}>
                 For the best experience, upload a study file so AI can generate notes,
@@ -8841,7 +8840,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
         <div style={{ background:C.surface, borderRadius:18, padding:24,
           border:`1px solid ${C.border}`, maxWidth:480, margin:"0 auto" }}>
           <h2 style={{ color:C.warm, margin:"0 0 6px", textAlign:"center",
-            fontSize:22, fontFamily:"'Fraunces',serif" }}>🏆 Final Results</h2>
+            fontSize:22, fontFamily:"'Fraunces',serif" }}>Final Results</h2>
           <p style={{ textAlign:"center", fontSize:12, color:C.muted, margin:"0 0 20px" }}>
             {gameState.topic} · {gameState.mode?.toUpperCase()}
           </p>
@@ -8855,9 +8854,9 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
                   background:i===0?C.warmL:C.bg, borderRadius:12,
                   padding:"12px 16px", marginBottom:8,
                   border:`1px solid ${i===0?C.warm+"55":C.border}` }}>
-                  <span style={{ fontSize:20 }}>{i===0?"🥇":i===1?"🥈":"🥉"}</span>
+                  
                   <span style={{ flex:1, fontWeight:700, color:C.text }}>
-                    {team === "team0" ? "🔵 Team Blue" : "🔴 Team Red"}
+                    {team === "team0" ? "Team Blue" : "Team Red"}
                   </span>
                   <span style={{ color:C.warm, fontWeight:800, fontSize:18 }}>{score}</span>
                   <span style={{ color:C.muted, fontSize:11 }}>pts</span>
@@ -8875,7 +8874,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
               padding:"10px 16px", marginBottom:6,
               border:`1px solid ${i===0?C.warm+"55":C.border}` }}>
               <span style={{ fontSize:18, width:26, textAlign:"center" }}>
-                {i===0?"🥇":i===1?"🥈":i===2?"🥉":`${i+1}.`}
+                {i===0?"1.":i===1?"2.":i===2?"3.":`${i+1}.`}
               </span>
               <span style={{ flex:1, color:C.text, fontWeight:700 }}>{entry.name}</span>
               <span style={{ color:C.warm, fontWeight:800, fontSize:16 }}>{entry.pts}</span>
@@ -8896,10 +8895,10 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
                 });
               }} style={{ flex:1, background:C.accentL, border:`1px solid ${C.accentS}`,
                 color:C.accent, borderRadius:12, padding:"11px",
-                fontSize:13, fontWeight:700, cursor:"pointer" }}>🔄 Play Again</button>
+                fontSize:13, fontWeight:700, cursor:"pointer" }}>Play Again</button>
               <button onClick={endGame} style={{ flex:1, background:C.bg,
                 border:`1px solid ${C.border}`, color:C.muted, borderRadius:12,
-                padding:"11px", fontSize:13, fontWeight:700, cursor:"pointer" }}>✓ Back to Room</button>
+                padding:"11px", fontSize:13, fontWeight:700, cursor:"pointer" }}>Back to Room</button>
             </div>
           )}
         </div>
@@ -8917,7 +8916,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
   if (mode === "elimination" && eliminated) return (
     <div style={{ flex:1, display:"flex", flexDirection:"column",
       alignItems:"center", justifyContent:"center", gap:16, padding:24 }}>
-      <div style={{ fontSize:56 }}>💀</div>
+      <div style={{ width:64,height:64,borderRadius:20,background:"#fee2e2",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto" }}><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={C.red} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a9 9 0 0 0-9 9c0 3.18 1.66 5.97 4.14 7.56L7 21h10l-.14-2.44A9 9 0 0 0 21 11a9 9 0 0 0-9-9zM9 17v1M15 17v1M9 12h.01M15 12h.01"/></svg></div>
       <h2 style={{ color:C.red, fontFamily:"'Fraunces',serif", margin:0 }}>You're Eliminated!</h2>
       <p style={{ color:C.muted, fontSize:13, textAlign:"center", maxWidth:260 }}>
         You answered incorrectly. Watch as the others battle it out.
@@ -8949,7 +8948,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
     return (
       <div style={{ flex:1, overflowY:"auto", padding:16, display:"flex", flexDirection:"column", gap:12 }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-          <span style={{ fontSize:14, fontWeight:700, color:C.text }}>🧩 Memory Match</span>
+          <span style={{ fontSize:14, fontWeight:700, color:C.text }}>Memory Match</span>
           <span style={{ color:C.accent, fontSize:12, fontWeight:700 }}>Score: {myScore} pts</span>
         </div>
         <p style={{ color:C.muted, fontSize:12, margin:0 }}>Match each question to its answer</p>
@@ -9018,7 +9017,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
                   color:correct?C.green:wrong?C.red:opt==="True"?"#1e6e3e":"#b71c1c",
                   outline:correct?`3px solid ${C.green}`:wrong?`3px solid ${C.red}`:chosen?`3px solid ${C.accent}`:"none",
                   transition:"all .12s", boxShadow:"0 3px 12px rgba(0,0,0,.08)" }}>
-                {opt === "True" ? "✅ True" : "❌ False"}
+                {opt === "True" ? "True" : "False"}
               </button>
             );
           })}
@@ -9039,7 +9038,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
           <div style={{ background:C.warmL, border:`1px solid ${C.warm}44`, borderRadius:8,
             padding:"4px 10px", fontSize:11, fontWeight:700, color:C.warm }}>
-            ⚡ RAPID FIRE — First correct = most points!
+            RAPID FIRE — First correct = most points!
           </div>
           <span style={{ color:C.accent, fontSize:12, fontWeight:700 }}>Score: {myScore}</span>
         </div>
@@ -9132,7 +9131,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
 
   // ── TEAM QUIZ mode ──────────────────────────────────────────────────────────
   if (mode === "teamquiz") {
-    const teamColors = {0:{c:C.accent,l:C.accentL,name:"🔵 Blue"}, 1:{c:C.red,l:C.redL,name:"🔴 Red"}};
+    const teamColors = {0:{c:C.accent,l:C.accentL,name:"Blue"}, 1:{c:C.red,l:C.redL,name:"Red"}};
     const myT = teamColors[myTeam] || teamColors[0];
     const tScores = gameState?.teamScores || {};
     return (
@@ -9145,7 +9144,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
           <div style={{ display:"flex", gap:8 }}>
             {Object.entries(tScores).map(([team,score])=>(
               <span key={team} style={{ fontSize:12, fontWeight:700,
-                color: team==="team0"?C.accent:C.red }}>{team==="team0"?"🔵":"🔴"} {score}</span>
+                color: team==="team0"?C.accent:C.red }}>{team==="team0"?"●":"●"} {score}</span>
             ))}
           </div>
         </div>
@@ -9186,7 +9185,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
         <div style={{ textAlign:"center", padding:"6px 0" }}>
           <span style={{ fontSize:11, fontWeight:700, color:C.warm, letterSpacing:1,
             textTransform:"uppercase", background:C.warmL, borderRadius:6, padding:"3px 10px" }}>
-            🎤 Quiz Show — Who Wants to Study?
+            Quiz Show — Who Wants to Study?
           </span>
         </div>
       )}
@@ -9263,7 +9262,7 @@ function ScoreBar({ board }) {
     <div style={{ background:C.surface, borderRadius:12, padding:"10px 14px",
       border:`1px solid ${C.border}` }}>
       <p style={{ margin:"0 0 6px", fontSize:10, fontWeight:700, color:C.muted,
-        letterSpacing:.8, textTransform:"uppercase" }}>🏆 Live Scores</p>
+        letterSpacing:.8, textTransform:"uppercase" }}>Live Scores</p>
       {board.map((entry,i) => (
         <div key={entry.uid} style={{ display:"flex", justifyContent:"space-between",
           padding:"4px 0", borderBottom:i<board.length-1?`1px solid ${C.border}`:"none" }}>
@@ -9288,14 +9287,14 @@ function SGGameLauncher({ group, db, groupId, user, groupFile, onClose }) {
   const sharedCards   = group?.sharedContent?.cards || [];
 
   const MP_GAMES = [
-    { id:"mcq",        emoji:"🧠", title:"Multiple Choice",   desc:"4-option quiz, everyone answers",       bg:C.accentL,  accent:C.accent  },
-    { id:"truefalse",  emoji:"✅", title:"True or False",     desc:"Vote true or false together",           bg:C.purpleL,  accent:C.purple  },
-    { id:"rapidfire",  emoji:"⚡", title:"Rapid Fire",        desc:"First to type the answer wins",         bg:C.greenL,   accent:C.green   },
-    { id:"quizshow",   emoji:"🎤", title:"Quiz Show",         desc:"Millionaire-style with lifelines",      bg:"#fef2f2",  accent:C.red     },
-    { id:"memory",     emoji:"🧩", title:"Memory Match",      desc:"Match questions to their answers",      bg:"#fdf4ff",  accent:C.purple  },
-    { id:"speedround", emoji:"🚀", title:"Speed Round",       desc:"10 questions, 10 seconds each",         bg:"#fff7ed",  accent:C.warm    },
-    { id:"elimination",emoji:"💀", title:"Elimination",       desc:"Wrong answer? You're out!",             bg:"#fef2f2",  accent:C.red     },
-    { id:"teamquiz",   emoji:"🤝", title:"Team Quiz",         desc:"Split into teams, highest score wins",  bg:C.accentL,  accent:C.accent  },
+    { id:"mcq",        emoji:"◉", title:"Multiple Choice",   desc:"4-option quiz, everyone answers",       bg:C.accentL,  accent:C.accent  },
+    { id:"truefalse",  emoji:"✓", title:"True or False",     desc:"Vote true or false together",           bg:C.purpleL,  accent:C.purple  },
+    { id:"rapidfire",  emoji:"▷", title:"Rapid Fire",        desc:"First to type the answer wins",         bg:C.greenL,   accent:C.green   },
+    { id:"quizshow",   emoji:"◈", title:"Quiz Show",         desc:"Millionaire-style with lifelines",      bg:"#fef2f2",  accent:C.red     },
+    { id:"memory",     emoji:"⊕", title:"Memory Match",      desc:"Match questions to their answers",      bg:"#fdf4ff",  accent:C.purple  },
+    { id:"speedround", emoji:"▲", title:"Speed Round",       desc:"10 questions, 10 seconds each",         bg:"#fff7ed",  accent:C.warm    },
+    { id:"elimination",emoji:"✕", title:"Elimination",       desc:"Wrong answer? You're out!",             bg:"#fef2f2",  accent:C.red     },
+    { id:"teamquiz",   emoji:"◇", title:"Team Quiz",         desc:"Split into teams, highest score wins",  bg:C.accentL,  accent:C.accent  },
   ];
 
   const effectiveTopic = groupFile?.name || topic.trim();
@@ -9392,7 +9391,7 @@ function SGGameLauncher({ group, db, groupId, user, groupFile, onClose }) {
         {/* Header */}
         <div style={{ padding: "12px 20px 12px", borderBottom: `1px solid ${C.border}`,
           display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontSize: 15, fontWeight: 700, color: C.text }}>🎮 Quiz Battle</span>
+          <span style={{ fontSize: 15, fontWeight: 700, color: C.text }}>Quiz Battle</span>
           <button onClick={onClose} style={{ background: C.bg, border: `1px solid ${C.border}`,
             borderRadius: "50%", width: 28, height: 28, color: C.muted, cursor: "pointer",
             fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
@@ -9405,7 +9404,7 @@ function SGGameLauncher({ group, db, groupId, user, groupFile, onClose }) {
             <div style={{ padding: "12px 14px", borderRadius: 12,
               background: C.greenL, border: `1px solid ${C.green}44`,
               display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontSize: 22 }}>🃏</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/></svg>
               <div>
                 <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: C.green }}>
                   Using shared flashcards
@@ -9419,7 +9418,7 @@ function SGGameLauncher({ group, db, groupId, user, groupFile, onClose }) {
             <div style={{ padding: "10px 14px", borderRadius: 12,
               background: C.accentL, border: `1px solid ${C.accentS}`,
               display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontSize: 20 }}>📎</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: C.accent }}>AI questions from group file</p>
                 <p style={{ margin: 0, fontSize: 11, color: C.muted,
@@ -9432,13 +9431,13 @@ function SGGameLauncher({ group, db, groupId, user, groupFile, onClose }) {
               <div style={{ padding: "12px 14px", borderRadius: 12,
                 background: C.warmL, border: `1px solid ${C.warm}55`,
                 display: "flex", gap: 10, alignItems: "flex-start" }}>
-                <span style={{ fontSize: 20, flexShrink: 0 }}>💡</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}><line x1="12" y1="2" x2="12" y2="3"/><path d="M9 9a3 3 0 1 1 6 0c0 1.5-1 2.5-2 3.5V15H11v-2.5C10 11.5 9 10.5 9 9z"/><rect x="9" y="16" width="6" height="2" rx="1"/><rect x="10" y="19" width="4" height="1" rx=".5"/></svg>
                 <div>
                   <p style={{ margin: "0 0 4px", fontSize: 13, fontWeight: 700, color: C.warm }}>
                     Tip: Create study cards first!
                   </p>
                   <p style={{ margin: 0, fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
-                    Tap the <strong>📺 Present</strong> button → <strong>AI Flashcards</strong> to generate and share a deck.
+                    Tap the <strong>Present</strong> button → <strong>AI Flashcards</strong> to generate and share a deck.
                     Quiz Battle will automatically use those cards — no topic needed.
                   </p>
                 </div>
@@ -9664,7 +9663,7 @@ function SGBottomBar({ groupId, db, group, user, isHost, canPresent, voiceState,
             <button onClick={onShowShare} style={hostBtn("#fff", "rgba(61,90,128,.5)", C.accentS)}
               onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"}
               onMouseLeave={e=>e.currentTarget.style.transform="none"}>
-              <span style={{ fontSize:16 }}>📺</span> Present
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><polyline points="17 2 12 7 7 2"/></svg> Present
             </button>
           )}
 
@@ -9679,7 +9678,7 @@ function SGBottomBar({ groupId, db, group, user, isHost, canPresent, voiceState,
             <button onClick={onShowGame} style={hostBtn("#fff", "rgba(74,124,89,.4)", C.green+"44")}
               onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"}
               onMouseLeave={e=>e.currentTarget.style.transform="none"}>
-              <span style={{ fontSize:16 }}>🎮</span> Quiz Battle
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/><circle cx="15" cy="12" r="1"/><circle cx="17" cy="10" r="1"/><rect x="2" y="8" width="20" height="12" rx="4"/></svg> Quiz Battle
             </button>
           ))}
         </div>
@@ -9711,7 +9710,7 @@ function SGBottomBar({ groupId, db, group, user, isHost, canPresent, voiceState,
 }
 
 
-// ── Main 👥 Study Group Room ─────────────────────────────────────────────────────
+// ── Main Study Group Room ─────────────────────────────────────────────────────
 function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
   const [group,     setGroup]     = useState(null);
   const [messages,  setMessages]  = useState([]);
@@ -9821,7 +9820,7 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
     // Fire when a game just started (prev was null/results, now is question)
     if (phase === "question" && prevGamePhase.current !== "question" && !isHost) {
       const topic = group.gameState?.topic || "a quiz";
-      setNotif(`🎮 The host started a quiz: "${topic}" — join now!`);
+      setNotif(`The host started a quiz: "${topic}" — join now!`);
       clearTimeout(notifTimer.current);
       notifTimer.current = setTimeout(() => setNotif(null), 5000);
     }
@@ -9864,7 +9863,7 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
   const handleLeave = async () => {
     if (isHost) {
       await addDoc(collection(db, "studyGroups", groupId, "messages"), {
-        text: "👋 The host ended the session.", uid: "system",
+        text: "The host ended the session.", uid: "system",
         displayName: "Classio", createdAt: serverTimestamp(),
       }).catch(() => {});
       await deleteDoc(doc(db, "studyGroups", groupId)).catch(() => {});
@@ -9958,12 +9957,12 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ width: 30, height: 30, background: C.accent, borderRadius: 9,
             display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <span style={{ fontSize: 14 }}>👥</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           </div>
           <div style={{ minWidth: 0 }}>
             <p style={{ margin: 0, fontSize: 15, fontWeight: 800, color: C.text,
               fontFamily: "'Fraunces',serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {group?.name || "👥 Study Group"}
+              {group?.name || "Study Group"}
             </p>
             <p style={{ margin: 0, fontSize: 10, color: C.muted }}>
               {memberList.length} member{memberList.length !== 1 ? "s" : ""}
@@ -9991,7 +9990,7 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
           color: isHost ? C.red : C.muted,
           borderRadius: 10, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer",
         }}>
-          {isHost ? "🔴 End Session" : "Leave"}
+          {isHost ? "End Session" : "Leave"}
         </button>
 
         {/* SGVoiceChat renders nothing — auto-joins, state flows to bottom bar */}
@@ -10021,10 +10020,10 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
               alignItems: "center", justifyContent: "center", gap: 20, padding: "24px 20px",
               overflowY: "auto" }}>
               <div style={{ width: 64, height: 64, borderRadius: 18, background: C.accentL,
-                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30 }}>📚</div>
+                display: "flex", alignItems: "center", justifyContent: "center" }}><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 0 3-3h7z"/></svg></div>
               <div style={{ textAlign: "center" }}>
                 <p style={{ margin: "0 0 6px", fontSize: 18, fontWeight: 700, color: C.text,
-                  fontFamily: "'Fraunces',serif" }}>{group?.name || "👥 Study Group"}</p>
+                  fontFamily: "'Fraunces',serif" }}>{group?.name || "Study Group"}</p>
                 <p style={{ margin: 0, fontSize: 13, color: C.muted, maxWidth: 260, lineHeight: 1.5 }}>
                   {isHost ? "You're the host — start the session below." : "Waiting for the host to start something…"}
                 </p>
@@ -10038,7 +10037,7 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
                     groupFile ? (
                       <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
                         background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:12 }}>
-                        <span style={{ fontSize:18 }}>📎</span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                         <div style={{ flex:1, minWidth:0 }}>
                           <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.accent }}>Study file loaded</p>
                           <p style={{ margin:0, fontSize:11, color:C.muted, overflow:"hidden",
@@ -10052,7 +10051,7 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
                         background:C.surface, border:`1.5px dashed ${C.border}`,
                         borderRadius:12, cursor:"pointer", width:"100%", boxSizing:"border-box" }}>
                         <div style={{ width:36, height:36, borderRadius:10, background:C.warmL,
-                          display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>📎</div>
+                          display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
                         <div>
                           <p style={{ margin:0, fontSize:13, fontWeight:700, color:C.text }}>Add study file</p>
                           <p style={{ margin:0, fontSize:11, color:C.muted }}>AI uses it for notes, flashcards & quizzes</p>
@@ -10098,7 +10097,7 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
                     return shownName ? (
                       <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
                         background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:12 }}>
-                        <span style={{ fontSize:18 }}>📎</span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                         <div style={{ flex:1, minWidth:0 }}>
                           <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.accent }}>
                             Host's study file
@@ -10138,7 +10137,7 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
                   onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"}
                   onMouseLeave={e=>e.currentTarget.style.transform="none"}>
                     <div style={{ width:48, height:48, borderRadius:14, background:C.accent,
-                      display:"flex", alignItems:"center", justifyContent:"center", fontSize:22 }}>📺</div>
+                      display:"flex", alignItems:"center", justifyContent:"center" }}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><polyline points="17 2 12 7 7 2"/></svg></div>
                     <div style={{ textAlign:"center" }}>
                       <p style={{ margin:"0 0 3px", fontSize:14, fontWeight:800, color:C.accent }}>Present</p>
                       <p style={{ margin:0, fontSize:11, color:C.muted, lineHeight:1.3 }}>Notes, cards, whiteboard, file</p>
@@ -10155,7 +10154,7 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
                   onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"}
                   onMouseLeave={e=>e.currentTarget.style.transform="none"}>
                     <div style={{ width:48, height:48, borderRadius:14, background:C.green,
-                      display:"flex", alignItems:"center", justifyContent:"center", fontSize:22 }}>🎮</div>
+                      display:"flex", alignItems:"center", justifyContent:"center" }}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/><circle cx="15" cy="12" r="1"/><circle cx="17" cy="10" r="1"/><rect x="2" y="8" width="20" height="12" rx="4"/></svg></div>
                     <div style={{ textAlign:"center" }}>
                       <p style={{ margin:"0 0 3px", fontSize:14, fontWeight:800, color:C.green }}>Quiz Battle</p>
                       <p style={{ margin:0, fontSize:11, color:C.muted, lineHeight:1.3 }}>Launch multiplayer quiz</p>
@@ -10208,7 +10207,7 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
         }}>
           {/* Tab bar */}
           <div style={{ flexShrink: 0, display: "flex", borderBottom: `1px solid ${C.border}` }}>
-            {[{ id: "chat", label: "💬 Chat" }, { id: "members", label: "👥 Members" }].map(t => (
+            {[{ id: "chat", label: "Chat" }, { id: "members", label: "Members" }].map(t => (
               <button key={t.id} onClick={() => setPanel(t.id)} style={{
                 flex: 1, padding: "10px 6px", border: "none", cursor: "pointer",
                 background: panel === t.id ? C.accentL : "transparent",
@@ -10228,7 +10227,7 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
                 {messages.length === 0 && (
                   <div style={{ textAlign: "center", padding: "32px 0", opacity: .4 }}>
                     <p style={{ color: C.muted, fontSize: 13, margin: 0 }}>No messages yet</p>
-                    <p style={{ color: C.muted, fontSize: 11, margin: "4px 0 0" }}>Say hi! 👋</p>
+                    <p style={{ color: C.muted, fontSize: 11, margin: "4px 0 0" }}>Say hi!</p>
                   </div>
                 )}
                 {messages.map(msg => (
@@ -10254,7 +10253,7 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
                   width: 36, height: 36, cursor: "pointer", flexShrink: 0,
                   display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15,
                   boxShadow: "0 2px 8px rgba(61,90,128,.3)",
-                }}>➤</button>
+                }}><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg></button>
               </div>
             </>
           )}
@@ -10291,17 +10290,17 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
                       </p>
                       <div style={{ display:"flex", gap:6, alignItems:"center", marginTop:2, flexWrap:"wrap" }}>
                         {m.uid === group?.hostUid && (
-                          <span style={{ fontSize: 10, color: C.warm }}>👑 Host</span>
+                          <span style={{ fontSize: 10, color: C.warm, display:"flex", alignItems:"center", gap:2 }}><svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><path d="M2 20h20v2H2zM3 8l4 8h10l4-8-6 4-3-6-3 6-6-4z"/></svg>Host</span>
                         )}
                         {group?.presenterUid === m.uid && m.uid !== group?.hostUid && (
-                          <span style={{ fontSize: 10, color: C.accent }}>📺 Can Present</span>
+                          <span style={{ fontSize: 10, color: C.accent }}>Can Present</span>
                         )}
                         {group?.sharedContent?.sharedByUid === m.uid && (
-                          <span style={{ fontSize: 10, color: C.accent }}>🔴 Live</span>
+                          <span style={{ fontSize: 10, color: C.accent, display:"flex", alignItems:"center", gap:2 }}><span style={{width:6,height:6,borderRadius:"50%",background:C.red,display:"inline-block"}}></span>Live</span>
                         )}
                         {inVoice && (
                           <span style={{ fontSize:10, color:isSpeaking?C.green:C.muted }}>
-                            {isSpeaking?"🎙️ Speaking":"🎙️"}
+                            {isSpeaking ? <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg> : <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>}
                           </span>
                         )}
                       </div>
@@ -10323,7 +10322,7 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
                           flexShrink:0, fontSize:10, fontWeight:700, cursor:"pointer",
                           background:C.accentL, border:`1px solid ${C.accentS}`,
                           color:C.accent, borderRadius:8, padding:"4px 8px",
-                        }}>📺 Present</button>
+                        }}>Present</button>
                       )
                     )}
                   </div>
