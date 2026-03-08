@@ -732,7 +732,7 @@ function StandaloneAI({ onClose }) {
             background:"linear-gradient(135deg,#6366f1,#8b5cf6)",
             display:"flex", alignItems:"center", justifyContent:"center", fontSize:20 }}>🤖</div>
           <div style={{ flex:1 }}>
-            <p style={{ margin:0, fontSize:16, fontWeight:700, color:C.text }}>AI Assistant</p>
+            <p style={{ margin:0, fontSize:16, fontWeight:700, color:C.text }}>🤖 AI Assistant</p>
             <p style={{ margin:0, fontSize:12, color:C.muted }}>Ask anything · Attach images · Replies in your language</p>
           </div>
           <button onClick={onClose} style={{ background:C.surface, border:`1px solid ${C.border}`,
@@ -846,11 +846,11 @@ function StandaloneAI({ onClose }) {
 function AboutTab() {
   const features = [
     { icon:"📁", title:"Folders & Files", desc:"Organise study materials into folders. Upload PDFs, Word docs, PowerPoints, images, and text files. Everything is saved to your account." },
-    { icon:"🤖", title:"AI Assistant", desc:"Ask the AI anything — type a question or attach a photo of a problem. No file needed. Replies in whatever language you write in." },
+    { icon:"🤖", title:"🤖 AI Assistant", desc:"Ask the AI anything — type a question or attach a photo of a problem. No file needed. Replies in whatever language you write in." },
     { icon:"📝", title:"AI Notes", desc:"Generate notes from any file in 4 styles: Summary, Detailed, Bullet Points, or Q&A. The AI reads your file and writes structured notes instantly." },
     { icon:"🃏", title:"Study Cards", desc:"Auto-generate up to 50 flashcards from your files. Flip to reveal answers. Great for memorising key concepts fast." },
     { icon:"🎮", title:"14+ Study Games", desc:"MCQ, Speed Round, Elimination, Memory Match, True/False, Listening Game, Quiz Show, and more — all generated from your material." },
-    { icon:"👥", title:"Study Groups", desc:"Create or join a live session. Present files, share whiteboards, run multiplayer quizzes, and voice chat with friends in real time." },
+    { icon:"👥", title:"👥 Study Groups", desc:"Create or join a live session. Present files, share whiteboards, run multiplayer quizzes, and voice chat with friends in real time." },
     { icon:"🎙️", title:"Voice Notes", desc:"Record yourself or a lecture — the app transcribes it into written notes automatically." },
     { icon:"🎧", title:"AI Podcast", desc:"Turn any file into a spoken podcast. Two AI hosts discuss your material so you can learn while listening." },
     { icon:"✏️", title:"Annotations", desc:"Highlight and annotate any file directly inside the app. Add comments and review them later." },
@@ -860,8 +860,8 @@ function AboutTab() {
     { n:"1", title:"Create a folder", desc:"Tap New Folder and name it after your subject — Physics, Maths, History, etc." },
     { n:"2", title:"Upload your file", desc:"Open the folder, upload your study material: PDF, PowerPoint, Word doc, or image." },
     { n:"3", title:"Generate with AI", desc:"Open the file and go to the AI tab to instantly create notes, flashcards, or a quiz game." },
-    { n:"4", title:"Study with friends", desc:"Tap Study Group, share your invite code, and study together with live voice chat and shared content." },
-    { n:"5", title:"Ask AI anything", desc:"Hit the AI Assistant button on the home screen to ask any question or send a photo of a problem — no file needed." },
+    { n:"4", title:"Study with friends", desc:"Tap 👥 Study Group, share your invite code, and study together with live voice chat and shared content." },
+    { n:"5", title:"Ask AI anything", desc:"Hit the 🤖 AI Assistant button on the home screen to ask any question or send a photo of a problem — no file needed." },
   ];
   return (
     <div style={{ paddingBottom:40 }}>
@@ -907,7 +907,7 @@ function AboutTab() {
         <p style={{ margin:"0 0 10px", fontSize:14, fontWeight:700, color:C.warm }}>💡 Pro Tips</p>
         <div style={{ display:"flex", flexDirection:"column", gap:7 }}>
           {["Link related files (e.g. lecture notes + past paper) so the AI reads both at once.",
-            "In Study Groups, give a friend presenter rights so they can run AI tools too.",
+            "In 👥 Study Groups, give a friend presenter rights so they can run AI tools too.",
             "Send a photo of a handwritten question — the AI will read and solve it.",
             "The AI always replies in your language. Write in Arabic, get Arabic answers.",
             "Use the AI Podcast feature to listen to your notes while commuting or exercising."
@@ -1121,14 +1121,14 @@ export default function App() {
       />}
       <AdBanner />
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 14px" }}>
-        {/* ── Action buttons row (Study Group + New Folder) ── */}
+        {/* ── Action buttons row (👥 Study Group + New Folder) ── */}
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:20, justifyContent:"flex-end" }}>
           <button onClick={()=>setShowStudyGroupLobby(true)} className="hov"
             style={{ display:"flex", alignItems:"center", gap:7, background:"#7c3aed",
               color:"#fff", border:"none", borderRadius:12, padding:"10px 18px",
               fontSize:14, fontWeight:600, cursor:"pointer",
               boxShadow:"0 4px 14px rgba(124,58,237,.35)" }}>
-            Study Group
+            👥 Study Group
           </button>
           {homeTab==="folders" && (
             <button onClick={()=>setShowNewFolder(true)} className="hov"
@@ -1299,14 +1299,14 @@ function Header({ user, saveStatus, isGuest, onSignOut, character, onOpenCharact
               </button>
             ))}
           </div>
-          {/* AI Assistant */}
+          {/* 🤖 AI Assistant */}
           <button onClick={onOpenAI}
             style={{ display:"flex", alignItems:"center", gap:6,
               background:"linear-gradient(135deg,#6366f1,#8b5cf6)",
               color:"#fff", border:"none", borderRadius:10, padding:"6px 14px",
               fontSize:13, fontWeight:700, cursor:"pointer",
               boxShadow:"0 2px 10px rgba(99,102,241,.4)" }}>
-            AI Assistant
+            🤖 AI Assistant
           </button>
         </div>
       )}
@@ -3001,7 +3001,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
     onUpdate({ ...folder, files: [...folder.files, ...added] });
   };
 
-  const TABS = [{ id:"files", label:"Files", icon:I.file },{ id:"ai", label:"AI Assistant", icon:I.ai }];
+  const TABS = [{ id:"files", label:"Files", icon:I.file },{ id:"ai", label:"🤖 AI Assistant", icon:I.ai }];
 
   return (
     <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif" }}>
@@ -3129,7 +3129,7 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
     {id:"notes", label:"Notes",           icon:I.notes},
     {id:"voice", label:"Voice & Podcast", icon:I.cards},
     {id:"cards", label:"Study Cards",     icon:I.cards},
-    {id:"ai",    label:"AI Assistant",    icon:I.ai},
+    {id:"ai",    label:"🤖 AI Assistant",    icon:I.ai},
     {id:"game",  label:"Game Mode",       icon:I.game},
   ];
   const fc = getFileColor(file);
@@ -3855,7 +3855,7 @@ ${fileContext}`
         {msgs.length === 0 && (
           <div style={{ textAlign:"center", padding:"24px 20px", color:C.muted }}>
             <div style={{ fontSize:40, marginBottom:12 }}>🤖</div>
-            <p style={{ fontSize:15, fontWeight:600, color:C.text, marginBottom:6 }}>AI Assistant</p>
+            <p style={{ fontSize:15, fontWeight:600, color:C.text, marginBottom:6 }}>🤖 AI Assistant</p>
             <p style={{ fontSize:13 }}>{file ? `Ask anything about "${file.name}".` : selectedFileIds.length > 0 ? "Ask anything about the selected files." : "Select files above then ask a question."}</p>
           </div>
         )}
@@ -6793,7 +6793,7 @@ function StudyGroupLobby({ user, db, onJoin, onClose }) {
             display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div>
               <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700,
-                fontFamily: "'Fraunces',serif", color: C.text }}>Study Group</h2>
+                fontFamily: "'Fraunces',serif", color: C.text }}>👥 Study Group</h2>
               <p style={{ margin: "3px 0 0", fontSize: 13, color: C.muted }}>Study together in real time</p>
             </div>
             <button onClick={onClose} style={{ background: C.bg, border: `1px solid ${C.border}`,
@@ -6812,7 +6812,7 @@ function StudyGroupLobby({ user, db, onJoin, onClose }) {
                   <div style={{ width: 40, height: 40, borderRadius: 12, background: C.accent,
                     display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>✨</div>
                   <div>
-                    <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.text }}>Create a Study Group</p>
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.text }}>Create a 👥 Study Group</p>
                     <p style={{ margin: "2px 0 0", fontSize: 12, color: C.muted }}>Start a new room and invite friends</p>
                   </div>
                 </button>
@@ -6824,7 +6824,7 @@ function StudyGroupLobby({ user, db, onJoin, onClose }) {
                   <div style={{ width: 40, height: 40, borderRadius: 12, background: C.warmL,
                     display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>🔗</div>
                   <div>
-                    <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.text }}>Join a Study Group</p>
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.text }}>Join a 👥 Study Group</p>
                     <p style={{ margin: "2px 0 0", fontSize: 12, color: C.muted }}>Enter a code from a friend</p>
                   </div>
                 </button>
@@ -7790,7 +7790,7 @@ function SGWhiteboard({ groupId, db, user, group, onClose }) {
               const noteText  = `WHITEBOARD: ${noteTitle}\n\n` +
                 `Saved on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}\n` +
                 `Strokes: ${strokes.length}\n\n` +
-                `[Whiteboard content — view in Study Group to see the drawing]`;
+                `[Whiteboard content — view in 👥 Study Group to see the drawing]`;
               try {
                 const key = `saved_notes_wb_${Date.now()}`;
                 const existing = JSON.parse(localStorage.getItem("classio_saved_whiteboards") || "[]");
@@ -9581,7 +9581,7 @@ function SGBottomBar({ groupId, db, group, user, isHost, canPresent, voiceState,
 }
 
 
-// ── Main Study Group Room ─────────────────────────────────────────────────────
+// ── Main 👥 Study Group Room ─────────────────────────────────────────────────────
 function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
   const [group,     setGroup]     = useState(null);
   const [messages,  setMessages]  = useState([]);
@@ -9833,7 +9833,7 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
           <div style={{ minWidth: 0 }}>
             <p style={{ margin: 0, fontSize: 15, fontWeight: 800, color: C.text,
               fontFamily: "'Fraunces',serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {group?.name || "Study Group"}
+              {group?.name || "👥 Study Group"}
             </p>
             <p style={{ margin: 0, fontSize: 10, color: C.muted }}>
               {memberList.length} member{memberList.length !== 1 ? "s" : ""}
@@ -9894,7 +9894,7 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
                 display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30 }}>📚</div>
               <div style={{ textAlign: "center" }}>
                 <p style={{ margin: "0 0 6px", fontSize: 18, fontWeight: 700, color: C.text,
-                  fontFamily: "'Fraunces',serif" }}>{group?.name || "Study Group"}</p>
+                  fontFamily: "'Fraunces',serif" }}>{group?.name || "👥 Study Group"}</p>
                 <p style={{ margin: 0, fontSize: 13, color: C.muted, maxWidth: 260, lineHeight: 1.5 }}>
                   {isHost ? "You're the host — start the session below." : "Waiting for the host to start something…"}
                 </p>
