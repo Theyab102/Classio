@@ -6542,8 +6542,17 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
 
   const changeSpeed = (s) => { setSpeed(s); if (playing || paused) { const p = currentProgressRef.current; stop(); setTimeout(() => playFromProgress(p), 50); } };
 
-  const wordCount = script ? script.trim().split(/\s+/).length : 0;
-  const estMins   = Math.max(1, Math.round((wordCount / 150) / speed));
+  const wordCount  = script ? script.trim().split(/\s+/).length : 0;
+  const totalSecs  = Math.max(1, Math.round((wordCount / 150) * 60 / speed));
+  const elapsedSecs = Math.round((progress / 100) * totalSecs);
+  const fmt = (s) => {
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sc = s % 60;
+    return h > 0
+      ? `${h}:${String(m).padStart(2,"0")}:${String(sc).padStart(2,"0")}`
+      : `${m}:${String(sc).padStart(2,"0")}`;
+  };
   const persona   = GLOBAL_PERSONAS[personaIdx];
 
   return (
@@ -6599,8 +6608,8 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
                 pointerEvents:"none" }}/>
             </div>
             <div style={{ display:"flex", justifyContent:"space-between", marginTop:6 }}>
-              <span style={{ fontSize:11, color:"#818cf8" }}>{progress}%</span>
-              <span style={{ fontSize:11, color:"#818cf8" }}>~{estMins} min · {wordCount} words</span>
+              <span style={{ fontSize:11, color:"#818cf8" }}>{fmt(elapsedSecs)}</span>
+              <span style={{ fontSize:11, color:"#818cf8" }}>{fmt(totalSecs)}</span>
             </div>
           </div>
 
