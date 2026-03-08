@@ -618,63 +618,49 @@ const GS = `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@3
 @keyframes sg-fadein{from{opacity:0;transform:translateX(-50%) translateY(-8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 .card-hov{transition:all .2s} .tab:hover{background:#F0EDE9!important} .row:hover{background:#F7F5F2!important} .row{transition:background .15s}
 
-/* ── RESPONSIVE ─────────────────────────────────────────── */
-/* Touch targets: min 44px */
-button,a,[role=button]{min-height:44px;min-width:44px}
-button.icon-btn{min-height:36px;min-width:36px}
-
-/* Tablets: 600–1024px */
-@media(max-width:1024px){
-  .max-w-page{max-width:100%!important;padding-left:16px!important;padding-right:16px!important}
-  .tablet-stack{flex-direction:column!important}
-  .tablet-grid-2{grid-template-columns:1fr 1fr!important}
-  .header-gap{gap:8px!important}
-}
-
-/* Phones: ≤600px portrait + landscape */
+/* ── PHONE ONLY (≤600px) — desktop & tablet unchanged ────── */
 @media(max-width:600px){
+  /* Hide desktop-only elements */
   .desktop-only{display:none!important}
-  .mobile-stack{flex-direction:column!important}
-  .mobile-full{width:100%!important;max-width:100%!important}
-  .mobile-pad{padding:10px 12px!important}
-  .mobile-small-text{font-size:12px!important}
-  .tab-label{display:none!important}
-  .toolbar-wrap{flex-wrap:wrap;gap:6px!important}
-  .mobile-hide{display:none!important}
-  .mobile-grid-1{grid-template-columns:1fr!important}
-  .mobile-text-sm{font-size:13px!important}
-  /* Page containers */
-  .page-inner{padding:14px 12px!important;max-width:100%!important}
-  /* Nav tabs */
-  .nav-tabs{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  /* Nav tabs scroll horizontally without scrollbar */
+  .nav-tabs{overflow-x:auto!important;-webkit-overflow-scrolling:touch;scrollbar-width:none;flex-wrap:nowrap!important}
   .nav-tabs::-webkit-scrollbar{display:none}
-  .nav-tab-btn{padding:12px 12px!important;font-size:12px!important;white-space:nowrap}
-  /* Cards */
-  .card-grid{grid-template-columns:1fr!important}
-  .game-grid{grid-template-columns:1fr 1fr!important}
-  /* Modals */
-  .modal-inner{border-radius:16px 16px 0 0!important;max-height:92vh!important;width:100%!important;margin:0!important;position:fixed!important;bottom:0!important;left:0!important;right:0!important}
-  /* Header */
-  .app-header{padding:0 12px!important;height:52px!important}
-  .app-header .logo-text{font-size:15px!important}
-  /* Bottom nav padding (AdBanner) */
+  .nav-tab-btn{padding:10px 10px!important;font-size:12px!important;white-space:nowrap!important}
+  /* Hide tab text labels, keep icons */
+  .tab-label{display:none!important}
+  /* Page padding */
+  .page-inner{padding:14px 12px!important}
+  /* Page bottom padding for AdBanner */
   .page-with-ad{padding-bottom:60px!important}
-  /* Inputs */
+  /* Header */
+  .app-header{padding:0 12px!important;min-height:52px!important}
+  /* Folder/file card grid → 2 cols */
+  .card-grid{grid-template-columns:1fr 1fr!important}
+  /* Game grid → 2 cols */
+  .game-grid{grid-template-columns:1fr 1fr!important}
+  /* Stack flex rows vertically */
+  .mobile-stack{flex-direction:column!important}
+  /* Full width */
+  .mobile-full{width:100%!important;max-width:100%!important}
+  /* Modals slide up from bottom */
+  .modal-inner{border-radius:18px 18px 0 0!important;max-height:92vh!important;width:100%!important;position:fixed!important;bottom:0!important;left:0!important;right:0!important;margin:0!important}
+  /* Touch target minimum */
+  button{min-height:40px}
+  /* Chat input wraps */
   .chat-input-row{flex-wrap:wrap;gap:6px!important}
 }
 
-/* Landscape phones (height < 500px) */
+/* Landscape phone (height < 500px) */
 @media(max-height:500px) and (orientation:landscape){
-  .app-header{height:44px!important}
-  .modal-inner{max-height:85vh!important;border-radius:12px!important;margin:auto!important;position:relative!important;bottom:auto!important}
-  .landscape-scroll{overflow-y:auto;max-height:80vh}
+  .app-header{min-height:44px!important;height:44px!important}
+  .modal-inner{max-height:90vh!important;border-radius:12px!important;position:relative!important;bottom:auto!important;margin:auto!important}
   .landscape-hide{display:none!important}
 }
 
-/* Shared tablet+phone */
-@media(max-width:1024px){
-  .touch-scroll{-webkit-overflow-scrolling:touch;overflow-x:auto;scrollbar-width:none}
-  .touch-scroll::-webkit-scrollbar{display:none}
+/* Scrollable tabs on tablet too */
+@media(max-width:900px){
+  .nav-tabs{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .nav-tabs::-webkit-scrollbar{display:none}
 }
 
 /* Hard cap on AdSense iframe */
@@ -845,7 +831,7 @@ function StandaloneAI({ onClose }) {
                   ["◎","Any language","Reply in your language"]].map(([ic,ti,de])=>(
                   <div key={ti} style={{ background:C.surface, border:`1px solid ${C.border}`,
                     borderRadius:12, padding:"12px 14px" }}>
-                    <p style={{ margin:"0 0 4px", fontSize:16, fontWeight:700, color:C.accent }}>{ic}</p>
+                    <div style={{ marginBottom:6 }}>{ic}</div>
                     <p style={{ margin:"0 0 2px", fontSize:12, fontWeight:700, color:C.text }}>{ti}</p>
                     <p style={{ margin:0, fontSize:11, color:C.muted, lineHeight:1.4 }}>{de}</p>
                   </div>
@@ -939,16 +925,16 @@ function StandaloneAI({ onClose }) {
 // ─── ABOUT / GUIDE TAB ────────────────────────────────────────────────────────
 function AboutTab() {
   const features = [
-    { icon:"▤", title:"Folders & Files", desc:"Organise study materials into folders. Upload PDFs, Word docs, PowerPoints, images, and text files. Everything is saved to your account." },
-    { icon:"◉", title:"AI Assistant", desc:"Ask the AI anything — type a question or attach a photo of a problem. No file needed. Replies in whatever language you write in." },
-    { icon:"✎", title:"AI Notes", desc:"Generate notes from any file in 4 styles: Summary, Detailed, Bullet Points, or Q&A. The AI reads your file and writes structured notes instantly." },
-    { icon:"▣", title:"Study Cards", desc:"Auto-generate up to 50 flashcards from your files. Flip to reveal answers. Great for memorising key concepts fast." },
-    { icon:"▷", title:"14+ Study Games", desc:"MCQ, Speed Round, Elimination, Memory Match, True/False, Listening Game, Quiz Show, and more — all generated from your material." },
-    { icon:"◎", title:"Study Groups", desc:"Create or join a live session. Present files, share whiteboards, run multiplayer quizzes, and voice chat with friends in real time." },
-    { icon:"♪", title:"Voice Notes", desc:"Record yourself or a lecture — the app transcribes it into written notes automatically." },
-    { icon:"◐", title:"AI Podcast", desc:"Turn any file into a spoken podcast. Two AI hosts discuss your material so you can learn while listening." },
-    { icon:"✐", title:"Annotations", desc:"Highlight and annotate any file directly inside the app. Add comments and review them later." },
-    { icon:"◑", title:"16 Languages", desc:"Full support for Arabic, French, Spanish, German, Chinese, Japanese, and 10 more. The AI always replies in the language you write in." },
+    { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3D5A80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>, title:"Folders & Files", desc:"Organise study materials into folders. Upload PDFs, Word docs, PowerPoints, images, and text files. Everything is saved to your account." },
+    { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8"/></svg>, title:"AI Assistant", desc:"Ask the AI anything — type a question or attach a photo of a problem. No file needed. Replies in whatever language you write in." },
+    { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>, title:"AI Notes", desc:"Generate notes from any file in 4 styles: Summary, Detailed, Bullet Points, or Q&A. The AI reads your file and writes structured notes instantly." },
+    { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/></svg>, title:"Study Cards", desc:"Auto-generate up to 50 flashcards from your files. Flip to reveal answers. Great for memorising key concepts fast." },
+    { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D69E2E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>, title:"14+ Study Games", desc:"MCQ, Speed Round, Elimination, Memory Match, True/False, Listening Game, Quiz Show, and more — all generated from your material." },
+    { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3D5A80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>, title:"Study Groups", desc:"Create or join a live session. Present files, share whiteboards, run multiplayer quizzes, and voice chat with friends in real time." },
+    { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>, title:"Voice Notes", desc:"Record yourself or a lecture — the app transcribes it into written notes automatically." },
+    { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>, title:"AI Podcast", desc:"Turn any file into a spoken podcast. Two AI hosts discuss your material so you can learn while listening." },
+    { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ea580c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>, title:"Annotations", desc:"Highlight and annotate any file directly inside the app. Add comments and review them later." },
+    { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0694a2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>, title:"16 Languages", desc:"Full support for Arabic, French, Spanish, German, Chinese, Japanese, and 10 more. The AI always replies in the language you write in." },
   ];
   const steps = [
     { n:"1", title:"Create a folder", desc:"Tap New Folder and name it after your subject — Physics, Maths, History, etc." },
@@ -1257,7 +1243,7 @@ export default function App() {
           </div>
         )}
 
-        {homeTab==="folders" && <div className="card-grid" className="card-grid" style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:16 }}>
+        {homeTab==="folders" && <div className="card-grid" style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))", gap:16 }}>
           {folders.map(folder => (
             <div key={folder.id} className="card-hov"
               onClick={() => { setActiveFolder(folder); setScreen("folder"); }}
@@ -3104,7 +3090,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
     <div className="page-with-ad" style={{ minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif" }}>
       <style>{GS}</style>
       {/* Top bar */}
-      <div className="app-header" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 16px", minHeight:52, display:"flex", alignItems:"center", gap:10 }}>
+      <div className="app-header" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", height:64, display:"flex", alignItems:"center", gap:16 }}>
         <button onClick={onBack} className="hov" style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14 }}>
           <Icon d={I.back} size={18} color={C.muted} /> Back
         </button>
@@ -3159,7 +3145,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
         ))}
       </div>
 
-      <div className="page-inner max-w-page" style={{ maxWidth:860, margin:"0 auto", padding:"28px 20px" }}>
+      <div className="page-inner" style={{ maxWidth:860, margin:"0 auto", padding:"32px 24px" }}>
         {tab === "files" && (
           <>
             <div onDragOver={e=>{e.preventDefault();setDragging(true);}} onDragLeave={()=>setDragging(false)}
@@ -3234,7 +3220,7 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
   return (
     <div className="page-with-ad" style={{ minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif" }}>
       <style>{GS}</style>
-      <div className="app-header" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 16px", minHeight:52, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+      <div className="app-header" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", height:64, display:"flex", alignItems:"center", gap:14 }}>
         <button onClick={onBack} className="hov" style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14 }}>
           <Icon d={I.back} size={18} color={C.muted} /> {folder.name}
         </button>
@@ -3244,17 +3230,17 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
         </div>
         <span style={{ fontSize:15, fontWeight:600, color:C.text, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{file.name}</span>
       </div>
-      <div className="nav-tabs touch-scroll" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 8px", display:"flex", gap:0 }}>
+      <div className="nav-tabs" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", display:"flex", gap:4 }}>
         {TABS.map(t => (
           <button key={t.id} className="tab" onClick={() => setTab(t.id)}
-            className="nav-tab-btn" style={{ display:"flex", alignItems:"center", gap:6, padding:"12px 14px", border:"none", borderBottom:tab===t.id?`2px solid ${C.accent}`:"2px solid transparent", background:"none", cursor:"pointer", fontSize:13, fontWeight:tab===t.id?700:500, color:tab===t.id?C.accent:C.muted, marginBottom:-1, whiteSpace:"nowrap" }}>
+            className="nav-tab-btn" style={{ display:"flex", alignItems:"center", gap:7, padding:"14px 18px", border:"none", borderBottom:tab===t.id?`2px solid ${C.accent}`:"2px solid transparent", background:"none", cursor:"pointer", fontSize:14, fontWeight:tab===t.id?700:500, color:tab===t.id?C.accent:C.muted, marginBottom:-1 }}>
             <Icon d={t.icon} size={15} color={tab===t.id?C.accent:C.muted} />{t.label}
           </button>
         ))}
       </div>
       {tab==="view"
         ? <ViewTab file={file} onUpdate={onUpdate} />
-        : <div className="page-inner max-w-page" style={{ maxWidth:900, margin:"0 auto", padding:"28px 20px" }}>
+        : <div className="page-inner" style={{ maxWidth:900, margin:"0 auto", padding:"32px 24px" }}>
             {tab==="notes" && <NotesTab key={file.id} file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} />}
             {tab==="voice" && <VoicePodcastTab file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} />}
             {tab==="cards" && <CardsTab file={file} onUpdate={onUpdate} />}
@@ -4358,7 +4344,7 @@ ${notesText.slice(0, 10000)}`,
                       style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:20, border:"none", cursor:"pointer", fontSize:12, fontWeight:700,
                         background: playbackPersonaIdx===i ? C.accent : C.surface,
                         color: playbackPersonaIdx===i ? "#fff" : C.text }}>
-                      <span style={{width:10,height:10,borderRadius:"50%",background:p.color,display:"inline-block",marginRight:4,flexShrink:0}}></span>{p.label}
+                      <span style={{width:12,height:12,borderRadius:"50%",background:p.color,display:"inline-block",flexShrink:0}}></span>{p.label}
                     </button>
                   ))}
                   <p style={{ width:"100%", fontSize:10, color:C.muted, marginTop:2 }}>
@@ -4515,10 +4501,10 @@ function NotesTab({ file, onUpdate, user, isGuest }) {
   const [customStyle,    setCustomStyle]    = useState("");
   const [useCustomStyle, setUseCustomStyle] = useState(false);
   const NOTE_STYLES = [
-    { id:"detailed", label:"Detailed",    desc:"Full notes with headings & examples" },
+    { id:"detailed", label:"📋 Detailed",    desc:"Full notes with headings & examples" },
     { id:"bullet",   label:"• Bullets",      desc:"Bullet points only, grouped by topic" },
-    { id:"simple",   label:"Simple",       desc:"Plain English, easy to understand" },
-    { id:"exam",     label:"Exam Focused", desc:"Key terms, questions & checklist" },
+    { id:"simple",   label:"🧒 Simple",       desc:"Plain English, easy to understand" },
+    { id:"exam",  label:"📝 Exam Focused", desc:"Key terms, questions & checklist" },
   ];
 
   // ── AI generate ───────────────────────────────────────────────────────────
@@ -4812,7 +4798,7 @@ function CardsTab({ file, onUpdate }) {
               </button>
             ))}
           </div>
-          <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+          <div style={{ display:"flex", gap:10, alignItems:"center" }}>
             <div style={{ display:"flex", alignItems:"center", gap:8, flex:1 }}>
               <span style={{ fontSize:13, color:C.muted }}>Custom:</span>
               <input type="number" min="0" max="50" value={cardCount} onChange={e => setCardCount(Math.min(50, Math.max(0, parseInt(e.target.value)||0)))}
@@ -4914,34 +4900,34 @@ function GameTab({ file }) {
   if (activeGame==="wordfill") return <WordFill cards={cards} onBack={()=>setActiveGame(null)} />;
 
   const GAMES = [
-    {id:"mcq",emoji:"◉",title:"Multiple Choice",desc:"4 options — pick the right one",bg:C.accentL,accent:C.accent},
-    {id:"voice",emoji:"♪",title:"Voice Answer",desc:"Speak your answer out loud — AI grades it",bg:"#f5f3ff",accent:"#7c3aed"},
-    {id:"flashcard",emoji:"▣",title:"Flashcard Flip",desc:"Flip cards and track what you know",bg:"#f5f3ff",accent:"#7c3aed"},
-    {id:"quizshow",emoji:"◈",title:"Quiz Show",desc:"Who Wants to Be a Millionaire style with lifelines",bg:"#fef2f2",accent:"#dc2626"},
-    {id:"fillblank",emoji:"✐",title:"Fill in the Blank",desc:"Complete the sentence with the right answer",bg:"#ecfeff",accent:"#0694a2"},
-    {id:"rapidfire",emoji:"▷",title:"Rapid Fire",desc:"Type as many correct answers as you can in 45s",bg:"#f0fdf4",accent:"#059669"},
-    {id:"truefalse",emoji:"✓",title:"True or False",desc:"Decide if the statement is true or false",bg:"#FAF5FF",accent:"#6B46C1"},
-    {id:"memory",emoji:"▦",title:"Memory Flip",desc:"Match question cards to answer cards",bg:"#FFF5F5",accent:"#C53030"},
-    {id:"match",emoji:"⊞",title:"Matching Pairs",desc:"Connect each term to its definition",bg:C.greenL,accent:C.green},
-    {id:"scramble",emoji:"⇄",title:"Word Scramble",desc:"AI scrambles a key word — rearrange the letter tiles",bg:C.warmL,accent:C.warm},
-    {id:"speedrun",emoji:"▶",title:"Speed Run",desc:"Answer as many as you can in 60 seconds",bg:"#FFFFF0",accent:"#D69E2E"},
-    {id:"tower",emoji:"⬆",title:"Answer Tower",desc:"Build a tower — answer correctly to stack blocks",bg:"#E6FFFA",accent:"#2C7A7B"},
-    {id:"falling",emoji:"▨",title:"Falling Blocks",desc:"Type the answer before the block falls",bg:C.purpleL,accent:C.purple},
-    {id:"listening",emoji:"◐",title:"Listening Quiz",desc:"Listen to the question — answer without reading it",bg:"#f0fdf4",accent:"#059669"},
-    {id:"wordfill",emoji:"≡",title:"Word Fill",desc:"Key words are blanked out — tap tiles to fill them in",bg:"#fff7ed",accent:"#ea580c"},
+    {id:"mcq",      icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.accent}     strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,      title:"Multiple Choice",  desc:"4 options — pick the right one",                              bg:C.accentL,   accent:C.accent},
+    {id:"voice",    icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7c3aed"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>,  title:"Voice Answer",     desc:"Speak your answer out loud — AI grades it",                   bg:"#f5f3ff",   accent:"#7c3aed"},
+    {id:"flashcard",icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7c3aed"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/></svg>,                                                                                                                    title:"Flashcard Flip",   desc:"Flip cards and track what you know",                          bg:"#f5f3ff",   accent:"#7c3aed"},
+    {id:"quizshow", icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#dc2626"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>,                                                                                                  title:"Quiz Show",        desc:"Who Wants to Be a Millionaire style with lifelines",          bg:"#fef2f2",   accent:"#dc2626"},
+    {id:"fillblank",icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0694a2"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="17" y1="18" x2="3" y2="18"/></svg>,                                               title:"Fill in the Blank", desc:"Complete the sentence with the right answer",                bg:"#ecfeff",   accent:"#0694a2"},
+    {id:"rapidfire",icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#059669"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,                                                                                                                                               title:"Rapid Fire",       desc:"Type as many correct answers as you can in 45s",             bg:"#f0fdf4",   accent:"#059669"},
+    {id:"truefalse",icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6B46C1"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>,                                                                                                                                                                              title:"True or False",    desc:"Decide if the statement is true or false",                    bg:"#FAF5FF",   accent:"#6B46C1"},
+    {id:"memory",   icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C53030"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="9" height="9" rx="1"/><rect x="13" y="3" width="9" height="9" rx="1"/><rect x="2" y="13" width="9" height="9" rx="1"/><rect x="13" y="13" width="9" height="9" rx="1"/></svg>,       title:"Memory Flip",      desc:"Match question cards to answer cards",                        bg:"#FFF5F5",   accent:"#C53030"},
+    {id:"match",    icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.green}      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>,                                                       title:"Matching Pairs",   desc:"Connect each term to its definition",                         bg:C.greenL,    accent:C.green},
+    {id:"scramble", icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.warm}       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>,                                                  title:"Word Scramble",    desc:"AI scrambles a key word — rearrange the letter tiles",        bg:C.warmL,     accent:C.warm},
+    {id:"speedrun", icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#D69E2E"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,                                                                                                                                    title:"Speed Run",        desc:"Answer as many as you can in 60 seconds",                    bg:"#FFFFF0",   accent:"#D69E2E"},
+    {id:"tower",    icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2C7A7B"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="16" width="16" height="4" rx="1"/><rect x="6" y="11" width="12" height="4" rx="1"/><rect x="8" y="6" width="8" height="4" rx="1"/></svg>,                                                      title:"Answer Tower",     desc:"Build a tower — answer correctly to stack blocks",            bg:"#E6FFFA",   accent:"#2C7A7B"},
+    {id:"falling",  icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.purple}     strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><line x1="14" y1="17" x2="21" y2="17"/></svg>,               title:"Falling Blocks",   desc:"Type the answer before the block falls",                     bg:C.purpleL,   accent:C.purple},
+    {id:"listening",icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#059669"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>,                      title:"Listening Quiz",   desc:"Listen to the question — answer without reading it",         bg:"#f0fdf4",   accent:"#059669"},
+    {id:"wordfill", icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ea580c"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="7" y1="14" x2="7" y2="17"/><line x1="12" y1="14" x2="12" y2="17"/></svg>,                                 title:"Word Fill",        desc:"Key words are blanked out — tap tiles to fill them in",       bg:"#fff7ed",   accent:"#ea580c"},
   ];
 
   return (
     <div style={{ maxWidth:760, margin:"0 auto" }}>
       <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:26, fontWeight:700, color:C.text, marginBottom:6 }}>Game Mode</h2>
       <p style={{ fontSize:14, color:C.muted, marginBottom:28 }}>{cards.length} cards ready · Choose a game</p>
-      <div className="game-grid" style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(auto-fill,minmax(160px,1fr))", gap:14 }}>
+      <div className="game-grid" style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(auto-fill,minmax(200px,1fr))", gap:14 }}>
         {GAMES.map(g => (
           <button key={g.id} onClick={()=>setActiveGame(g.id)}
             style={{ background:g.bg, border:`1.5px solid ${g.accent}22`, borderRadius:18, padding:"20px 18px", textAlign:"left", cursor:"pointer", transition:"transform .15s,box-shadow .15s" }}
             onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-3px)";e.currentTarget.style.boxShadow=`0 8px 24px ${g.accent}33`;}}
             onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow="none";}}>
-            <div style={{ fontSize:32, marginBottom:10 }}><span style={{fontSize:16,lineHeight:1}}>{g.emoji}</span></div>
+            <div style={{ marginBottom:10, display:"flex" }}>{g.icon}</div>
             <p style={{ fontSize:15, fontWeight:700, color:C.text, marginBottom:5 }}>{g.title}</p>
             <p style={{ fontSize:12, color:C.muted, lineHeight:1.4 }}>{g.desc}</p>
           </button>
@@ -4962,7 +4948,7 @@ function GHeader({ title, score, curr, total, onBack, accent }) {
         <span style={{ fontSize:14, fontWeight:700, color:accent }}>Score: {score}</span>
       </div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-        <h3 className="logo-text" style={{ fontFamily:"'Fraunces',serif", fontSize:18, fontWeight:700, color:C.text, whiteSpace:"nowrap" }}>{title}</h3>
+        <h3 style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:700, color:C.text }}>{title}</h3>
         <span style={{ fontSize:13, color:C.muted }}>{curr+1}/{total}</span>
       </div>
       <div style={{ height:5, background:C.border, borderRadius:3 }}>
@@ -5278,7 +5264,7 @@ function Match({ cards, onBack }) {
   if(done) return <GResults score={score} total={deck.length} onBack={onBack} />;
   const bs=(isSel,isMat,isWrong,col)=>({ background:isMat?C.greenL:isWrong?C.redL:isSel?col+"22":C.surface, border:`1.5px solid ${isMat?C.green:isWrong?C.red:isSel?col:C.border}`, borderRadius:10, padding:"10px 12px", fontSize:13, color:isMat?C.green:isWrong?C.red:C.text, cursor:isMat?"default":"pointer", textAlign:"left", lineHeight:1.4, transition:"all .2s", fontWeight:isSel?600:400, opacity:isMat?.7:1 });
   return (
-    <div className="max-w-page" style={{ maxWidth:680, margin:"0 auto" }}>
+    <div style={{ maxWidth:680, margin:"0 auto" }}>
       <GHeader title="Matching Pairs" score={score} curr={matched.length} total={deck.length} onBack={onBack} accent={C.green} />
       <p style={{ fontSize:13, color:C.muted, marginBottom:16, textAlign:"center" }}>Match each term to its definition</p>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
@@ -5355,7 +5341,7 @@ function Tower({ cards, onBack }) {
   };
   if(done) return <GResults score={tower.length} total={deck.length} onBack={onBack} msg="Tower Built!" />;
   return (
-    <div className="max-w-page mobile-stack" style={{ maxWidth:600, margin:"0 auto", display:"flex", gap:16 }}>
+    <div style={{ maxWidth:600, margin:"0 auto", display:"flex", gap:24 }}>
       <div style={{ flex:1 }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
           <button onClick={onBack} style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14 }}><Icon d={I.back} size={16} color={C.muted} /> Games</button>
@@ -5717,8 +5703,8 @@ function FlashcardFlip({ cards, onBack }) {
       </div>
       {flipped && (
         <div style={{ display: "flex", gap: 12 }}>
-          <button onClick={() => respond(false)} style={{ flex: 1, background: "#FFF5F5", color: C.red, border: `2px solid ${C.red}33`, borderRadius: 14, padding: "14px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg> Still learning</button>
-          <button onClick={() => respond(true)} style={{ flex: 1, background: "#f0fdf4", color: "#16a34a", border: "2px solid #16a34a33", borderRadius: 14, padding: "14px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg> Got it!</button>
+          <button onClick={() => respond(false)} style={{ flex: 1, background: "#FFF5F5", color: C.red, border: `2px solid ${C.red}33`, borderRadius: 14, padding: "14px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}> Still learning</button>
+          <button onClick={() => respond(true)} style={{ flex: 1, background: "#f0fdf4", color: "#16a34a", border: "2px solid #16a34a33", borderRadius: 14, padding: "14px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}> Got it!</button>
         </div>
       )}
       {!flipped && <p style={{ textAlign: "center", color: C.muted, fontSize: 13 }}>Tap the card to reveal the answer</p>}
@@ -6448,7 +6434,7 @@ function ListeningGame({ cards, onBack }) {
                   background: personaIdx===i ? accent : "#f3f4f6",
                   color: personaIdx===i ? "#fff" : "#374151",
                   boxShadow: personaIdx===i ? `0 2px 10px ${accent}44` : "none" }}>
-                <span style={{width:10,height:10,borderRadius:"50%",background:p.color,display:"inline-block",marginRight:4}}></span>{p.label}
+                <span style={{width:12,height:12,borderRadius:"50%",background:p.color,display:"inline-block",flexShrink:0}}></span>{p.label}
               </button>
             ))}
             <p style={{ width:"100%", fontSize:10, color:"#9ca3af", marginTop:4 }}>Using: {getSmartVoiceLabel(personaIdx, allVoices, "en-US")} · ♀ = Female · ♂ = Male</p>
@@ -6697,7 +6683,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
       ) : (
         <>
           {/* Seekable progress bar */}
-          <div style={{ padding:"0 16px 8px" }}>
+          <div style={{ padding:"0 22px 8px" }}>
             <div ref={progressBarRef}
               onClick={seekFromEvent}
               onMouseDown={e => { setIsDragging(true); seekFromEvent(e); }}
@@ -6726,8 +6712,8 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
           </div>
 
           {/* Transport controls */}
-          <div style={{ padding:"8px 16px 12px" }}>
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:10, marginBottom:12, flexWrap:"wrap" }}>
+          <div style={{ padding:"8px 22px 14px" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:18, marginBottom:14 }}>
 
               {/* Stop */}
               <button onClick={stop} title="Stop"
@@ -6813,7 +6799,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
             {/* Current voice badge */}
             {!showPicker && (
               <p style={{ fontSize:11, color:"#818cf8", textAlign:"center", marginBottom:10 }}>
-                <span style={{width:10,height:10,borderRadius:"50%",background:persona.color,display:"inline-block",marginRight:4}}></span><strong style={{color:"#c7d2fe"}}>{persona.label}</strong> · {persona.gender==="female"?"♀ Female":"♂ Male"} · {persona.desc} · <span style={{color:"#6366f1"}}>{getSmartVoiceLabel(personaIdx, allVoices, lang)}</span>
+                <span style={{width:12,height:12,borderRadius:"50%",background:persona.color,display:"inline-block",flexShrink:0}}></span><strong style={{color:"#c7d2fe"}}>{persona.label}</strong> · {persona.gender==="female"?"♀ Female":"♂ Male"} · {persona.desc} · <span style={{color:"#6366f1"}}>{getSmartVoiceLabel(personaIdx, allVoices, lang)}</span>
               </p>
             )}
 
@@ -8213,10 +8199,10 @@ function SGAINotesGen({ groupId, db, user, groupFile, onClose }) {
   const [title,   setTitle]   = useState("");
 
   const STYLES = [
-    { id:"detailed", label:"Detailed",     desc:"Sections + bullet points" },
+    { id:"detailed", label:"📋 Detailed",     desc:"Sections + bullet points" },
     { id:"bullet",   label:"• Bullet Points", desc:"Concise bullet-only format" },
-    { id:"simple",   label:"Simple",        desc:"Plain language, short sentences" },
-    { id:"exam",     label:"Exam Focus",    desc:"Key terms + likely questions" },
+    { id:"simple",   label:"🧒 Simple",        desc:"Plain language, short sentences" },
+    { id:"exam",     label:"📝 Exam Focus",    desc:"Key terms + likely questions" },
   ];
 
   const generate = async () => {
@@ -8669,13 +8655,13 @@ function SGSharePicker({ user, db, groupId, group, groupFile, isHost, onClose,
   };
 
   const MODES = [
-    { id:"notes",       emoji:"✎", label:"AI Notes",      desc:"Generate & share notes with AI",
+    { id:"notes",       icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3D5A80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>, label:"AI Notes",      desc:"Generate & share notes with AI",
       action: () => { onClose(); onOpenNotes(); } },
-    { id:"flashcards",  emoji:"▣", label:"AI Flashcards", desc:"Generate & present study cards",
+    { id:"flashcards",  icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/></svg>, label:"AI Flashcards", desc:"Generate & present study cards",
       action: () => { onClose(); onOpenFlashcards(); } },
-    { id:"whiteboard",  emoji:"✐", label:"Whiteboard",    desc:"Draw live for everyone to see",
+    { id:"whiteboard",  icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>, label:"Whiteboard",    desc:"Draw live for everyone to see",
       action: () => { onClose(); onOpenWhiteboard(); } },
-    { id:"file",        emoji:"▤", label:"Study File",
+    { id:"file",        icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D69E2E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>, label:"Study File",
       desc: (() => {
         if (groupFile) return `Present "${groupFile.name}"`;
         const hostFile = group?.hostFileName || group?.sharedContent?.fileName;
@@ -8688,7 +8674,7 @@ function SGSharePicker({ user, db, groupId, group, groupFile, isHost, onClose,
         reShareFile();
       },
       disabled: sharing || (!groupFile && !group?.sharedContent?.fileChunks && !group?.hostFileName) },
-    { id:"screenshare", emoji:"▨", label:"Screen Share",  desc:"Share your screen live",
+    { id:"screenshare", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>, label:"Screen Share",  desc:"Share your screen live",
       action: () => setActiveStep("screenshare") },
   ];
 
@@ -9365,14 +9351,14 @@ function SGGameLauncher({ group, db, groupId, user, groupFile, onClose }) {
   const sharedCards   = group?.sharedContent?.cards || [];
 
   const MP_GAMES = [
-    { id:"mcq",        emoji:"◉", title:"Multiple Choice",   desc:"4-option quiz, everyone answers",       bg:C.accentL,  accent:C.accent  },
-    { id:"truefalse",  emoji:"✓", title:"True or False",     desc:"Vote true or false together",           bg:C.purpleL,  accent:C.purple  },
-    { id:"rapidfire",  emoji:"▷", title:"Rapid Fire",        desc:"First to type the answer wins",         bg:C.greenL,   accent:C.green   },
-    { id:"quizshow",   emoji:"◈", title:"Quiz Show",         desc:"Millionaire-style with lifelines",      bg:"#fef2f2",  accent:C.red     },
-    { id:"memory",     emoji:"⊕", title:"Memory Match",      desc:"Match questions to their answers",      bg:"#fdf4ff",  accent:C.purple  },
-    { id:"speedround", emoji:"▲", title:"Speed Round",       desc:"10 questions, 10 seconds each",         bg:"#fff7ed",  accent:C.warm    },
-    { id:"elimination",emoji:"✕", title:"Elimination",       desc:"Wrong answer? You're out!",             bg:"#fef2f2",  accent:C.red     },
-    { id:"teamquiz",   emoji:"◇", title:"Team Quiz",         desc:"Split into teams, highest score wins",  bg:C.accentL,  accent:C.accent  },
+    { id:"mcq",        icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>, title:"Multiple Choice",   desc:"4-option quiz, everyone answers",       bg:C.accentL,  accent:C.accent  },
+    { id:"truefalse",  icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.purple} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>, title:"True or False",     desc:"Vote true or false together",           bg:C.purpleL,  accent:C.purple  },
+    { id:"rapidfire",  icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>, title:"Rapid Fire",        desc:"First to type the answer wins",         bg:C.greenL,   accent:C.green   },
+    { id:"quizshow",   icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.red} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>, title:"Quiz Show",         desc:"Millionaire-style with lifelines",      bg:"#fef2f2",  accent:C.red     },
+    { id:"memory",     icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.purple} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="9" height="9" rx="1"/><rect x="13" y="3" width="9" height="9" rx="1"/><rect x="2" y="13" width="9" height="9" rx="1"/><rect x="13" y="13" width="9" height="9" rx="1"/></svg>, title:"Memory Match",      desc:"Match questions to their answers",      bg:"#fdf4ff",  accent:C.purple  },
+    { id:"speedround", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.warm} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>, title:"Speed Round",       desc:"10 questions, 10 seconds each",         bg:"#fff7ed",  accent:C.warm    },
+    { id:"elimination", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.red} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>, title:"Elimination",       desc:"Wrong answer? You're out!",             bg:"#fef2f2",  accent:C.red     },
+    { id:"teamquiz",   icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>, title:"Team Quiz",         desc:"Split into teams, highest score wins",  bg:C.accentL,  accent:C.accent  },
   ];
 
   const effectiveTopic = groupFile?.name || topic.trim();
