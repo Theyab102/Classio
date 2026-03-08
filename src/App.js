@@ -6608,8 +6608,9 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
   const charPosRef   = useRef([]);
   const progressBarRef = useRef(null);
   const currentProgressRef = useRef(0);
-  const puterAudiosRef = useRef([]); // active puter audio elements
-  const [puterLoading, setPuterLoading] = useState(false); // fetching neural audio
+  const puterAudiosRef = useRef([]); // ALL active puter audio elements (for hard stop)
+  const puterGenRef = useRef(0);      // incremented each play — old gens are discarded
+  const [puterLoading, setPuterLoading] = useState(false);
   const timerRef = useRef(null); // smooth progress interval
   const sentenceStartTimeRef = useRef(null); // when current sentence started
   const sentenceStartProgRef = useRef(0);    // progress % when sentence started
@@ -6645,11 +6646,12 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
   };
 
   const stopAll = () => {
+    // Increment generation — any in-flight puter fetches will see stale gen and stop
+    puterGenRef.current += 1;
     window.speechSynthesis.cancel();
+    // Hard-stop every audio element we have a reference to
     puterAudiosRef.current.forEach(a => {
-      try { if (a._cancelToken) a._cancelToken.cancelled = true; } catch(e){}
-      try { if (a.audio) { a.audio.pause(); a.audio.currentTime = 0; } } catch(e){}
-      try { if (a.pause) { a.pause(); a.currentTime = 0; } } catch(e){}
+      try { a.pause(); a.currentTime = 0; a.src = ""; } catch(e){}
     });
     puterAudiosRef.current = [];
     setPuterLoading(false);
@@ -6677,47 +6679,54 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
     if (p.engine === "puter") {
       // ── Puter neural TTS: play sentences sequentially ──
       setPlaying(true); setPaused(false);
-      const cancelToken = { cancelled: false };
-      puterAudiosRef.current = [{ _cancelToken: cancelToken }]; // mark as active
+      puterAudiosRef.current = []; // clear old refs
+      const myGen = puterGenRef.current; // snapshot generation at start of this play
       const playPuterSequence = async (idx) => {
-        if (cancelToken.cancelled || idx >= sentences.length) {
-          if (!cancelToken.cancelled) { setPlaying(false); setPaused(false); setProgress(100); }
+        // Stop if a newer play/stop has started
+        if (puterGenRef.current !== myGen || idx >= sentences.length) {
+          if (puterGenRef.current === myGen) { setPlaying(false); setPaused(false); setProgress(100); }
           return;
         }
         const sen = sentences[idx];
         const myStart = positions[idx];
         const myEnd = myStart + sen.length;
-        const prog = Math.round((myStart / totalChars.current) * 100);
-        setProgress(prog); currentProgressRef.current = prog;
-        if (!cancelToken.cancelled) setPuterLoading(true);
+        const startProg = (myStart / totalChars.current) * 100;
+        const endProg   = (myEnd / totalChars.current) * 100;
+        setProgress(startProg); currentProgressRef.current = startProg;
+        setPuterLoading(true);
         await new Promise(resolve => {
           speakWithPuter(
             sen.trim(),
             p.puterVoice || "Joanna",
             speed,
             () => {
-              if (!cancelToken.cancelled) {
-                setPlaying(true); setPaused(false); setPuterLoading(false);
-                const startProg = (myStart / totalChars.current) * 100;
-                const endProg   = (myEnd / totalChars.current) * 100;
-                const estDurMs  = Math.max(500, (sen.trim().length / (18 * speed)) * 1000);
-                startProgressTimer(startProg, endProg, estDurMs);
-              }
+              // onStart — audio has begun playing
+              if (puterGenRef.current !== myGen) return;
+              setPlaying(true); setPaused(false); setPuterLoading(false);
+              const estDurMs = Math.max(500, (sen.trim().length / (18 * speed)) * 1000);
+              startProgressTimer(startProg, endProg, estDurMs);
             },
             () => {
+              // onEnd
               stopProgressTimer();
-              if (!cancelToken.cancelled) {
-                const endProg = (myEnd / totalChars.current) * 100;
+              if (puterGenRef.current === myGen) {
                 setProgress(endProg); currentProgressRef.current = endProg;
               }
               resolve();
             },
-            () => resolve()
+            () => { stopProgressTimer(); resolve(); } // onError
           ).then(audio => {
-            if (audio && !cancelToken.cancelled) puterAudiosRef.current = [{ audio, _cancelToken: cancelToken }];
+            if (!audio) return;
+            // Register audio so stopAll can kill it immediately
+            puterAudiosRef.current.push(audio);
+            // If gen changed while fetching, stop immediately
+            if (puterGenRef.current !== myGen) {
+              try { audio.pause(); audio.currentTime = 0; audio.src = ""; } catch(e){}
+            }
           });
         });
-        if (!cancelToken.cancelled) await playPuterSequence(idx + 1);
+        // Proceed to next sentence only if still same generation
+        if (puterGenRef.current === myGen) await playPuterSequence(idx + 1);
       };
       playPuterSequence(startIdx);
     } else {
@@ -6775,7 +6784,12 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
   const pause = () => {
     const p = personaRef.current || GLOBAL_PERSONAS[0];
     if (p.engine === "puter") {
-      puterAudiosRef.current.forEach(a => { try { if(a.audio) a.audio.pause(); else if(a.pause) a.pause(); } catch(e){} });
+      // Increment gen to stop the sequence loop, then stop all audios
+      puterGenRef.current += 1;
+      puterAudiosRef.current.forEach(a => { try { a.pause(); a.currentTime = 0; a.src = ""; } catch(e){} });
+      puterAudiosRef.current = [];
+      stopProgressTimer();
+      setPuterLoading(false);
       setPaused(true); setPlaying(false);
     } else {
       if (window.speechSynthesis.speaking) { window.speechSynthesis.pause(); setPaused(true); setPlaying(false); }
