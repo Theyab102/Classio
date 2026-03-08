@@ -6610,17 +6610,39 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
   const currentProgressRef = useRef(0);
   const puterAudiosRef = useRef([]); // active puter audio elements
   const [puterLoading, setPuterLoading] = useState(false); // fetching neural audio
+  const timerRef = useRef(null); // smooth progress interval
+  const sentenceStartTimeRef = useRef(null); // when current sentence started
+  const sentenceStartProgRef = useRef(0);    // progress % when sentence started
+  const sentenceEndProgRef   = useRef(0);    // progress % when sentence ends
 
   const SPEEDS = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
 
   useEffect(() => {
     const load = () => setAllVoices(window.speechSynthesis.getVoices());
     load(); window.speechSynthesis.onvoiceschanged = load;
-    return () => { window.speechSynthesis.cancel(); };
+    return () => { window.speechSynthesis.cancel(); stopProgressTimer(); };
   }, [lang]);
 
   useEffect(() => { personaRef.current = GLOBAL_PERSONAS[personaIdx]; }, [personaIdx]);
   if (!personaRef.current) personaRef.current = GLOBAL_PERSONAS[0];
+
+  // Smooth progress: interpolate between sentenceStartProg and sentenceEndProg
+  const startProgressTimer = (startProg, endProg, durationMs) => {
+    stopProgressTimer();
+    sentenceStartTimeRef.current = Date.now();
+    sentenceStartProgRef.current = startProg;
+    sentenceEndProgRef.current   = endProg;
+    timerRef.current = setInterval(() => {
+      const elapsed = Date.now() - sentenceStartTimeRef.current;
+      const frac = Math.min(1, elapsed / Math.max(durationMs, 1));
+      const interp = startProg + (endProg - startProg) * frac;
+      setProgress(interp); currentProgressRef.current = interp;
+      if (frac >= 1) stopProgressTimer();
+    }, 80);
+  };
+  const stopProgressTimer = () => {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+  };
 
   const stopAll = () => {
     window.speechSynthesis.cancel();
@@ -6631,6 +6653,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
     });
     puterAudiosRef.current = [];
     setPuterLoading(false);
+    stopProgressTimer();
   };
   const stop = () => { stopAll(); setPlaying(false); setPaused(false); setProgress(0); currentProgressRef.current = 0; };
 
@@ -6672,10 +6695,19 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
             sen.trim(),
             p.puterVoice || "Joanna",
             speed,
-            () => { if (!cancelToken.cancelled) { setPlaying(true); setPaused(false); setPuterLoading(false); } },
             () => {
               if (!cancelToken.cancelled) {
-                const endProg = Math.round((myEnd / totalChars.current) * 100);
+                setPlaying(true); setPaused(false); setPuterLoading(false);
+                const startProg = (myStart / totalChars.current) * 100;
+                const endProg   = (myEnd / totalChars.current) * 100;
+                const estDurMs  = Math.max(500, (sen.trim().length / (18 * speed)) * 1000);
+                startProgressTimer(startProg, endProg, estDurMs);
+              }
+            },
+            () => {
+              stopProgressTimer();
+              if (!cancelToken.cancelled) {
+                const endProg = (myEnd / totalChars.current) * 100;
                 setProgress(endProg); currentProgressRef.current = endProg;
               }
               resolve();
@@ -6702,16 +6734,21 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
           if (voice) u.voice = voice;
           const myEnd = positions[absIdx] + sen.length;
           u.onstart = () => {
-            const prog = Math.round((positions[absIdx] / totalChars.current) * 100);
-            setProgress(prog); currentProgressRef.current = prog;
+            const startProg = (positions[absIdx] / totalChars.current) * 100;
+            const endProg   = (myEnd / totalChars.current) * 100;
+            // Estimate duration from char count, speed, rate
+            const estDurMs = Math.max(500, (sen.trim().length / (18 * speed * (p.rate || 0.93))) * 1000);
+            setProgress(startProg); currentProgressRef.current = startProg;
             setPlaying(true); setPaused(false);
+            startProgressTimer(startProg, endProg, estDurMs);
           };
           u.onend = () => {
-            const prog = Math.round((myEnd / totalChars.current) * 100);
+            stopProgressTimer();
+            const prog = (myEnd / totalChars.current) * 100;
             setProgress(prog); currentProgressRef.current = prog;
             if (absIdx === sentences.length - 1) { setPlaying(false); setPaused(false); setProgress(100); }
           };
-          u.onerror = () => { setPlaying(false); setPaused(false); };
+          u.onerror = () => { stopProgressTimer(); setPlaying(false); setPaused(false); };
           window.speechSynthesis.speak(u);
         });
       };
