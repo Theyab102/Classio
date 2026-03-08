@@ -1018,6 +1018,7 @@ function AboutTab() {
 }
 
 export default function App() {
+  const { isMobile, isTablet } = useResponsive();
   const [user, setUser] = useState(undefined);
   const [isGuest, setIsGuest] = useState(false);
   const [guestName, setGuestName] = useState("");
@@ -4884,6 +4885,7 @@ async function aiCheckAnswer(question, correct, userAnswer) {
 }
 
 function GameTab({ file }) {
+  const { isMobile } = useResponsive();
   const cards = file.studyCards || [];
   const [activeGame, setActiveGame] = useState(null);
 
