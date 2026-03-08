@@ -7918,20 +7918,31 @@ function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
     onClose();
   };
 
-  // Share file — upload to Firebase Storage, store download URL in Firestore (no 1MB limit)
+  // Share file — convert to base64 and store directly in Firestore (no Storage needed)
   const shareFile = async () => {
     if (!groupFile?._fileObj) return;
     setSharing(true);
     try {
-      const path    = `studyGroups/${groupId}/files/${Date.now()}_${groupFile.name}`;
-      const fileRef = storageRef(storage, path);
-      await uploadBytes(fileRef, groupFile._fileObj);
-      const downloadURL = await getDownloadURL(fileRef);
+      const file = groupFile._fileObj;
+      // Check size — Firestore doc limit is 1MB, base64 adds ~33% overhead
+      if (file.size > 700000) {
+        alert(`File is too large (${(file.size/1024/1024).toFixed(1)}MB). Please use a file under 700KB for study group sharing.`);
+        setSharing(false);
+        return;
+      }
+      // Read as base64 data URL
+      const fileData = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload  = (e) => resolve(e.target.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
       await updateDoc(doc(db,"studyGroups",groupId), {
         sharedContent: {
           type:        "file",
           fileName:    groupFile.name,
-          fileURL:     downloadURL,
+          fileData:    fileData,   // base64 data URL — works without Firebase Storage
+          fileURL:     null,
           title:       groupFile.name,
           sharedBy:    user.displayName?.split(" ")[0] || "Host",
           sharedByUid: user.uid,
@@ -7941,7 +7952,7 @@ function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
       });
     } catch(e) {
       console.error("shareFile", e);
-      alert("Upload failed: " + e.message);
+      alert("Share failed: " + e.message);
     }
     setSharing(false);
     onClose();
