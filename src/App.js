@@ -6567,24 +6567,39 @@ function SGFileViewer({ fileData, fileURL, fileChunks, groupId, fileName }) {
     setChunkData(null);
     setChunkError("");
     setChunkLoading(true);
+    let cancelled = false;
     (async () => {
-      try {
-        const chunkCol = collection(db, "studyGroups", groupId, "fileChunks");
-        const snap = await getDocs(chunkCol);
-        if (snap.empty) { setChunkError("File not found."); return; }
-        // Sort by index and reassemble
-        const sorted = snap.docs
-          .map(d => d.data())
-          .sort((a,b) => a.index - b.index);
-        const assembled = sorted.map(d => d.chunk).join("");
-        setChunkData(assembled);
-      } catch(e) {
-        console.error("Chunk fetch error:", e);
-        setChunkError("Could not load file: " + e.message);
-      } finally {
-        setChunkLoading(false);
+      // Retry up to 5 times in case chunks aren't all written yet
+      for (let attempt = 0; attempt < 5; attempt++) {
+        try {
+          const chunkCol = collection(db, "studyGroups", groupId, "fileChunks");
+          const snap = await getDocs(chunkCol);
+          if (cancelled) return;
+          if (snap.empty) {
+            if (attempt < 4) { await new Promise(r => setTimeout(r, 1500)); continue; }
+            setChunkError("File not found."); return;
+          }
+          const docs = snap.docs.map(d => d.data());
+          const expectedTotal = fileChunks;
+          // Check we have all chunks
+          if (docs.length < expectedTotal) {
+            if (attempt < 4) { await new Promise(r => setTimeout(r, 1500)); continue; }
+            setChunkError(`Only ${docs.length} of ${expectedTotal} file parts received.`); return;
+          }
+          // Sort by index and reassemble
+          const sorted = docs.sort((a,b) => a.index - b.index);
+          const assembled = sorted.map(d => d.chunk).join("");
+          if (!cancelled) setChunkData(assembled);
+          return;
+        } catch(e) {
+          if (attempt < 4) { await new Promise(r => setTimeout(r, 1500)); continue; }
+          console.error("Chunk fetch error:", e);
+          if (!cancelled) setChunkError("Could not load file: " + e.message);
+          return;
+        }
       }
-    })();
+    })().finally(() => { if (!cancelled) setChunkLoading(false); });
+    return () => { cancelled = true; };
   }, [fileChunks, groupId]);
 
   // Final source — chunks take priority, then direct URL, then legacy base64
@@ -8037,19 +8052,20 @@ function SGSharePicker({ user, db, groupId, group, groupFile, isHost, onClose,
       // Delete old chunks first
       const oldChunks = await getDocs(chunkCol);
       for (const d of oldChunks.docs) await deleteDoc(d.ref);
-      // Write new chunks
+      // Write new chunks — all must succeed before we tell viewers
       for (let i = 0; i < totalChunks; i++) {
         await setDoc(doc(chunkCol, String(i)), {
           chunk: fileData.slice(i * CHUNK, (i + 1) * CHUNK),
           index: i,
+          total: totalChunks,
         });
       }
-      // Store metadata in main group doc
+      // Only AFTER all chunks are written, set sharedContent so viewers start fetching
       await updateDoc(doc(db,"studyGroups",groupId), {
         sharedContent: {
           type:        "file",
           fileName:    groupFile.name,
-          fileChunks:  totalChunks,   // viewers fetch chunks from subcollection
+          fileChunks:  totalChunks,
           fileData:    null,
           fileURL:     null,
           title:       groupFile.name,
@@ -9217,33 +9233,44 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
   // Granted presenters use host's file automatically — fetch chunks and build File object
   const [presenterFileObj, setPresenterFileObj] = useState(null);
   useEffect(() => {
-    if (isHost || !canPresent) return; // host uses groupFile directly
+    if (isHost || !canPresent) return;
     const sc = group?.sharedContent;
     if (!sc?.fileChunks || !sc?.fileName) return;
-    if (presenterFileObj?.name === sc.fileName) return; // already loaded
+    if (presenterFileObj?.name === sc.fileName) return;
     (async () => {
-      try {
-        const chunkCol = collection(db, "studyGroups", groupId, "fileChunks");
-        const snap = await getDocs(chunkCol);
-        if (snap.empty) return;
-        const sorted = snap.docs.map(d => d.data()).sort((a,b) => a.index - b.index);
-        const base64 = sorted.map(d => d.chunk).join("");
-        const [header, b64] = base64.split(",");
-        const mime = header.match(/:(.*?);/)?.[1] || "application/octet-stream";
-        const bin  = atob(b64);
-        const arr  = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-        const fileObj = new File([arr], sc.fileName, { type: mime });
-        setPresenterFileObj(fileObj);
-      } catch(e) { console.error("presenterFileObj fetch", e); }
+      for (let attempt = 0; attempt < 5; attempt++) {
+        try {
+          const chunkCol = collection(db, "studyGroups", groupId, "fileChunks");
+          const snap = await getDocs(chunkCol);
+          if (snap.empty || snap.docs.length < sc.fileChunks) {
+            await new Promise(r => setTimeout(r, 1500)); continue;
+          }
+          const sorted = snap.docs.map(d => d.data()).sort((a,b) => a.index - b.index);
+          const base64 = sorted.map(d => d.chunk).join("");
+          const [header, b64] = base64.split(",");
+          const mime = header.match(/:(.*?);/)?.[1] || "application/octet-stream";
+          const bin  = atob(b64);
+          const arr  = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+          setPresenterFileObj(new File([arr], sc.fileName, { type: mime }));
+          return;
+        } catch(e) {
+          if (attempt < 4) { await new Promise(r => setTimeout(r, 1500)); continue; }
+          console.error("presenterFileObj fetch", e);
+        }
+      }
     })();
   }, [canPresent, isHost, group?.sharedContent?.fileChunks, group?.sharedContent?.fileName]);
 
-  // The file every tool uses — host's local file OR presenter's fetched copy
+  // The file every tool uses:
+  // - Host: their own uploaded file (groupFile)
+  // - Granted presenter: their own uploaded file if they have one,
+  //   otherwise the host's file fetched from Firestore (presenterFileObj)
+  // - Regular member: null
   const effectiveGroupFile = isHost
     ? groupFile
-    : (canPresent && presenterFileObj)
-      ? { name: presenterFileObj.name, _fileObj: presenterFileObj }
+    : canPresent
+      ? (groupFile || (presenterFileObj ? { name: presenterFileObj.name, _fileObj: presenterFileObj } : null))
       : null;
   const presenter = group?.sharedContent
     ? Object.values(members).find(m => m?.uid === group.sharedContent.sharedByUid)
