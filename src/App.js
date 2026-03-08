@@ -116,7 +116,55 @@ const GLOBAL_PERSONAS = [
   // ── Neutral ─────────────────────────────────────────────────────────────────
   { id:"river",   label:"River",   gender:"neutral",color:"#0891b2", desc:"Smooth & neutral",         pitch:1.0,  rate:0.93,
     targets:["microsoft jenny online","jenny online","microsoft guy online","guy online","google us english","google uk english","default","en-us","en-gb"] },
+  // ── Puter.js (neural / realistic) ───────────────────────────────────────────
+  { id:"p_nova",  label:"Nova",    gender:"female", color:"#be185d", desc:"Neural · Warm & natural",   engine:"puter", puterVoice:"Joanna",   pitch:1.0, rate:1.0 },
+  { id:"p_aria",  label:"Aria",    gender:"female", color:"#7c3aed", desc:"Neural · Bright & clear",   engine:"puter", puterVoice:"Kendra",   pitch:1.0, rate:1.0 },
+  { id:"p_jade",  label:"Jade",    gender:"female", color:"#0f766e", desc:"Neural · Calm & soothing",  engine:"puter", puterVoice:"Salli",    pitch:1.0, rate:1.0 },
+  { id:"p_echo",  label:"Echo",    gender:"male",   color:"#1d4ed8", desc:"Neural · Deep & confident", engine:"puter", puterVoice:"Matthew",  pitch:1.0, rate:1.0 },
+  { id:"p_cole",  label:"Cole",    gender:"male",   color:"#166534", desc:"Neural · Friendly & warm",  engine:"puter", puterVoice:"Joey",     pitch:1.0, rate:1.0 },
+  { id:"p_rex",   label:"Rex",     gender:"male",   color:"#92400e", desc:"Neural · Strong & clear",   engine:"puter", puterVoice:"Justin",   pitch:1.0, rate:1.0 },
 ];
+
+// ── Puter.js loader ──────────────────────────────────────────────────────────
+let _puterLoaded = false;
+let _puterLoading = false;
+let _puterCallbacks = [];
+
+function loadPuter() {
+  return new Promise((resolve) => {
+    if (_puterLoaded && window.puter) { resolve(window.puter); return; }
+    _puterCallbacks.push(resolve);
+    if (_puterLoading) return;
+    _puterLoading = true;
+    const s = document.createElement("script");
+    s.src = "https://js.puter.com/v2/";
+    s.onload = () => {
+      _puterLoaded = true; _puterLoading = false;
+      _puterCallbacks.forEach(cb => cb(window.puter));
+      _puterCallbacks = [];
+    };
+    s.onerror = () => { _puterLoading = false; _puterCallbacks.forEach(cb => cb(null)); _puterCallbacks = []; };
+    document.head.appendChild(s);
+  });
+}
+
+async function speakWithPuter(text, voiceName, rate = 1.0, onStart, onEnd, onError) {
+  try {
+    const puter = await loadPuter();
+    if (!puter) throw new Error("Puter not loaded");
+    onStart && onStart();
+    const audio = await puter.ai.txt2speech(text, voiceName);
+    audio.playbackRate = rate;
+    audio.onended = () => onEnd && onEnd();
+    audio.onerror = () => onError && onError();
+    audio.play();
+    return audio;
+  } catch(e) {
+    console.warn("Puter TTS failed:", e);
+    onError && onError();
+    return null;
+  }
+}
 
 // Resolve the best available browser voice for a persona.
 // Key fix: we track which voices have ALREADY been assigned to earlier personas
@@ -6553,6 +6601,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
   const charPosRef   = useRef([]);
   const progressBarRef = useRef(null);
   const currentProgressRef = useRef(0);
+  const puterAudiosRef = useRef([]); // active puter audio elements
 
   const SPEEDS = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
 
@@ -6565,64 +6614,115 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
   useEffect(() => { personaRef.current = GLOBAL_PERSONAS[personaIdx]; }, [personaIdx]);
   if (!personaRef.current) personaRef.current = GLOBAL_PERSONAS[0];
 
-  const stop = () => { window.speechSynthesis.cancel(); setPlaying(false); setPaused(false); setProgress(0); currentProgressRef.current = 0; };
+  const stopAll = () => {
+    window.speechSynthesis.cancel();
+    puterAudiosRef.current.forEach(a => { try { a.pause(); a.currentTime = 0; } catch(e){} });
+    puterAudiosRef.current = [];
+  };
+  const stop = () => { stopAll(); setPlaying(false); setPaused(false); setProgress(0); currentProgressRef.current = 0; };
 
   const playFromProgress = (startProgress) => {
     if (!script || loading) return;
-    window.speechSynthesis.cancel();
+    stopAll();
     totalChars.current = script.length || 1;
     const p = personaRef.current || GLOBAL_PERSONAS[0];
-    const voice = getSmartVoice(p, allVoices, lang);
     const processed = script.replace(/[\r\n]{2,}/g, "  ").replace(/\.\s+([A-Z])/g, ". $1").trim();
     const rawSents = processed.match(/[^.!?]+[.!?]+(\s|$)/g) || [processed];
     const sentences = rawSents.filter(s => s.trim().length > 0);
     sentencesRef.current = sentences;
 
-    // Build char positions
     let cp = 0;
     const positions = sentences.map(s => { const start = cp; cp += s.length; return start; });
     charPosRef.current = positions;
 
-    // Find which sentence to start from
     const startChar = Math.floor((startProgress / 100) * totalChars.current);
     const startIdx = Math.max(0, positions.findIndex((pos, i) => pos >= startChar || i === sentences.length - 1));
 
-    const speakFrom = (idx) => {
-      sentences.slice(idx).forEach((sen, relIdx) => {
-        const absIdx = idx + relIdx;
-        const u = new SpeechSynthesisUtterance(sen.trim());
-        u.rate   = speed * (p.rate || 0.93);
-        u.pitch  = p.pitch || 1.0;
-        u.volume = 1.0;
-        u.lang   = lang;
-        if (voice) u.voice = voice;
-        const myEnd = positions[absIdx] + sen.length;
-        u.onstart = () => {
-          const prog = Math.round((positions[absIdx] / totalChars.current) * 100);
-          setProgress(prog); currentProgressRef.current = prog;
-          setPlaying(true); setPaused(false);
-        };
-        u.onend = () => {
-          const prog = Math.round((myEnd / totalChars.current) * 100);
-          setProgress(prog); currentProgressRef.current = prog;
-          if (absIdx === sentences.length - 1) { setPlaying(false); setPaused(false); setProgress(100); }
-        };
-        u.onerror = () => { setPlaying(false); setPaused(false); };
-        window.speechSynthesis.speak(u);
-      });
-    };
-    speakFrom(startIdx);
-    setPlaying(true); setPaused(false);
+    if (p.engine === "puter") {
+      // ── Puter neural TTS: play sentences sequentially ──
+      setPlaying(true); setPaused(false);
+      const playPuterSequence = async (idx) => {
+        if (idx >= sentences.length) { setPlaying(false); setPaused(false); setProgress(100); return; }
+        const sen = sentences[idx];
+        const myStart = positions[idx];
+        const myEnd = myStart + sen.length;
+        const prog = Math.round((myStart / totalChars.current) * 100);
+        setProgress(prog); currentProgressRef.current = prog;
+        await new Promise(resolve => {
+          speakWithPuter(
+            sen.trim(),
+            p.puterVoice || "Joanna",
+            speed,
+            () => { setPlaying(true); setPaused(false); },
+            () => {
+              const endProg = Math.round((myEnd / totalChars.current) * 100);
+              setProgress(endProg); currentProgressRef.current = endProg;
+              resolve();
+            },
+            () => resolve()
+          ).then(audio => { if (audio) puterAudiosRef.current = [audio]; });
+        });
+        // Check if stop was called between sentences
+        if (puterAudiosRef.current.length > 0 || idx === startIdx) {
+          await playPuterSequence(idx + 1);
+        }
+      };
+      playPuterSequence(startIdx);
+    } else {
+      // ── Browser Web Speech API ──
+      const voice = getSmartVoice(p, allVoices, lang);
+      const speakFrom = (idx) => {
+        sentences.slice(idx).forEach((sen, relIdx) => {
+          const absIdx = idx + relIdx;
+          const u = new SpeechSynthesisUtterance(sen.trim());
+          u.rate   = speed * (p.rate || 0.93);
+          u.pitch  = p.pitch || 1.0;
+          u.volume = 1.0;
+          u.lang   = lang;
+          if (voice) u.voice = voice;
+          const myEnd = positions[absIdx] + sen.length;
+          u.onstart = () => {
+            const prog = Math.round((positions[absIdx] / totalChars.current) * 100);
+            setProgress(prog); currentProgressRef.current = prog;
+            setPlaying(true); setPaused(false);
+          };
+          u.onend = () => {
+            const prog = Math.round((myEnd / totalChars.current) * 100);
+            setProgress(prog); currentProgressRef.current = prog;
+            if (absIdx === sentences.length - 1) { setPlaying(false); setPaused(false); setProgress(100); }
+          };
+          u.onerror = () => { setPlaying(false); setPaused(false); };
+          window.speechSynthesis.speak(u);
+        });
+      };
+      speakFrom(startIdx);
+      setPlaying(true); setPaused(false);
+    }
   };
 
   const play = () => {
     if (!script || loading) return;
-    if (paused) { window.speechSynthesis.resume(); setPlaying(true); setPaused(false); return; }
+    const p = personaRef.current || GLOBAL_PERSONAS[0];
+    if (paused) {
+      if (p.engine === "puter") {
+        // Puter can't resume — restart from current position
+        playFromProgress(currentProgressRef.current);
+      } else {
+        window.speechSynthesis.resume(); setPlaying(true); setPaused(false);
+      }
+      return;
+    }
     playFromProgress(progress >= 100 ? 0 : progress);
   };
 
   const pause = () => {
-    if (window.speechSynthesis.speaking) { window.speechSynthesis.pause(); setPaused(true); setPlaying(false); }
+    const p = personaRef.current || GLOBAL_PERSONAS[0];
+    if (p.engine === "puter") {
+      puterAudiosRef.current.forEach(a => { try { a.pause(); } catch(e){} });
+      setPaused(true); setPlaying(false);
+    } else {
+      if (window.speechSynthesis.speaking) { window.speechSynthesis.pause(); setPaused(true); setPlaying(false); }
+    }
   };
 
   // Skip forward/back by 5 seconds
@@ -6781,33 +6881,64 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
             {showPicker && (
               <div style={{ background:"rgba(0,0,0,.4)", borderRadius:18, padding:"14px 12px", marginBottom:12, border:"1px solid rgba(255,255,255,.08)" }}>
                 <p style={{ fontSize:10, fontWeight:800, color:"#818cf8", letterSpacing:1.2, marginBottom:11, textTransform:"uppercase", textAlign:"center" }}>Choose a Voice</p>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
-                  {GLOBAL_PERSONAS.map((p, i) => {
+                {/* Browser voices section */}
+                <p style={{ fontSize:9, fontWeight:800, color:"#4b5563", letterSpacing:1.2, marginBottom:6, textTransform:"uppercase" }}>Browser Voices</p>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6, marginBottom:12 }}>
+                  {GLOBAL_PERSONAS.filter(p => !p.engine).map((p, _) => {
+                    const i = GLOBAL_PERSONAS.indexOf(p);
                     const sel = personaIdx === i;
                     const vName = getSmartVoiceLabel(i, allVoices, lang);
                     return (
                       <button key={p.id} onClick={() => { setPersonaIdx(i); if(playing||paused) stop(); }}
                         style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3, padding:"10px 6px", borderRadius:14, border:"none", cursor:"pointer",
-                          background: sel ? "rgba(99,102,241,.55)" : "rgba(255,255,255,.06)",
-                          outline: sel ? "2px solid #6366f1" : "2px solid transparent", transition:"all .15s" }}>
-                        <span style={{ fontSize:22 }}>{p.emoji}</span>
-                        <span style={{ fontSize:13, fontWeight:800, color:"#fff" }}>{p.label}</span>
-                        <span style={{ fontSize:10, color:"#a5b4fc" }}>{p.gender==="female"?"♀":"♂"} {p.desc}</span>
-                        <span style={{ fontSize:9, color:"#6366f1", background:"rgba(99,102,241,.2)", borderRadius:6, padding:"2px 6px", marginTop:2, maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{vName}</span>
+                          background: sel ? `${p.color}44` : "rgba(255,255,255,.06)",
+                          outline: sel ? `2px solid ${p.color}` : "2px solid transparent", transition:"all .15s" }}>
+                        <span style={{ width:20, height:20, borderRadius:"50%", background:p.color, display:"block", boxShadow:`0 0 8px ${p.color}88` }}></span>
+                        <span style={{ fontSize:12, fontWeight:800, color:"#fff" }}>{p.label}</span>
+                        <span style={{ fontSize:9, color:"#a5b4fc", textAlign:"center" }}>{p.gender==="female"?"♀":p.gender==="male"?"♂":"⚥"} {p.desc}</span>
+                        <span style={{ fontSize:8, color:"#6366f1", background:"rgba(99,102,241,.2)", borderRadius:6, padding:"1px 5px", maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{vName}</span>
                       </button>
                     );
                   })}
                 </div>
-                <p style={{ fontSize:10, color:"#4b5563", textAlign:"center", marginTop:10 }}>
-                  Best voices: Microsoft Online (Edge) · Google (Chrome) · macOS voices
+                {/* Neural voices section */}
+                <p style={{ fontSize:9, fontWeight:800, color:"#be185d", letterSpacing:1.2, marginBottom:6, textTransform:"uppercase", display:"flex", alignItems:"center", gap:6 }}>
+                  <span style={{ background:"#be185d", borderRadius:4, padding:"1px 5px", fontSize:8, color:"#fff" }}>NEURAL</span> Realistic Voices · powered by Puter
+                </p>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
+                  {GLOBAL_PERSONAS.filter(p => p.engine === "puter").map((p, _) => {
+                    const i = GLOBAL_PERSONAS.indexOf(p);
+                    const sel = personaIdx === i;
+                    return (
+                      <button key={p.id} onClick={() => { setPersonaIdx(i); if(playing||paused) stop(); }}
+                        style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3, padding:"10px 6px", borderRadius:14, border:"none", cursor:"pointer",
+                          background: sel ? `${p.color}44` : "rgba(255,255,255,.06)",
+                          outline: sel ? `2px solid ${p.color}` : "2px solid transparent", transition:"all .15s",
+                          position:"relative" }}>
+                        <span style={{ width:20, height:20, borderRadius:"50%", background:`linear-gradient(135deg,${p.color},${p.color}99)`, display:"block", boxShadow:`0 0 10px ${p.color}99` }}></span>
+                        <span style={{ fontSize:12, fontWeight:800, color:"#fff" }}>{p.label}</span>
+                        <span style={{ fontSize:9, color:"#f9a8d4", textAlign:"center" }}>{p.gender==="female"?"♀":"♂"} {p.desc}</span>
+                        <span style={{ fontSize:8, background:"rgba(190,24,93,.3)", color:"#fda4af", borderRadius:6, padding:"1px 5px" }}>Neural ✦</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p style={{ fontSize:9, color:"#4b5563", textAlign:"center", marginTop:10 }}>
+                  Browser: Best in Edge/Chrome · Neural: realistic, loads on first use
                 </p>
               </div>
             )}
 
             {/* Current voice badge */}
             {!showPicker && (
-              <p style={{ fontSize:11, color:"#818cf8", textAlign:"center", marginBottom:10 }}>
-                <span style={{width:10,height:10,borderRadius:"50%",background:persona.color,display:"inline-block",flexShrink:0,verticalAlign:"middle",marginRight:5}}></span><strong style={{color:"#c7d2fe"}}>{persona.label}</strong> · {persona.gender==="female"?"♀ Female":"♂ Male"} · {persona.desc} · <span style={{color:"#6366f1"}}>{getSmartVoiceLabel(personaIdx, allVoices, lang)}</span>
+              <p style={{ fontSize:11, color:"#818cf8", textAlign:"center", marginBottom:10, display:"flex", alignItems:"center", justifyContent:"center", gap:5, flexWrap:"wrap" }}>
+                <span style={{width:10,height:10,borderRadius:"50%",background:persona.color,display:"inline-block",flexShrink:0,verticalAlign:"middle",boxShadow:`0 0 6px ${persona.color}`}}></span>
+                <strong style={{color:"#c7d2fe"}}>{persona.label}</strong>
+                <span>· {persona.gender==="female"?"♀":"♂"} · {persona.desc}</span>
+                {persona.engine==="puter"
+                  ? <span style={{background:"rgba(190,24,93,.35)",color:"#fda4af",borderRadius:6,padding:"1px 6px",fontSize:9,fontWeight:800}}>NEURAL ✦</span>
+                  : <span style={{color:"#6366f1",fontSize:9}}>{getSmartVoiceLabel(personaIdx, allVoices, lang)}</span>
+                }
               </p>
             )}
 
