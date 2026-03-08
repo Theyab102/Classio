@@ -3,6 +3,7 @@ import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot, updateDoc, deleteDoc, serverTimestamp, query, orderBy, limit, getDocs, arrayUnion } from "firebase/firestore";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
+import { getDatabase, ref as dbRef, set as dbSet, get as dbGet } from "firebase/database";
 
 // ─── FIREBASE ─────────────────────────────────────────────────────────────────
 const firebaseConfig = {
@@ -12,11 +13,13 @@ const firebaseConfig = {
   storageBucket: "classio-4378f.firebasestorage.app",
   messagingSenderId: "595968221954",
   appId: "1:595968221954:web:cdefee80f05999f8bf181b",
+  databaseURL: "https://classio-4378f-default-rtdb.firebaseio.com",
 };
 const firebaseApp = initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
 const db = getFirestore(firebaseApp);
 const storage = getStorage(firebaseApp);
+const rtdb = getDatabase(firebaseApp);
 const googleProvider = new GoogleAuthProvider();
 
 // ─── GROQ AI (FREE) ──────────────────────────────────────────────────────────
@@ -6547,7 +6550,7 @@ function SGChatMessage({ msg, isSelf }) {
 
 // ── Mini file viewer used inside SGSharedContent for "file" type ──────────────
 // Renders PDFs, images, Word docs, text — same as ViewTab but self-contained.
-function SGFileViewer({ fileData, fileURL, fileName }) {
+function SGFileViewer({ fileData, fileURL, fileRtdbKey, fileName }) {
   const ext     = (fileName || "").split(".").pop().toLowerCase();
   const isPDF   = ext === "pdf";
   const isImage = ["jpg","jpeg","png","gif","webp","bmp","svg"].includes(ext);
@@ -6555,8 +6558,18 @@ function SGFileViewer({ fileData, fileURL, fileName }) {
   const isWord  = ["doc","docx"].includes(ext);
   const isPPT   = ["ppt","pptx"].includes(ext);
 
-  // The source URL — Firebase Storage URL takes priority over legacy base64
-  const srcURL = fileURL || fileData || "";
+  // Fetch from Realtime Database if a key is provided
+  const [rtdbData, setRtdbData] = useState(null);
+  useEffect(() => {
+    if (!fileRtdbKey) return;
+    setRtdbData(null);
+    dbGet(dbRef(rtdb, fileRtdbKey))
+      .then(snap => { if (snap.exists()) setRtdbData(snap.val().data); })
+      .catch(e => console.error("RTDB fetch", e));
+  }, [fileRtdbKey]);
+
+  // The source URL — RTDB base64 takes priority, then Storage URL, then legacy base64
+  const srcURL = rtdbData || fileURL || fileData || "";
 
   // For PDF.js we need an ArrayBuffer — fetch with no-cors workaround via proxy param
   const canvasRef = useRef(null);
@@ -6873,7 +6886,8 @@ function SGSharedContent({ content, presenterName, isHost, db, groupId }) {
       {/* ── Real file viewer — same rendering as ViewTab ── */}
       {content.type === "file" && (
         <div style={{ flex:1, overflow:"hidden" }}>
-          <SGFileViewer fileData={content.fileData} fileURL={content.fileURL} fileName={content.fileName} />
+          <SGFileViewer fileData={content.fileData} fileURL={content.fileURL}
+            fileRtdbKey={content.fileRtdbKey} fileName={content.fileName} />
         </div>
       )}
 
@@ -7918,18 +7932,13 @@ function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
     onClose();
   };
 
-  // Share file — convert to base64 and store directly in Firestore (no Storage needed)
+  // Share file — store base64 in Realtime Database (free, no size limit per doc)
+  // Firestore only holds a reference key; viewers fetch the file from RTDB
   const shareFile = async () => {
     if (!groupFile?._fileObj) return;
     setSharing(true);
     try {
       const file = groupFile._fileObj;
-      // Check size — Firestore doc limit is 1MB, base64 adds ~33% overhead
-      if (file.size > 700000) {
-        alert(`File is too large (${(file.size/1024/1024).toFixed(1)}MB). Please use a file under 700KB for study group sharing.`);
-        setSharing(false);
-        return;
-      }
       // Read as base64 data URL
       const fileData = await new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -7937,11 +7946,16 @@ function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });
+      // Store file data in Realtime Database under a unique key
+      const fileKey = `sgfiles/${groupId}/${Date.now()}`;
+      await dbSet(dbRef(rtdb, fileKey), { data: fileData, name: file.name });
+      // Store only the reference key in Firestore (tiny — no size issue)
       await updateDoc(doc(db,"studyGroups",groupId), {
         sharedContent: {
           type:        "file",
           fileName:    groupFile.name,
-          fileData:    fileData,   // base64 data URL — works without Firebase Storage
+          fileRtdbKey: fileKey,   // viewers use this to fetch from RTDB
+          fileData:    null,
           fileURL:     null,
           title:       groupFile.name,
           sharedBy:    user.displayName?.split(" ")[0] || "Host",
