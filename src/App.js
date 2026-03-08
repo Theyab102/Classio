@@ -6602,20 +6602,22 @@ function SGFileViewer({ fileData, fileURL, fileChunks, groupId, fileName }) {
   const [pptTotal, setPptTotal] = useState(0);
   const [pptPage,  setPptPage]  = useState(1);
 
-  // For text/word/ppt we still need a File object — build from base64 if available
+  // Build a File object from the assembled base64 string (chunkData OR legacy fileData)
+  // Used by TextViewer, WordViewer, PPTViewer which all need a real File object
+  const base64Src = chunkData || fileData || "";
   const fileObj = useMemo(() => {
-    if (!fileData) return null;
+    if (!base64Src) return null;
     try {
-      const [header, b64] = fileData.split(",");
+      const [header, b64] = base64Src.split(",");
       const mime = header.match(/:(.*?);/)?.[1] || "application/octet-stream";
       const binary = atob(b64);
       const bytes  = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
       return new File([bytes], fileName || "file", { type: mime });
     } catch { return null; }
-  }, [fileData, fileName]);
+  }, [base64Src, fileName]);
 
-  // Load PDF — use PDF.js with the direct Firebase Storage URL (CORS-enabled by Firebase)
+  // Load PDF — handle both base64 data URLs and remote URLs
   useEffect(() => {
     if (!isPDF || !srcURL) return;
     setPdfReady(false); pdfRef.current = null; setPageNum(1);
@@ -6630,10 +6632,20 @@ function SGFileViewer({ fileData, fileURL, fileChunks, groupId, fileName }) {
           window.pdfjsLib.GlobalWorkerOptions.workerSrc =
             "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
         }
-        // PDF.js load with CORS-friendly options for Firebase Storage URLs
+        let pdfSource;
+        if (srcURL.startsWith("data:")) {
+          // base64 data URL — convert to Uint8Array for PDF.js
+          const b64 = srcURL.split(",")[1];
+          const bin = atob(b64);
+          const arr = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+          pdfSource = { data: arr };
+        } else {
+          // Remote URL
+          pdfSource = { url: srcURL, withCredentials: false };
+        }
         const pdf = await window.pdfjsLib.getDocument({
-          url: srcURL,
-          withCredentials: false,
+          ...pdfSource,
           cMapUrl: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/",
           cMapPacked: true,
         }).promise;
@@ -6748,23 +6760,22 @@ function SGFileViewer({ fileData, fileURL, fileChunks, groupId, fileName }) {
               boxShadow:"0 4px 32px rgba(0,0,0,.5)", background:"#fff" }} />
         )}
 
-        {/* PPT / Word — use Google Docs viewer for URL-based files (no CORS issue) */}
-        {(isPPT || isWord) && fileURL && (
-          <iframe
-            src={gdocsURL(fileURL)}
-            title={fileName}
-            style={{ width:"100%", height:"100%", minHeight:500, border:"none",
-              borderRadius:8, background:"#fff" }}
-            allow="autoplay"
-          />
-        )}
-
-        {/* PPT / Word — local fileObj fallback (host side before upload completes) */}
-        {isPPT && !fileURL && fileObj && (
+        {/* PPT / Word — use local fileObj (built from base64 chunks) */}
+        {isPPT && fileObj && (
           <PPTViewer fileObj={fileObj} page={pptPage}
             onTotalPages={setPptTotal} onSlidesLoaded={()=>{}} />
         )}
-        {isWord && !fileURL && fileObj && <WordViewer fileObj={fileObj} />}
+        {isPPT && !fileObj && fileURL && (
+          <iframe src={gdocsURL(fileURL)} title={fileName}
+            style={{ width:"100%", height:"100%", minHeight:500, border:"none",
+              borderRadius:8, background:"#fff" }} allow="autoplay" />
+        )}
+        {isWord && fileObj && <WordViewer fileObj={fileObj} />}
+        {isWord && !fileObj && fileURL && (
+          <iframe src={gdocsURL(fileURL)} title={fileName}
+            style={{ width:"100%", height:"100%", minHeight:500, border:"none",
+              borderRadius:8, background:"#fff" }} allow="autoplay" />
+        )}
 
         {/* Plain text */}
         {isText && fileObj && <TextViewer fileObj={fileObj} />}
@@ -7961,7 +7972,7 @@ function SGVoiceChat({ groupId, db, user, members, onStateChange }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // SHARE PICKER — Google Meet style bottom-sheet, all modes in one place
 // ═══════════════════════════════════════════════════════════════════════════════
-function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
+function SGSharePicker({ user, db, groupId, group, groupFile, isHost, onClose,
                          onOpenWhiteboard, onOpenFlashcards, onOpenNotes }) {
   const [sharing,    setSharing]    = useState(false);
   const [activeStep, setActiveStep] = useState("pick"); // pick | screenshare
@@ -8067,18 +8078,15 @@ function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
       desc: (() => {
         if (groupFile) return `Present "${groupFile.name}"`;
         const hostFile = group?.hostFileName || group?.sharedContent?.fileName;
-        if (hostFile && group?.sharedContent?.fileChunks) return `Present "${hostFile}"`;
-        return "No file uploaded yet";
+        if (hostFile) return `Present "${hostFile}"`;
+        return isHost ? "No file uploaded yet" : "No file uploaded by host";
       })(),
       action: () => {
         if (groupFile) { shareFile(); return; }
-        // No local file — use already-stored chunks if available
-        const hasChunks = !!(group?.sharedContent?.fileChunks || 0);
-        const hostFile  = group?.hostFileName;
-        if (hasChunks || hostFile) { reShareFile(); return; }
-        if (!bypassWarning) { setNoFileWarning(true); return; }
+        // Non-host presenter: re-present using already stored chunks
+        reShareFile();
       },
-      disabled: sharing },
+      disabled: sharing || (!groupFile && !group?.sharedContent?.fileChunks && !group?.hostFileName) },
     { id:"screenshare", emoji:"🖥️", label:"Screen Share",  desc:"Share your screen live",
       action: () => setActiveStep("screenshare") },
   ];
@@ -9205,6 +9213,38 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
   const isHost      = group?.hostUid === user.uid;
   const canPresent  = isHost || group?.presenterUid === user.uid;
   const members = group?.members || {};
+
+  // Granted presenters use host's file automatically — fetch chunks and build File object
+  const [presenterFileObj, setPresenterFileObj] = useState(null);
+  useEffect(() => {
+    if (isHost || !canPresent) return; // host uses groupFile directly
+    const sc = group?.sharedContent;
+    if (!sc?.fileChunks || !sc?.fileName) return;
+    if (presenterFileObj?.name === sc.fileName) return; // already loaded
+    (async () => {
+      try {
+        const chunkCol = collection(db, "studyGroups", groupId, "fileChunks");
+        const snap = await getDocs(chunkCol);
+        if (snap.empty) return;
+        const sorted = snap.docs.map(d => d.data()).sort((a,b) => a.index - b.index);
+        const base64 = sorted.map(d => d.chunk).join("");
+        const [header, b64] = base64.split(",");
+        const mime = header.match(/:(.*?);/)?.[1] || "application/octet-stream";
+        const bin  = atob(b64);
+        const arr  = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        const fileObj = new File([arr], sc.fileName, { type: mime });
+        setPresenterFileObj(fileObj);
+      } catch(e) { console.error("presenterFileObj fetch", e); }
+    })();
+  }, [canPresent, isHost, group?.sharedContent?.fileChunks, group?.sharedContent?.fileName]);
+
+  // The file every tool uses — host's local file OR presenter's fetched copy
+  const effectiveGroupFile = isHost
+    ? groupFile
+    : (canPresent && presenterFileObj)
+      ? { name: presenterFileObj.name, _fileObj: presenterFileObj }
+      : null;
   const presenter = group?.sharedContent
     ? Object.values(members).find(m => m?.uid === group.sharedContent.sharedByUid)
     : null;
@@ -9320,7 +9360,8 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
       {showShare && (
         <SGSharePicker
           user={user} db={db} groupId={groupId} group={group}
-          groupFile={groupFile}
+          groupFile={effectiveGroupFile}
+          isHost={isHost}
           onClose={() => setShowShare(false)}
           onOpenWhiteboard={() => setShowWhiteboard(true)}
           onOpenFlashcards={() => setShowFlashcards(true)}
@@ -9329,7 +9370,7 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
       )}
       {showGame && (
         <SGGameLauncher group={group} db={db} groupId={groupId} user={user}
-          groupFile={groupFile}
+          groupFile={effectiveGroupFile}
           onClose={() => setShowGame(false)} />
       )}
       {showWhiteboard && (
@@ -9337,11 +9378,13 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
           onClose={() => setShowWhiteboard(false)} />
       )}
       {showFlashcards && (
-        <SGAIFlashcardGen groupId={groupId} db={db} user={user} groupFile={groupFile}
+        <SGAIFlashcardGen groupId={groupId} db={db} user={user}
+          groupFile={effectiveGroupFile}
           onClose={() => setShowFlashcards(false)} />
       )}
       {showNotes && (
-        <SGAINotesGen groupId={groupId} db={db} user={user} groupFile={groupFile}
+        <SGAINotesGen groupId={groupId} db={db} user={user}
+          groupFile={effectiveGroupFile}
           onClose={() => setShowNotes(false)} />
       )}
 
@@ -9448,48 +9491,73 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
                 </p>
               </div>
 
-              {/* ── Group study file upload (host) ── */}
-              {isHost && (
+              {/* ── Study file — upload for host, read-only info for granted presenters ── */}
+              {canPresent && (
                 <div style={{ width:"100%", maxWidth:380 }}>
-                  {groupFile ? (
-                    <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
-                      background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:12 }}>
-                      <span style={{ fontSize:18 }}>📎</span>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.accent }}>Study file loaded</p>
-                        <p style={{ margin:0, fontSize:11, color:C.muted, overflow:"hidden",
-                          textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{groupFile.name}</p>
+                  {isHost ? (
+                    // HOST: can upload or clear file
+                    groupFile ? (
+                      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
+                        background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:12 }}>
+                        <span style={{ fontSize:18 }}>📎</span>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.accent }}>Study file loaded</p>
+                          <p style={{ margin:0, fontSize:11, color:C.muted, overflow:"hidden",
+                            textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{groupFile.name}</p>
+                        </div>
+                        <button onClick={() => setGroupFile(null)} style={{
+                          background:"none", border:"none", color:C.red, cursor:"pointer", fontSize:16 }}>×</button>
                       </div>
-                      <button onClick={() => setGroupFile(null)} style={{
-                        background:"none", border:"none", color:C.red, cursor:"pointer", fontSize:16 }}>×</button>
-                    </div>
+                    ) : (
+                      <label style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
+                        background:C.surface, border:`1.5px dashed ${C.border}`,
+                        borderRadius:12, cursor:"pointer", width:"100%", boxSizing:"border-box" }}>
+                        <div style={{ width:36, height:36, borderRadius:10, background:C.warmL,
+                          display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>📎</div>
+                        <div>
+                          <p style={{ margin:0, fontSize:13, fontWeight:700, color:C.text }}>Add study file</p>
+                          <p style={{ margin:0, fontSize:11, color:C.muted }}>AI uses it for notes, flashcards & quizzes</p>
+                        </div>
+                        <input type="file" style={{ display:"none" }} onChange={e => {
+                          const f = e.target.files?.[0];
+                          if (f) {
+                            setGroupFile({ name:f.name, _fileObj:f });
+                            updateDoc(doc(db,"studyGroups",groupId),{
+                              hostFileName: f.name
+                            }).catch(()=>{});
+                          }
+                        }} />
+                      </label>
+                    )
                   ) : (
-                    <label style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
-                      background:C.surface, border:`1.5px dashed ${C.border}`,
-                      borderRadius:12, cursor:"pointer", width:"100%", boxSizing:"border-box" }}>
-                      <div style={{ width:36, height:36, borderRadius:10, background:C.warmL,
-                        display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>📎</div>
-                      <div>
-                        <p style={{ margin:0, fontSize:13, fontWeight:700, color:C.text }}>Add study file</p>
-                        <p style={{ margin:0, fontSize:11, color:C.muted }}>AI uses it for notes, flashcards & quizzes</p>
+                    // NON-HOST PRESENTER: show host's file read-only
+                    effectiveGroupFile ? (
+                      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
+                        background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:12 }}>
+                        <span style={{ fontSize:18 }}>📎</span>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.accent }}>Shared study file</p>
+                          <p style={{ margin:0, fontSize:11, color:C.muted, overflow:"hidden",
+                            textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{effectiveGroupFile.name}</p>
+                        </div>
+                        <span style={{ fontSize:10, color:C.muted, flexShrink:0 }}>Host's file</span>
                       </div>
-                      <input type="file" style={{ display:"none" }} onChange={e => {
-                        const f = e.target.files?.[0];
-                        if (f) {
-                          setGroupFile({ name:f.name, _fileObj:f });
-                          // Persist filename so granted presenters can see it too
-                          updateDoc(doc(db,"studyGroups",groupId),{
-                            hostFileName: f.name
-                          }).catch(()=>{});
-                        }
-                      }} />
-                    </label>
+                    ) : (
+                      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
+                        background:C.surface, border:`1.5px dashed ${C.border}`, borderRadius:12 }}>
+                        <span style={{ fontSize:18 }}>⏳</span>
+                        <div>
+                          <p style={{ margin:0, fontSize:13, fontWeight:700, color:C.muted }}>No study file yet</p>
+                          <p style={{ margin:0, fontSize:11, color:C.muted }}>Host hasn't uploaded a file</p>
+                        </div>
+                      </div>
+                    )
                   )}
                 </div>
               )}
 
-              {/* Host CTA cards — big, impossible to miss */}
-              {isHost && (
+              {/* CTA cards — for host AND granted presenters */}
+              {canPresent && (
                 <div style={{ display:"flex", gap:12, flexWrap:"wrap", justifyContent:"center", width:"100%", maxWidth:380 }}>
                   <button onClick={() => setShowShare(true)} style={{
                     flex:"1 1 150px", display:"flex", flexDirection:"column",
