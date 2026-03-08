@@ -6550,7 +6550,7 @@ function SGChatMessage({ msg, isSelf }) {
 
 // ── Mini file viewer used inside SGSharedContent for "file" type ──────────────
 // Renders PDFs, images, Word docs, text — same as ViewTab but self-contained.
-function SGFileViewer({ fileData, fileURL, fileRtdbKey, fileName }) {
+function SGFileViewer({ fileData, fileURL, fileChunks, groupId, fileName }) {
   const ext     = (fileName || "").split(".").pop().toLowerCase();
   const isPDF   = ext === "pdf";
   const isImage = ["jpg","jpeg","png","gif","webp","bmp","svg"].includes(ext);
@@ -6558,46 +6558,38 @@ function SGFileViewer({ fileData, fileURL, fileRtdbKey, fileName }) {
   const isWord  = ["doc","docx"].includes(ext);
   const isPPT   = ["ppt","pptx"].includes(ext);
 
-  // Fetch from Realtime Database if a key is provided
-  const [rtdbData,    setRtdbData]    = useState(null);
-  const [rtdbLoading, setRtdbLoading] = useState(false);
-  const [rtdbError,   setRtdbError]   = useState("");
+  // Fetch chunked file from Firestore subcollection
+  const [chunkData,    setChunkData]    = useState(null);
+  const [chunkLoading, setChunkLoading] = useState(false);
+  const [chunkError,   setChunkError]   = useState("");
   useEffect(() => {
-    if (!fileRtdbKey) return;
-    setRtdbData(null);
-    setRtdbError("");
-    setRtdbLoading(true);
-    dbGet(dbRef(rtdb, fileRtdbKey))
-      .then(snap => {
-        if (!snap.exists()) {
-          setRtdbError("File not found in database.");
-          return;
-        }
-        const val = snap.val();
-        // Reassemble chunks: c0, c1, c2...
-        if (val.total !== undefined) {
-          let assembled = "";
-          for (let i = 0; i < val.total; i++) {
-            assembled += (val[`c${i}`] || "");
-          }
-          setRtdbData(assembled);
-        } else if (val.data) {
-          // Legacy single-chunk format
-          setRtdbData(val.data);
-        } else {
-          setRtdbError("File data missing in database.");
-        }
-      })
-      .catch(e => {
-        console.error("RTDB fetch error:", e);
-        setRtdbError("Could not load file: " + e.message);
-      })
-      .finally(() => setRtdbLoading(false));
-  }, [fileRtdbKey]);
+    if (!fileChunks || fileChunks === 0 || !groupId) return;
+    setChunkData(null);
+    setChunkError("");
+    setChunkLoading(true);
+    (async () => {
+      try {
+        const chunkCol = collection(db, "studyGroups", groupId, "fileChunks");
+        const snap = await getDocs(chunkCol);
+        if (snap.empty) { setChunkError("File not found."); return; }
+        // Sort by index and reassemble
+        const sorted = snap.docs
+          .map(d => d.data())
+          .sort((a,b) => a.index - b.index);
+        const assembled = sorted.map(d => d.chunk).join("");
+        setChunkData(assembled);
+      } catch(e) {
+        console.error("Chunk fetch error:", e);
+        setChunkError("Could not load file: " + e.message);
+      } finally {
+        setChunkLoading(false);
+      }
+    })();
+  }, [fileChunks, groupId]);
 
-  // The source — RTDB base64 takes priority, then Storage URL, then legacy base64
-  const srcURL = rtdbData || fileURL || fileData || "";
-  const isLoading = fileRtdbKey && rtdbLoading;
+  // Final source — chunks take priority, then direct URL, then legacy base64
+  const srcURL = chunkData || fileURL || fileData || "";
+  const isLoading = !!(fileChunks && chunkLoading);
 
   // For PDF.js we need an ArrayBuffer — fetch with no-cors workaround via proxy param
   const canvasRef = useRef(null);
@@ -6687,16 +6679,13 @@ function SGFileViewer({ fileData, fileURL, fileRtdbKey, fileName }) {
     </div>
   );
 
-  if (rtdbError) return (
+  if (chunkError) return (
     <div style={{ flex:1, display:"flex", flexDirection:"column",
       alignItems:"center", justifyContent:"center", gap:12,
       background:"#404040", color:"#fff", padding:32 }}>
       <div style={{ fontSize:44 }}>⚠️</div>
       <p style={{ margin:0, fontSize:15, fontWeight:700 }}>Failed to load file</p>
-      <p style={{ margin:0, fontSize:12, opacity:.6, textAlign:"center", maxWidth:300 }}>{rtdbError}</p>
-      <p style={{ margin:0, fontSize:11, opacity:.4 }}>
-        Make sure Realtime Database rules allow read access.
-      </p>
+      <p style={{ margin:0, fontSize:12, opacity:.6, textAlign:"center", maxWidth:300 }}>{chunkError}</p>
     </div>
   );
 
@@ -6942,7 +6931,8 @@ function SGSharedContent({ content, presenterName, isHost, db, groupId }) {
       {content.type === "file" && (
         <div style={{ flex:1, overflow:"hidden" }}>
           <SGFileViewer fileData={content.fileData} fileURL={content.fileURL}
-            fileRtdbKey={content.fileRtdbKey} fileName={content.fileName} />
+            fileChunks={content.fileChunks} groupId={groupId}
+            fileName={content.fileName} />
         </div>
       )}
 
@@ -7987,8 +7977,8 @@ function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
     onClose();
   };
 
-  // Share file — store base64 in Realtime Database (free, no size limit per doc)
-  // Firestore only holds a reference key; viewers fetch the file from RTDB
+  // Share file — split base64 across Firestore sub-documents (750KB each)
+  // No Firebase Storage or RTDB needed — works on free Spark plan
   const shareFile = async () => {
     if (!groupFile?._fileObj) return;
     setSharing(true);
@@ -8001,24 +7991,26 @@ function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });
-      // Store file in Realtime Database — split into 500KB chunks to avoid node limits
-      const fileKey = `sgfiles/${groupId}/${Date.now()}`;
-      const CHUNK = 500000; // 500KB per chunk
-      const chunks = {};
-      for (let i = 0; i * CHUNK < fileData.length; i++) {
-        chunks[`c${i}`] = fileData.slice(i * CHUNK, (i + 1) * CHUNK);
+      // Split into 750KB chunks and write each as a separate Firestore doc
+      const CHUNK = 750000;
+      const totalChunks = Math.ceil(fileData.length / CHUNK);
+      const chunkCol = collection(db, "studyGroups", groupId, "fileChunks");
+      // Delete old chunks first
+      const oldChunks = await getDocs(chunkCol);
+      for (const d of oldChunks.docs) await deleteDoc(d.ref);
+      // Write new chunks
+      for (let i = 0; i < totalChunks; i++) {
+        await setDoc(doc(chunkCol, String(i)), {
+          chunk: fileData.slice(i * CHUNK, (i + 1) * CHUNK),
+          index: i,
+        });
       }
-      await dbSet(dbRef(rtdb, fileKey), {
-        name: file.name,
-        total: Object.keys(chunks).length,
-        ...chunks,
-      });
-      // Store only the reference key in Firestore (tiny — no size issue)
+      // Store metadata in main group doc
       await updateDoc(doc(db,"studyGroups",groupId), {
         sharedContent: {
           type:        "file",
           fileName:    groupFile.name,
-          fileRtdbKey: fileKey,   // viewers use this to fetch from RTDB
+          fileChunks:  totalChunks,   // viewers fetch chunks from subcollection
           fileData:    null,
           fileURL:     null,
           title:       groupFile.name,
