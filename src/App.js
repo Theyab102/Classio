@@ -9234,15 +9234,18 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
   const [presenterFileObj, setPresenterFileObj] = useState(null);
   useEffect(() => {
     if (isHost || !canPresent) return;
+    // Use current sharedContent chunks OR any previously stored chunks
     const sc = group?.sharedContent;
-    if (!sc?.fileChunks || !sc?.fileName) return;
-    if (presenterFileObj?.name === sc.fileName) return;
+    const targetName = sc?.fileName || group?.hostFileName;
+    const targetChunks = sc?.fileChunks;
+    if (!targetChunks || !targetName) return;
+    if (presenterFileObj?.name === targetName) return;
     (async () => {
       for (let attempt = 0; attempt < 5; attempt++) {
         try {
           const chunkCol = collection(db, "studyGroups", groupId, "fileChunks");
           const snap = await getDocs(chunkCol);
-          if (snap.empty || snap.docs.length < sc.fileChunks) {
+          if (snap.empty || snap.docs.length < targetChunks) {
             await new Promise(r => setTimeout(r, 1500)); continue;
           }
           const sorted = snap.docs.map(d => d.data()).sort((a,b) => a.index - b.index);
@@ -9252,7 +9255,7 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
           const bin  = atob(b64);
           const arr  = new Uint8Array(bin.length);
           for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-          setPresenterFileObj(new File([arr], sc.fileName, { type: mime }));
+          setPresenterFileObj(new File([arr], targetName, { type: mime }));
           return;
         } catch(e) {
           if (attempt < 4) { await new Promise(r => setTimeout(r, 1500)); continue; }
@@ -9260,7 +9263,7 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
         }
       }
     })();
-  }, [canPresent, isHost, group?.sharedContent?.fileChunks, group?.sharedContent?.fileName]);
+  }, [canPresent, isHost, group?.sharedContent?.fileChunks, group?.sharedContent?.fileName, group?.hostFileName]);
 
   // The file every tool uses:
   // - Host: their own uploaded file (groupFile)
@@ -9556,18 +9559,27 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
                         }} />
                       </label>
                     )
-                  ) : (
+                  ) : (() => {
                     // NON-HOST PRESENTER: show host's file read-only
-                    effectiveGroupFile ? (
+                    // Use effectiveGroupFile name, OR hostFileName from Firestore,
+                    // OR the currently shared file name — whichever is available
+                    const shownName = effectiveGroupFile?.name
+                      || group?.hostFileName
+                      || group?.sharedContent?.fileName;
+                    return shownName ? (
                       <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
                         background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:12 }}>
                         <span style={{ fontSize:18 }}>📎</span>
                         <div style={{ flex:1, minWidth:0 }}>
-                          <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.accent }}>Shared study file</p>
+                          <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.accent }}>
+                            {effectiveGroupFile ? "Shared study file" : "Host's study file"}
+                          </p>
                           <p style={{ margin:0, fontSize:11, color:C.muted, overflow:"hidden",
-                            textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{effectiveGroupFile.name}</p>
+                            textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{shownName}</p>
                         </div>
-                        <span style={{ fontSize:10, color:C.muted, flexShrink:0 }}>Host's file</span>
+                        <span style={{ fontSize:10, color:C.muted, flexShrink:0 }}>
+                          {effectiveGroupFile ? "Ready ✓" : "Loading…"}
+                        </span>
                       </div>
                     ) : (
                       <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
@@ -9578,8 +9590,8 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
                           <p style={{ margin:0, fontSize:11, color:C.muted }}>Host hasn't uploaded a file</p>
                         </div>
                       </div>
-                    )
-                  )}
+                    );
+                  })()}
                 </div>
               )}
 
