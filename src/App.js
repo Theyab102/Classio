@@ -9236,10 +9236,9 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
     if (isHost || !canPresent) return;
     // Use current sharedContent chunks OR any previously stored chunks
     const sc = group?.sharedContent;
-    const targetName = sc?.fileName || group?.hostFileName;
-    const targetChunks = sc?.fileChunks;
-    // Only fetch if chunks actually exist (host has shared the file)
-    // If host just uploaded locally, chunks don't exist yet — wait until they share
+    // Use chunks from current share OR from the upload (hostFileChunks)
+    const targetName   = sc?.fileName   || group?.hostFileName;
+    const targetChunks = sc?.fileChunks || group?.hostFileChunks;
     if (!targetChunks || targetChunks === 0 || !targetName) return;
     if (presenterFileObj?.name === targetName) return;
     (async () => {
@@ -9265,7 +9264,7 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
         }
       }
     })();
-  }, [canPresent, isHost, group?.sharedContent?.fileChunks, group?.sharedContent?.fileName, group?.hostFileName]);
+  }, [canPresent, isHost, group?.sharedContent?.fileChunks, group?.sharedContent?.fileName, group?.hostFileName, group?.hostFileChunks]);
 
   // The file every tool uses:
   // - Host: their own uploaded file (groupFile)
@@ -9550,14 +9549,34 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
                           <p style={{ margin:0, fontSize:13, fontWeight:700, color:C.text }}>Add study file</p>
                           <p style={{ margin:0, fontSize:11, color:C.muted }}>AI uses it for notes, flashcards & quizzes</p>
                         </div>
-                        <input type="file" style={{ display:"none" }} onChange={e => {
+                        <input type="file" style={{ display:"none" }} onChange={async e => {
                           const f = e.target.files?.[0];
-                          if (f) {
-                            setGroupFile({ name:f.name, _fileObj:f });
-                            updateDoc(doc(db,"studyGroups",groupId),{
-                              hostFileName: f.name
-                            }).catch(()=>{});
-                          }
+                          if (!f) return;
+                          setGroupFile({ name:f.name, _fileObj:f });
+                          // Write chunks immediately so granted presenters can use AI tools right away
+                          try {
+                            const fileData = await new Promise((res, rej) => {
+                              const r = new FileReader();
+                              r.onload = ev => res(ev.target.result);
+                              r.onerror = rej;
+                              r.readAsDataURL(f);
+                            });
+                            const CHUNK = 750000;
+                            const totalChunks = Math.ceil(fileData.length / CHUNK);
+                            const chunkCol = collection(db, "studyGroups", groupId, "fileChunks");
+                            const old = await getDocs(chunkCol);
+                            for (const d of old.docs) await deleteDoc(d.ref);
+                            for (let i = 0; i < totalChunks; i++) {
+                              await setDoc(doc(chunkCol, String(i)), {
+                                chunk: fileData.slice(i * CHUNK, (i + 1) * CHUNK),
+                                index: i, total: totalChunks,
+                              });
+                            }
+                            await updateDoc(doc(db,"studyGroups",groupId), {
+                              hostFileName: f.name,
+                              hostFileChunks: totalChunks,
+                            });
+                          } catch(err) { console.error("host upload chunks", err); }
                         }} />
                       </label>
                     )
@@ -9579,8 +9598,9 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
                           <p style={{ margin:0, fontSize:11, color:C.muted, overflow:"hidden",
                             textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{shownName}</p>
                         </div>
-                        <span style={{ fontSize:10, color:C.green, flexShrink:0, fontWeight:700 }}>
-                          ✓ Available
+                        <span style={{ fontSize:10, flexShrink:0, fontWeight:700,
+                          color: effectiveGroupFile ? C.green : C.muted }}>
+                          {effectiveGroupFile ? "✓ Ready" : group?.hostFileChunks ? "Syncing…" : "Available"}
                         </span>
                       </div>
                     ) : (
