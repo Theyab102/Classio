@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot, updateDoc, deleteDoc, serverTimestamp, query, orderBy, limit, getDocs, arrayUnion } from "firebase/firestore";
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 
 // ─── FIREBASE ─────────────────────────────────────────────────────────────────
 const firebaseConfig = {
@@ -15,6 +16,7 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
 const db = getFirestore(firebaseApp);
+const storage = getStorage(firebaseApp);
 const googleProvider = new GoogleAuthProvider();
 
 // ─── GROQ AI (FREE) ──────────────────────────────────────────────────────────
@@ -6545,7 +6547,7 @@ function SGChatMessage({ msg, isSelf }) {
 
 // ── Mini file viewer used inside SGSharedContent for "file" type ──────────────
 // Renders PDFs, images, Word docs, text — same as ViewTab but self-contained.
-function SGFileViewer({ fileData, fileName }) {
+function SGFileViewer({ fileData, fileURL, fileName }) {
   const ext  = (fileName || "").split(".").pop().toLowerCase();
   const isPDF   = ext === "pdf";
   const isImage = ["jpg","jpeg","png","gif","webp","bmp","svg"].includes(ext);
@@ -6553,8 +6555,19 @@ function SGFileViewer({ fileData, fileName }) {
   const isWord  = ["doc","docx"].includes(ext);
   const isPPT   = ["ppt","pptx"].includes(ext);
 
-  // Reconstruct a File/Blob from the stored base64 data-URL
+  // Load file: fetch from Storage URL (new) or reconstruct from base64 (legacy)
+  const [fetchedBlob, setFetchedBlob] = useState(null);
+  useEffect(() => {
+    if (!fileURL) return;
+    setFetchedBlob(null);
+    fetch(fileURL)
+      .then(r => r.blob())
+      .then(blob => setFetchedBlob(new File([blob], fileName||"file", {type:blob.type})))
+      .catch(e => console.error("fetch file", e));
+  }, [fileURL]);
+
   const fileObj = useMemo(() => {
+    if (fileURL) return fetchedBlob;
     if (!fileData) return null;
     try {
       const [header, b64] = fileData.split(",");
@@ -6564,7 +6577,7 @@ function SGFileViewer({ fileData, fileName }) {
       for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
       return new File([bytes], fileName || "file", { type: mime });
     } catch { return null; }
-  }, [fileData, fileName]);
+  }, [fileData, fileURL, fetchedBlob, fileName]);
 
   // PDF state
   const canvasRef = useRef(null);
@@ -6667,7 +6680,7 @@ function SGFileViewer({ fileData, fileName }) {
             style={{ display:"block", boxShadow:"0 4px 32px rgba(0,0,0,.6)", maxWidth:"100%" }} />
         )}
         {isImage && (
-          <img src={fileData} alt={fileName}
+          <img src={fileURL || fileData} alt={fileName}
             style={{ maxWidth:"100%", borderRadius:6, boxShadow:"0 4px 32px rgba(0,0,0,.5)", background:"#fff" }} />
         )}
         {isText && fileObj && <TextViewer fileObj={fileObj} />}
@@ -6824,7 +6837,7 @@ function SGSharedContent({ content, presenterName, isHost, db, groupId }) {
       {/* ── Real file viewer — same rendering as ViewTab ── */}
       {content.type === "file" && (
         <div style={{ flex:1, overflow:"hidden" }}>
-          <SGFileViewer fileData={content.fileData} fileName={content.fileName} />
+          <SGFileViewer fileData={content.fileData} fileURL={content.fileURL} fileName={content.fileName} />
         </div>
       )}
 
@@ -7063,31 +7076,28 @@ function SGWhiteboard({ groupId, db, user, group, onClose }) {
   const getPos = (e) => {
     const canvas = canvasRef.current;
     const r = canvas.getBoundingClientRect();
-    // Account for actual pixel buffer size vs displayed CSS size
-    const scaleX = canvas.width  / r.width;
-    const scaleY = canvas.height / r.height;
+    // Return CSS pixel coords — canvas buffer is CSS-sized (no DPR scaling on context),
+    // so raw offset from bounding rect is exactly right.
     const src = e.touches ? e.touches[0] : e;
     return {
-      x: (src.clientX - r.left) * scaleX,
-      y: (src.clientY - r.top)  * scaleY,
+      x: src.clientX - r.left,
+      y: src.clientY - r.top,
     };
   };
 
-  // Resize canvas buffer to match display size × DPR to prevent blur/misalignment
+  // Resize canvas buffer to match CSS display size exactly.
+  // We do NOT scale the context by DPR here — instead we keep the canvas
+  // buffer in CSS pixels so getPos coords map 1:1 with no offset drift.
   const syncCanvasSize = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const r = canvas.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    const w = Math.round(r.width  * dpr);
-    const h = Math.round(r.height * dpr);
+    const w = Math.round(r.width);
+    const h = Math.round(r.height);
     if (canvas.width !== w || canvas.height !== h) {
-      // Preserve existing strokes across resize
       const prevStrokes = [...strokes];
       canvas.width  = w;
       canvas.height = h;
-      const ctx = canvas.getContext("2d");
-      ctx.scale(dpr, dpr);
       redrawAll(prevStrokes);
     }
   }, [strokes]);
@@ -7229,14 +7239,8 @@ function SGWhiteboard({ groupId, db, user, group, onClose }) {
               📺 Present to Group
             </button>
           )}
-          <button onClick={async () => {
-              // Stop presenting and clear from Firestore, then close the modal
-              if (group?.sharedContent?.type === "whiteboard" &&
-                  group?.sharedContent?.sharedByUid === user.uid) {
-                await updateDoc(doc(db,"studyGroups",groupId),{sharedContent:null}).catch(()=>{});
-              }
-              onClose();
-            }} style={{ background:C.bg, border:`1px solid ${C.border}`,
+          <button onClick={onClose}
+            style={{ background:C.bg, border:`1px solid ${C.border}`,
             borderRadius:"50%", width:28, height:28, color:C.muted, cursor:"pointer", fontSize:14,
             display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
         </div>
@@ -7268,6 +7272,28 @@ function SGWhiteboard({ groupId, db, user, group, onClose }) {
           <button onClick={clearBoard} style={{ padding:"5px 10px", borderRadius:7, fontSize:12,
             border:`1px solid ${C.border}`, background:"#fff", color:C.muted, cursor:"pointer" }}>
             🗑️ Clear
+          </button>
+          <div style={{ width:1, height:20, background:C.border, flexShrink:0 }} />
+          <button onClick={async () => {
+              // Save whiteboard as a note in localStorage — same system as the main app notes
+              const noteTitle = title || "Whiteboard";
+              const noteText  = `WHITEBOARD: ${noteTitle}\n\n` +
+                `Saved on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}\n` +
+                `Strokes: ${strokes.length}\n\n` +
+                `[Whiteboard content — view in Study Group to see the drawing]`;
+              try {
+                const key = `saved_notes_wb_${Date.now()}`;
+                const existing = JSON.parse(localStorage.getItem("classio_saved_whiteboards") || "[]");
+                existing.unshift({ id: key, title: noteTitle, text: noteText,
+                  savedAt: Date.now(), strokes: strokes });
+                localStorage.setItem("classio_saved_whiteboards", JSON.stringify(existing.slice(0, 20)));
+                setSaving(true);
+                setTimeout(() => setSaving(false), 1200);
+              } catch(e) { console.error("save whiteboard", e); }
+            }} style={{ padding:"5px 12px", borderRadius:7, fontSize:12, fontWeight:700,
+            border:`1px solid ${C.green}44`, background:C.greenL, color:C.green, cursor:"pointer",
+            display:"flex", alignItems:"center", gap:5 }}>
+            💾 Save
           </button>
         </div>
         <div style={{ flex:1, overflow:"hidden", background:"#fff", position:"relative" }}>
@@ -7843,30 +7869,31 @@ function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
     onClose();
   };
 
-  // Share the real file — convert to base64 and store in Firestore as type "file"
+  // Share file — upload to Firebase Storage, store download URL in Firestore (no 1MB limit)
   const shareFile = async () => {
     if (!groupFile?._fileObj) return;
     setSharing(true);
     try {
-      const fileData = await new Promise((res, rej) => {
-        const reader = new FileReader();
-        reader.onload  = e => res(e.target.result);
-        reader.onerror = rej;
-        reader.readAsDataURL(groupFile._fileObj);
-      });
+      const path    = `studyGroups/${groupId}/files/${Date.now()}_${groupFile.name}`;
+      const fileRef = storageRef(storage, path);
+      await uploadBytes(fileRef, groupFile._fileObj);
+      const downloadURL = await getDownloadURL(fileRef);
       await updateDoc(doc(db,"studyGroups",groupId), {
         sharedContent: {
-          type:     "file",
-          fileName: groupFile.name,
-          fileData,                          // full base64 data-URL
-          title:    groupFile.name,
-          sharedBy: user.displayName?.split(" ")[0] || "Host",
+          type:        "file",
+          fileName:    groupFile.name,
+          fileURL:     downloadURL,
+          title:       groupFile.name,
+          sharedBy:    user.displayName?.split(" ")[0] || "Host",
           sharedByUid: user.uid,
-          sharedAt: Date.now(),
+          sharedAt:    Date.now(),
         },
         lastActivity: Date.now(),
       });
-    } catch(e) { console.error("shareFile", e); }
+    } catch(e) {
+      console.error("shareFile", e);
+      alert("Upload failed: " + e.message);
+    }
     setSharing(false);
     onClose();
   };
@@ -7909,14 +7936,8 @@ function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
               {activeStep === "pick" ? "📺 Present to Group" : "🖥️ Screen Share"}
             </span>
           </div>
-          <button onClick={() => {
-              // If screen share is active, stop it cleanly before closing
-              if (activeStep === "screenshare" && stopHostRef.current) {
-                stopHostRef.current();
-              } else {
-                onClose();
-              }
-            }} style={{ background:C.bg, border:`1px solid ${C.border}`,
+          <button onClick={onClose}
+            style={{ background:C.bg, border:`1px solid ${C.border}`,
             borderRadius:"50%", width:28, height:28, color:C.muted, cursor:"pointer", fontSize:14,
             display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
         </div>
@@ -8303,10 +8324,10 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
                 style={{ padding:"14px 12px", borderRadius:13, border:"none",
                   cursor:localAnswer!==null?"default":"pointer",
                   fontWeight:700, fontSize:13, textAlign:"left", lineHeight:1.4,
-                  background:correct?C.greenL:wrong?C.redL:chosen?C.accentL:C.bg,
+                  background:correct?C.greenL:wrong?C.redL:chosen?C.accentL:"#fff",
                   color:correct?C.green:wrong?C.red:chosen?C.accent:C.text,
-                  outline:correct?`2px solid ${C.green}`:wrong?`2px solid ${C.red}`:chosen?`2px solid ${C.accent}`:"2px solid transparent",
-                  transition:"all .12s" }}>
+                  border:`1.5px solid ${correct?C.green:wrong?C.red:chosen?C.accent:C.border}`,
+                  transition:"all .12s", boxShadow:"0 1px 4px rgba(0,0,0,.06)" }}>
                 <span style={{ opacity:.5, marginRight:6 }}>{["A","B","C","D"][i]}.</span>{opt}
               </button>
             );
@@ -8352,12 +8373,11 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
                   cursor:localAnswer!==null?"default":"pointer",
                   fontWeight:700, fontSize:13, textAlign:"left",
                   background: isTimeout && opt===q.answer ? C.greenL :
-                               correct?C.greenL:wrong?C.redL:chosen?C.accentL:C.bg,
+                               correct?C.greenL:wrong?C.redL:chosen?C.accentL:"#fff",
                   color: isTimeout && opt===q.answer ? C.green :
                          correct?C.green:wrong?C.red:chosen?C.accent:C.text,
-                  outline: (isTimeout&&opt===q.answer) ? `2px solid ${C.green}` :
-                           correct?`2px solid ${C.green}`:wrong?`2px solid ${C.red}`:
-                           chosen?`2px solid ${C.accent}`:"2px solid transparent",
+                  border: `1.5px solid ${(isTimeout&&opt===q.answer)||correct?C.green:wrong?C.red:chosen?C.accent:C.border}`,
+                  boxShadow:"0 1px 4px rgba(0,0,0,.06)",
                   transition:"all .12s" }}>
                 <span style={{ opacity:.5, marginRight:6 }}>{["A","B","C","D"][i]}.</span>{opt}
               </button>
@@ -8410,9 +8430,10 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
                 style={{ padding:"14px 12px", borderRadius:13, border:"none",
                   cursor:localAnswer!==null?"default":"pointer",
                   fontWeight:700, fontSize:13, textAlign:"left",
-                  background:correct?C.greenL:wrong?C.redL:chosen?myT.l:C.bg,
+                  background:correct?C.greenL:wrong?C.redL:chosen?myT.l:"#fff",
                   color:correct?C.green:wrong?C.red:chosen?myT.c:C.text,
-                  outline:correct?`2px solid ${C.green}`:wrong?`2px solid ${C.red}`:chosen?`2px solid ${myT.c}`:"2px solid transparent",
+                  border:`1.5px solid ${correct?C.green:wrong?C.red:chosen?myT.c:C.border}`,
+                  boxShadow:"0 1px 4px rgba(0,0,0,.06)",
                   transition:"all .12s" }}>
                 <span style={{ opacity:.5, marginRight:6 }}>{["A","B","C","D"][i]}.</span>{opt}
               </button>
@@ -8448,12 +8469,13 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
           const wrong   = chosen && opt !== q.answer;
           return (
             <button key={i} onClick={() => submitAnswer(opt)} disabled={localAnswer!==null}
-              style={{ padding:"14px 12px", borderRadius:13, border:"none",
+              style={{ padding:"14px 12px", borderRadius:13,
+                border:`1.5px solid ${correct?C.green:wrong?C.red:chosen?C.accent:C.border}`,
                 cursor:localAnswer!==null?"default":"pointer",
                 fontWeight:700, fontSize:13, textAlign:"left", lineHeight:1.4,
-                background:correct?C.greenL:wrong?C.redL:chosen?C.accentL:C.bg,
+                background:correct?C.greenL:wrong?C.redL:chosen?C.accentL:"#fff",
                 color:correct?C.green:wrong?C.red:chosen?C.accent:C.text,
-                outline:correct?`2px solid ${C.green}`:wrong?`2px solid ${C.red}`:chosen?`2px solid ${C.accent}`:"2px solid transparent",
+                boxShadow:"0 1px 4px rgba(0,0,0,.06)",
                 transition:"all .12s" }}>
               <span style={{ opacity:.5, marginRight:6 }}>{["A","B","C","D"][i]}.</span>{opt}
             </button>
