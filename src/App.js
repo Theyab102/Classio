@@ -948,7 +948,12 @@ function AboutTab() {
       <div style={{ textAlign:"center", padding:"36px 20px 28px",
         background:`linear-gradient(135deg,${C.accentL} 0%,${C.bg} 100%)`,
         borderRadius:20, marginBottom:28, border:`1px solid ${C.accentS}` }}>
-        <div style={{ width:64,height:64,borderRadius:20,background:C.accentL,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px" }}><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="{C.accent}}" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 0 3-3h7z"/></svg></div>
+        <div style={{ width:72,height:72,borderRadius:22,background:"linear-gradient(135deg,#3D5A80,#6366f1)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",boxShadow:"0 8px 24px rgba(99,102,241,.3)" }}>
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+            <path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 0 3-3h7z"/>
+          </svg>
+        </div>
         <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:26, fontWeight:700,
           color:C.text, margin:"0 0 10px" }}>Welcome to Classio</h2>
         <p style={{ fontSize:14, color:C.muted, maxWidth:460, margin:"0 auto", lineHeight:1.7 }}>
@@ -1371,13 +1376,16 @@ function Header({ user, saveStatus, isGuest, onSignOut, character, onOpenCharact
         <div style={{ display:"flex", alignItems:"center", gap:8, flex:1 }}>
           {/* Tab switcher */}
           <div style={{ display:"flex", background:C.bg, borderRadius:10, border:`1px solid ${C.border}`, padding:3, gap:2 }}>
-            {[["folders","Folders"],["about","About"]].map(([id,label])=>(
+            {[
+              ["folders","Folders",<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>],
+              ["about","About",<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>],
+            ].map(([id,label,icon])=>(
               <button key={id} onClick={()=>onSetHomeTab(id)}
-                style={{ padding:"5px 16px", borderRadius:7, fontSize:13, fontWeight:700,
+                style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 14px", borderRadius:7, fontSize:13, fontWeight:700,
                   border:"none", cursor:"pointer", transition:"all .15s",
                   background:homeTab===id?C.accent:"transparent",
                   color:homeTab===id?"#fff":C.muted }}>
-                {label}
+                {icon}{label}
               </button>
             ))}
           </div>
