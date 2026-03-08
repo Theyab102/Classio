@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
-import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot, updateDoc, deleteDoc, serverTimestamp, query, orderBy, limit, getDocs } from "firebase/firestore";
+import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot, updateDoc, deleteDoc, serverTimestamp, query, orderBy, limit, getDocs, arrayUnion } from "firebase/firestore";
 
 // ─── FIREBASE ─────────────────────────────────────────────────────────────────
 const firebaseConfig = {
@@ -7063,11 +7063,41 @@ function SGWhiteboard({ groupId, db, user, group, onClose }) {
   const getPos = (e) => {
     const canvas = canvasRef.current;
     const r = canvas.getBoundingClientRect();
+    // Account for actual pixel buffer size vs displayed CSS size
     const scaleX = canvas.width  / r.width;
     const scaleY = canvas.height / r.height;
     const src = e.touches ? e.touches[0] : e;
-    return { x: (src.clientX - r.left) * scaleX, y: (src.clientY - r.top) * scaleY };
+    return {
+      x: (src.clientX - r.left) * scaleX,
+      y: (src.clientY - r.top)  * scaleY,
+    };
   };
+
+  // Resize canvas buffer to match display size × DPR to prevent blur/misalignment
+  const syncCanvasSize = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const r = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.round(r.width  * dpr);
+    const h = Math.round(r.height * dpr);
+    if (canvas.width !== w || canvas.height !== h) {
+      // Preserve existing strokes across resize
+      const prevStrokes = [...strokes];
+      canvas.width  = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.scale(dpr, dpr);
+      redrawAll(prevStrokes);
+    }
+  }, [strokes]);
+
+  useEffect(() => {
+    syncCanvasSize();
+    const ro = new ResizeObserver(syncCanvasSize);
+    if (canvasRef.current) ro.observe(canvasRef.current);
+    return () => ro.disconnect();
+  }, [syncCanvasSize]);
 
   const redrawAll = (stks) => {
     const canvas = canvasRef.current;
@@ -7241,7 +7271,7 @@ function SGWhiteboard({ groupId, db, user, group, onClose }) {
           </button>
         </div>
         <div style={{ flex:1, overflow:"hidden", background:"#fff", position:"relative" }}>
-          <canvas ref={canvasRef} width={1200} height={700}
+          <canvas ref={canvasRef}
             style={{ width:"100%", height:"100%", display:"block",
               cursor: eraser ? "cell" : "crosshair", touchAction:"none" }}
             onMouseDown={onDown} onMouseMove={onMove} onMouseLeave={e=>{
@@ -7575,6 +7605,219 @@ Math: proper notation (1×10⁻¹⁰ not words, H₂O not words). Units: standar
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// VOICE CHAT — WebRTC audio mesh, Firestore signaling
+// Each member connects directly to each other member (full mesh).
+// Signaling stored under studyGroups/{gid}/voice/{uid_A}_{uid_B}
+// ═══════════════════════════════════════════════════════════════════════════════
+function SGVoiceChat({ groupId, db, user, members }) {
+  const [joined,   setJoined]   = useState(false);
+  const [muted,    setMuted]    = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const [peers,    setPeers]    = useState({}); // uid → { pc, speaking }
+  const localStreamRef = useRef(null);
+  const pcsRef         = useRef({});    // uid → RTCPeerConnection
+  const audioCtxRef    = useRef(null);
+  const analyserRef    = useRef(null);
+  const vadRaf         = useRef(null);
+  const unsubsRef      = useRef([]);
+  const remoteAudiosRef = useRef({}); // uid → <audio> element
+
+  const STUN = { iceServers:[{urls:"stun:stun.l.google.com:19302"},{urls:"stun:stun1.l.google.com:19302"}] };
+
+  // Pair key — always smaller uid first for consistency
+  const pairKey = (a, b) => [a,b].sort().join("_");
+  const sigRef  = (key) => doc(db,"studyGroups",groupId,"voice",key);
+
+  // Voice activity detection — updates speaking state + writes to Firestore
+  const startVAD = (stream) => {
+    const ctx  = new AudioContext();
+    const src  = ctx.createMediaStreamSource(stream);
+    const an   = ctx.createAnalyser();
+    an.fftSize = 512;
+    src.connect(an);
+    audioCtxRef.current = ctx;
+    analyserRef.current = an;
+    const buf = new Uint8Array(an.frequencyBinCount);
+    let lastState = false;
+    const tick = () => {
+      vadRaf.current = requestAnimationFrame(tick);
+      an.getByteFrequencyData(buf);
+      const avg = buf.reduce((s,v) => s+v, 0) / buf.length;
+      const isActive = avg > 12; // threshold
+      if (isActive !== lastState) {
+        lastState = isActive;
+        setSpeaking(isActive);
+        updateDoc(doc(db,"studyGroups",groupId),{
+          [`voiceSpeaking.${user.uid}`]: isActive
+        }).catch(()=>{});
+      }
+    };
+    tick();
+  };
+
+  // Create or get a peer connection to a specific remote uid
+  const getOrCreatePC = async (remoteUid, isInitiator) => {
+    if (pcsRef.current[remoteUid]) return pcsRef.current[remoteUid];
+    const pc = new RTCPeerConnection(STUN);
+    pcsRef.current[remoteUid] = pc;
+
+    // Add local tracks
+    localStreamRef.current?.getTracks().forEach(t => pc.addTrack(t, localStreamRef.current));
+
+    // Remote track → play in hidden audio element
+    pc.ontrack = (e) => {
+      if (!remoteAudiosRef.current[remoteUid]) {
+        const audio = document.createElement("audio");
+        audio.autoplay = true;
+        audio.playsInline = true;
+        document.body.appendChild(audio);
+        remoteAudiosRef.current[remoteUid] = audio;
+      }
+      remoteAudiosRef.current[remoteUid].srcObject = e.streams[0];
+    };
+
+    const key = pairKey(user.uid, remoteUid);
+
+    // ICE candidate handling
+    pc.onicecandidate = (e) => {
+      if (!e.candidate) return;
+      const field = user.uid < remoteUid ? "callerIce" : "calleeIce";
+      setDoc(sigRef(key), { [field]: arrayUnion(e.candidate.toJSON()) }, { merge:true }).catch(()=>{});
+    };
+
+    pc.onconnectionstatechange = () => {
+      setPeers(p => ({...p, [remoteUid]: { ...p[remoteUid], connected: pc.connectionState==="connected" }}));
+    };
+
+    if (isInitiator) {
+      // Create offer
+      const offer = await pc.createOffer({ offerToReceiveAudio:true });
+      await pc.setLocalDescription(offer);
+      await setDoc(sigRef(key), { offer:{type:offer.type,sdp:offer.sdp}, calleeIce:[], callerIce:[] });
+
+      // Watch for answer + callee ICE
+      const unsub = onSnapshot(sigRef(key), async (snap) => {
+        const d = snap.data();
+        if (d?.answer && !pc.remoteDescription) {
+          await pc.setRemoteDescription(new RTCSessionDescription(d.answer)).catch(()=>{});
+        }
+        (d?.calleeIce||[]).forEach(async c => {
+          if (pc.remoteDescription) await pc.addIceCandidate(new RTCIceCandidate(c)).catch(()=>{});
+        });
+      });
+      unsubsRef.current.push(unsub);
+    } else {
+      // Watch for offer
+      const unsub = onSnapshot(sigRef(key), async (snap) => {
+        const d = snap.data();
+        if (!d?.offer || pc.remoteDescription) return;
+        await pc.setRemoteDescription(new RTCSessionDescription(d.offer)).catch(()=>{});
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        await setDoc(sigRef(key), { answer:{type:answer.type,sdp:answer.sdp} }, { merge:true });
+        (d?.callerIce||[]).forEach(async c => {
+          await pc.addIceCandidate(new RTCIceCandidate(c)).catch(()=>{});
+        });
+      });
+      unsubsRef.current.push(unsub);
+    }
+
+    return pc;
+  };
+
+  const joinVoice = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio:true, video:false });
+      localStreamRef.current = stream;
+      startVAD(stream);
+      setJoined(true);
+
+      // Signal presence
+      await updateDoc(doc(db,"studyGroups",groupId),{
+        [`voiceMembers.${user.uid}`]: true, lastActivity:Date.now()
+      }).catch(()=>{});
+
+      // Connect to everyone currently in voice
+      const mems = Object.keys(members).filter(uid => uid !== user.uid);
+      for (const remoteUid of mems) {
+        const isInit = user.uid < remoteUid; // smaller uid initiates
+        await getOrCreatePC(remoteUid, isInit).catch(()=>{});
+      }
+    } catch(e) {
+      console.error("Voice join error", e);
+    }
+  };
+
+  const leaveVoice = () => {
+    cancelAnimationFrame(vadRaf.current);
+    audioCtxRef.current?.close().catch(()=>{});
+    Object.values(pcsRef.current).forEach(pc => pc.close());
+    pcsRef.current = {};
+    localStreamRef.current?.getTracks().forEach(t=>t.stop());
+    localStreamRef.current = null;
+    // Remove audio elements
+    Object.values(remoteAudiosRef.current).forEach(el => el.remove());
+    remoteAudiosRef.current = {};
+    unsubsRef.current.forEach(u => u());
+    unsubsRef.current = [];
+    setSpeaking(false); setJoined(false); setPeers({});
+    updateDoc(doc(db,"studyGroups",groupId),{
+      [`voiceMembers.${user.uid}`]: null,
+      [`voiceSpeaking.${user.uid}`]: null,
+    }).catch(()=>{});
+  };
+
+  const toggleMute = () => {
+    const enabled = !muted;
+    setMuted(!enabled);
+    localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = enabled; });
+  };
+
+  useEffect(() => () => { if (joined) leaveVoice(); }, []);
+
+  // Count voice members
+  const voiceMembers = Object.entries(members).filter(([uid,m]) => m).map(([uid]) => uid);
+
+  if (!joined) return (
+    <button onClick={joinVoice} style={{
+      display:"flex", alignItems:"center", gap:6,
+      background:C.purpleL, border:`1px solid ${C.purple}44`,
+      color:C.purple, borderRadius:9, padding:"7px 12px",
+      fontSize:11, fontWeight:700, cursor:"pointer", flexShrink:0,
+    }}>
+      🎙️ Join Voice
+    </button>
+  );
+
+  return (
+    <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
+      {/* Speaking indicator */}
+      <div style={{
+        width:8, height:8, borderRadius:"50%", flexShrink:0,
+        background: speaking ? C.green : C.border,
+        boxShadow: speaking ? `0 0 0 3px ${C.greenL}` : "none",
+        transition:"all .15s",
+      }} />
+      <button onClick={toggleMute} style={{
+        display:"flex", alignItems:"center", gap:5,
+        background: muted ? C.redL : C.greenL,
+        border:`1px solid ${muted ? C.red+"44" : C.green+"44"}`,
+        color: muted ? C.red : C.green,
+        borderRadius:9, padding:"6px 10px", fontSize:11, fontWeight:700, cursor:"pointer",
+      }}>
+        {muted ? "🔇 Muted" : "🎙️ Live"}
+      </button>
+      <button onClick={leaveVoice} style={{
+        background:"none", border:`1px solid ${C.border}`,
+        borderRadius:9, padding:"6px 8px", fontSize:11, color:C.muted,
+        cursor:"pointer",
+      }}>Leave</button>
+    </div>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // SHARE PICKER — Google Meet style bottom-sheet, all modes in one place
 // ═══════════════════════════════════════════════════════════════════════════════
 function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
@@ -7724,29 +7967,95 @@ function SGSharePicker({ user, db, groupId, group, groupFile, onClose,
 }
 
 // ── Multiplayer Quiz — synced via Firestore gameState ─────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// QUIZ GAME — handles all modes with genuinely different mechanics
+// Modes: mcq, truefalse, rapidfire, quizshow, memory, speedround, elimination, teamquiz
+// ═══════════════════════════════════════════════════════════════════════════════
 function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
-  const [localAnswer, setLocalAnswer] = useState(null);
-  const myScore = gameState?.scores?.[user.uid] || 0;
-  const q = gameState?.currentQuestion;
+  const [localAnswer,  setLocalAnswer]  = useState(null);
+  const [timeLeft,     setTimeLeft]     = useState(null);
+  const [teamInput,    setTeamInput]    = useState("");
+  const [matchPicked,  setMatchPicked]  = useState(null); // for memory mode
+  const timerRef = useRef(null);
 
-  useEffect(() => { setLocalAnswer(null); }, [gameState?.questionIndex]);
+  const mode  = gameState?.mode || "mcq";
+  const q     = gameState?.currentQuestion;
+  const myScore  = gameState?.scores?.[user.uid]  || 0;
+  const myTeam   = gameState?.teams?.[user.uid];
+  const eliminated = (gameState?.eliminated || []).includes(user.uid);
+
+  const scores = gameState?.scores || {};
+  const board  = Object.entries(scores)
+    .map(([uid,pts]) => ({ uid, pts, name:(members[uid]?.displayName||"User").split(" ")[0] }))
+    .sort((a,b) => b.pts - a.pts);
+  const answerCount = Object.keys(gameState?.answers || {}).length;
+  const memberCount = Object.keys(members || {}).length;
+
+  useEffect(() => { setLocalAnswer(null); setMatchPicked(null); }, [gameState?.questionIndex]);
+
+  // Speed round countdown timer
+  useEffect(() => {
+    if (mode !== "speedround" || !q || localAnswer !== null) return;
+    setTimeLeft(10);
+    timerRef.current = setInterval(() => {
+      setTimeLeft(t => {
+        if (t <= 1) {
+          clearInterval(timerRef.current);
+          submitAnswer("__timeout__");
+          return 0;
+        }
+        return t - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timerRef.current);
+  }, [gameState?.questionIndex, mode]);
 
   const submitAnswer = async (choice) => {
     if (localAnswer !== null || !q) return;
     setLocalAnswer(choice);
+    clearInterval(timerRef.current);
     const correct = choice === q.answer;
     const current = gameState?.scores?.[user.uid] || 0;
-    await updateDoc(doc(db,"studyGroups",groupId), {
-      [`gameState.scores.${user.uid}`]: correct ? current + 10 : current,
+
+    // Score calculation varies by mode
+    let points = 0;
+    if (correct) {
+      if (mode === "speedround") points = Math.max(1, timeLeft || 1) * 100; // time bonus
+      else if (mode === "rapidfire") {
+        const answered = Object.keys(gameState?.answers || {}).length;
+        points = Math.max(10, 100 - answered * 15); // first correct = 100pts, each subsequent -15
+      }
+      else points = 10;
+    }
+
+    const updates = {
+      [`gameState.scores.${user.uid}`]: current + points,
       [`gameState.answers.${user.uid}`]: choice,
-    });
+    };
+
+    // Elimination mode: mark as eliminated on wrong answer
+    if (mode === "elimination" && !correct) {
+      const current_elim = gameState?.eliminated || [];
+      if (!current_elim.includes(user.uid)) {
+        updates["gameState.eliminated"] = [...current_elim, user.uid];
+      }
+    }
+
+    // Team mode: accumulate to team score
+    if (mode === "teamquiz" && myTeam !== undefined && correct) {
+      const teamKey = `gameState.teamScores.team${myTeam}`;
+      const cur = (gameState?.teamScores?.[`team${myTeam}`] || 0);
+      updates[teamKey] = cur + 10;
+    }
+
+    await updateDoc(doc(db,"studyGroups",groupId), updates);
   };
 
   const nextQuestion = async () => {
     const questions = gameState.questions || [];
     const next = (gameState.questionIndex || 0) + 1;
     if (next >= questions.length) {
-      await updateDoc(doc(db,"studyGroups",groupId), { "gameState.phase":"results" });
+      await updateDoc(doc(db,"studyGroups",groupId), {"gameState.phase":"results"});
     } else {
       await updateDoc(doc(db,"studyGroups",groupId), {
         "gameState.questionIndex": next,
@@ -7761,56 +8070,79 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
     await updateDoc(doc(db,"studyGroups",groupId), { gameState:null });
   };
 
-  const scores = gameState?.scores || {};
-  const board  = Object.entries(scores)
-    .map(([uid,pts]) => ({ uid, pts, name: members[uid]?.displayName || "User" }))
-    .sort((a,b) => b.pts - a.pts);
-  const answerCount = Object.keys(gameState?.answers || {}).length;
-  const memberCount = Object.keys(members || {}).length;
+  // ── RESULTS SCREEN ──────────────────────────────────────────────────────────
+  if (gameState?.phase === "results") {
+    const teamScores = gameState?.teamScores || {};
+    return (
+      <div style={{ flex:1, overflowY:"auto", padding:20 }}>
+        <div style={{ background:C.surface, borderRadius:18, padding:24,
+          border:`1px solid ${C.border}`, maxWidth:480, margin:"0 auto" }}>
+          <h2 style={{ color:C.warm, margin:"0 0 6px", textAlign:"center",
+            fontSize:22, fontFamily:"'Fraunces',serif" }}>🏆 Final Results</h2>
+          <p style={{ textAlign:"center", fontSize:12, color:C.muted, margin:"0 0 20px" }}>
+            {gameState.topic} · {gameState.mode?.toUpperCase()}
+          </p>
 
-  if (gameState?.phase === "results") return (
-    <div style={{ flex:1, overflowY:"auto", padding:20 }}>
-      <div style={{ background:C.surface, borderRadius:18, padding:24,
-        border:`1px solid ${C.border}`, boxShadow:"0 4px 20px rgba(0,0,0,.07)",
-        maxWidth:480, margin:"0 auto" }}>
-        <h2 style={{ color:C.warm, margin:"0 0 20px", textAlign:"center",
-          fontSize:22, fontFamily:"'Fraunces',serif" }}>🏆 Final Results</h2>
-        {board.map((entry,i) => (
-          <div key={entry.uid} style={{
-            display:"flex", alignItems:"center", gap:12,
-            background:i===0?C.warmL:C.bg,
-            borderRadius:12, padding:"12px 16px", marginBottom:8,
-            border:`1px solid ${i===0?C.warm+"55":C.border}`,
-          }}>
-            <span style={{ fontSize:20, width:28, textAlign:"center" }}>
-              {i===0?"🥇":i===1?"🥈":i===2?"🥉":`${i+1}.`}
-            </span>
-            <span style={{ flex:1, color:C.text, fontWeight:700 }}>{entry.name}</span>
-            <span style={{ color:C.warm, fontWeight:800, fontSize:18 }}>{entry.pts}</span>
-            <span style={{ color:C.muted, fontSize:11 }}>pts</span>
-          </div>
-        ))}
-        {isHost && (
-          <div style={{ display:"flex", gap:8, marginTop:16 }}>
-            <button onClick={async () => {
-              const initScores = {};
-              Object.keys(members||{}).forEach(uid => { initScores[uid]=0; });
-              const qs = gameState.questions || [];
-              await updateDoc(doc(db,"studyGroups",groupId), {
-                gameState: { ...gameState, phase:"question", questionIndex:0,
-                  currentQuestion:qs[0], scores:initScores, answers:{} },
-              });
-            }} style={{ flex:1, background:C.accentL, border:`1px solid ${C.accentS}`,
-              color:C.accent, borderRadius:12, padding:"11px",
-              fontSize:13, fontWeight:700, cursor:"pointer" }}>🔄 Play Again</button>
-            <button onClick={endGame} style={{ flex:1, background:C.bg,
-              border:`1px solid ${C.border}`, color:C.muted, borderRadius:12,
-              padding:"11px", fontSize:13, fontWeight:700, cursor:"pointer" }}>✓ Back to Room</button>
-          </div>
-        )}
+          {mode === "teamquiz" && Object.keys(teamScores).length > 0 ? (
+            <>
+              <p style={{ fontSize:11, fontWeight:700, color:C.muted, letterSpacing:.8,
+                textTransform:"uppercase", marginBottom:10 }}>Team Scores</p>
+              {Object.entries(teamScores).sort((a,b)=>b[1]-a[1]).map(([team,score],i)=>(
+                <div key={team} style={{ display:"flex", alignItems:"center", gap:12,
+                  background:i===0?C.warmL:C.bg, borderRadius:12,
+                  padding:"12px 16px", marginBottom:8,
+                  border:`1px solid ${i===0?C.warm+"55":C.border}` }}>
+                  <span style={{ fontSize:20 }}>{i===0?"🥇":i===1?"🥈":"🥉"}</span>
+                  <span style={{ flex:1, fontWeight:700, color:C.text }}>
+                    {team === "team0" ? "🔵 Team Blue" : "🔴 Team Red"}
+                  </span>
+                  <span style={{ color:C.warm, fontWeight:800, fontSize:18 }}>{score}</span>
+                  <span style={{ color:C.muted, fontSize:11 }}>pts</span>
+                </div>
+              ))}
+              <div style={{ height:1, background:C.border, margin:"16px 0" }} />
+            </>
+          ) : null}
+
+          <p style={{ fontSize:11, fontWeight:700, color:C.muted, letterSpacing:.8,
+            textTransform:"uppercase", marginBottom:10 }}>Individual Scores</p>
+          {board.map((entry,i) => (
+            <div key={entry.uid} style={{ display:"flex", alignItems:"center", gap:12,
+              background:i===0?C.warmL:C.bg, borderRadius:12,
+              padding:"10px 16px", marginBottom:6,
+              border:`1px solid ${i===0?C.warm+"55":C.border}` }}>
+              <span style={{ fontSize:18, width:26, textAlign:"center" }}>
+                {i===0?"🥇":i===1?"🥈":i===2?"🥉":`${i+1}.`}
+              </span>
+              <span style={{ flex:1, color:C.text, fontWeight:700 }}>{entry.name}</span>
+              <span style={{ color:C.warm, fontWeight:800, fontSize:16 }}>{entry.pts}</span>
+              <span style={{ color:C.muted, fontSize:11 }}>pts</span>
+            </div>
+          ))}
+
+          {isHost && (
+            <div style={{ display:"flex", gap:8, marginTop:16 }}>
+              <button onClick={async () => {
+                const initScores={};
+                Object.keys(members||{}).forEach(uid => {initScores[uid]=0;});
+                const qs = gameState.questions||[];
+                await updateDoc(doc(db,"studyGroups",groupId),{
+                  gameState:{...gameState, phase:"question", questionIndex:0,
+                    currentQuestion:qs[0], scores:initScores, answers:{},
+                    eliminated:[], teamScores:{} },
+                });
+              }} style={{ flex:1, background:C.accentL, border:`1px solid ${C.accentS}`,
+                color:C.accent, borderRadius:12, padding:"11px",
+                fontSize:13, fontWeight:700, cursor:"pointer" }}>🔄 Play Again</button>
+              <button onClick={endGame} style={{ flex:1, background:C.bg,
+                border:`1px solid ${C.border}`, color:C.muted, borderRadius:12,
+                padding:"11px", fontSize:13, fontWeight:700, cursor:"pointer" }}>✓ Back to Room</button>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
 
   if (!q) return (
     <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center" }}>
@@ -7818,19 +8150,284 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
     </div>
   );
 
+  // ── ELIMINATION: show eliminated screen ────────────────────────────────────
+  if (mode === "elimination" && eliminated) return (
+    <div style={{ flex:1, display:"flex", flexDirection:"column",
+      alignItems:"center", justifyContent:"center", gap:16, padding:24 }}>
+      <div style={{ fontSize:56 }}>💀</div>
+      <h2 style={{ color:C.red, fontFamily:"'Fraunces',serif", margin:0 }}>You're Eliminated!</h2>
+      <p style={{ color:C.muted, fontSize:13, textAlign:"center", maxWidth:260 }}>
+        You answered incorrectly. Watch as the others battle it out.
+      </p>
+      <div style={{ background:C.surface, borderRadius:14, padding:"14px 20px",
+        border:`1px solid ${C.border}`, width:"100%", maxWidth:320 }}>
+        <p style={{ margin:"0 0 8px", fontSize:10, fontWeight:700, color:C.muted,
+          letterSpacing:.8, textTransform:"uppercase" }}>Still Playing ({
+            memberCount - (gameState?.eliminated||[]).length
+          })</p>
+        {board.filter(e=>!(gameState?.eliminated||[]).includes(e.uid)).map((entry,i)=>(
+          <div key={entry.uid} style={{ display:"flex", justifyContent:"space-between",
+            padding:"5px 0", borderBottom:`1px solid ${C.border}` }}>
+            <span style={{ color:C.text, fontSize:13 }}>{entry.name}</span>
+            <span style={{ color:C.green, fontWeight:700 }}>{entry.pts}pts</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  // ── MEMORY MATCH mode ──────────────────────────────────────────────────────
+  if (mode === "memory") {
+    const pairs = (gameState.questions||[]).slice(0,8).map(q=>([
+      {id:`q_${q.question}`, text:q.question, type:"question", answer:q.answer},
+      {id:`a_${q.answer}`,   text:q.answer,   type:"answer",  answer:q.answer},
+    ])).flat().sort(()=>Math.random()-.5);
+
+    return (
+      <div style={{ flex:1, overflowY:"auto", padding:16, display:"flex", flexDirection:"column", gap:12 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <span style={{ fontSize:14, fontWeight:700, color:C.text }}>🧩 Memory Match</span>
+          <span style={{ color:C.accent, fontSize:12, fontWeight:700 }}>Score: {myScore} pts</span>
+        </div>
+        <p style={{ color:C.muted, fontSize:12, margin:0 }}>Match each question to its answer</p>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+          {pairs.map(card => {
+            const matched = gameState?.matched?.includes(card.id);
+            const picked  = matchPicked?.id === card.id;
+            return (
+              <button key={card.id} disabled={matched || picked}
+                onClick={async () => {
+                  if (matched) return;
+                  if (!matchPicked) { setMatchPicked(card); return; }
+                  // Check match
+                  const isMatch = matchPicked.answer === card.answer && matchPicked.type !== card.type;
+                  if (isMatch) {
+                    const cur = gameState?.scores?.[user.uid]||0;
+                    const matched_arr = [...(gameState?.matched||[]), matchPicked.id, card.id];
+                    await updateDoc(doc(db,"studyGroups",groupId),{
+                      [`gameState.scores.${user.uid}`]: cur+15,
+                      "gameState.matched": matched_arr,
+                    });
+                  }
+                  setMatchPicked(null);
+                }}
+                style={{ padding:"10px 8px", borderRadius:10, fontSize:12, textAlign:"center",
+                  fontWeight:600, lineHeight:1.4, cursor:matched?"default":"pointer",
+                  background: matched?C.greenL : picked?C.accentL : C.surface,
+                  border:`2px solid ${matched?C.green:picked?C.accent:C.border}`,
+                  color: matched?C.green:picked?C.accent:C.text,
+                  opacity: matched?.7:1, transition:"all .12s",
+                  textDecoration: matched?"line-through":"none",
+                }}>
+                <div style={{ fontSize:9, fontWeight:800, letterSpacing:.8, textTransform:"uppercase",
+                  color:C.muted, marginBottom:4 }}>{card.type}</div>
+                {card.text}
+              </button>
+            );
+          })}
+        </div>
+        <ScoreBar board={board} />
+      </div>
+    );
+  }
+
+  // ── TRUE/FALSE mode ─────────────────────────────────────────────────────────
+  if (mode === "truefalse") {
+    const tfQ = q;
+    return (
+      <div style={{ flex:1, overflowY:"auto", padding:16, display:"flex", flexDirection:"column", gap:12 }}>
+        <ProgressBar gameState={gameState} myScore={myScore} />
+        <div style={{ background:C.surface, borderRadius:14, padding:"20px", border:`1px solid ${C.border}`,
+          boxShadow:"0 2px 10px rgba(0,0,0,.06)", flex:1, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <p style={{ color:C.text, fontSize:17, fontWeight:700, textAlign:"center", lineHeight:1.6, margin:0 }}>{tfQ.question}</p>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
+          {["True","False"].map(opt => {
+            const chosen  = localAnswer === opt;
+            const correct = localAnswer !== null && opt === tfQ.answer;
+            const wrong   = chosen && opt !== tfQ.answer;
+            return (
+              <button key={opt} onClick={() => submitAnswer(opt)} disabled={localAnswer!==null}
+                style={{ padding:"28px 12px", borderRadius:16, border:"none",
+                  cursor:localAnswer!==null?"default":"pointer",
+                  fontSize:22, fontWeight:800,
+                  background:correct?C.greenL:wrong?C.redL:opt==="True"?"#e6f4ea":"#fce8e8",
+                  color:correct?C.green:wrong?C.red:opt==="True"?"#1e6e3e":"#b71c1c",
+                  outline:correct?`3px solid ${C.green}`:wrong?`3px solid ${C.red}`:chosen?`3px solid ${C.accent}`:"none",
+                  transition:"all .12s", boxShadow:"0 3px 12px rgba(0,0,0,.08)" }}>
+                {opt === "True" ? "✅ True" : "❌ False"}
+              </button>
+            );
+          })}
+        </div>
+        {isHost && localAnswer !== null && (
+          <NextBtn onClick={nextQuestion} />
+        )}
+        <AnswerBar answerCount={answerCount} memberCount={memberCount} />
+        <ScoreBar board={board} />
+      </div>
+    );
+  }
+
+  // ── RAPID FIRE mode ─────────────────────────────────────────────────────────
+  if (mode === "rapidfire") {
+    return (
+      <div style={{ flex:1, overflowY:"auto", padding:16, display:"flex", flexDirection:"column", gap:10 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div style={{ background:C.warmL, border:`1px solid ${C.warm}44`, borderRadius:8,
+            padding:"4px 10px", fontSize:11, fontWeight:700, color:C.warm }}>
+            ⚡ RAPID FIRE — First correct = most points!
+          </div>
+          <span style={{ color:C.accent, fontSize:12, fontWeight:700 }}>Score: {myScore}</span>
+        </div>
+        <ProgressBar gameState={gameState} myScore={myScore} hideScore />
+        <div style={{ background:C.surface, borderRadius:14, padding:"18px", border:`1px solid ${C.border}` }}>
+          <p style={{ color:C.text, fontSize:16, fontWeight:700, margin:0, lineHeight:1.5 }}>{q.question}</p>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+          {(q.options||[]).map((opt,i) => {
+            const chosen  = localAnswer === opt;
+            const correct = localAnswer !== null && opt === q.answer;
+            const wrong   = chosen && opt !== q.answer;
+            return (
+              <button key={i} onClick={() => submitAnswer(opt)} disabled={localAnswer!==null}
+                style={{ padding:"14px 12px", borderRadius:13, border:"none",
+                  cursor:localAnswer!==null?"default":"pointer",
+                  fontWeight:700, fontSize:13, textAlign:"left", lineHeight:1.4,
+                  background:correct?C.greenL:wrong?C.redL:chosen?C.accentL:C.bg,
+                  color:correct?C.green:wrong?C.red:chosen?C.accent:C.text,
+                  outline:correct?`2px solid ${C.green}`:wrong?`2px solid ${C.red}`:chosen?`2px solid ${C.accent}`:"2px solid transparent",
+                  transition:"all .12s" }}>
+                <span style={{ opacity:.5, marginRight:6 }}>{["A","B","C","D"][i]}.</span>{opt}
+              </button>
+            );
+          })}
+        </div>
+        {isHost && localAnswer !== null && <NextBtn onClick={nextQuestion} />}
+        <AnswerBar answerCount={answerCount} memberCount={memberCount} />
+        <ScoreBar board={board} />
+      </div>
+    );
+  }
+
+  // ── SPEED ROUND mode ────────────────────────────────────────────────────────
+  if (mode === "speedround") {
+    const timerPct = ((timeLeft||0) / 10) * 100;
+    const timerColor = (timeLeft||0) > 6 ? C.green : (timeLeft||0) > 3 ? C.warm : C.red;
+    return (
+      <div style={{ flex:1, overflowY:"auto", padding:16, display:"flex", flexDirection:"column", gap:10 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <span style={{ color:C.muted, fontSize:12 }}>Q {(gameState.questionIndex||0)+1}/{gameState.questions?.length}</span>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <div style={{ height:6, width:80, borderRadius:3, background:C.border }}>
+              <div style={{ height:"100%", borderRadius:3, background:timerColor,
+                width:`${timerPct}%`, transition:"width 1s linear" }} />
+            </div>
+            <span style={{ fontSize:16, fontWeight:800, color:timerColor, minWidth:24 }}>{timeLeft}</span>
+          </div>
+          <span style={{ color:C.accent, fontSize:12, fontWeight:700 }}>Score: {myScore}</span>
+        </div>
+        <div style={{ background:C.surface, borderRadius:14, padding:"18px", border:`1px solid ${C.border}` }}>
+          <p style={{ color:C.text, fontSize:16, fontWeight:700, margin:0, lineHeight:1.5 }}>{q.question}</p>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+          {(q.options||[]).map((opt,i) => {
+            const chosen  = localAnswer === opt;
+            const correct = localAnswer !== null && opt === q.answer;
+            const wrong   = chosen && (opt !== q.answer || opt === "__timeout__");
+            const isTimeout = localAnswer === "__timeout__";
+            return (
+              <button key={i} onClick={() => submitAnswer(opt)}
+                disabled={localAnswer!==null}
+                style={{ padding:"14px 12px", borderRadius:13, border:"none",
+                  cursor:localAnswer!==null?"default":"pointer",
+                  fontWeight:700, fontSize:13, textAlign:"left",
+                  background: isTimeout && opt===q.answer ? C.greenL :
+                               correct?C.greenL:wrong?C.redL:chosen?C.accentL:C.bg,
+                  color: isTimeout && opt===q.answer ? C.green :
+                         correct?C.green:wrong?C.red:chosen?C.accent:C.text,
+                  outline: (isTimeout&&opt===q.answer) ? `2px solid ${C.green}` :
+                           correct?`2px solid ${C.green}`:wrong?`2px solid ${C.red}`:
+                           chosen?`2px solid ${C.accent}`:"2px solid transparent",
+                  transition:"all .12s" }}>
+                <span style={{ opacity:.5, marginRight:6 }}>{["A","B","C","D"][i]}.</span>{opt}
+              </button>
+            );
+          })}
+        </div>
+        {localAnswer === "__timeout__" && (
+          <div style={{ padding:"8px 14px", borderRadius:10, background:C.redL,
+            border:`1px solid ${C.red}44`, color:C.red, fontSize:13, fontWeight:700, textAlign:"center" }}>
+            ⏰ Time's up! The answer was: {q.answer}
+          </div>
+        )}
+        {isHost && localAnswer !== null && <NextBtn onClick={nextQuestion} />}
+        <AnswerBar answerCount={answerCount} memberCount={memberCount} />
+        <ScoreBar board={board} />
+      </div>
+    );
+  }
+
+  // ── TEAM QUIZ mode ──────────────────────────────────────────────────────────
+  if (mode === "teamquiz") {
+    const teamColors = {0:{c:C.accent,l:C.accentL,name:"🔵 Blue"}, 1:{c:C.red,l:C.redL,name:"🔴 Red"}};
+    const myT = teamColors[myTeam] || teamColors[0];
+    const tScores = gameState?.teamScores || {};
+    return (
+      <div style={{ flex:1, overflowY:"auto", padding:16, display:"flex", flexDirection:"column", gap:10 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div style={{ background:myT.l, border:`1px solid ${myT.c}44`,
+            borderRadius:8, padding:"4px 10px", fontSize:11, fontWeight:700, color:myT.c }}>
+            {myT.name} Team
+          </div>
+          <div style={{ display:"flex", gap:8 }}>
+            {Object.entries(tScores).map(([team,score])=>(
+              <span key={team} style={{ fontSize:12, fontWeight:700,
+                color: team==="team0"?C.accent:C.red }}>{team==="team0"?"🔵":"🔴"} {score}</span>
+            ))}
+          </div>
+        </div>
+        <ProgressBar gameState={gameState} myScore={myScore} />
+        <div style={{ background:C.surface, borderRadius:14, padding:"18px", border:`1px solid ${C.border}` }}>
+          <p style={{ color:C.text, fontSize:16, fontWeight:700, margin:0, lineHeight:1.5 }}>{q.question}</p>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+          {(q.options||[]).map((opt,i) => {
+            const chosen  = localAnswer === opt;
+            const correct = localAnswer !== null && opt === q.answer;
+            const wrong   = chosen && opt !== q.answer;
+            return (
+              <button key={i} onClick={() => submitAnswer(opt)} disabled={localAnswer!==null}
+                style={{ padding:"14px 12px", borderRadius:13, border:"none",
+                  cursor:localAnswer!==null?"default":"pointer",
+                  fontWeight:700, fontSize:13, textAlign:"left",
+                  background:correct?C.greenL:wrong?C.redL:chosen?myT.l:C.bg,
+                  color:correct?C.green:wrong?C.red:chosen?myT.c:C.text,
+                  outline:correct?`2px solid ${C.green}`:wrong?`2px solid ${C.red}`:chosen?`2px solid ${myT.c}`:"2px solid transparent",
+                  transition:"all .12s" }}>
+                <span style={{ opacity:.5, marginRight:6 }}>{["A","B","C","D"][i]}.</span>{opt}
+              </button>
+            );
+          })}
+        </div>
+        {isHost && localAnswer !== null && <NextBtn onClick={nextQuestion} />}
+        <AnswerBar answerCount={answerCount} memberCount={memberCount} />
+      </div>
+    );
+  }
+
+  // ── DEFAULT MCQ / QUIZ SHOW mode ────────────────────────────────────────────
   return (
     <div style={{ flex:1, overflowY:"auto", padding:16, display:"flex", flexDirection:"column", gap:12 }}>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-        <span style={{ color:C.muted, fontSize:12 }}>
-          Question {(gameState.questionIndex||0)+1} / {gameState.questions?.length||"?"}
-        </span>
-        <span style={{ color:C.accent, fontSize:12, fontWeight:700 }}>Score: {myScore} pts</span>
-      </div>
-      <div style={{ height:4, borderRadius:2, background:C.border }}>
-        <div style={{ height:"100%", borderRadius:2, background:C.accent,
-          width:`${(((gameState.questionIndex||0)+1)/(gameState.questions?.length||1))*100}%`,
-          transition:"width .3s" }} />
-      </div>
+      {mode === "quizshow" && (
+        <div style={{ textAlign:"center", padding:"6px 0" }}>
+          <span style={{ fontSize:11, fontWeight:700, color:C.warm, letterSpacing:1,
+            textTransform:"uppercase", background:C.warmL, borderRadius:6, padding:"3px 10px" }}>
+            🎤 Quiz Show — Who Wants to Study?
+          </span>
+        </div>
+      )}
+      <ProgressBar gameState={gameState} myScore={myScore} />
       <div style={{ background:C.surface, borderRadius:14, padding:"18px 20px",
         border:`1px solid ${C.border}`, boxShadow:"0 2px 10px rgba(0,0,0,.06)" }}>
         <p style={{ color:C.text, fontSize:16, fontWeight:700, margin:0, lineHeight:1.5 }}>{q.question}</p>
@@ -7854,28 +8451,66 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
           );
         })}
       </div>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"4px 0" }}>
-        <span style={{ color:C.muted, fontSize:12 }}>⏳ {answerCount}/{memberCount} answered</span>
-        {isHost && localAnswer!==null && (
-          <button onClick={nextQuestion} style={{ background:C.accent, color:"#fff",
-            border:"none", borderRadius:10, padding:"8px 18px", fontSize:13, fontWeight:700,
-            cursor:"pointer", boxShadow:"0 3px 10px rgba(61,90,128,.3)" }}>Next →</button>
-        )}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+        <AnswerBar answerCount={answerCount} memberCount={memberCount} inline />
+        {isHost && localAnswer !== null && <NextBtn onClick={nextQuestion} />}
       </div>
-      <div style={{ background:C.surface, borderRadius:12, padding:"12px 14px", border:`1px solid ${C.border}` }}>
-        <p style={{ margin:"0 0 8px", fontSize:10, fontWeight:700, color:C.muted,
-          letterSpacing:.8, textTransform:"uppercase" }}>🏆 Live Scores</p>
-        {board.map((entry,i) => (
-          <div key={entry.uid} style={{ display:"flex", justifyContent:"space-between",
-            padding:"5px 0", borderBottom:i<board.length-1?`1px solid ${C.border}`:"none" }}>
-            <span style={{ color:C.text, fontSize:13 }}>{entry.name.split(" ")[0]}</span>
-            <span style={{ color:C.warm, fontWeight:700, fontSize:13 }}>{entry.pts}</span>
-          </div>
-        ))}
-      </div>
+      <ScoreBar board={board} />
     </div>
   );
 }
+
+// ── Quiz sub-components ───────────────────────────────────────────────────────
+function ProgressBar({ gameState, myScore, hideScore }) {
+  return (
+    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8 }}>
+      <span style={{ color:C.muted, fontSize:12, flexShrink:0 }}>
+        Q {(gameState?.questionIndex||0)+1} / {gameState?.questions?.length||"?"}
+      </span>
+      <div style={{ flex:1, height:4, borderRadius:2, background:C.border }}>
+        <div style={{ height:"100%", borderRadius:2, background:C.accent,
+          width:`${(((gameState?.questionIndex||0)+1)/(gameState?.questions?.length||1))*100}%`,
+          transition:"width .3s" }} />
+      </div>
+      {!hideScore && <span style={{ color:C.accent, fontSize:12, fontWeight:700, flexShrink:0 }}>
+        {myScore} pts
+      </span>}
+    </div>
+  );
+}
+function NextBtn({ onClick }) {
+  return (
+    <button onClick={onClick} style={{ background:C.accent, color:"#fff",
+      border:"none", borderRadius:10, padding:"9px 20px", fontSize:13, fontWeight:700,
+      cursor:"pointer", alignSelf:"flex-end", boxShadow:"0 3px 10px rgba(61,90,128,.3)" }}>
+      Next →
+    </button>
+  );
+}
+function AnswerBar({ answerCount, memberCount, inline }) {
+  return (
+    <span style={{ color:C.muted, fontSize:12, ...(inline?{}:{display:"block",padding:"2px 0"}) }}>
+      ⏳ {answerCount}/{memberCount} answered
+    </span>
+  );
+}
+function ScoreBar({ board }) {
+  return (
+    <div style={{ background:C.surface, borderRadius:12, padding:"10px 14px",
+      border:`1px solid ${C.border}` }}>
+      <p style={{ margin:"0 0 6px", fontSize:10, fontWeight:700, color:C.muted,
+        letterSpacing:.8, textTransform:"uppercase" }}>🏆 Live Scores</p>
+      {board.map((entry,i) => (
+        <div key={entry.uid} style={{ display:"flex", justifyContent:"space-between",
+          padding:"4px 0", borderBottom:i<board.length-1?`1px solid ${C.border}`:"none" }}>
+          <span style={{ color:C.text, fontSize:12 }}>{entry.name}</span>
+          <span style={{ color:C.warm, fontWeight:700, fontSize:12 }}>{entry.pts}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 
 // ── Game launcher — topic + game mode grid ────────────────────────────────────
 function SGGameLauncher({ group, db, groupId, user, groupFile, onClose }) {
@@ -7945,7 +8580,14 @@ function SGGameLauncher({ group, db, groupId, user, groupFile, onClose }) {
       }
 
       const initScores = {};
-      Object.keys(group.members || {}).forEach(uid => { initScores[uid] = 0; });
+      const memberUids = Object.keys(group.members || {});
+      memberUids.forEach(uid => { initScores[uid] = 0; });
+
+      // Assign teams for team quiz — split members evenly into 2 teams
+      const teams = {};
+      if (gameId === "teamquiz") {
+        memberUids.forEach((uid, i) => { teams[uid] = i % 2; });
+      }
 
       await updateDoc(doc(db, "studyGroups", groupId), {
         gameState: {
@@ -7956,6 +8598,9 @@ function SGGameLauncher({ group, db, groupId, user, groupFile, onClose }) {
           currentQuestion: questions[0],
           scores: initScores,
           answers: {},
+          eliminated: [],
+          teams,
+          teamScores: gameId === "teamquiz" ? { team0:0, team1:0 } : {},
           topic: effectiveTopic || "Flashcards",
           fromCards: hasFlashcards && sharedCards.length >= 4,
         },
@@ -8392,6 +9037,11 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
         }}>
           {isHost ? "🔴 End Session" : "Leave"}
         </button>
+
+        {/* Voice chat — always visible in top bar */}
+        {group && (
+          <SGVoiceChat groupId={groupId} db={db} user={user} members={members} />
+        )}
       </div>
 
       {/* ── Body ── */}
@@ -8588,29 +9238,50 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
           {/* Members */}
           {panel === "members" && (
             <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "12px 10px" }}>
-              {memberList.map(m => !m ? null : (
-                <div key={m.uid} style={{
-                  display: "flex", alignItems: "center", gap: 10,
-                  padding: "10px 8px", borderRadius: 12, marginBottom: 4,
-                  background: m.uid === user.uid ? C.accentL : C.bg,
-                  border: `1px solid ${m.uid === user.uid ? C.accentS : C.border}`,
-                }}>
-                  <SGAvatar character={m.character} displayName={m.displayName}
-                    size={34} isHost={m.uid === group?.hostUid} isSelf={m.uid === user.uid} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: C.text,
-                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {m.displayName || "User"}{m.uid === user.uid ? " (You)" : ""}
-                    </p>
-                    {m.uid === group?.hostUid && (
-                      <p style={{ margin: 0, fontSize: 10, color: C.warm }}>👑 Host</p>
-                    )}
-                    {group?.sharedContent?.sharedByUid === m.uid && (
-                      <p style={{ margin: 0, fontSize: 10, color: C.accent }}>📺 Presenting</p>
-                    )}
+              {memberList.map(m => {
+                if (!m) return null;
+                const isSpeaking = group?.voiceSpeaking?.[m.uid];
+                const inVoice    = group?.voiceMembers?.[m.uid];
+                return (
+                  <div key={m.uid} style={{
+                    display: "flex", alignItems: "center", gap: 10,
+                    padding: "10px 8px", borderRadius: 12, marginBottom: 4,
+                    background: m.uid === user.uid ? C.accentL : C.bg,
+                    border: `1px solid ${isSpeaking ? C.green+"88" : m.uid === user.uid ? C.accentS : C.border}`,
+                    transition: "border-color .2s",
+                  }}>
+                    <div style={{ position:"relative", flexShrink:0 }}>
+                      <SGAvatar character={m.character} displayName={m.displayName}
+                        size={34} isHost={m.uid === group?.hostUid} isSelf={m.uid === user.uid} />
+                      {isSpeaking && (
+                        <div style={{ position:"absolute", bottom:-2, right:-2,
+                          width:10, height:10, borderRadius:"50%",
+                          background:C.green, border:"2px solid #fff",
+                          animation:"sg-pulse 1s ease infinite" }} />
+                      )}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: C.text,
+                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {m.displayName || "User"}{m.uid === user.uid ? " (You)" : ""}
+                      </p>
+                      <div style={{ display:"flex", gap:6, alignItems:"center", marginTop:2 }}>
+                        {m.uid === group?.hostUid && (
+                          <span style={{ fontSize: 10, color: C.warm }}>👑 Host</span>
+                        )}
+                        {group?.sharedContent?.sharedByUid === m.uid && (
+                          <span style={{ fontSize: 10, color: C.accent }}>📺 Presenting</span>
+                        )}
+                        {inVoice && (
+                          <span style={{ fontSize:10, color:isSpeaking?C.green:C.muted }}>
+                            {isSpeaking?"🎙️ Speaking":"🎙️"}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
