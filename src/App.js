@@ -6734,38 +6734,45 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
       };
       playPuterSequence(startIdx);
     } else {
-      // ── Browser Web Speech API ──
+      // ── Browser Web Speech API — ONE sentence at a time, chained via onend ──
       const voice = getSmartVoice(p, allVoices, lang);
-      const speakFrom = (idx) => {
-        sentences.slice(idx).forEach((sen, relIdx) => {
-          const absIdx = idx + relIdx;
-          const u = new SpeechSynthesisUtterance(sen.trim());
-          u.rate   = speed * (p.rate || 0.93);
-          u.pitch  = p.pitch || 1.0;
-          u.volume = 1.0;
-          u.lang   = lang;
-          if (voice) u.voice = voice;
-          const myEnd = positions[absIdx] + sen.length;
-          u.onstart = () => {
-            const startProg = (positions[absIdx] / totalChars.current) * 100;
-            const endProg   = (myEnd / totalChars.current) * 100;
-            // Estimate duration from char count, speed, rate
-            const estDurMs = Math.max(500, (sen.trim().length / (18 * speed * (p.rate || 0.93))) * 1000);
-            setProgress(startProg); currentProgressRef.current = startProg;
-            setPlaying(true); setPaused(false);
-            startProgressTimer(startProg, endProg, estDurMs);
-          };
-          u.onend = () => {
-            stopProgressTimer();
-            const prog = (myEnd / totalChars.current) * 100;
-            setProgress(prog); currentProgressRef.current = prog;
-            if (absIdx === sentences.length - 1) { setPlaying(false); setPaused(false); setProgress(100); }
-          };
-          u.onerror = () => { stopProgressTimer(); setPlaying(false); setPaused(false); };
-          window.speechSynthesis.speak(u);
-        });
+      const myGen = puterGenRef.current; // reuse gen counter for browser too
+      const speakOne = (idx) => {
+        if (puterGenRef.current !== myGen || idx >= sentences.length) {
+          if (puterGenRef.current === myGen) { setPlaying(false); setPaused(false); setProgress(100); }
+          return;
+        }
+        const sen = sentences[idx];
+        const myStart = positions[idx];
+        const myEnd = myStart + sen.length;
+        const startProg = (myStart / totalChars.current) * 100;
+        const endProg   = (myEnd  / totalChars.current) * 100;
+        const u = new SpeechSynthesisUtterance(sen.trim());
+        u.rate   = speed * (p.rate || 0.93);
+        u.pitch  = p.pitch || 1.0;
+        u.volume = 1.0;
+        u.lang   = lang;
+        if (voice) u.voice = voice;
+        u.onstart = () => {
+          if (puterGenRef.current !== myGen) { window.speechSynthesis.cancel(); return; }
+          const estDurMs = Math.max(400, (sen.trim().length / (18 * speed * (p.rate || 0.93))) * 1000);
+          setProgress(startProg); currentProgressRef.current = startProg;
+          setPlaying(true); setPaused(false);
+          startProgressTimer(startProg, endProg, estDurMs);
+        };
+        u.onend = () => {
+          if (puterGenRef.current !== myGen) return;
+          stopProgressTimer();
+          setProgress(endProg); currentProgressRef.current = endProg;
+          speakOne(idx + 1); // chain to next sentence
+        };
+        u.onerror = () => {
+          stopProgressTimer();
+          if (puterGenRef.current === myGen) speakOne(idx + 1); // skip errored sentence
+        };
+        window.speechSynthesis.speak(u);
       };
-      speakFrom(startIdx);
+      speakOne(startIdx);
       setPlaying(true); setPaused(false);
     }
   };
