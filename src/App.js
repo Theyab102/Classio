@@ -4344,7 +4344,7 @@ ${notesText.slice(0, 10000)}`,
                       style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:20, border:"none", cursor:"pointer", fontSize:12, fontWeight:700,
                         background: playbackPersonaIdx===i ? C.accent : C.surface,
                         color: playbackPersonaIdx===i ? "#fff" : C.text }}>
-                      <span style={{width:12,height:12,borderRadius:"50%",background:p.color,display:"inline-block",flexShrink:0}}></span>{p.label}
+                      <span style={{width:10,height:10,borderRadius:"50%",background:p.color,display:"inline-block",flexShrink:0,verticalAlign:"middle",marginRight:5}}></span>{p.label}
                     </button>
                   ))}
                   <p style={{ width:"100%", fontSize:10, color:C.muted, marginTop:2 }}>
@@ -6434,7 +6434,7 @@ function ListeningGame({ cards, onBack }) {
                   background: personaIdx===i ? accent : "#f3f4f6",
                   color: personaIdx===i ? "#fff" : "#374151",
                   boxShadow: personaIdx===i ? `0 2px 10px ${accent}44` : "none" }}>
-                <span style={{width:12,height:12,borderRadius:"50%",background:p.color,display:"inline-block",flexShrink:0}}></span>{p.label}
+                <span style={{width:10,height:10,borderRadius:"50%",background:p.color,display:"inline-block",flexShrink:0,verticalAlign:"middle",marginRight:5}}></span>{p.label}
               </button>
             ))}
             <p style={{ width:"100%", fontSize:10, color:"#9ca3af", marginTop:4 }}>Using: {getSmartVoiceLabel(personaIdx, allVoices, "en-US")} · ♀ = Female · ♂ = Male</p>
@@ -6799,7 +6799,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
             {/* Current voice badge */}
             {!showPicker && (
               <p style={{ fontSize:11, color:"#818cf8", textAlign:"center", marginBottom:10 }}>
-                <span style={{width:12,height:12,borderRadius:"50%",background:persona.color,display:"inline-block",flexShrink:0}}></span><strong style={{color:"#c7d2fe"}}>{persona.label}</strong> · {persona.gender==="female"?"♀ Female":"♂ Male"} · {persona.desc} · <span style={{color:"#6366f1"}}>{getSmartVoiceLabel(personaIdx, allVoices, lang)}</span>
+                <span style={{width:10,height:10,borderRadius:"50%",background:persona.color,display:"inline-block",flexShrink:0,verticalAlign:"middle",marginRight:5}}></span><strong style={{color:"#c7d2fe"}}>{persona.label}</strong> · {persona.gender==="female"?"♀ Female":"♂ Male"} · {persona.desc} · <span style={{color:"#6366f1"}}>{getSmartVoiceLabel(personaIdx, allVoices, lang)}</span>
               </p>
             )}
 
