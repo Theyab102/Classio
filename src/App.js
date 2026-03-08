@@ -553,6 +553,20 @@ const I = {
   chevron: "M9 18l6-6-6-6",
   refresh: "M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15",
   paperclip: "M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48",
+  mic: "M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3zM19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8",
+  headphones: "M3 18v-6a9 9 0 0 1 18 0v6M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z",
+  globe: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z",
+  robot: "M12 2a2 2 0 0 1 2 2v1h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h3V4a2 2 0 0 1 2-2zM9 11h.01M15 11h.01M9 15s1 1.5 3 1.5 3-1.5 3-1.5",
+  zap: "M13 2L3 14h9l-1 8 10-12h-9l1-8z",
+  star: "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z",
+  users: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",
+  image: "M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM21 15l-5-5L5 19",
+  pen: "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z",
+  eraser: "M20 20H7L3 16l10-10 7 7-3.5 3.5M6.5 17.5l5-5",
+  highlight: "M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z",
+  podcast: "M8.56 2.9A7 7 0 0 1 19 9v4M2 9a10 10 0 0 1 20 0v5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2zM6 9v1a6 6 0 0 0 12 0V9M12 16v6M8 22h8",
+  info: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 8h.01M11 12h1v4h1",
+  regenerate: "M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15",
 };
 
 // ─── TEXT FORMATTER ───────────────────────────────────────────────────────────
@@ -730,7 +744,9 @@ function StandaloneAI({ onClose }) {
           borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
           <div style={{ width:40, height:40, borderRadius:12,
             background:"linear-gradient(135deg,#6366f1,#8b5cf6)",
-            display:"flex", alignItems:"center", justifyContent:"center", fontSize:20 }}>🤖</div>
+            display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8M12 5V3"/><circle cx="12" cy="3" r="1"/></svg>
+          </div>
           <div style={{ flex:1 }}>
             <p style={{ margin:0, fontSize:16, fontWeight:700, color:C.text }}>🤖 AI Assistant</p>
             <p style={{ margin:0, fontSize:12, color:C.muted }}>Ask anything · Attach images · Replies in your language</p>
@@ -744,7 +760,9 @@ function StandaloneAI({ onClose }) {
           display:"flex", flexDirection:"column", gap:12 }}>
           {msgs.length === 0 && (
             <div style={{ textAlign:"center", padding:"32px 16px" }}>
-              <div style={{ fontSize:52, marginBottom:14 }}>🤖</div>
+              <div style={{ width:64, height:64, borderRadius:20, background:"linear-gradient(135deg,#6366f1,#8b5cf6)", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 14px" }}>
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8M12 5V3"/><circle cx="12" cy="3" r="1"/></svg>
+              </div>
               <p style={{ fontSize:17, fontWeight:700, color:C.text, marginBottom:8 }}>Classio AI</p>
               <p style={{ fontSize:13, color:C.muted, lineHeight:1.7, maxWidth:320, margin:"0 auto 24px" }}>
                 Ask me anything! Solve problems, explain concepts, or send a photo of a question.
@@ -770,8 +788,9 @@ function StandaloneAI({ onClose }) {
               {m.role==="assistant" && (
                 <div style={{ width:28,height:28,borderRadius:8,
                   background:"linear-gradient(135deg,#6366f1,#8b5cf6)",
-                  display:"flex",alignItems:"center",justifyContent:"center",
-                  fontSize:13,flexShrink:0 }}>🤖</div>
+                  display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8"/></svg>
+                </div>
               )}
               <div style={{ maxWidth:"75%", borderRadius:16, overflow:"hidden",
                 background:m.role==="user"?C.accent:C.surface,
@@ -788,7 +807,9 @@ function StandaloneAI({ onClose }) {
             <div style={{ display:"flex", alignItems:"flex-end", gap:8 }}>
               <div style={{ width:28,height:28,borderRadius:8,
                 background:"linear-gradient(135deg,#6366f1,#8b5cf6)",
-                display:"flex",alignItems:"center",justifyContent:"center",fontSize:13 }}>🤖</div>
+                display:"flex",alignItems:"center",justifyContent:"center" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8"/></svg>
+              </div>
               <div style={{ display:"flex", gap:5, padding:"12px 14px", background:C.surface,
                 borderRadius:16, border:`1px solid ${C.border}` }}>
                 {[0,1,2].map(j=><div key={j} style={{ width:7,height:7,borderRadius:"50%",
@@ -819,8 +840,10 @@ function StandaloneAI({ onClose }) {
           <button onClick={()=>imgInputRef.current?.click()} title="Attach image"
             style={{ flexShrink:0, width:44, height:44, borderRadius:12,
               border:`1.5px solid ${attachedImage?C.accent:C.border}`,
-              background:attachedImage?C.accentL:C.bg, cursor:"pointer", fontSize:20,
-              display:"flex", alignItems:"center", justifyContent:"center" }}>📷</button>
+              background:attachedImage?C.accentL:C.bg, cursor:"pointer",
+              display:"flex", alignItems:"center", justifyContent:"center", color:attachedImage?C.accent:C.muted }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          </button>
           <input ref={imgInputRef} type="file" accept="image/*" style={{ display:"none" }}
             onChange={e=>{ attachImage(e.target.files?.[0]); e.target.value=""; }}/>
           <input value={inp} onChange={e=>setInp(e.target.value)}
@@ -1128,7 +1151,8 @@ export default function App() {
               color:"#fff", border:"none", borderRadius:12, padding:"10px 18px",
               fontSize:14, fontWeight:600, cursor:"pointer",
               boxShadow:"0 4px 14px rgba(124,58,237,.35)" }}>
-            👥 Study Group
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Study Group
           </button>
           {homeTab==="folders" && (
             <button onClick={()=>setShowNewFolder(true)} className="hov"
@@ -1306,7 +1330,8 @@ function Header({ user, saveStatus, isGuest, onSignOut, character, onOpenCharact
               color:"#fff", border:"none", borderRadius:10, padding:"6px 14px",
               fontSize:13, fontWeight:700, cursor:"pointer",
               boxShadow:"0 2px 10px rgba(99,102,241,.4)" }}>
-            🤖 AI Assistant
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8M12 5V3"/><circle cx="12" cy="3" r="1"/></svg>
+            AI Assistant
           </button>
         </div>
       )}
@@ -3129,7 +3154,7 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
     {id:"notes", label:"Notes",           icon:I.notes},
     {id:"voice", label:"Voice & Podcast", icon:I.cards},
     {id:"cards", label:"Study Cards",     icon:I.cards},
-    {id:"ai",    label:"🤖 AI Assistant",    icon:I.ai},
+    {id:"ai",    label:"AI Assistant",    icon:I.ai},
     {id:"game",  label:"Game Mode",       icon:I.game},
   ];
   const fc = getFileColor(file);
@@ -3330,7 +3355,11 @@ ${text}`
   };
 
   const COLORS = ["#E53E3E","#FF8C00","#ECC94B","#38A169","#3182CE","#805AD5","#1a1a1a","#ffffff"];
-  const TOOLS  = [{id:"pen",icon:"✏️"},{id:"highlight",icon:"🖊️"},{id:"eraser",icon:"🧹"}];
+  const TOOLS  = [
+    {id:"pen",      svgPath:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"},
+    {id:"highlight",svgPath:"M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"},
+    {id:"eraser",   svgPath:"M20 20H7L3 16l10-10 7 7-3.5 3.5M6.5 17.5l5-5"},
+  ];
 
   if (!fileObj) return (
     <div style={{ textAlign:"center", padding:"60px 24px" }}>
@@ -3338,7 +3367,7 @@ ${text}`
       <p style={{ fontSize:16, fontWeight:600, color:C.text, marginBottom:8 }}>File not loaded</p>
       <p style={{ fontSize:13, color:C.muted, marginBottom:20 }}>Files need to be re-uploaded once after a full page refresh.</p>
       <label style={{ display:"inline-flex", alignItems:"center", gap:8, background:C.accent, color:"#fff", borderRadius:10, padding:"11px 22px", cursor:"pointer", fontSize:14, fontWeight:600 }}>
-        📁 Re-open File
+        Re-open File
         <input type="file" style={{ display:"none" }} onChange={e => {
           const f = e.target.files?.[0]; if (!f) return;
           FILE_STORE.set(file.id, f); idbSave(file.id, f); onUpdate({...file, _fileObj: f});
@@ -3366,7 +3395,7 @@ ${text}`
           ))}
           <div style={{ width:1, height:20, background:C.border, flexShrink:0 }} />
           <input type="range" min="1" max="20" value={brushSize} onChange={e => setBrushSize(+e.target.value)} style={{ width:60 }} />
-          <button onClick={clearDraw} style={{ fontSize:12, background:"none", border:`1px solid ${C.border}`, borderRadius:6, padding:"4px 8px", cursor:"pointer", color:C.muted }}>🗑️ Clear</button>
+          <button onClick={clearDraw} style={{ fontSize:12, background:"none", border:`1px solid ${C.border}`, borderRadius:6, padding:"4px 8px", cursor:"pointer", color:C.muted }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg> Clear</button>
           <div style={{ flex:1 }} />
           <div style={{ display:"flex", alignItems:"center", gap:5 }}>
             <button onClick={() => changePage(pageNum-1)} disabled={pageNum<=1}
@@ -3383,7 +3412,7 @@ ${text}`
             <Icon d={I.sparkle} size={12} color="#fff" sw={2} />{explaining?"…":`Explain Page ${pageNum}`}
           </button>
         </>) : (<>
-          <span style={{ fontSize:13, color:C.muted }}>📄 <strong style={{ color:C.text }}>{fileName}</strong></span>
+          <span style={{ fontSize:13, color:C.muted }}> <strong style={{ color:C.text }}>{fileName}</strong></span>
           <div style={{ flex:1 }} />
           {isPPT && pptTotal > 1 && (
             <div style={{ display:"flex", alignItems:"center", gap:5 }}>
@@ -3854,8 +3883,10 @@ ${fileContext}`
         })()}
         {msgs.length === 0 && (
           <div style={{ textAlign:"center", padding:"24px 20px", color:C.muted }}>
-            <div style={{ fontSize:40, marginBottom:12 }}>🤖</div>
-            <p style={{ fontSize:15, fontWeight:600, color:C.text, marginBottom:6 }}>🤖 AI Assistant</p>
+            <div style={{ width:52, height:52, borderRadius:16, background:"linear-gradient(135deg,#6366f1,#8b5cf6)", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px" }}>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8M12 5V3"/><circle cx="12" cy="3" r="1"/></svg>
+            </div>
+            <p style={{ fontSize:15, fontWeight:600, color:C.text, marginBottom:6 }}>AI Assistant</p>
             <p style={{ fontSize:13 }}>{file ? `Ask anything about "${file.name}".` : selectedFileIds.length > 0 ? "Ask anything about the selected files." : "Select files above then ask a question."}</p>
           </div>
         )}
@@ -4000,7 +4031,7 @@ function VoicePodcastTab({ file, user, isGuest, onUpdate }) {
         }
       }
       const preview = (transcriptRef.current + interimText).trim();
-      setVoiceStatus("🎙️ " + (preview ? preview.slice(-90) + "…" : "Listening… speak now"));
+      setVoiceStatus("" + (preview ? preview.slice(-90) + "…" : "Listening… speak now"));
     };
     recognition.onerror = (e) => {
       if (e.error === "not-allowed") setVoiceStatus("❌ Microphone access denied. Allow mic in browser settings.");
@@ -4013,7 +4044,7 @@ function VoicePodcastTab({ file, user, isGuest, onUpdate }) {
     recognition.start();
     recognitionRef.current = recognition;
     setRecording(true);
-    setVoiceStatus("🎙️ Listening… speak now. Click Stop when done.");
+    setVoiceStatus("Listening… speak now. Click Stop when done.");
   };
 
   const stopVoice = async () => {
@@ -4183,7 +4214,7 @@ ${notesText.slice(0, 10000)}`,
 
       {/* Sub-tabs */}
       <div style={{ display:"flex", gap:8, marginBottom:22, borderBottom:`1.5px solid ${C.border}`, paddingBottom:12 }}>
-        {[{id:"record",label:"🎙️ Voice Notes"},{id:"podcast",label:"🎧 Study Podcast"}].map(t => (
+        {[{id:"record",label:"Voice Notes"},{id:"podcast",label:"🎧 Study Podcast"}].map(t => (
           <button key={t.id} onClick={() => setSubTab(t.id)} style={{
             padding:"8px 20px", borderRadius:20, border:"none", cursor:"pointer",
             fontWeight:700, fontSize:13,
@@ -4226,7 +4257,7 @@ ${notesText.slice(0, 10000)}`,
               )}
               {!recording ? (
                 <button onClick={startVoice} disabled={processing} style={{ background:processing?"#ccc":C.red, color:"#fff", border:"none", borderRadius:14, padding:"13px 38px", fontSize:15, fontWeight:700, cursor:processing?"not-allowed":"pointer", boxShadow:`0 4px 16px ${C.red}44` }}>
-                  {processing ? "⏳ Processing…" : "🎙️ Start Recording"}
+                  {processing ? "Processing…" : "Start Recording"}
                 </button>
               ) : (
                 <button onClick={stopVoice} disabled={processing} style={{ background:"#fff", color:C.red, border:`2px solid ${C.red}`, borderRadius:14, padding:"13px 38px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
@@ -4317,7 +4348,7 @@ ${notesText.slice(0, 10000)}`,
             <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
               <button onClick={generatePodcast} disabled={podcastLoading}
                 style={{ background:podcastLoading?"#ccc":"#7c3aed", color:"#fff", border:"none", borderRadius:12, padding:"11px 24px", fontSize:14, fontWeight:700, cursor:podcastLoading?"not-allowed":"pointer", boxShadow:podcastLoading?"none":"0 4px 16px rgba(124,58,237,.4)" }}>
-                {podcastLoading ? "⏳ Generating…" : podcastScript ? "🔄 Regenerate" : "🎧 Generate Podcast"}
+                {podcastLoading ? "Generating…" : podcastScript ? "Regenerate" : "Generate Podcast"}
               </button>
               {podcastScript && !podcastLoading && (
                 <button onClick={() => { setPodcastScript(""); setShowPodcast(false); try { localStorage.removeItem(PODCAST_KEY); } catch {} }}
@@ -4350,7 +4381,7 @@ function VoiceNotesTab({ file, user, isGuest, notes, onNotesUpdate,
   // Redirect: this is now handled by VoicePodcastTab
   return (
     <div style={{ textAlign:"center", padding:"40px 20px", color:C.muted }}>
-      <div style={{ fontSize:36, marginBottom:12 }}>🎙️</div>
+      
       <p style={{ fontSize:14, fontWeight:600, marginBottom:6 }}>Voice Notes has moved!</p>
       <p style={{ fontSize:13 }}>Use the <strong>Voice & Podcast</strong> tab at the top of this page.</p>
     </div>
@@ -4542,7 +4573,7 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
                           <p style={{ fontSize:11, color:C.muted }}>{n.date} · {n.text.trim().split(/\s+/).length} words</p>
                         </div>
                         <button onClick={e => { e.stopPropagation(); delSaved(n.name); }}
-                          style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", fontSize:15, padding:"2px 5px", flexShrink:0 }}>🗑</button>
+                          style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", padding:"2px 5px", flexShrink:0, display:"flex", alignItems:"center" }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
                       </div>
                     ))}
                   </div>
@@ -4592,7 +4623,7 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
           <span style={{ fontSize:11, fontWeight:800, color:C.muted, letterSpacing:1 }}>NOTE STYLE</span>
           <button onClick={() => setUseCustomStyle(u => !u)}
             style={{ fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:20, border:`1.5px solid ${useCustomStyle?C.accent:C.border}`, background:useCustomStyle?C.accentL:"transparent", color:useCustomStyle?C.accent:C.muted, cursor:"pointer" }}>
-            {useCustomStyle ? "✏️ Custom (on)" : "✏️ Custom style"}
+            {useCustomStyle ? "Custom (on)" : "Custom style"}
           </button>
         </div>
         {!useCustomStyle ? (
