@@ -58,6 +58,36 @@ async function callClaudeChat(system, messages) {
   return data.choices?.[0]?.message?.content || "";
 }
 
+// Vision-capable chat — uses Llama 4 Scout on Groq (supports image input)
+// imageBase64: full data URL like "data:image/jpeg;base64,..."
+async function callClaudeVision(system, messages, imageBase64) {
+  // Build the last user message with image attached
+  const msgsWithImage = messages.map((m, i) => {
+    if (i === messages.length - 1 && m.role === "user" && imageBase64) {
+      return {
+        role: "user",
+        content: [
+          { type: "image_url", image_url: { url: imageBase64 } },
+          { type: "text",      text: m.content || "Analyze this image and answer the question." },
+        ],
+      };
+    }
+    return m;
+  });
+  const res = await fetch(GROQ_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_KEY}` },
+    body: JSON.stringify({
+      model: "meta-llama/llama-4-scout-17b-16e-instruct",
+      messages: [{ role: "system", content: system }, ...msgsWithImage],
+      max_tokens: 2000,
+    }),
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
+  return data.choices?.[0]?.message?.content || "";
+}
+
 // ─── GLOBAL VOICE SYSTEM ──────────────────────────────────────────────────────
 // Shared ChatGPT-style voice personas used across Podcast, Listening game, etc.
 // Each persona lists exact browser voice name fragments to try in order.
@@ -3401,14 +3431,29 @@ function AITab({ file, allFiles, folder, onUpdate }) {
   const [inp, setInp] = useState("");
   const [loading, setLoading] = useState(false);
   const [selectedFileIds, setSelectedFileIds] = useState([]);
+  const [attachedImage, setAttachedImage] = useState(null); // { base64, name }
+  const imgInputRef = useRef(null);
   const bottomRef = useRef(null);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:"smooth" }); }, [msgs]);
+
+  const attachImage = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => setAttachedImage({ base64: e.target.result, name: file.name });
+    reader.readAsDataURL(file);
+  };
+
   const send = async () => {
     const text = inp.trim();
-    if (!text || loading) return;
-    const userMsg = { role:"user", content: text };
+    if ((!text && !attachedImage) || loading) return;
+    const displayContent = attachedImage
+      ? (text || "What do you see in this image? Solve/explain it.")
+      : text;
+    const userMsg = { role:"user", content: displayContent, image: attachedImage?.base64 };
     const newMsgs = [...msgs, userMsg];
     setMsgs(newMsgs); setInp(""); setLoading(true);
+    const imgToSend = attachedImage?.base64 || null;
+    setAttachedImage(null);
     try {
       // Build context from selected files (folder mode) or current file + linked
       let fileContext = "";
@@ -3417,7 +3462,6 @@ function AITab({ file, allFiles, folder, onUpdate }) {
         try { const t = await extractFileText(fObj); return (t || "").slice(0, 6000); } catch { return ""; }
       };
       if (selectedFileIds.length > 0) {
-        // Folder AI — use whichever files the user selected from dropdown
         for (const sid of selectedFileIds) {
           const sf = allFiles?.find(f => f.id === sid);
           if (sf) { const t = await safeText(sf._fileObj); if (t) fileContext += `File "${sf.name}":
@@ -3426,7 +3470,6 @@ ${t}
 `; }
         }
       } else if (file) {
-        // File AI — use this file + its linked files
         const t = await safeText(file._fileObj);
         if (t) fileContext += `File "${file.name}":
 ${t}
@@ -3441,11 +3484,15 @@ ${lt}
         }
       }
       const sys = fileContext
-        ? `You are a study AI. Use ONLY the following file content to answer. Plain text, no asterisks, no markdown.
+        ? `You are a study AI. Use the following file content plus any image provided to answer. Plain text, no asterisks, no markdown.
 
 ${fileContext}`
-        : `You are helping a student with "${folder?.name || "their files"}". Plain text, no asterisks.`;
-      const reply = await callClaudeChat(sys, newMsgs.map(m => ({ role:m.role, content:m.content })));
+        : `You are a study AI helping a student. Analyze images, solve problems, and explain clearly. Plain text, no asterisks.`;
+      // Use vision model if image attached, regular chat otherwise
+      const apiMsgs = newMsgs.map(m => ({ role: m.role, content: m.content }));
+      const reply = imgToSend
+        ? await callClaudeVision(sys, apiMsgs, imgToSend)
+        : await callClaudeChat(sys, apiMsgs);
       setMsgs([...newMsgs, { role:"assistant", content: reply }]);
     } catch(e) { setMsgs([...newMsgs, { role:"assistant", content:"Error: " + e.message }]); }
     setLoading(false);
@@ -3532,20 +3579,69 @@ ${fileContext}`
         )}
         {msgs.map((m,i) => (
           <div key={i} style={{ display:"flex", justifyContent:m.role==="user"?"flex-end":"flex-start" }}>
-            <div style={{ maxWidth:"80%", padding:"10px 14px", borderRadius:14, background:m.role==="user"?C.accent:C.surface, color:m.role==="user"?"#fff":C.text, fontSize:14, lineHeight:1.6, border:m.role==="user"?"none":`1px solid ${C.border}` }}>
-              <Fmt text={m.content} />
+            <div style={{ maxWidth:"80%", borderRadius:14, overflow:"hidden",
+              background:m.role==="user"?C.accent:C.surface,
+              border:m.role==="user"?"none":`1px solid ${C.border}` }}>
+              {/* Show attached image inside the bubble */}
+              {m.image && (
+                <img src={m.image} alt="attached"
+                  style={{ display:"block", width:"100%", maxWidth:320, maxHeight:220,
+                    objectFit:"contain", background:"#000" }} />
+              )}
+              <div style={{ padding:"10px 14px", color:m.role==="user"?"#fff":C.text,
+                fontSize:14, lineHeight:1.6 }}>
+                <Fmt text={m.content} />
+              </div>
             </div>
           </div>
         ))}
         {loading && <div style={{ display:"flex", gap:5, padding:"10px 14px" }}>{[0,1,2].map(j=><div key={j} style={{ width:7,height:7,borderRadius:"50%",background:C.accent,animation:"bounce 1.2s infinite",animationDelay:`${j*.2}s` }}/>)}</div>}
         <div ref={bottomRef} />
       </div>
-      <div style={{ display:"flex", gap:10, paddingTop:12, borderTop:`1px solid ${C.border}` }}>
-        <input value={inp} onChange={e=>setInp(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}}
-          placeholder="Ask a question…"
-          style={{ flex:1, border:`1.5px solid ${C.border}`, borderRadius:12, padding:"11px 16px", fontSize:14, outline:"none", background:C.bg, color:C.text }} />
-        <button onClick={send} disabled={!inp.trim()||loading}
-          style={{ background:inp.trim()&&!loading?C.accent:"#ccc", color:"#fff", border:"none", borderRadius:12, padding:"11px 20px", fontSize:14, fontWeight:600, cursor:inp.trim()&&!loading?"pointer":"not-allowed" }}>
+
+      {/* Image preview strip */}
+      {attachedImage && (
+        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px",
+          background:C.accentL, border:`1px solid ${C.accentS}`,
+          borderRadius:12, marginBottom:8 }}>
+          <img src={attachedImage.base64} alt="preview"
+            style={{ width:48, height:48, objectFit:"cover", borderRadius:8, flexShrink:0 }} />
+          <div style={{ flex:1, minWidth:0 }}>
+            <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.accent }}>Image attached</p>
+            <p style={{ margin:0, fontSize:11, color:C.muted, overflow:"hidden",
+              textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{attachedImage.name}</p>
+          </div>
+          <button onClick={() => setAttachedImage(null)}
+            style={{ background:"none", border:"none", color:C.red,
+              cursor:"pointer", fontSize:18, flexShrink:0 }}>×</button>
+        </div>
+      )}
+
+      <div style={{ display:"flex", gap:8, paddingTop:10, borderTop:`1px solid ${C.border}`,
+        alignItems:"flex-end" }}>
+        {/* Image attach button */}
+        <button onClick={() => imgInputRef.current?.click()}
+          title="Attach image"
+          style={{ flexShrink:0, width:42, height:42, borderRadius:12,
+            border:`1.5px solid ${attachedImage ? C.accent : C.border}`,
+            background: attachedImage ? C.accentL : C.bg,
+            cursor:"pointer", fontSize:20, display:"flex",
+            alignItems:"center", justifyContent:"center" }}>
+          📷
+        </button>
+        <input ref={imgInputRef} type="file" accept="image/*" style={{ display:"none" }}
+          onChange={e => { attachImage(e.target.files?.[0]); e.target.value=""; }} />
+        <input value={inp} onChange={e=>setInp(e.target.value)}
+          onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}}
+          placeholder={attachedImage ? "Ask about the image… (or just press Send)" : "Ask a question…"}
+          style={{ flex:1, border:`1.5px solid ${C.border}`, borderRadius:12,
+            padding:"11px 16px", fontSize:14, outline:"none",
+            background:C.bg, color:C.text }} />
+        <button onClick={send} disabled={(!inp.trim() && !attachedImage) || loading}
+          style={{ flexShrink:0, background:(inp.trim()||attachedImage)&&!loading?C.accent:"#ccc",
+            color:"#fff", border:"none", borderRadius:12, padding:"11px 20px",
+            fontSize:14, fontWeight:600,
+            cursor:(inp.trim()||attachedImage)&&!loading?"pointer":"not-allowed" }}>
           Send
         </button>
       </div>
