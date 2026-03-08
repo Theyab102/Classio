@@ -6668,46 +6668,74 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
         const puter = await loadPuter();
         if (!puter) throw new Error("Puter unavailable");
 
-        // Puter auto-plays — we'll stop it immediately and steal its src
-        const puterEl = await puter.ai.txt2speech(script, {
+        console.log("[Podcast] calling puter.ai.txt2speech...");
+        const puterEl = await puter.ai.txt2speech(script.slice(0, 3000), {
           voice: persona.puterVoice || "Joanna",
           engine: "neural",
           language: "en-US"
         });
+        console.log("[Podcast] puter returned:", puterEl);
+        console.log("[Podcast] type:", typeof puterEl, puterEl?.constructor?.name);
+        console.log("[Podcast] src:", puterEl?.src);
+        console.log("[Podcast] currentSrc:", puterEl?.currentSrc);
+        console.log("[Podcast] duration:", puterEl?.duration);
+        console.log("[Podcast] readyState:", puterEl?.readyState);
 
-        // Stop puter's own playback immediately
-        try { puterEl.pause(); puterEl.currentTime = 0; } catch(e) {}
+        if (!puterEl) throw new Error("Puter returned null");
 
-        // Get the blob/data URL from the puter element
+        // Pause puter's auto-play
+        try { puterEl.pause(); puterEl.currentTime = 0; } catch(e) { console.warn("[Podcast] pause failed:", e); }
+
         const src = puterEl.src || puterEl.currentSrc || "";
-        if (!src) throw new Error("Puter returned no audio src");
+        console.log("[Podcast] final src to use:", src ? src.slice(0,80) : "EMPTY");
 
-        // Load into our own persistent audio element
-        const audio = audioRef.current;
-        audio.src = src;
-        audio.playbackRate = speed;
-        audio.load();
-
-        // Wait until it can play
-        await new Promise((res, rej) => {
-          const onReady = () => { audio.removeEventListener("canplay", onReady); audio.removeEventListener("error", onErr); res(); };
-          const onErr   = (e) => { audio.removeEventListener("canplay", onReady); audio.removeEventListener("error", onErr); rej(e); };
-          audio.addEventListener("canplay", onReady);
-          audio.addEventListener("error",   onErr);
-          setTimeout(res, 10000); // safety fallback
-        });
-
-        setDuration(audio.duration || 0);
-        setAudioReady(true);
-        setGenerating(false);
-        audio.play().catch(e => { console.warn("play blocked:", e); });
+        if (src) {
+          // Load blob src into our own persistent audio element
+          const audio = audioRef.current;
+          audio.src = src;
+          audio.playbackRate = speed;
+          audio.load();
+          await new Promise((res) => {
+            const done = () => { audio.removeEventListener("canplay", done); res(); };
+            audio.addEventListener("canplay", done);
+            audio.onerror = (e) => { console.warn("[Podcast] audio load error:", e); res(); };
+            setTimeout(res, 12000);
+          });
+          console.log("[Podcast] loaded into our element, duration:", audio.duration);
+          setDuration(audio.duration || 0);
+          setAudioReady(true);
+          setGenerating(false);
+          audio.play().catch(e => console.warn("[Podcast] play error:", e));
+        } else {
+          // src is empty — use puterEl directly as our audio element
+          console.log("[Podcast] no src — using puterEl directly as audio element");
+          // Wire our state listeners onto puterEl
+          const onTime  = () => setCurrentTime(puterEl.currentTime);
+          const onDur   = () => setDuration(puterEl.duration);
+          const onPlay_ = () => setPlaying(true);
+          const onPaus_ = () => setPlaying(false);
+          const onEnd_  = () => { setPlaying(false); setCurrentTime(0); };
+          puterEl.addEventListener("timeupdate",     onTime);
+          puterEl.addEventListener("durationchange", onDur);
+          puterEl.addEventListener("play",           onPlay_);
+          puterEl.addEventListener("pause",          onPaus_);
+          puterEl.addEventListener("ended",          onEnd_);
+          // Store old audio ref for cleanup
+          const oldAudio = audioRef.current;
+          oldAudio.pause(); oldAudio.src = "";
+          audioRef.current = puterEl;
+          puterEl.playbackRate = speed;
+          setDuration(puterEl.duration || 0);
+          setAudioReady(true);
+          setGenerating(false);
+          puterEl.play().catch(e => console.warn("[Podcast] puterEl play:", e));
+        }
 
       } catch(e) {
-        console.warn("Puter TTS failed:", e);
-        // Fallback: use browser voice
-        setGenError(null);
+        console.warn("[Podcast] Puter TTS failed:", e);
+        setGenError("Neural voice failed — switching to browser voice.");
         setGenerating(false);
-        playBrowserVoice(0);
+        setTimeout(() => { setGenError(null); playBrowserVoice(0); }, 1500);
       }
     } else {
       // Browser Web Speech API — record to audio blob via MediaRecorder
