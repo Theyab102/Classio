@@ -6522,9 +6522,12 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
     if (window.speechSynthesis.speaking) { window.speechSynthesis.pause(); setPaused(true); setPlaying(false); }
   };
 
-  // Skip forward/back by roughly 10% of the script
+  // Skip forward/back by 5 seconds
   const skip = (dir) => {
-    const newProg = Math.min(100, Math.max(0, currentProgressRef.current + dir * 10));
+    const wc = script ? script.trim().split(/\s+/).length : 0;
+    const dur = Math.max(1, Math.round((wc / 150) * 60 / speed));
+    const fiveSecPct = (5 / dur) * 100;
+    const newProg = Math.min(100, Math.max(0, currentProgressRef.current + dir * fiveSecPct));
     setProgress(newProg); currentProgressRef.current = newProg;
     if (playing || paused) playFromProgress(newProg);
   };
@@ -6622,10 +6625,10 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
                 ⏹
               </button>
               {/* Skip back 10% */}
-              <button onClick={() => skip(-1)} title="Skip back" disabled={!playing && !paused}
-                style={{ width:40, height:40, borderRadius:"50%", background:"rgba(255,255,255,.08)", border:"none", color:"#a5b4fc", fontSize:15, cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:0, opacity:(!playing&&!paused)?.3:1 }}>
+              <button onClick={() => skip(-1)} title="Skip back"
+                style={{ width:40, height:40, borderRadius:"50%", background:"rgba(255,255,255,.08)", border:"none", color:"#a5b4fc", fontSize:15, cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:0 }}>
                 <span style={{ fontSize:14, lineHeight:1 }}>⏪</span>
-                <span style={{ fontSize:8, color:"#818cf8", lineHeight:1 }}>10%</span>
+                <span style={{ fontSize:8, color:"#818cf8", lineHeight:1 }}>5s</span>
               </button>
               {/* Play / Pause */}
               {!playing ? (
@@ -6640,10 +6643,10 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
                 </button>
               )}
               {/* Skip forward 10% */}
-              <button onClick={() => skip(1)} title="Skip forward" disabled={!playing && !paused}
-                style={{ width:40, height:40, borderRadius:"50%", background:"rgba(255,255,255,.08)", border:"none", color:"#a5b4fc", fontSize:15, cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:0, opacity:(!playing&&!paused)?.3:1 }}>
+              <button onClick={() => skip(1)} title="Skip forward"
+                style={{ width:40, height:40, borderRadius:"50%", background:"rgba(255,255,255,.08)", border:"none", color:"#a5b4fc", fontSize:15, cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:0 }}>
                 <span style={{ fontSize:14, lineHeight:1 }}>⏩</span>
-                <span style={{ fontSize:8, color:"#818cf8", lineHeight:1 }}>10%</span>
+                <span style={{ fontSize:8, color:"#818cf8", lineHeight:1 }}>5s</span>
               </button>
               {/* Voice picker */}
               <button onClick={() => setShowPicker(v => !v)} title="Choose voice"
