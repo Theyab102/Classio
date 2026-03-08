@@ -9238,7 +9238,9 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
     const sc = group?.sharedContent;
     const targetName = sc?.fileName || group?.hostFileName;
     const targetChunks = sc?.fileChunks;
-    if (!targetChunks || !targetName) return;
+    // Only fetch if chunks actually exist (host has shared the file)
+    // If host just uploaded locally, chunks don't exist yet — wait until they share
+    if (!targetChunks || targetChunks === 0 || !targetName) return;
     if (presenterFileObj?.name === targetName) return;
     (async () => {
       for (let attempt = 0; attempt < 5; attempt++) {
@@ -9572,13 +9574,13 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
                         <span style={{ fontSize:18 }}>📎</span>
                         <div style={{ flex:1, minWidth:0 }}>
                           <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.accent }}>
-                            {effectiveGroupFile ? "Shared study file" : "Host's study file"}
+                            Host's study file
                           </p>
                           <p style={{ margin:0, fontSize:11, color:C.muted, overflow:"hidden",
                             textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{shownName}</p>
                         </div>
-                        <span style={{ fontSize:10, color:C.muted, flexShrink:0 }}>
-                          {effectiveGroupFile ? "Ready ✓" : "Loading…"}
+                        <span style={{ fontSize:10, color:C.green, flexShrink:0, fontWeight:700 }}>
+                          ✓ Available
                         </span>
                       </div>
                     ) : (
