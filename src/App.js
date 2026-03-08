@@ -500,6 +500,24 @@ async function extractFileText(fileObj) {
   return null;
 }
 
+// ─── RESPONSIVE HOOK ─────────────────────────────────────────────────────────
+function useResponsive() {
+  const [size, setSize] = useState(() => {
+    const w = window.innerWidth;
+    return w <= 600 ? "phone" : w <= 1024 ? "tablet" : "desktop";
+  });
+  useEffect(() => {
+    const fn = () => {
+      const w = window.innerWidth;
+      setSize(w <= 600 ? "phone" : w <= 1024 ? "tablet" : "desktop");
+    };
+    window.addEventListener("resize", fn);
+    window.addEventListener("orientationchange", fn);
+    return () => { window.removeEventListener("resize", fn); window.removeEventListener("orientationchange", fn); };
+  }, []);
+  return { isMobile: size === "phone", isTablet: size === "tablet", isDesktop: size === "desktop", size };
+}
+
 // ─── COLORS ───────────────────────────────────────────────────────────────────
 const C = {
   bg: "#F7F5F2", surface: "#FFFFFF", border: "#E8E4DF", text: "#1A1714",
@@ -599,21 +617,74 @@ const GS = `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@3
 .hov:hover{opacity:0.82} .card-hov:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.10)!important}
 @keyframes sg-fadein{from{opacity:0;transform:translateX(-50%) translateY(-8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 .card-hov{transition:all .2s} .tab:hover{background:#F0EDE9!important} .row:hover{background:#F7F5F2!important} .row{transition:background .15s}
-@media(max-width:768px){
+
+/* ── RESPONSIVE ─────────────────────────────────────────── */
+/* Touch targets: min 44px */
+button,a,[role=button]{min-height:44px;min-width:44px}
+button.icon-btn{min-height:36px;min-width:36px}
+
+/* Tablets: 600–1024px */
+@media(max-width:1024px){
+  .max-w-page{max-width:100%!important;padding-left:16px!important;padding-right:16px!important}
+  .tablet-stack{flex-direction:column!important}
+  .tablet-grid-2{grid-template-columns:1fr 1fr!important}
+  .header-gap{gap:8px!important}
+}
+
+/* Phones: ≤600px portrait + landscape */
+@media(max-width:600px){
   .desktop-only{display:none!important}
   .mobile-stack{flex-direction:column!important}
   .mobile-full{width:100%!important;max-width:100%!important}
-  .mobile-pad{padding:12px 14px!important}
+  .mobile-pad{padding:10px 12px!important}
   .mobile-small-text{font-size:12px!important}
-  .tab-label{display:none}
+  .tab-label{display:none!important}
   .toolbar-wrap{flex-wrap:wrap;gap:6px!important}
+  .mobile-hide{display:none!important}
+  .mobile-grid-1{grid-template-columns:1fr!important}
+  .mobile-text-sm{font-size:13px!important}
+  /* Page containers */
+  .page-inner{padding:14px 12px!important;max-width:100%!important}
+  /* Nav tabs */
+  .nav-tabs{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .nav-tabs::-webkit-scrollbar{display:none}
+  .nav-tab-btn{padding:12px 12px!important;font-size:12px!important;white-space:nowrap}
+  /* Cards */
+  .card-grid{grid-template-columns:1fr!important}
+  .game-grid{grid-template-columns:1fr 1fr!important}
+  /* Modals */
+  .modal-inner{border-radius:16px 16px 0 0!important;max-height:92vh!important;width:100%!important;margin:0!important;position:fixed!important;bottom:0!important;left:0!important;right:0!important}
+  /* Header */
+  .app-header{padding:0 12px!important;height:52px!important}
+  .app-header .logo-text{font-size:15px!important}
+  /* Bottom nav padding (AdBanner) */
+  .page-with-ad{padding-bottom:60px!important}
+  /* Inputs */
+  .chat-input-row{flex-wrap:wrap;gap:6px!important}
 }
-/* Hard cap on AdSense iframe so it never expands beyond our container */
+
+/* Landscape phones (height < 500px) */
+@media(max-height:500px) and (orientation:landscape){
+  .app-header{height:44px!important}
+  .modal-inner{max-height:85vh!important;border-radius:12px!important;margin:auto!important;position:relative!important;bottom:auto!important}
+  .landscape-scroll{overflow-y:auto;max-height:80vh}
+  .landscape-hide{display:none!important}
+}
+
+/* Shared tablet+phone */
+@media(max-width:1024px){
+  .touch-scroll{-webkit-overflow-scrolling:touch;overflow-x:auto;scrollbar-width:none}
+  .touch-scroll::-webkit-scrollbar{display:none}
+}
+
+/* Hard cap on AdSense iframe */
 ins.adsbygoogle{max-height:46px!important;overflow:hidden!important}
 ins.adsbygoogle iframe{max-height:46px!important}
+
 @keyframes bounce{0%,80%,100%{transform:scale(.8);opacity:.5}40%{transform:scale(1.1);opacity:1}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
 @keyframes sg-pulse{0%,100%{box-shadow:0 0 0 0 rgba(74,124,89,.6)}70%{box-shadow:0 0 0 6px rgba(74,124,89,0)}}
+@keyframes ppbar{0%,100%{transform:scaleY(.4);opacity:.5}50%{transform:scaleY(1);opacity:1}}
 `; 
 
 // Global file object store — survives navigation within the session
@@ -1185,7 +1256,7 @@ export default function App() {
           </div>
         )}
 
-        {homeTab==="folders" && <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))", gap:16 }}>
+        {homeTab==="folders" && <div className="card-grid" className="card-grid" style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:16 }}>
           {folders.map(folder => (
             <div key={folder.id} className="card-hov"
               onClick={() => { setActiveFolder(folder); setScreen("folder"); }}
@@ -3029,10 +3100,10 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
   const TABS = [{ id:"files", label:"Files", icon:I.file },{ id:"ai", label:"AI Assistant", icon:I.ai }];
 
   return (
-    <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif" }}>
+    <div className="page-with-ad" style={{ minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif" }}>
       <style>{GS}</style>
       {/* Top bar */}
-      <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", height:64, display:"flex", alignItems:"center", gap:16 }}>
+      <div className="app-header" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 16px", minHeight:52, display:"flex", alignItems:"center", gap:10 }}>
         <button onClick={onBack} className="hov" style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14 }}>
           <Icon d={I.back} size={18} color={C.muted} /> Back
         </button>
@@ -3087,7 +3158,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
         ))}
       </div>
 
-      <div style={{ maxWidth:860, margin:"0 auto", padding:"32px 24px" }}>
+      <div className="page-inner max-w-page" style={{ maxWidth:860, margin:"0 auto", padding:"28px 20px" }}>
         {tab === "files" && (
           <>
             <div onDragOver={e=>{e.preventDefault();setDragging(true);}} onDragLeave={()=>setDragging(false)}
@@ -3160,9 +3231,9 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
   const fc = getFileColor(file);
 
   return (
-    <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif" }}>
+    <div className="page-with-ad" style={{ minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif" }}>
       <style>{GS}</style>
-      <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", height:64, display:"flex", alignItems:"center", gap:14 }}>
+      <div className="app-header" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 16px", minHeight:52, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
         <button onClick={onBack} className="hov" style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14 }}>
           <Icon d={I.back} size={18} color={C.muted} /> {folder.name}
         </button>
@@ -3172,17 +3243,17 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
         </div>
         <span style={{ fontSize:15, fontWeight:600, color:C.text, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{file.name}</span>
       </div>
-      <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", display:"flex", gap:4 }}>
+      <div className="nav-tabs touch-scroll" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 8px", display:"flex", gap:0 }}>
         {TABS.map(t => (
           <button key={t.id} className="tab" onClick={() => setTab(t.id)}
-            style={{ display:"flex", alignItems:"center", gap:7, padding:"14px 18px", border:"none", borderBottom:tab===t.id?`2px solid ${C.accent}`:"2px solid transparent", background:"none", cursor:"pointer", fontSize:14, fontWeight:tab===t.id?700:500, color:tab===t.id?C.accent:C.muted, marginBottom:-1 }}>
+            className="nav-tab-btn" style={{ display:"flex", alignItems:"center", gap:6, padding:"12px 14px", border:"none", borderBottom:tab===t.id?`2px solid ${C.accent}`:"2px solid transparent", background:"none", cursor:"pointer", fontSize:13, fontWeight:tab===t.id?700:500, color:tab===t.id?C.accent:C.muted, marginBottom:-1, whiteSpace:"nowrap" }}>
             <Icon d={t.icon} size={15} color={tab===t.id?C.accent:C.muted} />{t.label}
           </button>
         ))}
       </div>
       {tab==="view"
         ? <ViewTab file={file} onUpdate={onUpdate} />
-        : <div style={{ maxWidth:900, margin:"0 auto", padding:"32px 24px" }}>
+        : <div className="page-inner max-w-page" style={{ maxWidth:900, margin:"0 auto", padding:"28px 20px" }}>
             {tab==="notes" && <NotesTab key={file.id} file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} />}
             {tab==="voice" && <VoicePodcastTab file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} />}
             {tab==="cards" && <CardsTab file={file} onUpdate={onUpdate} />}
@@ -3212,6 +3283,7 @@ function ViewTab({ file, onUpdate }) {
   const drawRef    = useRef(null);
   const renderRef  = useRef(null);
   const pdfRef     = useRef(null);
+  const { isMobile } = useResponsive();
   const [totalPages, setTotalPages] = useState(0);
   const [pageNum,    setPageNum]    = useState(1);
   const [pdfReady,   setPdfReady]   = useState(false);
@@ -3738,6 +3810,7 @@ function DownloadViewer({ fileObj, fileName }) {
 
 
 function AITab({ file, allFiles, folder, onUpdate }) {
+  const { isMobile } = useResponsive();
   const [msgs, setMsgs] = useState([]);
   const [inp, setInp] = useState("");
   const [loading, setLoading] = useState(false);
@@ -3969,6 +4042,7 @@ const LANG_OPTIONS = [["en-US","English (US)"],["en-GB","English (UK)"],["ar-SA"
 // ─── VOICE & PODCAST TAB ─────────────────────────────────────────────────────
 // All audio features: Voice Notes recording + Podcast player
 function VoicePodcastTab({ file, user, isGuest, onUpdate }) {
+  const { isMobile } = useResponsive();
   const [subTab, setSubTab] = useState("record"); // "record" | "podcast"
   const [lang, setLang] = useState("en-US");
 
@@ -4214,7 +4288,7 @@ ${notesText.slice(0, 10000)}`,
 
       {/* Sub-tabs */}
       <div style={{ display:"flex", gap:8, marginBottom:22, borderBottom:`1.5px solid ${C.border}`, paddingBottom:12 }}>
-        {[{id:"record",label:"Voice Notes"},{id:"podcast",label:"Study Podcast"}].map(t => (
+        {[{id:"record",label:"Voice Notes"},{id:"podcast",label:"Podcast"}].map(t => (
           <button key={t.id} onClick={() => setSubTab(t.id)} style={{
             padding:"8px 20px", borderRadius:20, border:"none", cursor:"pointer",
             fontWeight:700, fontSize:13,
@@ -4393,6 +4467,7 @@ function VoiceNotesTab({ file, user, isGuest, notes, onNotesUpdate,
 function NotesTab({ file, onUpdate, user, isGuest }) {
   // Notes start empty — user must load a saved note or generate new ones
   // (unsaved notes are NOT persisted when leaving the file)
+  const { isMobile } = useResponsive();
   const [notes,    setNotes]   = useState("");
   const [unsaved,  setUnsaved]  = useState(false);  // track unsaved changes
   const [gen,      setGen]     = useState(false);
@@ -4676,6 +4751,7 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
 
 // ─── STUDY CARDS TAB ──────────────────────────────────────────────────────────
 function CardsTab({ file, onUpdate }) {
+  const { isMobile } = useResponsive();
   const [cards, setCards] = useState(file.studyCards||[]);
   const [flipped, setFlipped] = useState({});
   const [gen, setGen] = useState(false);
@@ -4735,7 +4811,7 @@ function CardsTab({ file, onUpdate }) {
               </button>
             ))}
           </div>
-          <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+          <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
             <div style={{ display:"flex", alignItems:"center", gap:8, flex:1 }}>
               <span style={{ fontSize:13, color:C.muted }}>Custom:</span>
               <input type="number" min="0" max="50" value={cardCount} onChange={e => setCardCount(Math.min(50, Math.max(0, parseInt(e.target.value)||0)))}
@@ -4857,7 +4933,7 @@ function GameTab({ file }) {
     <div style={{ maxWidth:760, margin:"0 auto" }}>
       <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:26, fontWeight:700, color:C.text, marginBottom:6 }}>Game Mode</h2>
       <p style={{ fontSize:14, color:C.muted, marginBottom:28 }}>{cards.length} cards ready · Choose a game</p>
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))", gap:14 }}>
+      <div className="game-grid" style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(auto-fill,minmax(160px,1fr))", gap:14 }}>
         {GAMES.map(g => (
           <button key={g.id} onClick={()=>setActiveGame(g.id)}
             style={{ background:g.bg, border:`1.5px solid ${g.accent}22`, borderRadius:18, padding:"20px 18px", textAlign:"left", cursor:"pointer", transition:"transform .15s,box-shadow .15s" }}
@@ -4884,7 +4960,7 @@ function GHeader({ title, score, curr, total, onBack, accent }) {
         <span style={{ fontSize:14, fontWeight:700, color:accent }}>Score: {score}</span>
       </div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-        <h3 style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:700, color:C.text }}>{title}</h3>
+        <h3 className="logo-text" style={{ fontFamily:"'Fraunces',serif", fontSize:18, fontWeight:700, color:C.text, whiteSpace:"nowrap" }}>{title}</h3>
         <span style={{ fontSize:13, color:C.muted }}>{curr+1}/{total}</span>
       </div>
       <div style={{ height:5, background:C.border, borderRadius:3 }}>
@@ -5200,7 +5276,7 @@ function Match({ cards, onBack }) {
   if(done) return <GResults score={score} total={deck.length} onBack={onBack} />;
   const bs=(isSel,isMat,isWrong,col)=>({ background:isMat?C.greenL:isWrong?C.redL:isSel?col+"22":C.surface, border:`1.5px solid ${isMat?C.green:isWrong?C.red:isSel?col:C.border}`, borderRadius:10, padding:"10px 12px", fontSize:13, color:isMat?C.green:isWrong?C.red:C.text, cursor:isMat?"default":"pointer", textAlign:"left", lineHeight:1.4, transition:"all .2s", fontWeight:isSel?600:400, opacity:isMat?.7:1 });
   return (
-    <div style={{ maxWidth:680, margin:"0 auto" }}>
+    <div className="max-w-page" style={{ maxWidth:680, margin:"0 auto" }}>
       <GHeader title="Matching Pairs" score={score} curr={matched.length} total={deck.length} onBack={onBack} accent={C.green} />
       <p style={{ fontSize:13, color:C.muted, marginBottom:16, textAlign:"center" }}>Match each term to its definition</p>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
@@ -5277,7 +5353,7 @@ function Tower({ cards, onBack }) {
   };
   if(done) return <GResults score={tower.length} total={deck.length} onBack={onBack} msg="Tower Built!" />;
   return (
-    <div style={{ maxWidth:600, margin:"0 auto", display:"flex", gap:24 }}>
+    <div className="max-w-page mobile-stack" style={{ maxWidth:600, margin:"0 auto", display:"flex", gap:16 }}>
       <div style={{ flex:1 }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
           <button onClick={onBack} style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14 }}><Icon d={I.back} size={16} color={C.muted} /> Games</button>
@@ -6619,7 +6695,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
       ) : (
         <>
           {/* Seekable progress bar */}
-          <div style={{ padding:"0 22px 8px" }}>
+          <div style={{ padding:"0 16px 8px" }}>
             <div ref={progressBarRef}
               onClick={seekFromEvent}
               onMouseDown={e => { setIsDragging(true); seekFromEvent(e); }}
@@ -6648,8 +6724,8 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
           </div>
 
           {/* Transport controls */}
-          <div style={{ padding:"8px 22px 14px" }}>
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:14, marginBottom:14 }}>
+          <div style={{ padding:"8px 16px 12px" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:10, marginBottom:12, flexWrap:"wrap" }}>
 
               {/* Stop */}
               <button onClick={stop} title="Stop"
@@ -6740,7 +6816,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
             )}
 
             {/* Speed controls */}
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:4, flexWrap:"wrap" }}>
               <span style={{ fontSize:10, fontWeight:800, color:"#4b5563", marginRight:3, letterSpacing:1 }}>SPEED</span>
               {SPEEDS.map(s => (
                 <button key={s} onClick={() => changeSpeed(s)}
@@ -9712,6 +9788,7 @@ function SGBottomBar({ groupId, db, group, user, isHost, canPresent, voiceState,
 
 // ── Main Study Group Room ─────────────────────────────────────────────────────
 function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
+  const { isMobile, isTablet } = useResponsive();
   const [group,     setGroup]     = useState(null);
   const [messages,  setMessages]  = useState([]);
   const [chatInput, setChatInput] = useState("");
@@ -10201,9 +10278,13 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
 
         {/* ── Right sidebar ── */}
         <div style={{
-          width: 264, flexShrink: 0,
-          background: C.surface, borderLeft: `1px solid ${C.border}`,
+          width: isMobile ? "100%" : isTablet ? 220 : 264,
+          flexShrink: 0,
+          background: C.surface,
+          borderLeft: isMobile ? "none" : `1px solid ${C.border}`,
+          borderTop: isMobile ? `1px solid ${C.border}` : "none",
           display: "flex", flexDirection: "column", overflow: "hidden",
+          maxHeight: isMobile ? 200 : "none",
         }}>
           {/* Tab bar */}
           <div style={{ flexShrink: 0, display: "flex", borderBottom: `1px solid ${C.border}` }}>
