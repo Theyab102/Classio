@@ -49,7 +49,7 @@ async function callClaudeChat(system, messages) {
     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_KEY}` },
     body: JSON.stringify({
       model: "llama-3.3-70b-versatile",
-      messages: [{ role: "system", content: system }, ...messages],
+      messages: [{ role: "system", content: system + "\n\nIMPORTANT: Always reply in the SAME language the user wrote in. If Arabic → Arabic. If French → French. Match exactly." }, ...messages],
       max_tokens: 1200,
     }),
   });
@@ -79,7 +79,7 @@ async function callClaudeVision(system, messages, imageBase64) {
     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_KEY}` },
     body: JSON.stringify({
       model: "meta-llama/llama-4-scout-17b-16e-instruct",
-      messages: [{ role: "system", content: system }, ...msgsWithImage],
+      messages: [{ role: "system", content: system + "\n\nIMPORTANT: Always reply in the SAME language the user wrote in. Match exactly." }, ...msgsWithImage],
       max_tokens: 2000,
     }),
   });
@@ -685,6 +685,244 @@ function stripBlobs(flds) {
   }));
 }
 
+// ─── STANDALONE AI ASSISTANT ─────────────────────────────────────────────────
+function StandaloneAI({ onClose }) {
+  const [msgs, setMsgs] = useState([]);
+  const [inp, setInp] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [attachedImage, setAttachedImage] = useState(null);
+  const imgInputRef = useRef(null);
+  const bottomRef = useRef(null);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:"smooth" }); }, [msgs]);
+  const attachImage = (f) => {
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = e => setAttachedImage({ base64: e.target.result, name: f.name });
+    r.readAsDataURL(f);
+  };
+  const send = async () => {
+    const text = inp.trim();
+    if ((!text && !attachedImage) || loading) return;
+    const content = text || "Analyze this image and explain or solve it.";
+    const userMsg = { role:"user", content, image: attachedImage?.base64 };
+    const newMsgs = [...msgs, userMsg];
+    setMsgs(newMsgs); setInp(""); setLoading(true);
+    const imgToSend = attachedImage?.base64 || null;
+    setAttachedImage(null);
+    try {
+      const sys = "You are Classio AI, a smart study assistant. Help students with any question — solve problems, explain concepts, analyze images of questions or diagrams. Be clear and concise. No asterisks, no markdown.";
+      const apiMsgs = newMsgs.map(m => ({ role:m.role, content:m.content }));
+      const reply = imgToSend
+        ? await callClaudeVision(sys, apiMsgs, imgToSend)
+        : await callClaudeChat(sys, apiMsgs);
+      setMsgs([...newMsgs, { role:"assistant", content: reply }]);
+    } catch(e) { setMsgs([...newMsgs, { role:"assistant", content:"Error: " + e.message }]); }
+    setLoading(false);
+  };
+  return (
+    <div style={{ position:"fixed", inset:0, zIndex:3000, background:"rgba(26,23,20,.55)",
+      backdropFilter:"blur(4px)", display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div style={{ background:C.bg, borderRadius:22, width:"100%", maxWidth:680,
+        height:"85vh", display:"flex", flexDirection:"column",
+        boxShadow:"0 24px 80px rgba(0,0,0,.2)", border:`1px solid ${C.border}` }}>
+        {/* Header */}
+        <div style={{ display:"flex", alignItems:"center", gap:12, padding:"16px 20px",
+          borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
+          <div style={{ width:40, height:40, borderRadius:12,
+            background:"linear-gradient(135deg,#6366f1,#8b5cf6)",
+            display:"flex", alignItems:"center", justifyContent:"center", fontSize:20 }}>🤖</div>
+          <div style={{ flex:1 }}>
+            <p style={{ margin:0, fontSize:16, fontWeight:700, color:C.text }}>AI Assistant</p>
+            <p style={{ margin:0, fontSize:12, color:C.muted }}>Ask anything · Attach images · Replies in your language</p>
+          </div>
+          <button onClick={onClose} style={{ background:C.surface, border:`1px solid ${C.border}`,
+            borderRadius:"50%", width:32, height:32, cursor:"pointer", fontSize:18,
+            color:C.muted, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
+        </div>
+        {/* Messages */}
+        <div style={{ flex:1, overflowY:"auto", padding:"16px 20px",
+          display:"flex", flexDirection:"column", gap:12 }}>
+          {msgs.length === 0 && (
+            <div style={{ textAlign:"center", padding:"32px 16px" }}>
+              <div style={{ fontSize:52, marginBottom:14 }}>🤖</div>
+              <p style={{ fontSize:17, fontWeight:700, color:C.text, marginBottom:8 }}>Classio AI</p>
+              <p style={{ fontSize:13, color:C.muted, lineHeight:1.7, maxWidth:320, margin:"0 auto 24px" }}>
+                Ask me anything! Solve problems, explain concepts, or send a photo of a question.
+              </p>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, maxWidth:360, margin:"0 auto", textAlign:"left" }}>
+                {[["📸","Photo of a question","Take a photo — I'll solve it"],
+                  ["🧮","Math & Science","Step-by-step solutions"],
+                  ["📝","Explain concepts","Clear simple explanations"],
+                  ["🌍","Any language","Reply in your language"]].map(([ic,ti,de])=>(
+                  <div key={ti} style={{ background:C.surface, border:`1px solid ${C.border}`,
+                    borderRadius:12, padding:"12px 14px" }}>
+                    <p style={{ margin:"0 0 4px", fontSize:20 }}>{ic}</p>
+                    <p style={{ margin:"0 0 2px", fontSize:12, fontWeight:700, color:C.text }}>{ti}</p>
+                    <p style={{ margin:0, fontSize:11, color:C.muted, lineHeight:1.4 }}>{de}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {msgs.map((m,i)=>(
+            <div key={i} style={{ display:"flex", justifyContent:m.role==="user"?"flex-end":"flex-start",
+              alignItems:"flex-end", gap:8 }}>
+              {m.role==="assistant" && (
+                <div style={{ width:28,height:28,borderRadius:8,
+                  background:"linear-gradient(135deg,#6366f1,#8b5cf6)",
+                  display:"flex",alignItems:"center",justifyContent:"center",
+                  fontSize:13,flexShrink:0 }}>🤖</div>
+              )}
+              <div style={{ maxWidth:"75%", borderRadius:16, overflow:"hidden",
+                background:m.role==="user"?C.accent:C.surface,
+                border:m.role==="user"?"none":`1px solid ${C.border}` }}>
+                {m.image && <img src={m.image} alt="attached"
+                  style={{ display:"block", width:"100%", maxWidth:320, maxHeight:200,
+                    objectFit:"contain", background:"#111" }} />}
+                <div style={{ padding:"10px 14px", color:m.role==="user"?"#fff":C.text,
+                  fontSize:14, lineHeight:1.7 }}><Fmt text={m.content} /></div>
+              </div>
+            </div>
+          ))}
+          {loading && (
+            <div style={{ display:"flex", alignItems:"flex-end", gap:8 }}>
+              <div style={{ width:28,height:28,borderRadius:8,
+                background:"linear-gradient(135deg,#6366f1,#8b5cf6)",
+                display:"flex",alignItems:"center",justifyContent:"center",fontSize:13 }}>🤖</div>
+              <div style={{ display:"flex", gap:5, padding:"12px 14px", background:C.surface,
+                borderRadius:16, border:`1px solid ${C.border}` }}>
+                {[0,1,2].map(j=><div key={j} style={{ width:7,height:7,borderRadius:"50%",
+                  background:C.accent,animation:"bounce 1.2s infinite",animationDelay:`${j*.2}s` }}/>)}
+              </div>
+            </div>
+          )}
+          <div ref={bottomRef}/>
+        </div>
+        {/* Image preview */}
+        {attachedImage && (
+          <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 20px",
+            background:C.accentL, borderTop:`1px solid ${C.accentS}`, flexShrink:0 }}>
+            <img src={attachedImage.base64} alt="preview"
+              style={{ width:44,height:44,objectFit:"cover",borderRadius:8,flexShrink:0 }}/>
+            <div style={{ flex:1, minWidth:0 }}>
+              <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.accent }}>Image attached</p>
+              <p style={{ margin:0, fontSize:11, color:C.muted, overflow:"hidden",
+                textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{attachedImage.name}</p>
+            </div>
+            <button onClick={()=>setAttachedImage(null)}
+              style={{ background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:20 }}>×</button>
+          </div>
+        )}
+        {/* Input */}
+        <div style={{ display:"flex", gap:8, padding:"14px 20px",
+          borderTop:`1px solid ${C.border}`, flexShrink:0 }}>
+          <button onClick={()=>imgInputRef.current?.click()} title="Attach image"
+            style={{ flexShrink:0, width:44, height:44, borderRadius:12,
+              border:`1.5px solid ${attachedImage?C.accent:C.border}`,
+              background:attachedImage?C.accentL:C.bg, cursor:"pointer", fontSize:20,
+              display:"flex", alignItems:"center", justifyContent:"center" }}>📷</button>
+          <input ref={imgInputRef} type="file" accept="image/*" style={{ display:"none" }}
+            onChange={e=>{ attachImage(e.target.files?.[0]); e.target.value=""; }}/>
+          <input value={inp} onChange={e=>setInp(e.target.value)}
+            onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); }}}
+            placeholder={attachedImage?"Ask about the image… (or just press Send)":"Ask anything…"}
+            style={{ flex:1, border:`1.5px solid ${C.border}`, borderRadius:12,
+              padding:"11px 16px", fontSize:14, outline:"none", background:C.bg, color:C.text }}/>
+          <button onClick={send} disabled={(!inp.trim()&&!attachedImage)||loading}
+            style={{ flexShrink:0,
+              background:(inp.trim()||attachedImage)&&!loading?C.accent:"#ccc",
+              color:"#fff", border:"none", borderRadius:12, padding:"11px 22px",
+              fontSize:14, fontWeight:700,
+              cursor:(inp.trim()||attachedImage)&&!loading?"pointer":"not-allowed" }}>
+            Send
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── ABOUT / GUIDE TAB ────────────────────────────────────────────────────────
+function AboutTab() {
+  const features = [
+    { icon:"📁", title:"Folders & Files", desc:"Organise study materials into folders. Upload PDFs, Word docs, PowerPoints, images, and text files. Everything is saved to your account." },
+    { icon:"🤖", title:"AI Assistant", desc:"Ask the AI anything — type a question or attach a photo of a problem. No file needed. Replies in whatever language you write in." },
+    { icon:"📝", title:"AI Notes", desc:"Generate notes from any file in 4 styles: Summary, Detailed, Bullet Points, or Q&A. The AI reads your file and writes structured notes instantly." },
+    { icon:"🃏", title:"Study Cards", desc:"Auto-generate up to 50 flashcards from your files. Flip to reveal answers. Great for memorising key concepts fast." },
+    { icon:"🎮", title:"14+ Study Games", desc:"MCQ, Speed Round, Elimination, Memory Match, True/False, Listening Game, Quiz Show, and more — all generated from your material." },
+    { icon:"👥", title:"Study Groups", desc:"Create or join a live session. Present files, share whiteboards, run multiplayer quizzes, and voice chat with friends in real time." },
+    { icon:"🎙️", title:"Voice Notes", desc:"Record yourself or a lecture — the app transcribes it into written notes automatically." },
+    { icon:"🎧", title:"AI Podcast", desc:"Turn any file into a spoken podcast. Two AI hosts discuss your material so you can learn while listening." },
+    { icon:"✏️", title:"Annotations", desc:"Highlight and annotate any file directly inside the app. Add comments and review them later." },
+    { icon:"🌍", title:"16 Languages", desc:"Full support for Arabic, French, Spanish, German, Chinese, Japanese, and 10 more. The AI always replies in the language you write in." },
+  ];
+  const steps = [
+    { n:"1", title:"Create a folder", desc:"Tap New Folder and name it after your subject — Physics, Maths, History, etc." },
+    { n:"2", title:"Upload your file", desc:"Open the folder, upload your study material: PDF, PowerPoint, Word doc, or image." },
+    { n:"3", title:"Generate with AI", desc:"Open the file and go to the AI tab to instantly create notes, flashcards, or a quiz game." },
+    { n:"4", title:"Study with friends", desc:"Tap Study Group, share your invite code, and study together with live voice chat and shared content." },
+    { n:"5", title:"Ask AI anything", desc:"Hit the AI Assistant button on the home screen to ask any question or send a photo of a problem — no file needed." },
+  ];
+  return (
+    <div style={{ paddingBottom:40 }}>
+      <div style={{ textAlign:"center", padding:"36px 20px 28px",
+        background:`linear-gradient(135deg,${C.accentL} 0%,${C.bg} 100%)`,
+        borderRadius:20, marginBottom:28, border:`1px solid ${C.accentS}` }}>
+        <div style={{ fontSize:52, marginBottom:12 }}>📚</div>
+        <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:26, fontWeight:700,
+          color:C.text, margin:"0 0 10px" }}>Welcome to Classio</h2>
+        <p style={{ fontSize:14, color:C.muted, maxWidth:460, margin:"0 auto", lineHeight:1.7 }}>
+          Your AI-powered study companion. Upload your materials, generate notes and flashcards,
+          play study games, and collaborate with friends — all in one place.
+        </p>
+      </div>
+      <h3 style={{ fontFamily:"'Fraunces',serif", fontSize:18, fontWeight:700, color:C.text, marginBottom:14 }}>🚀 How to get started</h3>
+      <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:32 }}>
+        {steps.map(s=>(
+          <div key={s.n} style={{ display:"flex", alignItems:"flex-start", gap:14,
+            background:C.surface, border:`1px solid ${C.border}`, borderRadius:14, padding:"14px 16px" }}>
+            <div style={{ width:32,height:32,borderRadius:10,background:C.accent,
+              display:"flex",alignItems:"center",justifyContent:"center",
+              fontSize:14,fontWeight:800,color:"#fff",flexShrink:0 }}>{s.n}</div>
+            <div>
+              <p style={{ margin:"0 0 3px", fontSize:14, fontWeight:700, color:C.text }}>{s.title}</p>
+              <p style={{ margin:0, fontSize:13, color:C.muted, lineHeight:1.5 }}>{s.desc}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+      <h3 style={{ fontFamily:"'Fraunces',serif", fontSize:18, fontWeight:700, color:C.text, marginBottom:14 }}>✨ All Features</h3>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(250px,1fr))", gap:12, marginBottom:28 }}>
+        {features.map(f=>(
+          <div key={f.title} style={{ background:C.surface, border:`1px solid ${C.border}`,
+            borderRadius:16, padding:"16px 14px" }}>
+            <p style={{ fontSize:26, margin:"0 0 8px" }}>{f.icon}</p>
+            <p style={{ margin:"0 0 5px", fontSize:14, fontWeight:700, color:C.text }}>{f.title}</p>
+            <p style={{ margin:0, fontSize:13, color:C.muted, lineHeight:1.55 }}>{f.desc}</p>
+          </div>
+        ))}
+      </div>
+      <div style={{ background:C.warmL, border:`1px solid ${C.warm}44`,
+        borderRadius:16, padding:"16px 18px" }}>
+        <p style={{ margin:"0 0 10px", fontSize:14, fontWeight:700, color:C.warm }}>💡 Pro Tips</p>
+        <div style={{ display:"flex", flexDirection:"column", gap:7 }}>
+          {["Link related files (e.g. lecture notes + past paper) so the AI reads both at once.",
+            "In Study Groups, give a friend presenter rights so they can run AI tools too.",
+            "Send a photo of a handwritten question — the AI will read and solve it.",
+            "The AI always replies in your language. Write in Arabic, get Arabic answers.",
+            "Use the AI Podcast feature to listen to your notes while commuting or exercising."
+          ].map((tip,i)=>(
+            <div key={i} style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
+              <span style={{ color:C.warm, flexShrink:0, marginTop:1 }}>•</span>
+              <p style={{ margin:0, fontSize:13, color:C.text, lineHeight:1.5 }}>{tip}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [user, setUser] = useState(undefined);
   const [isGuest, setIsGuest] = useState(false);
@@ -694,6 +932,8 @@ export default function App() {
   const [activeFolder, setActiveFolder] = useState(null);
   const [activeFile, setActiveFile] = useState(null);
   const [showNewFolder, setShowNewFolder] = useState(false);
+  const [homeTab, setHomeTab] = useState("folders");
+  const [showHomeAI, setShowHomeAI] = useState(false);
   const [newName, setNewName] = useState("");
   const [newColor,       setNewColor]       = useState(FOLDER_COLORS[0]);
   const [showFolderPicker,setShowFolderPicker] = useState(false);
@@ -881,38 +1121,68 @@ export default function App() {
       />}
       <AdBanner />
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 14px" }}>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: 32 }}>
-          <div>
-            <h1 style={{ fontFamily:"'Fraunces',serif", fontSize: 32, fontWeight: 700, color: C.text, letterSpacing: -1 }}>My Folders</h1>
-            <p style={{ fontSize: 14, color: C.muted, marginTop: 4 }}>{folders.length === 0 ? "Create your first folder to get started" : `${folders.length} folder${folders.length !== 1 ? "s" : ""}`}</p>
+        {/* ── Nav bar: tabs + action buttons ── */}
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:20, flexWrap:"wrap" }}>
+          <div style={{ display:"flex", background:C.surface, borderRadius:12,
+            border:`1px solid ${C.border}`, padding:3, gap:2 }}>
+            {[["folders","📁 Folders"],["about","ℹ️ About"]].map(([id,label])=>(
+              <button key={id} onClick={()=>setHomeTab(id)}
+                style={{ padding:"7px 18px", borderRadius:9, fontSize:13, fontWeight:700,
+                  border:"none", cursor:"pointer", transition:"all .15s",
+                  background:homeTab===id?C.accent:"transparent",
+                  color:homeTab===id?"#fff":C.muted }}>
+                {label}
+              </button>
+            ))}
           </div>
-          <div style={{ display:"flex", gap:8 }}>
-            <button onClick={() => setShowStudyGroupLobby(true)} className="hov"
-              style={{ display:"flex", alignItems:"center", gap:7, background:"#7c3aed", color:"#fff", border:"none", borderRadius:12, padding:"10px 18px", fontSize:14, fontWeight:600, cursor:"pointer", boxShadow:"0 4px 14px rgba(124,58,237,.35)" }}>
-              👥 Study Group
+          <div style={{ flex:1 }}/>
+          <button onClick={()=>setShowHomeAI(true)} className="hov"
+            style={{ display:"flex", alignItems:"center", gap:7,
+              background:"linear-gradient(135deg,#6366f1,#8b5cf6)",
+              color:"#fff", border:"none", borderRadius:12, padding:"10px 18px",
+              fontSize:14, fontWeight:600, cursor:"pointer",
+              boxShadow:"0 4px 14px rgba(99,102,241,.4)" }}>
+            🤖 AI Assistant
+          </button>
+          <button onClick={()=>setShowStudyGroupLobby(true)} className="hov"
+            style={{ display:"flex", alignItems:"center", gap:7, background:"#7c3aed",
+              color:"#fff", border:"none", borderRadius:12, padding:"10px 18px",
+              fontSize:14, fontWeight:600, cursor:"pointer",
+              boxShadow:"0 4px 14px rgba(124,58,237,.35)" }}>
+            👥 Study Group
+          </button>
+          {homeTab==="folders" && (
+            <button onClick={()=>setShowNewFolder(true)} className="hov"
+              style={{ display:"flex", alignItems:"center", gap:8, background:C.accent,
+                color:"#fff", border:"none", borderRadius:12, padding:"10px 20px",
+                fontSize:14, fontWeight:600, cursor:"pointer" }}>
+              <Icon d={I.plus} size={16} color="#fff" sw={2.5}/> New Folder
             </button>
-            <button onClick={() => setShowNewFolder(true)} className="hov"
-              style={{ display:"flex", alignItems:"center", gap: 8, background: C.accent, color:"#fff", border:"none", borderRadius: 12, padding:"10px 20px", fontSize: 14, fontWeight: 600, cursor:"pointer" }}>
-              <Icon d={I.plus} size={16} color="#fff" sw={2.5} /> New Folder
-            </button>
-          </div>
+          )}
         </div>
+        {homeTab==="folders" && (
+          <p style={{ fontSize:14, color:C.muted, marginBottom:20 }}>
+            {folders.length===0?"Create your first folder to get started":`${folders.length} folder${folders.length!==1?"s":""}`}
+          </p>
+        )}
 
-        {folders.length === 0 && (
+        {homeTab==="about" && <AboutTab/>}
+
+        {homeTab==="folders" && folders.length===0 && (
           <div style={{ textAlign:"center", padding:"80px 0" }}>
-            <div style={{ width:80, height:80, background: C.accentL, borderRadius:24, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 20px" }}>
-              <Icon d={I.folder} size={36} color={C.accent} />
+            <div style={{ width:80, height:80, background:C.accentL, borderRadius:24, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 20px" }}>
+              <Icon d={I.folder} size={36} color={C.accent}/>
             </div>
             <p style={{ fontSize:18, fontWeight:600, color:C.text, marginBottom:8 }}>No folders yet</p>
             <p style={{ fontSize:14, color:C.muted, maxWidth:280, margin:"0 auto 24px" }}>Create a folder for each subject to organise your files</p>
-            <button onClick={() => setShowNewFolder(true)} className="hov"
+            <button onClick={()=>setShowNewFolder(true)} className="hov"
               style={{ background:C.accent, color:"#fff", border:"none", borderRadius:10, padding:"10px 24px", fontSize:14, fontWeight:600, cursor:"pointer" }}>
               Create First Folder
             </button>
           </div>
         )}
 
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))", gap:16 }}>
+        {homeTab==="folders" && <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))", gap:16 }}>
           {folders.map(folder => (
             <div key={folder.id} className="card-hov"
               onClick={() => { setActiveFolder(folder); setScreen("folder"); }}
@@ -936,7 +1206,10 @@ export default function App() {
               <p style={{ fontSize:13, color:C.muted }}>{folder.files.length} file{folder.files.length !== 1 ? "s" : ""}</p>
             </div>
           ))}
-        </div>
+        </div>}
+
+      {showHomeAI && <StandaloneAI onClose={() => setShowHomeAI(false)} />}
+
       </div>
 
       {showNewFolder && (
