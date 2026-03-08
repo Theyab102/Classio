@@ -6768,32 +6768,23 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
 
   const play = () => {
     if (!script || loading) return;
-    const p = personaRef.current || GLOBAL_PERSONAS[0];
     if (paused) {
-      if (p.engine === "puter") {
-        // Puter can't resume — restart from current position
-        playFromProgress(currentProgressRef.current);
-      } else {
-        window.speechSynthesis.resume(); setPlaying(true); setPaused(false);
-      }
+      // Always restart from saved position — browser speechSynthesis.resume() is unreliable
+      playFromProgress(currentProgressRef.current);
       return;
     }
     playFromProgress(progress >= 100 ? 0 : progress);
   };
 
   const pause = () => {
-    const p = personaRef.current || GLOBAL_PERSONAS[0];
-    if (p.engine === "puter") {
-      // Increment gen to stop the sequence loop, then stop all audios
-      puterGenRef.current += 1;
-      puterAudiosRef.current.forEach(a => { try { a.pause(); a.currentTime = 0; a.src = ""; } catch(e){} });
-      puterAudiosRef.current = [];
-      stopProgressTimer();
-      setPuterLoading(false);
-      setPaused(true); setPlaying(false);
-    } else {
-      if (window.speechSynthesis.speaking) { window.speechSynthesis.pause(); setPaused(true); setPlaying(false); }
-    }
+    // Save exact position, then cancel everything — don't use speechSynthesis.pause()
+    // because it keeps running silently in the background
+    const savedProg = currentProgressRef.current;
+    stopAll();
+    setProgress(savedProg);
+    currentProgressRef.current = savedProg;
+    setPaused(true);
+    setPlaying(false);
   };
 
   // Skip forward/back by 5 seconds
