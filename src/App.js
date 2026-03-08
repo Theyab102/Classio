@@ -7609,211 +7609,220 @@ Math: proper notation (1×10⁻¹⁰ not words, H₂O not words). Units: standar
 // Each member connects directly to each other member (full mesh).
 // Signaling stored under studyGroups/{gid}/voice/{uid_A}_{uid_B}
 // ═══════════════════════════════════════════════════════════════════════════════
-function SGVoiceChat({ groupId, db, user, members }) {
-  const [joined,   setJoined]   = useState(false);
+// ═══════════════════════════════════════════════════════════════════════════════
+// VOICE CHAT — auto-joins on mount, exposes state via onStateChange callback
+// muted    = your mic is off  (others can't hear you)
+// deafened = others' audio is silenced locally (only you)
+// ═══════════════════════════════════════════════════════════════════════════════
+function SGVoiceChat({ groupId, db, user, members, onStateChange }) {
   const [muted,    setMuted]    = useState(false);
+  const [deafened, setDeafened] = useState(false);
   const [speaking, setSpeaking] = useState(false);
-  const [peers,    setPeers]    = useState({}); // uid → { pc, speaking }
-  const localStreamRef = useRef(null);
-  const pcsRef         = useRef({});    // uid → RTCPeerConnection
-  const audioCtxRef    = useRef(null);
-  const analyserRef    = useRef(null);
-  const vadRaf         = useRef(null);
-  const unsubsRef      = useRef([]);
-  const remoteAudiosRef = useRef({}); // uid → <audio> element
+  const [ready,    setReady]    = useState(false);   // mic acquired
+  const [error,    setError]    = useState("");
 
-  const STUN = { iceServers:[{urls:"stun:stun.l.google.com:19302"},{urls:"stun:stun1.l.google.com:19302"}] };
+  const localStreamRef  = useRef(null);
+  const pcsRef          = useRef({});
+  const audioCtxRef     = useRef(null);
+  const vadRafRef       = useRef(null);
+  const unsubsRef       = useRef([]);
+  const remoteAudiosRef = useRef({});
+  const deafenedRef     = useRef(false); // ref copy so ontrack closure reads latest
 
-  // Pair key — always smaller uid first for consistency
-  const pairKey = (a, b) => [a,b].sort().join("_");
+  const STUN = { iceServers:[
+    {urls:"stun:stun.l.google.com:19302"},
+    {urls:"stun:stun1.l.google.com:19302"},
+  ]};
+
+  const pairKey = (a,b) => [a,b].sort().join("_");
   const sigRef  = (key) => doc(db,"studyGroups",groupId,"voice",key);
 
-  // Voice activity detection — updates speaking state + writes to Firestore
+  // ── Voice Activity Detection ───────────────────────────────────────────────
   const startVAD = (stream) => {
-    const ctx  = new AudioContext();
-    const src  = ctx.createMediaStreamSource(stream);
-    const an   = ctx.createAnalyser();
-    an.fftSize = 512;
-    src.connect(an);
-    audioCtxRef.current = ctx;
-    analyserRef.current = an;
-    const buf = new Uint8Array(an.frequencyBinCount);
-    let lastState = false;
-    const tick = () => {
-      vadRaf.current = requestAnimationFrame(tick);
-      an.getByteFrequencyData(buf);
-      const avg = buf.reduce((s,v) => s+v, 0) / buf.length;
-      const isActive = avg > 12; // threshold
-      if (isActive !== lastState) {
-        lastState = isActive;
-        setSpeaking(isActive);
-        updateDoc(doc(db,"studyGroups",groupId),{
-          [`voiceSpeaking.${user.uid}`]: isActive
-        }).catch(()=>{});
-      }
-    };
-    tick();
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const src = ctx.createMediaStreamSource(stream);
+      const an  = ctx.createAnalyser();
+      an.fftSize = 512;
+      src.connect(an);
+      audioCtxRef.current = ctx;
+      const buf = new Uint8Array(an.frequencyBinCount);
+      let last = false;
+      const tick = () => {
+        vadRafRef.current = requestAnimationFrame(tick);
+        an.getByteFrequencyData(buf);
+        const avg = buf.reduce((s,v)=>s+v,0) / buf.length;
+        const active = avg > 12 && !deafenedRef.current;
+        if (active !== last) {
+          last = active;
+          setSpeaking(active);
+          updateDoc(doc(db,"studyGroups",groupId),{
+            [`voiceSpeaking.${user.uid}`]: active
+          }).catch(()=>{});
+        }
+      };
+      tick();
+    } catch(e) { console.error("VAD error",e); }
   };
 
-  // Create or get a peer connection to a specific remote uid
-  const getOrCreatePC = async (remoteUid, isInitiator) => {
-    if (pcsRef.current[remoteUid]) return pcsRef.current[remoteUid];
-    const pc = new RTCPeerConnection(STUN);
+  // ── Create peer connection to one remote user ──────────────────────────────
+  const connectTo = async (remoteUid) => {
+    if (pcsRef.current[remoteUid]) return;
+    const pc  = new RTCPeerConnection(STUN);
     pcsRef.current[remoteUid] = pc;
 
-    // Add local tracks
-    localStreamRef.current?.getTracks().forEach(t => pc.addTrack(t, localStreamRef.current));
+    // Add local mic tracks
+    localStreamRef.current?.getTracks().forEach(t =>
+      pc.addTrack(t, localStreamRef.current)
+    );
 
-    // Remote track → play in hidden audio element
+    // Incoming audio → hidden <audio> element
     pc.ontrack = (e) => {
-      if (!remoteAudiosRef.current[remoteUid]) {
-        const audio = document.createElement("audio");
+      let audio = remoteAudiosRef.current[remoteUid];
+      if (!audio) {
+        audio = document.createElement("audio");
         audio.autoplay = true;
         audio.playsInline = true;
         document.body.appendChild(audio);
         remoteAudiosRef.current[remoteUid] = audio;
       }
-      remoteAudiosRef.current[remoteUid].srcObject = e.streams[0];
+      audio.srcObject = e.streams[0];
+      // Apply current deafen state
+      audio.volume = deafenedRef.current ? 0 : 1;
     };
 
-    const key = pairKey(user.uid, remoteUid);
+    const key     = pairKey(user.uid, remoteUid);
+    const isCaller = user.uid < remoteUid;
 
-    // ICE candidate handling
+    // ICE trickle
     pc.onicecandidate = (e) => {
       if (!e.candidate) return;
-      const field = user.uid < remoteUid ? "callerIce" : "calleeIce";
-      setDoc(sigRef(key), { [field]: arrayUnion(e.candidate.toJSON()) }, { merge:true }).catch(()=>{});
+      const field = isCaller ? "callerIce" : "calleeIce";
+      setDoc(sigRef(key), {[field]: arrayUnion(e.candidate.toJSON())}, {merge:true}).catch(()=>{});
     };
 
-    pc.onconnectionstatechange = () => {
-      setPeers(p => ({...p, [remoteUid]: { ...p[remoteUid], connected: pc.connectionState==="connected" }}));
-    };
-
-    if (isInitiator) {
-      // Create offer
-      const offer = await pc.createOffer({ offerToReceiveAudio:true });
+    if (isCaller) {
+      const offer = await pc.createOffer({offerToReceiveAudio:true});
       await pc.setLocalDescription(offer);
-      await setDoc(sigRef(key), { offer:{type:offer.type,sdp:offer.sdp}, calleeIce:[], callerIce:[] });
-
-      // Watch for answer + callee ICE
+      await setDoc(sigRef(key), {
+        offer:{type:offer.type,sdp:offer.sdp}, callerIce:[], calleeIce:[]
+      });
       const unsub = onSnapshot(sigRef(key), async (snap) => {
         const d = snap.data();
         if (d?.answer && !pc.remoteDescription) {
           await pc.setRemoteDescription(new RTCSessionDescription(d.answer)).catch(()=>{});
         }
-        (d?.calleeIce||[]).forEach(async c => {
-          if (pc.remoteDescription) await pc.addIceCandidate(new RTCIceCandidate(c)).catch(()=>{});
-        });
+        for (const c of (d?.calleeIce||[])) {
+          if (pc.remoteDescription)
+            await pc.addIceCandidate(new RTCIceCandidate(c)).catch(()=>{});
+        }
       });
       unsubsRef.current.push(unsub);
     } else {
-      // Watch for offer
       const unsub = onSnapshot(sigRef(key), async (snap) => {
         const d = snap.data();
         if (!d?.offer || pc.remoteDescription) return;
         await pc.setRemoteDescription(new RTCSessionDescription(d.offer)).catch(()=>{});
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        await setDoc(sigRef(key), { answer:{type:answer.type,sdp:answer.sdp} }, { merge:true });
-        (d?.callerIce||[]).forEach(async c => {
+        await setDoc(sigRef(key), {answer:{type:answer.type,sdp:answer.sdp}},{merge:true});
+        for (const c of (d?.callerIce||[]))
           await pc.addIceCandidate(new RTCIceCandidate(c)).catch(()=>{});
-        });
       });
       unsubsRef.current.push(unsub);
     }
-
-    return pc;
   };
 
-  const joinVoice = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio:true, video:false });
-      localStreamRef.current = stream;
-      startVAD(stream);
-      setJoined(true);
+  // ── Auto-join on mount ─────────────────────────────────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+        if (cancelled) { stream.getTracks().forEach(t=>t.stop()); return; }
+        localStreamRef.current = stream;
+        startVAD(stream);
+        setReady(true);
 
-      // Signal presence
-      await updateDoc(doc(db,"studyGroups",groupId),{
-        [`voiceMembers.${user.uid}`]: true, lastActivity:Date.now()
-      }).catch(()=>{});
+        await updateDoc(doc(db,"studyGroups",groupId),{
+          [`voiceMembers.${user.uid}`]: true,
+          lastActivity: Date.now(),
+        }).catch(()=>{});
 
-      // Connect to everyone currently in voice
-      const mems = Object.keys(members).filter(uid => uid !== user.uid);
-      for (const remoteUid of mems) {
-        const isInit = user.uid < remoteUid; // smaller uid initiates
-        await getOrCreatePC(remoteUid, isInit).catch(()=>{});
+        // Connect to all current members
+        const others = Object.keys(members).filter(uid => uid !== user.uid);
+        for (const uid of others) await connectTo(uid).catch(()=>{});
+
+      } catch(e) {
+        if (!cancelled) setError("Mic blocked");
+        console.warn("Voice auto-join failed:", e.message);
       }
-    } catch(e) {
-      console.error("Voice join error", e);
-    }
-  };
+    })();
 
-  const leaveVoice = () => {
-    cancelAnimationFrame(vadRaf.current);
-    audioCtxRef.current?.close().catch(()=>{});
-    Object.values(pcsRef.current).forEach(pc => pc.close());
-    pcsRef.current = {};
-    localStreamRef.current?.getTracks().forEach(t=>t.stop());
-    localStreamRef.current = null;
-    // Remove audio elements
-    Object.values(remoteAudiosRef.current).forEach(el => el.remove());
-    remoteAudiosRef.current = {};
-    unsubsRef.current.forEach(u => u());
-    unsubsRef.current = [];
-    setSpeaking(false); setJoined(false); setPeers({});
-    updateDoc(doc(db,"studyGroups",groupId),{
-      [`voiceMembers.${user.uid}`]: null,
-      [`voiceSpeaking.${user.uid}`]: null,
-    }).catch(()=>{});
-  };
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(vadRafRef.current);
+      audioCtxRef.current?.close().catch(()=>{});
+      Object.values(pcsRef.current).forEach(pc=>pc.close());
+      pcsRef.current = {};
+      localStreamRef.current?.getTracks().forEach(t=>t.stop());
+      localStreamRef.current = null;
+      Object.values(remoteAudiosRef.current).forEach(el=>el.remove());
+      remoteAudiosRef.current = {};
+      unsubsRef.current.forEach(u=>u());
+      unsubsRef.current = [];
+      updateDoc(doc(db,"studyGroups",groupId),{
+        [`voiceMembers.${user.uid}`]:null,
+        [`voiceSpeaking.${user.uid}`]:null,
+      }).catch(()=>{});
+    };
+  }, [groupId]);
 
+  // When new members join, connect to them too
+  useEffect(() => {
+    if (!ready) return;
+    const others = Object.keys(members).filter(uid=>uid!==user.uid);
+    others.forEach(uid => connectTo(uid).catch(()=>{}));
+  }, [Object.keys(members).sort().join(","), ready]);
+
+  // ── Mute — disables local mic tracks ──────────────────────────────────────
   const toggleMute = () => {
-    const enabled = !muted;
-    setMuted(!enabled);
-    localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = enabled; });
+    const nowMuted = !muted;
+    setMuted(nowMuted);
+    localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = !nowMuted; });
+    if (nowMuted) {
+      // Stop showing as speaking when muted
+      setSpeaking(false);
+      updateDoc(doc(db,"studyGroups",groupId),{[`voiceSpeaking.${user.uid}`]:false}).catch(()=>{});
+    }
+    onStateChange?.({ muted:nowMuted, deafened });
   };
 
-  useEffect(() => () => { if (joined) leaveVoice(); }, []);
+  // ── Deafen — sets remote audio volume to 0 (only affects your ears) ───────
+  const toggleDeafen = () => {
+    const nowDeafened = !deafened;
+    setDeafened(nowDeafened);
+    deafenedRef.current = nowDeafened;
+    // Set volume on all existing remote audio elements
+    Object.values(remoteAudiosRef.current).forEach(el => {
+      el.volume = nowDeafened ? 0 : 1;
+    });
+    // Auto-mute mic when deafening (like Discord)
+    if (nowDeafened && !muted) {
+      setMuted(true);
+      localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = false; });
+    }
+    onStateChange?.({ muted: nowDeafened ? true : muted, deafened:nowDeafened });
+  };
 
-  // Count voice members
-  const voiceMembers = Object.entries(members).filter(([uid,m]) => m).map(([uid]) => uid);
+  // Expose state + toggle functions upward for bottom bar
+  useEffect(() => {
+    onStateChange?.({ muted, deafened, speaking, ready, error,
+      toggleMute, toggleDeafen });
+  }, [muted, deafened, speaking, ready, error]);
 
-  if (!joined) return (
-    <button onClick={joinVoice} style={{
-      display:"flex", alignItems:"center", gap:6,
-      background:C.purpleL, border:`1px solid ${C.purple}44`,
-      color:C.purple, borderRadius:9, padding:"7px 12px",
-      fontSize:11, fontWeight:700, cursor:"pointer", flexShrink:0,
-    }}>
-      🎙️ Join Voice
-    </button>
-  );
-
-  return (
-    <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
-      {/* Speaking indicator */}
-      <div style={{
-        width:8, height:8, borderRadius:"50%", flexShrink:0,
-        background: speaking ? C.green : C.border,
-        boxShadow: speaking ? `0 0 0 3px ${C.greenL}` : "none",
-        transition:"all .15s",
-      }} />
-      <button onClick={toggleMute} style={{
-        display:"flex", alignItems:"center", gap:5,
-        background: muted ? C.redL : C.greenL,
-        border:`1px solid ${muted ? C.red+"44" : C.green+"44"}`,
-        color: muted ? C.red : C.green,
-        borderRadius:9, padding:"6px 10px", fontSize:11, fontWeight:700, cursor:"pointer",
-      }}>
-        {muted ? "🔇 Muted" : "🎙️ Live"}
-      </button>
-      <button onClick={leaveVoice} style={{
-        background:"none", border:`1px solid ${C.border}`,
-        borderRadius:9, padding:"6px 8px", fontSize:11, color:C.muted,
-        cursor:"pointer",
-      }}>Leave</button>
-    </div>
-  );
+  // Render nothing — UI lives in the bottom bar via props
+  return null;
 }
 
 
@@ -8747,62 +8756,201 @@ function SGGameLauncher({ group, db, groupId, user, groupFile, onClose }) {
 
 
 // ── Host toolbar ──────────────────────────────────────────────────────────────
-function SGHostControls({ groupId, db, group, onShowShare, onShowGame }) {
+// ═══════════════════════════════════════════════════════════════════════════════
+// BOTTOM BAR — Google Meet style. Visible to ALL users.
+// Left:   voice controls (mic mute + deafen)
+// Center: host controls (Present / Stop / Quiz / End Quiz)
+// Right:  status pill
+// ═══════════════════════════════════════════════════════════════════════════════
+function SGBottomBar({ groupId, db, group, user, isHost, voiceState,
+                       onToggleMute, onToggleDeafen,
+                       onShowShare, onShowGame }) {
+  const muted    = voiceState?.muted    ?? false;
+  const deafened = voiceState?.deafened ?? false;
+  const speaking = voiceState?.speaking ?? false;
+  const ready    = voiceState?.ready    ?? false;
   const hasShared = !!group?.sharedContent;
   const hasGame   = !!group?.gameState;
 
-  const stopSharing = async () => {
-    await updateDoc(doc(db,"studyGroups",groupId), { sharedContent:null });
-  };
-  const endGame = async () => {
-    await updateDoc(doc(db,"studyGroups",groupId), { gameState:null });
-  };
+  const stopSharing = () => updateDoc(doc(db,"studyGroups",groupId),{sharedContent:null});
+  const endGame     = () => updateDoc(doc(db,"studyGroups",groupId),{gameState:null});
+
+  // Button base styles
+  const voiceBtn = (active, activeColor, activeBg) => ({
+    display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
+    gap:3, width:56, height:56, borderRadius:14, border:"none", cursor:"pointer",
+    background: active ? activeBg : "rgba(255,255,255,0.08)",
+    color: active ? activeColor : "#fff",
+    transition:"all .15s",
+    flexShrink:0,
+  });
+
+  const hostBtn = (color, bg, border) => ({
+    display:"flex", alignItems:"center", gap:6,
+    background: bg, border:`1.5px solid ${border}`,
+    color, borderRadius:12, padding:"10px 18px",
+    fontSize:13, fontWeight:700, cursor:"pointer",
+    boxShadow:"0 2px 10px rgba(0,0,0,.15)",
+    transition:"transform .1s",
+    flexShrink:0,
+  });
 
   return (
-    <div style={{ flexShrink:0, padding:"10px 14px", borderTop:`1px solid ${C.border}`,
-      background:C.surface, display:"flex", alignItems:"center", gap:8,
-      position:"relative", zIndex:10 }}>
-      <span style={{ fontSize:9, fontWeight:800, color:C.accent,
-        letterSpacing:1, textTransform:"uppercase",
-        background:C.accentL, borderRadius:6, padding:"3px 7px", flexShrink:0 }}>👑 Host</span>
-      {hasShared ? (
-        <button onClick={stopSharing} style={{ display:"flex", alignItems:"center", gap:6,
-          background:C.redL, border:`1px solid ${C.red}44`, color:C.red, borderRadius:9,
-          padding:"8px 14px", fontSize:12, fontWeight:700, cursor:"pointer", flexShrink:0 }}>
-          ⏹ Stop Presenting</button>
-      ) : (
-        <button onClick={onShowShare} style={{ display:"flex", alignItems:"center", gap:6,
-          background:C.accentL, border:`1px solid ${C.accentS}`, color:C.accent, borderRadius:9,
-          padding:"8px 14px", fontSize:12, fontWeight:700, cursor:"pointer", flexShrink:0,
-          boxShadow:"0 2px 8px rgba(61,90,128,.15)" }}>📺 Present</button>
+    <div style={{
+      position:"relative", zIndex:200,
+      flexShrink:0,
+      background:"rgba(26,23,20,0.92)",
+      backdropFilter:"blur(12px)",
+      borderTop:"1px solid rgba(255,255,255,0.08)",
+      padding:"10px 20px",
+      display:"flex", alignItems:"center", justifyContent:"space-between", gap:12,
+    }}>
+
+      {/* ── LEFT: Voice controls ── */}
+      <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:130 }}>
+        {/* Mic mute */}
+        <button
+          onClick={onToggleMute}
+          title={muted ? "Unmute" : "Mute"}
+          style={voiceBtn(muted, C.red, C.redL+"33")}
+          onMouseEnter={e=>e.currentTarget.style.background=muted?"rgba(196,92,92,.3)":"rgba(255,255,255,.15)"}
+          onMouseLeave={e=>e.currentTarget.style.background=muted?"rgba(196,92,92,.2)":"rgba(255,255,255,.08)"}
+        >
+          {/* Mic icon */}
+          <svg width={22} height={22} viewBox="0 0 24 24" fill="none"
+            stroke={muted ? C.red : (speaking ? C.green : "#fff")}
+            strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            {muted ? (
+              <>
+                <line x1="1" y1="1" x2="23" y2="23" />
+                <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
+                <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23" />
+                <line x1="12" y1="19" x2="12" y2="23" />
+                <line x1="8" y1="23" x2="16" y2="23" />
+              </>
+            ) : (
+              <>
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                <line x1="12" y1="19" x2="12" y2="23" />
+                <line x1="8" y1="23" x2="16" y2="23" />
+              </>
+            )}
+          </svg>
+          <span style={{ fontSize:9, fontWeight:700, letterSpacing:.3 }}>
+            {muted ? "UNMUTE" : "MUTE"}
+          </span>
+          {/* Speaking ring — only when live and talking */}
+          {speaking && !muted && (
+            <div style={{
+              position:"absolute", inset:-3, borderRadius:17,
+              border:`2px solid ${C.green}`,
+              animation:"sg-pulse 1s ease infinite",
+              pointerEvents:"none",
+            }} />
+          )}
+        </button>
+
+        {/* Deafen — mutes ALL incoming audio just for you */}
+        <button
+          onClick={onToggleDeafen}
+          title={deafened ? "Undeafen" : "Deafen (mute everyone for you)"}
+          style={voiceBtn(deafened, C.red, C.redL+"33")}
+          onMouseEnter={e=>e.currentTarget.style.background=deafened?"rgba(196,92,92,.3)":"rgba(255,255,255,.15)"}
+          onMouseLeave={e=>e.currentTarget.style.background=deafened?"rgba(196,92,92,.2)":"rgba(255,255,255,.08)"}
+        >
+          <svg width={22} height={22} viewBox="0 0 24 24" fill="none"
+            stroke={deafened ? C.red : "#fff"}
+            strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            {deafened ? (
+              <>
+                <line x1="1" y1="1" x2="23" y2="23" />
+                <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
+                <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z" />
+                <path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
+              </>
+            ) : (
+              <>
+                <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
+                <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z" />
+                <path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
+              </>
+            )}
+          </svg>
+          <span style={{ fontSize:9, fontWeight:700, letterSpacing:.3 }}>
+            {deafened ? "UNDEAFEN" : "DEAFEN"}
+          </span>
+        </button>
+
+        {/* Voice status text */}
+        <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
+          <span style={{ fontSize:11, fontWeight:700,
+            color: deafened ? C.red : muted ? C.red : speaking ? C.green : "rgba(255,255,255,.7)" }}>
+            {deafened ? "Deafened" : muted ? "Muted" : speaking ? "Speaking" : "Connected"}
+          </span>
+          {!ready && (
+            <span style={{ fontSize:9, color:"rgba(255,255,255,.4)" }}>mic blocked</span>
+          )}
+        </div>
+      </div>
+
+      {/* ── CENTER: Host controls ── */}
+      {isHost && (
+        <div style={{ display:"flex", alignItems:"center", gap:10, position:"absolute",
+          left:"50%", transform:"translateX(-50%)" }}>
+          {/* Present / Stop Presenting */}
+          {hasShared ? (
+            <button onClick={stopSharing} style={hostBtn(C.red, "rgba(196,92,92,.2)", C.red+"44")}
+              onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"}
+              onMouseLeave={e=>e.currentTarget.style.transform="none"}>
+              <span style={{ fontSize:16 }}>⏹</span> Stop Presenting
+            </button>
+          ) : (
+            <button onClick={onShowShare} style={hostBtn("#fff", "rgba(61,90,128,.5)", C.accentS)}
+              onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"}
+              onMouseLeave={e=>e.currentTarget.style.transform="none"}>
+              <span style={{ fontSize:16 }}>📺</span> Present
+            </button>
+          )}
+
+          {/* Quiz / End Quiz */}
+          {hasGame ? (
+            <button onClick={endGame} style={hostBtn(C.red, "rgba(196,92,92,.2)", C.red+"44")}
+              onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"}
+              onMouseLeave={e=>e.currentTarget.style.transform="none"}>
+              <span style={{ fontSize:16 }}>⏹</span> End Quiz
+            </button>
+          ) : (
+            <button onClick={onShowGame} style={hostBtn("#fff", "rgba(74,124,89,.4)", C.green+"44")}
+              onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"}
+              onMouseLeave={e=>e.currentTarget.style.transform="none"}>
+              <span style={{ fontSize:16 }}>🎮</span> Quiz Battle
+            </button>
+          )}
+        </div>
       )}
-      {hasGame ? (
-        <button onClick={endGame} style={{ display:"flex", alignItems:"center", gap:6,
-          background:C.redL, border:`1px solid ${C.red}44`, color:C.red, borderRadius:9,
-          padding:"8px 14px", fontSize:12, fontWeight:700, cursor:"pointer", flexShrink:0 }}>
-          ⏹ End Quiz</button>
-      ) : (
-        <button onClick={onShowGame} style={{ display:"flex", alignItems:"center", gap:6,
-          background:C.greenL, border:`1px solid ${C.green}44`, color:C.green, borderRadius:9,
-          padding:"8px 14px", fontSize:12, fontWeight:700, cursor:"pointer", flexShrink:0,
-          boxShadow:"0 2px 8px rgba(74,124,89,.15)" }}>🎮 Quiz Battle</button>
-      )}
-      {hasGame && (
-        <span style={{ marginLeft:"auto", fontSize:11, color:C.green, fontWeight:700,
-          display:"flex", alignItems:"center", gap:5 }}>
-          <span style={{ width:7, height:7, borderRadius:"50%", background:C.green,
-            display:"inline-block", boxShadow:`0 0 0 3px ${C.greenL}` }} />
-          Quiz Live
-        </span>
-      )}
-      {hasShared && !hasGame && (
-        <span style={{ marginLeft:"auto", fontSize:11, color:C.accent, fontWeight:700,
-          display:"flex", alignItems:"center", gap:5 }}>
-          <span style={{ width:7, height:7, borderRadius:"50%", background:C.accent,
-            display:"inline-block", boxShadow:`0 0 0 3px ${C.accentL}` }} />
-          Presenting
-        </span>
-      )}
+
+      {/* ── RIGHT: Live status pill ── */}
+      <div style={{ minWidth:130, display:"flex", justifyContent:"flex-end" }}>
+        {hasGame && (
+          <div style={{ display:"flex", alignItems:"center", gap:6,
+            background:"rgba(74,124,89,.25)", border:"1px solid rgba(74,124,89,.4)",
+            borderRadius:20, padding:"5px 12px" }}>
+            <div style={{ width:7,height:7,borderRadius:"50%",background:C.green,
+              animation:"sg-pulse 1.4s ease infinite" }} />
+            <span style={{ fontSize:11, fontWeight:700, color:C.green }}>Quiz Live</span>
+          </div>
+        )}
+        {hasShared && !hasGame && (
+          <div style={{ display:"flex", alignItems:"center", gap:6,
+            background:"rgba(61,90,128,.25)", border:"1px solid rgba(61,90,128,.4)",
+            borderRadius:20, padding:"5px 12px" }}>
+            <div style={{ width:7,height:7,borderRadius:"50%",background:C.accentS,
+              animation:"sg-pulse 1.4s ease infinite" }} />
+            <span style={{ fontSize:11, fontWeight:700, color:C.accentS }}>Presenting</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -8823,6 +8971,8 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
   const [showNotes,      setShowNotes]      = useState(false);
   // Group study file — host uploads, AI uses it for flashcards/notes/quiz
   const [groupFile,      setGroupFile]      = useState(null); // { name, _fileObj }
+  // Voice state — updated by SGVoiceChat via onStateChange callback
+  const [voiceState, setVoiceState] = useState({ muted:false, deafened:false, speaking:false, ready:false });
   // Notification banner when host starts game
   const [notif,     setNotif]     = useState(null);
   const notifTimer = useRef(null);
@@ -9038,9 +9188,12 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
           {isHost ? "🔴 End Session" : "Leave"}
         </button>
 
-        {/* Voice chat — always visible in top bar */}
+        {/* SGVoiceChat renders nothing — auto-joins, state flows to bottom bar */}
         {group && (
-          <SGVoiceChat groupId={groupId} db={db} user={user} members={members} />
+          <SGVoiceChat
+            groupId={groupId} db={db} user={user} members={members}
+            onStateChange={setVoiceState}
+          />
         )}
       </div>
 
@@ -9166,10 +9319,13 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
             </div>
           )}
 
-          {/* Host toolbar */}
-          {isHost && group && (
-            <SGHostControls
-              groupId={groupId} db={db} group={group}
+          {/* Bottom bar — Google Meet style, visible to ALL users */}
+          {group && (
+            <SGBottomBar
+              groupId={groupId} db={db} group={group} user={user} isHost={isHost}
+              voiceState={voiceState}
+              onToggleMute={() => voiceState.toggleMute?.()}
+              onToggleDeafen={() => voiceState.toggleDeafen?.()}
               onShowShare={() => setShowShare(true)}
               onShowGame={() => setShowGame(true)}
             />
