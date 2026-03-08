@@ -153,14 +153,21 @@ async function speakWithPuter(text, voiceName, rate = 1.0, onStart, onEnd, onErr
     const puter = await loadPuter();
     if (!puter) throw new Error("Puter not loaded");
     onStart && onStart();
-    const audio = await puter.ai.txt2speech(text, voiceName);
-    audio.playbackRate = rate;
+    // Correct API: options object with voice, engine, language
+    const audio = await puter.ai.txt2speech(text, {
+      voice: voiceName || "Joanna",
+      engine: "neural",
+      language: "en-US"
+    });
+    // playbackRate works on HTMLAudioElement
+    try { audio.playbackRate = Math.min(Math.max(rate, 0.5), 4.0); } catch(e) {}
     audio.onended = () => onEnd && onEnd();
-    audio.onerror = () => onError && onError();
-    audio.play();
+    audio.onerror = (e) => { console.warn("Puter audio error:", e); onError && onError(); };
+    const playPromise = audio.play();
+    if (playPromise) playPromise.catch(e => { console.warn("Puter play blocked:", e); onError && onError(); });
     return audio;
   } catch(e) {
-    console.warn("Puter TTS failed:", e);
+    console.warn("Puter TTS failed, falling back to browser TTS:", e);
     onError && onError();
     return null;
   }
@@ -6602,6 +6609,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
   const progressBarRef = useRef(null);
   const currentProgressRef = useRef(0);
   const puterAudiosRef = useRef([]); // active puter audio elements
+  const [puterLoading, setPuterLoading] = useState(false); // fetching neural audio
 
   const SPEEDS = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
 
@@ -6616,8 +6624,13 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
 
   const stopAll = () => {
     window.speechSynthesis.cancel();
-    puterAudiosRef.current.forEach(a => { try { a.pause(); a.currentTime = 0; } catch(e){} });
+    puterAudiosRef.current.forEach(a => {
+      try { if (a._cancelToken) a._cancelToken.cancelled = true; } catch(e){}
+      try { if (a.audio) { a.audio.pause(); a.audio.currentTime = 0; } } catch(e){}
+      try { if (a.pause) { a.pause(); a.currentTime = 0; } } catch(e){}
+    });
     puterAudiosRef.current = [];
+    setPuterLoading(false);
   };
   const stop = () => { stopAll(); setPlaying(false); setPaused(false); setProgress(0); currentProgressRef.current = 0; };
 
@@ -6641,31 +6654,38 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
     if (p.engine === "puter") {
       // ── Puter neural TTS: play sentences sequentially ──
       setPlaying(true); setPaused(false);
+      const cancelToken = { cancelled: false };
+      puterAudiosRef.current = [{ _cancelToken: cancelToken }]; // mark as active
       const playPuterSequence = async (idx) => {
-        if (idx >= sentences.length) { setPlaying(false); setPaused(false); setProgress(100); return; }
+        if (cancelToken.cancelled || idx >= sentences.length) {
+          if (!cancelToken.cancelled) { setPlaying(false); setPaused(false); setProgress(100); }
+          return;
+        }
         const sen = sentences[idx];
         const myStart = positions[idx];
         const myEnd = myStart + sen.length;
         const prog = Math.round((myStart / totalChars.current) * 100);
         setProgress(prog); currentProgressRef.current = prog;
+        if (!cancelToken.cancelled) setPuterLoading(true);
         await new Promise(resolve => {
           speakWithPuter(
             sen.trim(),
             p.puterVoice || "Joanna",
             speed,
-            () => { setPlaying(true); setPaused(false); },
+            () => { if (!cancelToken.cancelled) { setPlaying(true); setPaused(false); setPuterLoading(false); } },
             () => {
-              const endProg = Math.round((myEnd / totalChars.current) * 100);
-              setProgress(endProg); currentProgressRef.current = endProg;
+              if (!cancelToken.cancelled) {
+                const endProg = Math.round((myEnd / totalChars.current) * 100);
+                setProgress(endProg); currentProgressRef.current = endProg;
+              }
               resolve();
             },
             () => resolve()
-          ).then(audio => { if (audio) puterAudiosRef.current = [audio]; });
+          ).then(audio => {
+            if (audio && !cancelToken.cancelled) puterAudiosRef.current = [{ audio, _cancelToken: cancelToken }];
+          });
         });
-        // Check if stop was called between sentences
-        if (puterAudiosRef.current.length > 0 || idx === startIdx) {
-          await playPuterSequence(idx + 1);
-        }
+        if (!cancelToken.cancelled) await playPuterSequence(idx + 1);
       };
       playPuterSequence(startIdx);
     } else {
@@ -6718,7 +6738,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
   const pause = () => {
     const p = personaRef.current || GLOBAL_PERSONAS[0];
     if (p.engine === "puter") {
-      puterAudiosRef.current.forEach(a => { try { a.pause(); } catch(e){} });
+      puterAudiosRef.current.forEach(a => { try { if(a.audio) a.audio.pause(); else if(a.pause) a.pause(); } catch(e){} });
       setPaused(true); setPlaying(false);
     } else {
       if (window.speechSynthesis.speaking) { window.speechSynthesis.pause(); setPaused(true); setPlaying(false); }
@@ -6821,7 +6841,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
 
           {/* Transport controls */}
           <div style={{ padding:"8px 22px 14px" }}>
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:18, marginBottom:14 }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:18, marginBottom:14, position:"relative" }}>
 
               {/* Stop */}
               <button onClick={stop} title="Stop"
@@ -6840,9 +6860,17 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
               </button>
 
               {/* Play / Pause */}
+              {puterLoading && (
+                <div style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%)", zIndex:10, background:"rgba(17,24,39,.85)", borderRadius:12, padding:"8px 14px", display:"flex", alignItems:"center", gap:6 }}>
+                  <div style={{ display:"flex", gap:3 }}>
+                    {[0,1,2].map(i=><span key={i} style={{ width:4, height:14, background:"#a5b4fc", borderRadius:2, display:"inline-block", animation:`ppbar 0.8s ease-in-out ${i*0.15}s infinite` }}/>)}
+                  </div>
+                  <span style={{ fontSize:10, color:"#a5b4fc", fontWeight:700 }}>Fetching neural audio…</span>
+                </div>
+              )}
               {!playing ? (
-                <button onClick={play} disabled={!script}
-                  style={{ width:64, height:64, borderRadius:"50%", background:"linear-gradient(135deg,#6366f1,#a855f7)", border:"none", color:"#fff", cursor:script?"pointer":"not-allowed", boxShadow:"0 6px 24px rgba(99,102,241,.6)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <button onClick={play} disabled={!script || puterLoading}
+                  style={{ width:64, height:64, borderRadius:"50%", background:"linear-gradient(135deg,#6366f1,#a855f7)", border:"none", color:"#fff", cursor:(script&&!puterLoading)?"pointer":"not-allowed", boxShadow:"0 6px 24px rgba(99,102,241,.6)", display:"flex", alignItems:"center", justifyContent:"center" }}>
                   {progress===100
                     ? <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
                     : <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
