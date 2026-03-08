@@ -6662,59 +6662,52 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
     setCurrentTime(0); setDuration(0);
 
     if (persona.engine === "puter") {
-      // Puter returns an HTMLAudioElement directly — use it, don't copy src
+      // Strategy: call puter.ai.txt2speech, immediately pause the returned element,
+      // extract its blob src, load into OUR persistent audio element, then play.
       try {
         const puter = await loadPuter();
         if (!puter) throw new Error("Puter unavailable");
-        const result = await puter.ai.txt2speech(script, {
+
+        // Puter auto-plays — we'll stop it immediately and steal its src
+        const puterEl = await puter.ai.txt2speech(script, {
           voice: persona.puterVoice || "Joanna",
           engine: "neural",
           language: "en-US"
         });
-        // result IS the audio element — wire up our event listeners to it
-        // and store it as our audioRef so controls work on it directly
-        const puterAudio = result;
-        puterAudio.playbackRate = speed;
 
-        // Swap audioRef to point to the puter audio element
-        // (detach listeners from old element first)
-        const oldAudio = audioRef.current;
-        if (oldAudio && oldAudio !== puterAudio) {
-          oldAudio.pause();
-          ["timeupdate","durationchange","play","pause","ended"].forEach(ev => {
-            oldAudio.removeEventListener(ev, oldAudio["_cl_"+ev]);
-          });
-        }
+        // Stop puter's own playback immediately
+        try { puterEl.pause(); puterEl.currentTime = 0; } catch(e) {}
 
-        // Attach our state listeners to the puter audio element
-        const onTime  = () => setCurrentTime(puterAudio.currentTime);
-        const onDur   = () => setDuration(puterAudio.duration);
-        const onPlay  = () => setPlaying(true);
-        const onPause = () => setPlaying(false);
-        const onEnded = () => { setPlaying(false); setCurrentTime(0); puterAudio.currentTime = 0; };
-        puterAudio._cl_timeupdate     = onTime;
-        puterAudio._cl_durationchange = onDur;
-        puterAudio._cl_play           = onPlay;
-        puterAudio._cl_pause          = onPause;
-        puterAudio._cl_ended          = onEnded;
-        puterAudio.addEventListener("timeupdate",     onTime);
-        puterAudio.addEventListener("durationchange", onDur);
-        puterAudio.addEventListener("play",           onPlay);
-        puterAudio.addEventListener("pause",          onPause);
-        puterAudio.addEventListener("ended",          onEnded);
+        // Get the blob/data URL from the puter element
+        const src = puterEl.src || puterEl.currentSrc || "";
+        if (!src) throw new Error("Puter returned no audio src");
 
-        audioRef.current = puterAudio;
-        setDuration(puterAudio.duration || 0);
+        // Load into our own persistent audio element
+        const audio = audioRef.current;
+        audio.src = src;
+        audio.playbackRate = speed;
+        audio.load();
+
+        // Wait until it can play
+        await new Promise((res, rej) => {
+          const onReady = () => { audio.removeEventListener("canplay", onReady); audio.removeEventListener("error", onErr); res(); };
+          const onErr   = (e) => { audio.removeEventListener("canplay", onReady); audio.removeEventListener("error", onErr); rej(e); };
+          audio.addEventListener("canplay", onReady);
+          audio.addEventListener("error",   onErr);
+          setTimeout(res, 10000); // safety fallback
+        });
+
+        setDuration(audio.duration || 0);
         setAudioReady(true);
         setGenerating(false);
-        puterAudio.play().catch(e => {
-          console.warn("Puter play failed:", e);
-          setGenError("Could not play neural audio. Try pressing play again.");
-        });
+        audio.play().catch(e => { console.warn("play blocked:", e); });
+
       } catch(e) {
         console.warn("Puter TTS failed:", e);
-        setGenError("Neural voice failed — try a browser voice instead.");
+        // Fallback: use browser voice
+        setGenError(null);
         setGenerating(false);
+        playBrowserVoice(0);
       }
     } else {
       // Browser Web Speech API — record to audio blob via MediaRecorder
@@ -6888,40 +6881,12 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
 
   // Switch voice — reset audio
   const switchVoice = (i) => {
-    handleStop();
-    const newPersona = GLOBAL_PERSONAS[i];
-    // If switching away from puter, restore a plain Audio element
-    if (persona.engine === "puter") {
-      const oldAudio = audioRef.current;
-      if (oldAudio) {
-        oldAudio.pause();
-        ["timeupdate","durationchange","play","pause","ended"].forEach(ev => {
-          oldAudio.removeEventListener(ev, oldAudio["_cl_"+ev]);
-        });
-      }
-      // Create a fresh plain audio element
-      const fresh = new Audio();
-      fresh.preload = "auto";
-      const onTime  = () => setCurrentTime(fresh.currentTime);
-      const onDur   = () => setDuration(fresh.duration);
-      const onPlay  = () => setPlaying(true);
-      const onPause = () => setPlaying(false);
-      const onEnded = () => { setPlaying(false); setCurrentTime(0); fresh.currentTime = 0; };
-      fresh._cl_timeupdate     = onTime;
-      fresh._cl_durationchange = onDur;
-      fresh._cl_play           = onPlay;
-      fresh._cl_pause          = onPause;
-      fresh._cl_ended          = onEnded;
-      fresh.addEventListener("timeupdate",     onTime);
-      fresh.addEventListener("durationchange", onDur);
-      fresh.addEventListener("play",           onPlay);
-      fresh.addEventListener("pause",          onPause);
-      fresh.addEventListener("ended",          onEnded);
-      audioRef.current = fresh;
-    }
-    setAudioReady(false);
-    setCurrentTime(0); setDuration(0); setGenError(null);
-    browserTimeRef.current = 0; setBrowserTime(0);
+    // Stop everything, clear audio src, reset state
+    stopBrowser();
+    const audio = audioRef.current;
+    if (audio) { audio.pause(); audio.src = ""; audio.load(); }
+    setPlaying(false); setAudioReady(false); setCurrentTime(0); setDuration(0); setGenError(null);
+    browserTimeRef.current = 0; setBrowserTime(0); setBrowserDur(0);
     setPersonaIdx(i);
     setShowPicker(false);
   };
