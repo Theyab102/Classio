@@ -1111,7 +1111,7 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'DM Sans', sans-serif", paddingBottom: 50 }}>
       <style>{GS}</style>
-      <Header user={isGuest ? { displayName: guestName, photoURL: null } : user} saveStatus={saveStatus} isGuest={isGuest} onSignOut={isGuest ? handleGuestSignOut : () => signOut(auth)} character={character} onOpenCharacter={() => setShowCharacter(true)} />
+      <Header user={isGuest ? { displayName: guestName, photoURL: null } : user} saveStatus={saveStatus} isGuest={isGuest} onSignOut={isGuest ? handleGuestSignOut : () => signOut(auth)} character={character} onOpenCharacter={() => setShowCharacter(true)} homeTab={homeTab} onSetHomeTab={setHomeTab} onOpenAI={() => setShowHomeAI(true)} />
       {showCharacter && <CharacterModal character={character} onChange={c => { setCharacter(c); localStorage.setItem("classio_char", JSON.stringify(c)); }} onClose={() => setShowCharacter(false)} />}
       {showStudyGroupLobby && <StudyGroupLobby
         user={isGuest ? { uid:"guest_"+guestName, displayName:guestName, photoURL:null } : user}
@@ -1121,29 +1121,8 @@ export default function App() {
       />}
       <AdBanner />
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 14px" }}>
-        {/* ── Nav bar: tabs + action buttons ── */}
-        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:20, flexWrap:"wrap" }}>
-          <div style={{ display:"flex", background:C.surface, borderRadius:12,
-            border:`1px solid ${C.border}`, padding:3, gap:2 }}>
-            {[["folders","📁 Folders"],["about","ℹ️ About"]].map(([id,label])=>(
-              <button key={id} onClick={()=>setHomeTab(id)}
-                style={{ padding:"7px 18px", borderRadius:9, fontSize:13, fontWeight:700,
-                  border:"none", cursor:"pointer", transition:"all .15s",
-                  background:homeTab===id?C.accent:"transparent",
-                  color:homeTab===id?"#fff":C.muted }}>
-                {label}
-              </button>
-            ))}
-          </div>
-          <div style={{ flex:1 }}/>
-          <button onClick={()=>setShowHomeAI(true)} className="hov"
-            style={{ display:"flex", alignItems:"center", gap:7,
-              background:"linear-gradient(135deg,#6366f1,#8b5cf6)",
-              color:"#fff", border:"none", borderRadius:12, padding:"10px 18px",
-              fontSize:14, fontWeight:600, cursor:"pointer",
-              boxShadow:"0 4px 14px rgba(99,102,241,.4)" }}>
-            🤖 AI Assistant
-          </button>
+        {/* ── Action buttons row (Study Group + New Folder) ── */}
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:20, justifyContent:"flex-end" }}>
           <button onClick={()=>setShowStudyGroupLobby(true)} className="hov"
             style={{ display:"flex", alignItems:"center", gap:7, background:"#7c3aed",
               color:"#fff", border:"none", borderRadius:12, padding:"10px 18px",
@@ -1294,16 +1273,46 @@ function AdBanner() {
 }
 
 // ─── HEADER ───────────────────────────────────────────────────────────────────
-function Header({ user, saveStatus, isGuest, onSignOut, character, onOpenCharacter }) {
+function Header({ user, saveStatus, isGuest, onSignOut, character, onOpenCharacter, homeTab, onSetHomeTab, onOpenAI }) {
   return (
-    <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 16px", height:56, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-        <div style={{ width:30, height:30, background:C.accent, borderRadius:9, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+    <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 16px", height:56, display:"flex", alignItems:"center", gap:12 }}>
+      {/* Logo */}
+      <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
+        <div style={{ width:30, height:30, background:C.accent, borderRadius:9, display:"flex", alignItems:"center", justifyContent:"center" }}>
           <Icon d={I.sparkle} size={15} color="#fff" sw={2} />
         </div>
         <span style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:700, color:C.text, letterSpacing:-0.5 }}>Classio</span>
       </div>
-      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+
+      {/* Center — tabs + AI button (only on home screen, i.e. when homeTab is defined) */}
+      {onSetHomeTab && (
+        <div style={{ display:"flex", alignItems:"center", gap:8, flex:1 }}>
+          {/* Tab switcher */}
+          <div style={{ display:"flex", background:C.bg, borderRadius:10, border:`1px solid ${C.border}`, padding:3, gap:2 }}>
+            {[["folders","📁 Folders"],["about","ℹ️ About"]].map(([id,label])=>(
+              <button key={id} onClick={()=>onSetHomeTab(id)}
+                style={{ padding:"5px 16px", borderRadius:7, fontSize:13, fontWeight:700,
+                  border:"none", cursor:"pointer", transition:"all .15s",
+                  background:homeTab===id?C.accent:"transparent",
+                  color:homeTab===id?"#fff":C.muted }}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {/* AI Assistant */}
+          <button onClick={onOpenAI}
+            style={{ display:"flex", alignItems:"center", gap:6,
+              background:"linear-gradient(135deg,#6366f1,#8b5cf6)",
+              color:"#fff", border:"none", borderRadius:10, padding:"6px 14px",
+              fontSize:13, fontWeight:700, cursor:"pointer",
+              boxShadow:"0 2px 10px rgba(99,102,241,.4)" }}>
+            🤖 AI Assistant
+          </button>
+        </div>
+      )}
+
+      {/* Right side */}
+      <div style={{ display:"flex", alignItems:"center", gap:8, marginLeft:"auto", flexShrink:0 }}>
         {!isGuest && saveStatus !== "idle" && (
           <span style={{ fontSize:12, fontWeight:600,
             color: saveStatus==="saved" ? C.green : saveStatus==="error" ? "#e53e3e" : C.muted }}>
