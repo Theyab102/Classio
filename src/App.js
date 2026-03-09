@@ -4287,26 +4287,30 @@ Context (for fixing mis-heard words only — do NOT add this as content): ${cont
     const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[^\x00-\x7F\s]+\s*/g,'') || lang;
     try {
       const script = await callClaude(
-        `You are a podcast host reading study notes aloud as a natural lesson.
+        `You are an engaging podcast host turning study notes into a thorough spoken lesson.
 Language: ${langLabel}. Write ENTIRELY in ${langLabel}.
 
-CRITICAL: Your podcast must be based STRICTLY on the notes provided below — do not add outside information.
-Cover EVERY point in the notes. Do not skip any section.
+CRITICAL RULES:
+- Base the podcast STRICTLY on the notes provided — do not add outside information
+- Cover EVERY concept, fact, definition, example, and detail in the notes — nothing skipped
+- The podcast must be long enough to fully explain all the material — aim for 8-12 minutes when spoken (≈ 1200-1800 words)
+- If the notes are long and detailed, the podcast must be equally long and detailed
 
-Format as spoken audio:
-1. Open warmly: "Hey! Today we're covering [topic from notes]…"
-2. Go through each section of the notes in order, explaining it naturally in conversational spoken ${langLabel}
-3. Use natural transitions between topics: "Moving on to…", "Now let's look at…", "Here's an important point…"
-4. End with "So to wrap up…" then summarise the key points from the notes
-5. 3-5 minutes when spoken aloud (≈ 450-600 words)
-6. NO markdown, NO asterisks, NO bullet symbols — plain spoken text only
-7. Include natural pauses: "…", "Now,", "So,"
-8. Convert math symbols to spoken words for TTS: 10⁻¹⁰ → "ten to the power of negative ten", × → "times", ² → "squared", π → "pi"
-9. Sound like a knowledgeable friend explaining the topic, not a robot reading a list`,
-        `Turn these notes into a podcast script. Cover every point:
+FORMAT (spoken audio only):
+1. Open warmly: "Hey! Today we're covering [topic]…" — briefly say what will be covered
+2. Go through EVERY section of the notes in order, explaining each concept fully and naturally
+3. For each concept: state it clearly, explain what it means, give context or examples from the notes
+4. Use natural transitions: "Moving on to…", "Now let's talk about…", "Here's something really important…", "Building on that…"
+5. Never rush — if the notes have 10 topics, cover all 10 in detail
+6. End with "So to wrap up today's session…" then summarise every key point covered
+7. NO markdown, NO asterisks, NO bullet symbols, NO headers — plain spoken words only
+8. Natural speech patterns: "Now,", "So,", "Think of it this way…", "In other words…", "What this means is…"
+9. Convert ALL symbols to spoken words for TTS: 10⁻¹⁰ → "ten to the power of negative ten", × → "times", ² → "squared", π → "pi", % → "percent", = → "equals", > → "greater than", < → "less than", → → "which gives us"
+10. Sound like a knowledgeable teacher who wants every student to fully understand — not a robot listing facts`,
+        `Turn ALL of these notes into a complete, detailed podcast script. Do not skip anything:
 
-${notesText.slice(0, 10000)}`,
-        2000
+${notesText.slice(0, 14000)}`,
+        4000
       );
       setPodcastScript(script);
       try { localStorage.setItem(PODCAST_KEY, script); } catch {}
