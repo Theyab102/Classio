@@ -116,62 +116,7 @@ const GLOBAL_PERSONAS = [
   // ── Neutral ─────────────────────────────────────────────────────────────────
   { id:"river",   label:"River",   gender:"neutral",color:"#0891b2", desc:"Smooth & neutral",         pitch:1.0,  rate:0.93,
     targets:["microsoft jenny online","jenny online","microsoft guy online","guy online","google us english","google uk english","default","en-us","en-gb"] },
-  // ── Puter.js (neural / realistic) ───────────────────────────────────────────
-  { id:"p_nova",  label:"Nova",    gender:"female", color:"#be185d", desc:"Neural · Warm & natural",   engine:"puter", puterVoice:"Joanna",   pitch:1.0, rate:1.0 },
-  { id:"p_aria",  label:"Aria",    gender:"female", color:"#7c3aed", desc:"Neural · Bright & clear",   engine:"puter", puterVoice:"Kendra",   pitch:1.0, rate:1.0 },
-  { id:"p_jade",  label:"Jade",    gender:"female", color:"#0f766e", desc:"Neural · Calm & soothing",  engine:"puter", puterVoice:"Salli",    pitch:1.0, rate:1.0 },
-  { id:"p_echo",  label:"Echo",    gender:"male",   color:"#1d4ed8", desc:"Neural · Deep & confident", engine:"puter", puterVoice:"Matthew",  pitch:1.0, rate:1.0 },
-  { id:"p_cole",  label:"Cole",    gender:"male",   color:"#166534", desc:"Neural · Friendly & warm",  engine:"puter", puterVoice:"Joey",     pitch:1.0, rate:1.0 },
-  { id:"p_rex",   label:"Rex",     gender:"male",   color:"#92400e", desc:"Neural · Strong & clear",   engine:"puter", puterVoice:"Justin",   pitch:1.0, rate:1.0 },
 ];
-
-// ── Puter.js loader ──────────────────────────────────────────────────────────
-let _puterLoaded = false;
-let _puterLoading = false;
-let _puterCallbacks = [];
-
-function loadPuter() {
-  return new Promise((resolve) => {
-    if (_puterLoaded && window.puter) { resolve(window.puter); return; }
-    _puterCallbacks.push(resolve);
-    if (_puterLoading) return;
-    _puterLoading = true;
-    const s = document.createElement("script");
-    s.src = "https://js.puter.com/v2/";
-    s.onload = () => {
-      _puterLoaded = true; _puterLoading = false;
-      _puterCallbacks.forEach(cb => cb(window.puter));
-      _puterCallbacks = [];
-    };
-    s.onerror = () => { _puterLoading = false; _puterCallbacks.forEach(cb => cb(null)); _puterCallbacks = []; };
-    document.head.appendChild(s);
-  });
-}
-
-async function speakWithPuter(text, voiceName, rate = 1.0, onStart, onEnd, onError) {
-  try {
-    const puter = await loadPuter();
-    if (!puter) throw new Error("Puter not loaded");
-    onStart && onStart();
-    // Correct API: options object with voice, engine, language
-    const audio = await puter.ai.txt2speech(text, {
-      voice: voiceName || "Joanna",
-      engine: "neural",
-      language: "en-US"
-    });
-    // playbackRate works on HTMLAudioElement
-    try { audio.playbackRate = Math.min(Math.max(rate, 0.5), 4.0); } catch(e) {}
-    audio.onended = () => onEnd && onEnd();
-    audio.onerror = (e) => { console.warn("Puter audio error:", e); onError && onError(); };
-    const playPromise = audio.play();
-    if (playPromise) playPromise.catch(e => { console.warn("Puter play blocked:", e); onError && onError(); });
-    return audio;
-  } catch(e) {
-    console.warn("Puter TTS failed, falling back to browser TTS:", e);
-    onError && onError();
-    return null;
-  }
-}
 
 // Resolve the best available browser voice for a persona.
 // Key fix: we track which voices have ALREADY been assigned to earlier personas
@@ -6595,341 +6540,197 @@ function ListeningGame({ cards, onBack }) {
 }
 
 
-// ─── ENHANCED PODCAST PLAYER ─────────────────────────────────────────────────
-// Podcast Player — single persistent Audio element, proper pause/seek
+// ─── PODCAST PLAYER ──────────────────────────────────────────────────────────
+// Browser-only, single persistent Audio element — proper pause/seek/rewind
 function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose }) {
   const [personaIdx, setPersonaIdx] = useState(0);
   const [showPicker, setShowPicker] = useState(false);
   const [speed,      setSpeed]      = useState(1.0);
   const [allVoices,  setAllVoices]  = useState([]);
+  const [playing,    setPlaying]    = useState(false);
+  const [currentTime,setCurrentTime]= useState(0);
+  const [duration,   setDuration]   = useState(0);
 
-  // Single audio element ref — never recreated
-  const audioRef      = useRef(null);
-  const [audioReady,  setAudioReady]  = useState(false); // true once blob URL loaded
-  const [generating,  setGenerating]  = useState(false); // fetching from puter/tts
-  const [playing,     setPlaying]     = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration,    setDuration]    = useState(0);
-  const [genError,    setGenError]    = useState(null);
-
-  // Browser voices
+  // Load browser voices
   useEffect(() => {
     const load = () => setAllVoices(window.speechSynthesis.getVoices());
-    load(); window.speechSynthesis.onvoiceschanged = load;
+    load();
+    window.speechSynthesis.onvoiceschanged = load;
+    return () => { window.speechSynthesis.cancel(); stopTimer(); };
   }, []);
 
-  const persona = GLOBAL_PERSONAS[personaIdx] || GLOBAL_PERSONAS[0];
+  const persona    = GLOBAL_PERSONAS[personaIdx] || GLOBAL_PERSONAS[0];
+  const personaRef = useRef(persona);
+  useEffect(() => { personaRef.current = GLOBAL_PERSONAS[personaIdx]; }, [personaIdx]);
   const SPEEDS = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
 
-  // ── Format time ──────────────────────────────────────────────────────────────
-  const fmt = (s) => {
-    if (!isFinite(s) || s < 0) return "0:00";
-    const h = Math.floor(s / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    const sec = Math.floor(s % 60);
-    return h > 0 ? `${h}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}` : `${m}:${String(sec).padStart(2,"0")}`;
+  // ── Timer for progress tracking ──────────────────────────────────────────
+  const timerRef       = useRef(null);
+  const genRef         = useRef(0);         // incremented on every play/stop
+  const elapsedRef     = useRef(0);         // seconds elapsed total
+  const timerStartRef  = useRef(0);         // Date.now() when timer last started
+  const totalDurRef    = useRef(0);
+
+  const stopTimer = () => {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
   };
 
-  // ── Create/attach audio element once ─────────────────────────────────────────
-  useEffect(() => {
-    if (!audioRef.current) {
-      audioRef.current = new Audio();
-      audioRef.current.preload = "auto";
-    }
-    const audio = audioRef.current;
-    const onTime   = () => setCurrentTime(audio.currentTime);
-    const onDur    = () => setDuration(audio.duration);
-    const onPlay   = () => setPlaying(true);
-    const onPause  = () => setPlaying(false);
-    const onEnded  = () => { setPlaying(false); setCurrentTime(0); audio.currentTime = 0; };
-    audio.addEventListener("timeupdate",  onTime);
-    audio.addEventListener("durationchange", onDur);
-    audio.addEventListener("play",  onPlay);
-    audio.addEventListener("pause", onPause);
-    audio.addEventListener("ended", onEnded);
-    return () => {
-      audio.pause();
-      audio.removeEventListener("timeupdate",  onTime);
-      audio.removeEventListener("durationchange", onDur);
-      audio.removeEventListener("play",  onPlay);
-      audio.removeEventListener("pause", onPause);
-      audio.removeEventListener("ended", onEnded);
-    };
-  }, []);
-
-  // ── Generate full audio blob via Puter or browser synth ──────────────────────
-  const generateAudio = async () => {
-    if (!script || generating) return;
-    const audio = audioRef.current;
-    audio.pause();
-    setPlaying(false); setAudioReady(false); setGenError(null); setGenerating(true);
-    setCurrentTime(0); setDuration(0);
-
-    if (persona.engine === "puter") {
-      // Strategy: call puter.ai.txt2speech, immediately pause the returned element,
-      // extract its blob src, load into OUR persistent audio element, then play.
-      try {
-        const puter = await loadPuter();
-        if (!puter) throw new Error("Puter unavailable");
-
-        // Split script into ~1000 char chunks at sentence boundaries
-        const chunks = [];
-        const sentences = script.match(/[^.!?]+[.!?]+(\s|$)/g) || [script];
-        let chunk = "";
-        for (const s of sentences) {
-          if ((chunk + s).length > 1000 && chunk.length > 0) {
-            chunks.push(chunk.trim());
-            chunk = s;
-          } else {
-            chunk += s;
-          }
-        }
-        if (chunk.trim()) chunks.push(chunk.trim());
-
-        // Fetch each chunk as audio blob and concatenate
-        const blobs = [];
-        for (let i = 0; i < chunks.length; i++) {
-          const el = await puter.ai.txt2speech(chunks[i], {
-            voice: persona.puterVoice || "Joanna",
-            engine: "neural",
-            language: "en-US"
-          });
-          // Immediately stop auto-play
-          try { el.pause(); el.currentTime = 0; } catch(e) {}
-
-          // Fetch the audio data as a blob
-          const src = el.src || el.currentSrc || "";
-          if (!src) throw new Error("No src from puter chunk " + i);
-          const resp = await fetch(src);
-          const blob = await resp.blob();
-          blobs.push(blob);
-        }
-
-        // Combine all blobs into one
-        const combined = new Blob(blobs, { type: blobs[0]?.type || "audio/mpeg" });
-        const blobUrl  = URL.createObjectURL(combined);
-
-        // Load into our persistent audio element
-        const audio = audioRef.current;
-        audio.src = blobUrl;
-        audio.playbackRate = speed;
-        audio.load();
-        await new Promise((res) => {
-          const done = () => { audio.removeEventListener("canplay", done); res(); };
-          audio.addEventListener("canplay", done);
-          audio.onerror = () => res();
-          setTimeout(res, 15000);
-        });
-        setDuration(audio.duration || 0);
-        setAudioReady(true);
-        setGenerating(false);
-        audio.play().catch(e => console.warn("play error:", e));
-
-      } catch(e) {
-        console.warn("Puter TTS failed:", e);
-        // Silent fallback to browser voice
-        setGenError(null);
-        setGenerating(false);
-        playBrowserVoice(0);
-      }
-    } else {
-      // Browser Web Speech API — record to audio blob via MediaRecorder
-      // Fallback: just play directly via speechSynthesis with a sync'd progress timer
-      setGenerating(false);
-      playBrowserVoice(0);
-    }
+  const startTimer = () => {
+    stopTimer();
+    timerStartRef.current = Date.now();
+    timerRef.current = setInterval(() => {
+      const elapsed = elapsedRef.current + (Date.now() - timerStartRef.current) / 1000;
+      const capped  = Math.min(elapsed, totalDurRef.current);
+      setCurrentTime(capped);
+      if (capped >= totalDurRef.current && totalDurRef.current > 0) stopTimer();
+    }, 100);
   };
 
-  // ── Browser voice: chain sentences, sync progress via timeupdate-style polling ─
-  const browserGenRef   = useRef(0);
-  const browserTimerRef = useRef(null);
-  const [browserPlaying, setBrowserPlaying] = useState(false);
-  const [browserTime,    setBrowserTime]    = useState(0);
-  const [browserDur,     setBrowserDur]     = useState(0);
-  const browserTimeRef  = useRef(0);
-  const browserDurRef   = useRef(0);
-
-  const stopBrowser = () => {
-    browserGenRef.current += 1;
-    window.speechSynthesis.cancel();
-    if (browserTimerRef.current) { clearInterval(browserTimerRef.current); browserTimerRef.current = null; }
-    setBrowserPlaying(false);
-  };
-
-  const playBrowserVoice = (fromTime) => {
-    stopBrowser();
-    if (!script) return;
-    const myGen = ++browserGenRef.current;
+  // ── Build sentences + cumulative durations ────────────────────────────────
+  const buildSentences = (fromTime = 0) => {
     const p = personaRef.current || GLOBAL_PERSONAS[0];
-    const voice = getSmartVoice(p, allVoices, lang);
-
-    // Split into sentences
-    const processed = script.replace(/[\r\n]{2,}/g, "  ").trim();
-    const rawSents = processed.match(/[^.!?]+[.!?]+(\s|$)/g) || [processed];
-    const sentences = rawSents.filter(s => s.trim().length > 0);
-
-    // Estimate durations per sentence (chars / speaking rate)
     const rate = speed * (p.rate || 0.93);
     const charsPerSec = 14 * rate;
-    const durations = sentences.map(s => Math.max(0.4, s.trim().length / charsPerSec));
-    const totalDur = durations.reduce((a,b) => a+b, 0);
-    browserDurRef.current = totalDur;
-    setBrowserDur(totalDur);
+    const raw = script.match(/[^.!?]+[.!?]+(\s|$)/g) || [script];
+    const sentences = raw.map(s => s.trim()).filter(Boolean);
+    const durations = sentences.map(s => Math.max(0.3, s.length / charsPerSec));
+    const total     = durations.reduce((a, b) => a + b, 0);
+    totalDurRef.current = total;
+    setDuration(total);
 
-    // Find which sentence to start from
-    let acc = 0;
-    let startIdx = 0;
+    // Find which sentence index corresponds to fromTime
+    let acc = 0, startIdx = 0;
     for (let i = 0; i < durations.length; i++) {
       if (acc + durations[i] > fromTime) { startIdx = i; break; }
       acc += durations[i];
-      startIdx = i;
+      if (i === durations.length - 1) startIdx = i;
     }
-    let timeAtStartSentence = acc;
+    return { sentences, durations, total, startIdx, timeAtStart: acc };
+  };
 
-    setBrowserPlaying(true); setPlaying(true);
-    browserTimeRef.current = fromTime;
-    setBrowserTime(fromTime);
+  // ── Play from a given time (seconds) ──────────────────────────────────────
+  const playFrom = (fromTime) => {
+    window.speechSynthesis.cancel();
+    stopTimer();
+    if (!script) return;
 
-    // Start polling timer for smooth progress
-    if (browserTimerRef.current) clearInterval(browserTimerRef.current);
-    const timerStart = Date.now();
-    const timeAtTimerStart = fromTime;
-    browserTimerRef.current = setInterval(() => {
-      if (browserGenRef.current !== myGen) { clearInterval(browserTimerRef.current); return; }
-      const elapsed = (Date.now() - timerStart) / 1000;
-      const t = Math.min(totalDur, timeAtTimerStart + elapsed * 1);
-      browserTimeRef.current = t;
-      setBrowserTime(t);
-      setCurrentTime(t);
-      setDuration(totalDur);
-      if (t >= totalDur) {
-        clearInterval(browserTimerRef.current);
-        setBrowserPlaying(false); setPlaying(false);
-        setBrowserTime(0); setCurrentTime(0);
+    const myGen = ++genRef.current;
+    const p = personaRef.current || GLOBAL_PERSONAS[0];
+    const voice = getSmartVoice(p, allVoices, lang);
+    const { sentences, durations, total, startIdx, timeAtStart } = buildSentences(fromTime);
+
+    elapsedRef.current   = fromTime;
+    timerStartRef.current = Date.now();
+    setCurrentTime(fromTime);
+    setPlaying(true);
+    startTimer();
+
+    const speakOne = (idx) => {
+      if (genRef.current !== myGen || idx >= sentences.length) {
+        if (genRef.current === myGen) {
+          stopTimer();
+          elapsedRef.current = total;
+          setCurrentTime(total);
+          setPlaying(false);
+        }
+        return;
       }
-    }, 100);
-
-    // Chain sentences one at a time
-    const speakFrom = (idx, sentenceStartTime) => {
-      if (browserGenRef.current !== myGen || idx >= sentences.length) return;
-      const u = new SpeechSynthesisUtterance(sentences[idx].trim());
-      u.rate   = rate;
+      const u = new SpeechSynthesisUtterance(sentences[idx]);
+      u.rate   = speed * (p.rate  || 0.93);
       u.pitch  = p.pitch || 1.0;
       u.volume = 1.0;
       u.lang   = lang;
       if (voice) u.voice = voice;
-      u.onend  = () => { if (browserGenRef.current === myGen) speakFrom(idx + 1, sentenceStartTime + durations[idx]); };
-      u.onerror = () => { if (browserGenRef.current === myGen) speakFrom(idx + 1, sentenceStartTime + durations[idx]); };
+      u.onend  = () => { if (genRef.current === myGen) speakOne(idx + 1); };
+      u.onerror = () => { if (genRef.current === myGen) speakOne(idx + 1); };
       window.speechSynthesis.speak(u);
     };
-    speakFrom(startIdx, timeAtStartSentence);
+    speakOne(startIdx);
   };
 
-  const personaRef = useRef(GLOBAL_PERSONAS[0]);
-  useEffect(() => { personaRef.current = GLOBAL_PERSONAS[personaIdx]; }, [personaIdx]);
-
-  // ── Unified controls ──────────────────────────────────────────────────────────
-  const isPuter   = persona.engine === "puter";
-  const isBrowser = !isPuter;
-
+  // ── Controls ──────────────────────────────────────────────────────────────
   const handlePlay = () => {
-    if (isPuter) {
-      if (audioReady && audioRef.current) {
-        audioRef.current.playbackRate = speed;
-        audioRef.current.play().catch(console.warn);
-      } else {
-        generateAudio();
-      }
-    } else {
-      playBrowserVoice(browserTimeRef.current);
-    }
+    if (playing) return;
+    playFrom(elapsedRef.current);
   };
 
   const handlePause = () => {
-    if (isPuter) {
-      audioRef.current?.pause(); // real pause — keeps currentTime
-    } else {
-      stopBrowser();
-    }
+    // Stop gen loop + timer, freeze elapsed time
+    genRef.current++;
+    window.speechSynthesis.cancel();
+    stopTimer();
+    // Snap elapsed to actual timer value
+    elapsedRef.current = Math.min(
+      elapsedRef.current + (Date.now() - timerStartRef.current) / 1000,
+      totalDurRef.current
+    );
+    setCurrentTime(elapsedRef.current);
+    setPlaying(false);
   };
 
   const handleStop = () => {
-    if (isPuter) {
-      const audio = audioRef.current;
-      if (audio) { audio.pause(); audio.currentTime = 0; }
-      setCurrentTime(0); setPlaying(false);
-    } else {
-      stopBrowser();
-      setBrowserTime(0); browserTimeRef.current = 0; setCurrentTime(0);
-    }
+    genRef.current++;
+    window.speechSynthesis.cancel();
+    stopTimer();
+    elapsedRef.current = 0;
+    setCurrentTime(0);
+    setPlaying(false);
   };
 
   const handleSeek = (newTime) => {
-    if (isPuter && audioRef.current && audioReady) {
-      audioRef.current.currentTime = newTime;
-      setCurrentTime(newTime);
-    } else if (isBrowser) {
-      const wasPlaying = browserPlaying;
-      stopBrowser();
-      browserTimeRef.current = newTime; setBrowserTime(newTime); setCurrentTime(newTime);
-      if (wasPlaying) playBrowserVoice(newTime);
-    }
+    const wasPlaying = playing;
+    genRef.current++;
+    window.speechSynthesis.cancel();
+    stopTimer();
+    elapsedRef.current = Math.max(0, Math.min(newTime, totalDurRef.current));
+    setCurrentTime(elapsedRef.current);
+    if (wasPlaying) playFrom(elapsedRef.current);
   };
 
-  const handleSkip = (dir) => {
-    const d = (isPuter ? (audioRef.current?.duration || browserDurRef.current) : browserDurRef.current) || 1;
-    const cur = isPuter ? (audioRef.current?.currentTime || 0) : browserTimeRef.current;
-    const newTime = Math.min(d, Math.max(0, cur + dir * 10));
-    handleSeek(newTime);
-  };
+  const handleSkip = (dir) => handleSeek(elapsedRef.current + dir * 10);
 
   const handleSeekBar = (e) => {
-    const bar = e.currentTarget;
-    const rect = bar.getBoundingClientRect();
-    const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-    const pct = Math.min(1, Math.max(0, x / rect.width));
-    const d = isPuter ? (audioRef.current?.duration || 0) : browserDurRef.current;
-    handleSeek(pct * d);
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x    = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+    const pct  = Math.min(1, Math.max(0, x / rect.width));
+    handleSeek(pct * (totalDurRef.current || 0));
   };
 
   const changeSpeed = (s) => {
     setSpeed(s);
-    if (isPuter && audioRef.current) audioRef.current.playbackRate = s;
-    else if (isBrowser && browserPlaying) {
-      const t = browserTimeRef.current;
-      stopBrowser();
-      setTimeout(() => playBrowserVoice(t), 50);
-    }
+    if (playing) { const t = elapsedRef.current; handleStop(); setTimeout(() => playFrom(t), 30); }
   };
 
-  // Switch voice — reset audio
   const switchVoice = (i) => {
-    // Stop everything, clear audio src, reset state
-    stopBrowser();
-    const audio = audioRef.current;
-    if (audio) { audio.pause(); audio.src = ""; audio.load(); }
-    setPlaying(false); setAudioReady(false); setCurrentTime(0); setDuration(0); setGenError(null);
-    browserTimeRef.current = 0; setBrowserTime(0); setBrowserDur(0);
+    handleStop();
     setPersonaIdx(i);
     setShowPicker(false);
   };
 
-  // Cleanup on unmount
-  useEffect(() => () => { stopBrowser(); audioRef.current?.pause(); }, []);
+  // Start playing when script first arrives
+  useEffect(() => {
+    if (script && !loading) {
+      elapsedRef.current = 0;
+      setCurrentTime(0);
+      buildSentences(0); // sets duration
+    }
+  }, [script]);
 
-  // ── Derived display values ────────────────────────────────────────────────────
-  const dispTime = isPuter ? currentTime : (browserPlaying ? currentTime : browserTimeRef.current);
-  const dispDur  = isPuter ? duration    : browserDurRef.current;
-  const dispProg = dispDur > 0 ? Math.min(1, dispTime / dispDur) : 0;
-  const isActuallyPlaying = isPuter ? playing : browserPlaying;
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  const fmt = (s) => {
+    if (!isFinite(s) || s < 0) return "0:00";
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = Math.floor(s % 60);
+    return h > 0 ? `${h}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}` : `${m}:${String(sec).padStart(2,"0")}`;
+  };
+  const progress = duration > 0 ? Math.min(1, currentTime / duration) : 0;
 
-  // ── UI ────────────────────────────────────────────────────────────────────────
+  // ── UI ─────────────────────────────────────────────────────────────────────
   return (
     <div style={{ background:"linear-gradient(160deg,#1e1b4b 0%,#0f172a 100%)", borderRadius:24, overflow:"hidden", fontFamily:"'DM Sans',sans-serif" }}>
       {loading ? (
         <div style={{ padding:"48px 24px", textAlign:"center" }}>
           <div style={{ display:"flex", justifyContent:"center", gap:5, marginBottom:16 }}>
-            {[0,1,2,3].map(i=><span key={i} style={{ width:5,height:28,background:"#6366f1",borderRadius:3,display:"inline-block",animation:`ppbar 0.9s ease-in-out ${i*0.15}s infinite` }}/>)}
+            {[0,1,2,3].map(i => <span key={i} style={{ width:5, height:28, background:"#6366f1", borderRadius:3, display:"inline-block", animation:`ppbar 0.9s ease-in-out ${i*0.15}s infinite` }}/>)}
           </div>
           <p style={{ color:"#a5b4fc", fontSize:14, fontWeight:600 }}>Generating podcast script…</p>
         </div>
@@ -6948,63 +6749,62 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
             <button onClick={onClose} style={{ background:"rgba(255,255,255,.08)", border:"none", borderRadius:8, color:"#a5b4fc", cursor:"pointer", padding:"6px 10px", fontSize:12 }}>✕</button>
           </div>
 
-          {/* Error */}
-          {genError && (
-            <div style={{ margin:"12px 20px 0", background:"rgba(220,38,38,.2)", border:"1px solid rgba(220,38,38,.4)", borderRadius:10, padding:"8px 12px" }}>
-              <p style={{ color:"#fca5a5", fontSize:12 }}>{genError}</p>
-            </div>
-          )}
-
           {/* Controls */}
           <div style={{ padding:"16px 20px 8px" }}>
-
-            {/* Time display */}
+            {/* Time */}
             <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
-              <span style={{ fontSize:11, color:"#818cf8", fontVariantNumeric:"tabular-nums" }}>{fmt(dispTime)}</span>
-              <span style={{ fontSize:11, color:"#4b5563", fontVariantNumeric:"tabular-nums" }}>{fmt(dispDur)}</span>
+              <span style={{ fontSize:11, color:"#818cf8", fontVariantNumeric:"tabular-nums" }}>{fmt(currentTime)}</span>
+              <span style={{ fontSize:11, color:"#4b5563", fontVariantNumeric:"tabular-nums" }}>{fmt(duration)}</span>
             </div>
 
             {/* Progress bar */}
             <div onClick={handleSeekBar} onTouchStart={handleSeekBar}
-              style={{ height:6, background:"rgba(255,255,255,.1)", borderRadius:3, cursor:"pointer", marginBottom:16, position:"relative" }}>
-              <div style={{ height:"100%", width:`${dispProg*100}%`, background:"linear-gradient(90deg,#6366f1,#a855f7)", borderRadius:3, transition:"width .1s linear" }}/>
-              <div style={{ position:"absolute", top:"50%", left:`${dispProg*100}%`, transform:"translate(-50%,-50%)", width:13, height:13, borderRadius:"50%", background:"#fff", boxShadow:"0 0 6px rgba(99,102,241,.8)", pointerEvents:"none" }}/>
+              style={{ height:6, background:"rgba(255,255,255,.1)", borderRadius:3, cursor:"pointer", marginBottom:16, position:"relative", userSelect:"none" }}>
+              <div style={{ height:"100%", width:`${progress*100}%`, background:"linear-gradient(90deg,#6366f1,#a855f7)", borderRadius:3 }}/>
+              <div style={{ position:"absolute", top:"50%", left:`${progress*100}%`, transform:"translate(-50%,-50%)", width:13, height:13, borderRadius:"50%", background:"#fff", boxShadow:"0 0 6px rgba(99,102,241,.8)", pointerEvents:"none" }}/>
             </div>
 
-            {/* Transport */}
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:12, marginBottom:12 }}>
+            {/* Transport buttons */}
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:16, marginBottom:12 }}>
 
               {/* Rewind 10s */}
               <button onClick={() => handleSkip(-1)} title="Back 10s"
-                style={{ background:"none", border:"none", color:"#a5b4fc", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, padding:4 }}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/><text x="12" y="15.5" textAnchor="middle" fontSize="6" fill="currentColor" fontWeight="bold" fontFamily="sans-serif">10</text></svg>
-                <span style={{ fontSize:9, color:"#6366f1" }}>10s</span>
+                style={{ background:"none", border:"none", color:"#a5b4fc", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:1, padding:4 }}>
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12.5 3a9 9 0 1 0 6.5 15.5l-1.4-1.4A7 7 0 1 1 12.5 5V3z"/>
+                  <path d="M12.5 3L8 7.5l4.5 4.5V3z"/>
+                  <text x="12" y="15" textAnchor="middle" fontSize="5.5" fill="currentColor" fontWeight="bold" fontFamily="sans-serif">10</text>
+                </svg>
               </button>
 
-              {/* Play / Pause / Generate */}
-              <button
-                onClick={isActuallyPlaying ? handlePause : handlePlay}
-                disabled={generating}
-                style={{ width:60, height:60, borderRadius:"50%", background:"linear-gradient(135deg,#6366f1,#a855f7)", border:"none", color:"#fff", cursor:generating?"not-allowed":"pointer", boxShadow:"0 6px 24px rgba(99,102,241,.5)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                {generating
-                  ? <div style={{ display:"flex", gap:3 }}>{[0,1,2].map(i=><span key={i} style={{ width:4,height:14,background:"#fff",borderRadius:2,animation:`ppbar 0.8s ease-in-out ${i*0.15}s infinite` }}/>)}</div>
-                  : isActuallyPlaying
-                    ? <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-                    : <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+              {/* Play / Pause */}
+              <button onClick={playing ? handlePause : handlePlay}
+                style={{ width:60, height:60, borderRadius:"50%", background:"linear-gradient(135deg,#6366f1,#a855f7)", border:"none", color:"#fff", cursor:"pointer", boxShadow:"0 6px 24px rgba(99,102,241,.5)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                {playing
+                  ? <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                  : <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
                 }
               </button>
 
               {/* Forward 10s */}
               <button onClick={() => handleSkip(1)} title="Forward 10s"
-                style={{ background:"none", border:"none", color:"#a5b4fc", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, padding:4 }}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5V1l5 5-5 5V7c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6h2c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8z"/><text x="12" y="15.5" textAnchor="middle" fontSize="6" fill="currentColor" fontWeight="bold" fontFamily="sans-serif">10</text></svg>
-                <span style={{ fontSize:9, color:"#6366f1" }}>10s</span>
+                style={{ background:"none", border:"none", color:"#a5b4fc", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:1, padding:4 }}>
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M11.5 3a9 9 0 1 1-6.5 15.5l1.4-1.4A7 7 0 1 0 11.5 5V3z"/>
+                  <path d="M11.5 3L16 7.5l-4.5 4.5V3z"/>
+                  <text x="12" y="15" textAnchor="middle" fontSize="5.5" fill="currentColor" fontWeight="bold" fontFamily="sans-serif">10</text>
+                </svg>
               </button>
 
               {/* Voice picker toggle */}
-              <button onClick={() => setShowPicker(v=>!v)} title="Choose voice"
+              <button onClick={() => setShowPicker(v => !v)}
                 style={{ width:36, height:36, borderRadius:"50%", background:showPicker?"rgba(99,102,241,.5)":"rgba(255,255,255,.08)", border:`1.5px solid ${showPicker?"#6366f1":"rgba(255,255,255,.15)"}`, color:"#a5b4fc", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                  <line x1="12" y1="19" x2="12" y2="23"/>
+                  <line x1="8" y1="23" x2="16" y2="23"/>
+                </svg>
               </button>
             </div>
 
@@ -7023,58 +6823,31 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
           {/* Voice picker */}
           {showPicker && (
             <div style={{ margin:"0 12px 12px", background:"rgba(0,0,0,.4)", borderRadius:16, padding:"12px 10px", border:"1px solid rgba(255,255,255,.08)" }}>
-              <p style={{ fontSize:9, fontWeight:800, color:"#818cf8", letterSpacing:1.2, marginBottom:8, textTransform:"uppercase", textAlign:"center" }}>Choose a Voice</p>
-
-              <p style={{ fontSize:9, fontWeight:800, color:"#4b5563", letterSpacing:1, marginBottom:6, textTransform:"uppercase" }}>Browser Voices</p>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:5, marginBottom:10 }}>
-                {GLOBAL_PERSONAS.filter(p=>!p.engine).map(p => {
-                  const i = GLOBAL_PERSONAS.indexOf(p);
+              <p style={{ fontSize:9, fontWeight:800, color:"#818cf8", letterSpacing:1.2, marginBottom:10, textTransform:"uppercase", textAlign:"center" }}>Choose a Voice</p>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
+                {GLOBAL_PERSONAS.map((p, i) => {
                   const sel = personaIdx === i;
                   return (
                     <button key={p.id} onClick={() => switchVoice(i)}
                       style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3, padding:"8px 4px", borderRadius:12, border:"none", cursor:"pointer",
-                        background:sel?`${p.color}44`:"rgba(255,255,255,.06)", outline:sel?`2px solid ${p.color}`:"2px solid transparent" }}>
+                        background:sel?`${p.color}44`:"rgba(255,255,255,.06)", outline:sel?`2px solid ${p.color}`:"2px solid transparent", transition:"all .15s" }}>
                       <span style={{ width:16, height:16, borderRadius:"50%", background:p.color, display:"block", boxShadow:`0 0 6px ${p.color}88` }}/>
                       <span style={{ fontSize:11, fontWeight:800, color:"#fff" }}>{p.label}</span>
-                      <span style={{ fontSize:9, color:"#a5b4fc", textAlign:"center" }}>{p.gender==="female"?"♀":"♂"} {p.desc}</span>
+                      <span style={{ fontSize:9, color:"#a5b4fc", textAlign:"center" }}>{p.gender==="female"?"♀":p.gender==="male"?"♂":"◇"} {p.desc}</span>
                     </button>
                   );
                 })}
               </div>
-
-              <p style={{ fontSize:9, fontWeight:800, color:"#be185d", letterSpacing:1, marginBottom:6, textTransform:"uppercase", display:"flex", alignItems:"center", gap:4 }}>
-                <span style={{ background:"#be185d", borderRadius:4, padding:"1px 5px", fontSize:8, color:"#fff" }}>NEURAL</span> Realistic · powered by Puter
-              </p>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:5 }}>
-                {GLOBAL_PERSONAS.filter(p=>p.engine==="puter").map(p => {
-                  const i = GLOBAL_PERSONAS.indexOf(p);
-                  const sel = personaIdx === i;
-                  return (
-                    <button key={p.id} onClick={() => switchVoice(i)}
-                      style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3, padding:"8px 4px", borderRadius:12, border:"none", cursor:"pointer",
-                        background:sel?`${p.color}44`:"rgba(255,255,255,.06)", outline:sel?`2px solid ${p.color}`:"2px solid transparent" }}>
-                      <span style={{ width:16, height:16, borderRadius:"50%", background:`linear-gradient(135deg,${p.color},${p.color}99)`, display:"block", boxShadow:`0 0 8px ${p.color}99` }}/>
-                      <span style={{ fontSize:11, fontWeight:800, color:"#fff" }}>{p.label}</span>
-                      <span style={{ fontSize:9, color:"#f9a8d4", textAlign:"center" }}>{p.gender==="female"?"♀":"♂"} {p.desc}</span>
-                      <span style={{ fontSize:8, background:"rgba(190,24,93,.3)", color:"#fda4af", borderRadius:6, padding:"1px 4px" }}>Neural ✦</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <p style={{ fontSize:9, color:"#4b5563", textAlign:"center", marginTop:8 }}>Neural voices require a free Puter account on first use</p>
+              <p style={{ fontSize:9, color:"#4b5563", textAlign:"center", marginTop:8 }}>Best voices in Edge & Chrome · Uses your device voices</p>
             </div>
           )}
 
           {/* Current voice badge */}
           {!showPicker && (
-            <div style={{ padding:"0 20px 10px", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+            <div style={{ padding:"0 20px 10px", display:"flex", alignItems:"center", justifyContent:"center", gap:6, flexWrap:"wrap" }}>
               <span style={{ width:10, height:10, borderRadius:"50%", background:persona.color, display:"inline-block", boxShadow:`0 0 6px ${persona.color}` }}/>
               <span style={{ fontSize:11, color:"#c7d2fe", fontWeight:700 }}>{persona.label}</span>
-              <span style={{ fontSize:11, color:"#6366f1" }}>· {persona.gender==="female"?"♀":"♂"} · {persona.desc}</span>
-              {persona.engine==="puter" && <span style={{ background:"rgba(190,24,93,.35)", color:"#fda4af", borderRadius:6, padding:"1px 6px", fontSize:9, fontWeight:800 }}>NEURAL ✦</span>}
-              {isPuter && !audioReady && !generating && script && (
-                <span style={{ fontSize:9, color:"#f59e0b" }}>▶ Press play to generate</span>
-              )}
+              <span style={{ fontSize:11, color:"#6366f1" }}>· {persona.gender==="female"?"♀":persona.gender==="male"?"♂":"◇"} · {persona.desc}</span>
             </div>
           )}
 
@@ -7090,10 +6863,6 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
     </div>
   );
 }
-
-
-
-
 
 // Keep PodcastPlayer as an alias for backward compatibility
 const PodcastPlayer = EnhancedPodcastPlayer;
