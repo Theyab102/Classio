@@ -6669,7 +6669,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
         if (!puter) throw new Error("Puter unavailable");
 
         console.log("[Podcast] calling puter.ai.txt2speech...");
-        const puterEl = await puter.ai.txt2speech(script.slice(0, 3000), {
+        const puterEl = await puter.ai.txt2speech(script, {
           voice: persona.puterVoice || "Joanna",
           engine: "neural",
           language: "en-US"
