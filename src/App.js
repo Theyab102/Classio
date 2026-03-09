@@ -6559,7 +6559,8 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
     { id:"atlas", label:"Atlas", gender:"male",   color:"#ea580c", desc:"Bold & clear"     },
     { id:"fable", label:"Fable", gender:"male",   color:"#16a34a", desc:"Friendly & warm"  },
   ];
-  const usePiper = TTS_SERVER.length > 0;
+  const hasPiper = TTS_SERVER.length > 0;
+  const [usePiper,   setUsePiper]   = useState(TTS_SERVER.length > 0); // can toggle to browser
 
   const [voiceIdx,   setVoiceIdx]   = useState(0);
   const [personaIdx, setPersonaIdx] = useState(0);
@@ -6681,7 +6682,10 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
       audio.play().catch(e => console.warn("Piper play:", e));
     } catch(e) {
       console.warn("Piper TTS error:", e);
-      setPiperError("Piper server error — using browser voice instead.");
+      const msg = e.name === "AbortError"
+        ? "Timed out — server may be downloading voice model. Try again in 30 seconds."
+        : `Server error: ${e.message}`;
+      setPiperError(msg + " Switching to browser voice.");
       setPiperLoading(false);
       playBrowserFrom(elapsedRef.current);
     }
@@ -6822,17 +6826,48 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
   };
 
   const switchServerVoice = (i) => {
+    const savedTime = audioRef.current ? audioRef.current.currentTime : 0;
     setVoiceIdx(i);
     setPiperReady(false);
     setPiperError(null);
-    handleStop();
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ""; }
+    setPlaying(false);
     setShowPicker(false);
+    // Regenerate with new voice from saved position
+    setTimeout(() => generatePiper(savedTime), 100);
   };
 
   const switchBrowserVoice = (i) => {
-    handleStop();
+    const savedTime = elapsedRef.current;
+    const wasPlaying = playing;
+    genRef.current++;
+    window.speechSynthesis.cancel();
+    stopTimer();
     setPersonaIdx(i);
     setShowPicker(false);
+    if (wasPlaying) setTimeout(() => playBrowserFrom(savedTime), 100);
+  };
+
+  const switchToPiper = () => {
+    // Stop browser voice and switch to piper mode
+    genRef.current++;
+    window.speechSynthesis.cancel();
+    stopTimer();
+    setUsePiper(true);
+    setPiperReady(false);
+    setShowPicker(false);
+    setPlaying(false);
+  };
+
+  const switchToBrowser = () => {
+    // Stop piper and switch to browser mode
+    if (audioRef.current) { audioRef.current.pause(); }
+    setUsePiper(false);
+    setPiperReady(false);
+    setShowPicker(false);
+    setPlaying(false);
+    elapsedRef.current = 0;
+    setCurrentTime(0);
   };
 
   // Estimate duration on script load (browser mode)
@@ -6893,7 +6928,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
               <div style={{ display:"flex", gap:3 }}>
                 {[0,1,2].map(i => <span key={i} style={{ width:4, height:14, background:"#6366f1", borderRadius:2, display:"inline-block", animation:`ppbar 0.8s ease-in-out ${i*0.15}s infinite` }}/>)}
               </div>
-              <p style={{ color:"#a5b4fc", fontSize:12, margin:0 }}>Generating neural audio… this takes ~20s on first use</p>
+              <p style={{ color:"#a5b4fc", fontSize:12, margin:0 }}>Generating neural audio… first use downloads voice model (~80MB), takes 1-2 min. After that ~10s.</p>
             </div>
           )}
 
@@ -6979,30 +7014,41 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
           {/* Voice picker */}
           {showPicker && (
             <div style={{ margin:"0 12px 12px", background:"rgba(0,0,0,.4)", borderRadius:16, padding:"12px 10px", border:"1px solid rgba(255,255,255,.08)" }}>
+              {/* Tab switcher — only show if piper is available */}
+              {hasPiper && (
+                <div style={{ display:"flex", gap:4, marginBottom:10, background:"rgba(255,255,255,.05)", borderRadius:10, padding:3 }}>
+                  <button onClick={switchToPiper}
+                    style={{ flex:1, padding:"5px 0", borderRadius:8, border:"none", cursor:"pointer", fontSize:10, fontWeight:800,
+                      background:usePiper?"linear-gradient(90deg,#6366f1,#a855f7)":"transparent",
+                      color:usePiper?"#fff":"#6366f1" }}>
+                    PIPER ✦ Neural
+                  </button>
+                  <button onClick={switchToBrowser}
+                    style={{ flex:1, padding:"5px 0", borderRadius:8, border:"none", cursor:"pointer", fontSize:10, fontWeight:800,
+                      background:!usePiper?"rgba(255,255,255,.15)":"transparent",
+                      color:!usePiper?"#fff":"#818cf8" }}>
+                    Browser Voices
+                  </button>
+                </div>
+              )}
+
               {usePiper ? (
-                <>
-                  <p style={{ fontSize:9, fontWeight:800, color:"#818cf8", letterSpacing:1.2, marginBottom:10, textTransform:"uppercase", textAlign:"center" }}>
-                    Piper Neural Voices
-                    <span style={{ marginLeft:6, fontSize:8, background:"linear-gradient(90deg,#6366f1,#a855f7)", color:"#fff", borderRadius:4, padding:"1px 5px" }}>NEURAL ✦</span>
-                  </p>
-                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
-                    {SERVER_VOICES.map((v, i) => {
-                      const sel = voiceIdx === i;
-                      return (
-                        <button key={v.id} onClick={() => switchServerVoice(i)}
-                          style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3, padding:"8px 4px", borderRadius:12, border:"none", cursor:"pointer",
-                            background:sel?`${v.color}44`:"rgba(255,255,255,.06)", outline:sel?`2px solid ${v.color}`:"2px solid transparent" }}>
-                          <span style={{ width:16, height:16, borderRadius:"50%", background:`linear-gradient(135deg,${v.color},${v.color}99)`, display:"block", boxShadow:`0 0 8px ${v.color}88` }}/>
-                          <span style={{ fontSize:11, fontWeight:800, color:"#fff" }}>{v.label}</span>
-                          <span style={{ fontSize:9, color:"#a5b4fc", textAlign:"center" }}>{v.gender==="female"?"♀":"♂"} {v.desc}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
+                  {SERVER_VOICES.map((v, i) => {
+                    const sel = voiceIdx === i;
+                    return (
+                      <button key={v.id} onClick={() => switchServerVoice(i)}
+                        style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3, padding:"8px 4px", borderRadius:12, border:"none", cursor:"pointer",
+                          background:sel?`${v.color}44`:"rgba(255,255,255,.06)", outline:sel?`2px solid ${v.color}`:"2px solid transparent" }}>
+                        <span style={{ width:16, height:16, borderRadius:"50%", background:`linear-gradient(135deg,${v.color},${v.color}99)`, display:"block", boxShadow:`0 0 8px ${v.color}88` }}/>
+                        <span style={{ fontSize:11, fontWeight:800, color:"#fff" }}>{v.label}</span>
+                        <span style={{ fontSize:9, color:"#a5b4fc", textAlign:"center" }}>{v.gender==="female"?"♀":"♂"} {v.desc}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               ) : (
                 <>
-                  <p style={{ fontSize:9, fontWeight:800, color:"#818cf8", letterSpacing:1.2, marginBottom:10, textTransform:"uppercase", textAlign:"center" }}>Browser Voices</p>
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
                     {GLOBAL_PERSONAS.map((p, i) => {
                       const sel = personaIdx === i;
