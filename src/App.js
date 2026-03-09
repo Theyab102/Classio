@@ -648,6 +648,22 @@ const GS = `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@3
   button{min-height:40px}
   /* Chat input wraps */
   .chat-input-row{flex-wrap:wrap;gap:6px!important}
+  /* Ensure nothing overflows horizontally */
+  .page-inner{overflow-x:hidden!important}
+  /* Make all buttons at least 44px tall for touch */
+  button{min-height:44px!important}
+  /* Fix podcast player on mobile */
+  .podcast-player{margin:0!important;border-radius:0!important}
+  /* File/folder names don't overflow */
+  .card-label{overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;max-width:100%!important}
+  /* Sticky bottom toolbar for key actions */
+  .mobile-action-bar{display:flex!important}
+  /* Fix modals taking full screen on phone */
+  .modal-inner{max-height:88vh!important}
+  /* Notes/cards content full width */
+  .content-card{width:100%!important;max-width:100%!important;box-sizing:border-box!important}
+  /* Prevent horizontal scroll on the whole page */
+  body{overflow-x:hidden!important}
 }
 
 /* Landscape phone (height < 500px) */
@@ -655,6 +671,15 @@ const GS = `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@3
   .app-header{min-height:44px!important;height:44px!important}
   .modal-inner{max-height:90vh!important;border-radius:12px!important;position:relative!important;bottom:auto!important;margin:auto!important}
   .landscape-hide{display:none!important}
+  /* Hide ad banner in landscape to save space */
+  .ad-banner-wrap{display:none!important}
+  .page-with-ad{padding-bottom:0!important}
+}
+
+/* Phone landscape — full width content, no wasted space */
+@media(max-width:900px) and (orientation:landscape){
+  .ad-banner-wrap{display:none!important}
+  .page-with-ad{padding-bottom:0!important}
 }
 
 /* Scrollable tabs on tablet too */
@@ -1340,16 +1365,18 @@ function AdBanner() {
     try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch(e) {}
   }, []);
 
+  const isMobileAd = window.innerWidth <= 600;
+  // Only show ad banner on mobile phones — desktop has more screen space
   return (
-    <div style={{
+    <div className="ad-banner-wrap" style={{
       position:"fixed", bottom:0, left:0, right:0, zIndex:999,
-      height:50, maxHeight:50, overflow:"hidden",
+      height:isMobileAd ? 44 : 50, maxHeight:isMobileAd ? 44 : 50, overflow:"hidden",
       background:C.surface, borderTop:`1px solid ${C.border}`,
       display:"flex", alignItems:"center", justifyContent:"center",
     }}>
-      <div style={{ position:"relative", width:"100%", maxWidth:728, height:46, overflow:"hidden" }}>
+      <div style={{ position:"relative", width:"100%", maxWidth:728, height:isMobileAd ? 40 : 46, overflow:"hidden" }}>
         <ins className="adsbygoogle"
-          style={{ display:"block", width:"100%", height:46, overflow:"hidden" }}
+          style={{ display:"block", width:"100%", height:isMobileAd ? 40 : 46, overflow:"hidden" }}
           data-ad-client="ca-pub-5802600279565250"
           data-ad-slot="7527000448"
           data-ad-format="horizontal"
@@ -6928,7 +6955,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
               <div style={{ display:"flex", gap:3 }}>
                 {[0,1,2].map(i => <span key={i} style={{ width:4, height:14, background:"#6366f1", borderRadius:2, display:"inline-block", animation:`ppbar 0.8s ease-in-out ${i*0.15}s infinite` }}/>)}
               </div>
-              <p style={{ color:"#a5b4fc", fontSize:12, margin:0 }}>Generating neural audio… first use downloads voice model (~80MB), takes 1-2 min. After that ~10s.</p>
+              <p style={{ color:"#a5b4fc", fontSize:12, margin:0 }}>Generating audio… if slow, the server just restarted and is downloading voices. Wait ~60s then try again.</p>
             </div>
           )}
 
