@@ -6542,7 +6542,26 @@ function ListeningGame({ cards, onBack }) {
 
 // ─── PODCAST PLAYER ──────────────────────────────────────────────────────────
 // Browser-only, single persistent Audio element — proper pause/seek/rewind
+// Read TTS server URL at module level — before any component mounts
+const _TTS_SERVER_URL = (typeof window !== "undefined" && window.__CLASSIO_TTS_URL__)
+  ? String(window.__CLASSIO_TTS_URL__).replace(/\/$/, "")
+  : "";
+
 function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose }) {
+  // ── TTS Server URL ───────────────────────────────────────────────────────────
+  const TTS_SERVER = _TTS_SERVER_URL;
+  // Voices available from server (matches server.py VOICES dict)
+  const SERVER_VOICES = [
+    { id:"aria",  label:"Aria",  gender:"female", color:"#6366f1", desc:"Warm & natural"   },
+    { id:"nova",  label:"Nova",  gender:"female", color:"#a855f7", desc:"Bright & clear"   },
+    { id:"jade",  label:"Jade",  gender:"female", color:"#0f766e", desc:"Calm & smooth"    },
+    { id:"echo",  label:"Echo",  gender:"male",   color:"#2563eb", desc:"Deep & confident" },
+    { id:"atlas", label:"Atlas", gender:"male",   color:"#ea580c", desc:"Bold & clear"     },
+    { id:"fable", label:"Fable", gender:"male",   color:"#16a34a", desc:"Friendly & warm"  },
+  ];
+  const usePiper = TTS_SERVER.length > 0;
+
+  const [voiceIdx,   setVoiceIdx]   = useState(0);
   const [personaIdx, setPersonaIdx] = useState(0);
   const [showPicker, setShowPicker] = useState(false);
   const [speed,      setSpeed]      = useState(1.0);
@@ -6550,6 +6569,11 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
   const [playing,    setPlaying]    = useState(false);
   const [currentTime,setCurrentTime]= useState(0);
   const [duration,   setDuration]   = useState(0);
+  // Piper states
+  const [piperLoading, setPiperLoading] = useState(false);
+  const [piperReady,   setPiperReady]   = useState(false);
+  const [piperError,   setPiperError]   = useState(null);
+  const audioRef = useRef(null);
 
   // Load browser voices
   useEffect(() => {
@@ -6559,22 +6583,47 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
     return () => { window.speechSynthesis.cancel(); stopTimer(); };
   }, []);
 
-  const persona    = GLOBAL_PERSONAS[personaIdx] || GLOBAL_PERSONAS[0];
+  // Create persistent audio element for Piper
+  useEffect(() => {
+    const audio = new Audio();
+    audio.preload = "auto";
+    const onTime  = () => setCurrentTime(audio.currentTime);
+    const onDur   = () => setDuration(audio.duration || 0);
+    const onPlay  = () => setPlaying(true);
+    const onPause = () => setPlaying(false);
+    const onEnded = () => { setPlaying(false); setCurrentTime(0); if(audio) audio.currentTime = 0; };
+    audio.addEventListener("timeupdate",     onTime);
+    audio.addEventListener("durationchange", onDur);
+    audio.addEventListener("play",           onPlay);
+    audio.addEventListener("pause",          onPause);
+    audio.addEventListener("ended",          onEnded);
+    audioRef.current = audio;
+    return () => {
+      audio.pause();
+      audio.removeEventListener("timeupdate",     onTime);
+      audio.removeEventListener("durationchange", onDur);
+      audio.removeEventListener("play",           onPlay);
+      audio.removeEventListener("pause",          onPause);
+      audio.removeEventListener("ended",          onEnded);
+    };
+  }, []);
+
+  const SPEEDS  = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
+  const persona = GLOBAL_PERSONAS[personaIdx] || GLOBAL_PERSONAS[0];
   const personaRef = useRef(persona);
   useEffect(() => { personaRef.current = GLOBAL_PERSONAS[personaIdx]; }, [personaIdx]);
-  const SPEEDS = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
+  const serverVoice = SERVER_VOICES[voiceIdx] || SERVER_VOICES[0];
 
-  // ── Timer for progress tracking ──────────────────────────────────────────
-  const timerRef       = useRef(null);
-  const genRef         = useRef(0);         // incremented on every play/stop
-  const elapsedRef     = useRef(0);         // seconds elapsed total
-  const timerStartRef  = useRef(0);         // Date.now() when timer last started
-  const totalDurRef    = useRef(0);
+  // ── Browser TTS timer ────────────────────────────────────────────────────────
+  const timerRef      = useRef(null);
+  const genRef        = useRef(0);
+  const elapsedRef    = useRef(0);
+  const timerStartRef = useRef(0);
+  const totalDurRef   = useRef(0);
 
   const stopTimer = () => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
   };
-
   const startTimer = () => {
     stopTimer();
     timerStartRef.current = Date.now();
@@ -6586,145 +6635,227 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
     }, 100);
   };
 
-  // ── Build sentences + cumulative durations ────────────────────────────────
-  const buildSentences = (fromTime = 0) => {
-    const p = personaRef.current || GLOBAL_PERSONAS[0];
-    const rate = speed * (p.rate || 0.93);
-    const charsPerSec = 14 * rate;
-    const raw = script.match(/[^.!?]+[.!?]+(\s|$)/g) || [script];
-    const sentences = raw.map(s => s.trim()).filter(Boolean);
-    const durations = sentences.map(s => Math.max(0.3, s.length / charsPerSec));
-    const total     = durations.reduce((a, b) => a + b, 0);
-    totalDurRef.current = total;
-    setDuration(total);
+  // ── Piper audio generation ───────────────────────────────────────────────────
+  const generatePiper = async (fromTime = 0) => {
+    if (!script || piperLoading) return;
+    setPiperLoading(true);
+    setPiperError(null);
+    setPiperReady(false);
+    const audio = audioRef.current;
+    if (audio) { audio.pause(); audio.src = ""; }
+    setPlaying(false); setCurrentTime(0); setDuration(0);
 
-    // Find which sentence index corresponds to fromTime
-    let acc = 0, startIdx = 0;
-    for (let i = 0; i < durations.length; i++) {
-      if (acc + durations[i] > fromTime) { startIdx = i; break; }
-      acc += durations[i];
-      if (i === durations.length - 1) startIdx = i;
+    try {
+      const resp = await fetch(`${TTS_SERVER}/generate-podcast`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text:   script,
+          voice:  serverVoice.id,
+          speed:  speed,
+          format: "mp3",
+        }),
+      });
+      if (!resp.ok) {
+        const err = await resp.text().catch(() => "Server error");
+        throw new Error(err);
+      }
+      const blob   = await resp.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      audio.src          = blobUrl;
+      audio.playbackRate = 1.0; // speed already baked in by server
+      audio.load();
+      await new Promise((res) => {
+        const done = () => { audio.removeEventListener("canplay", done); res(); };
+        audio.addEventListener("canplay", done);
+        audio.onerror = () => res();
+        setTimeout(res, 15000);
+      });
+      // Seek to fromTime if resuming after voice/speed change
+      if (fromTime > 0 && isFinite(audio.duration) && fromTime < audio.duration) {
+        audio.currentTime = fromTime;
+      }
+      setDuration(audio.duration || 0);
+      setPiperReady(true);
+      setPiperLoading(false);
+      audio.play().catch(e => console.warn("Piper play:", e));
+    } catch(e) {
+      console.warn("Piper TTS error:", e);
+      setPiperError("Piper server error — using browser voice instead.");
+      setPiperLoading(false);
+      playBrowserFrom(elapsedRef.current);
     }
-    return { sentences, durations, total, startIdx, timeAtStart: acc };
   };
 
-  // ── Play from a given time (seconds) ──────────────────────────────────────
-  const playFrom = (fromTime) => {
+  // ── Browser TTS ──────────────────────────────────────────────────────────────
+  const buildSentences = (fromTime = 0) => {
+    const p    = personaRef.current || GLOBAL_PERSONAS[0];
+    const rate = speed * (p.rate || 0.93);
+    const cps  = 14 * rate;
+    const raw  = script.match(/[^.!?]+[.!?]+(\s|$)/g) || [script];
+    const sents = raw.map(s => s.trim()).filter(Boolean);
+    const durs  = sents.map(s => Math.max(0.3, s.length / cps));
+    const total = durs.reduce((a, b) => a + b, 0);
+    totalDurRef.current = total;
+    setDuration(total);
+    let acc = 0, startIdx = 0;
+    for (let i = 0; i < durs.length; i++) {
+      if (acc + durs[i] > fromTime) { startIdx = i; break; }
+      acc += durs[i];
+      if (i === durs.length - 1) startIdx = i;
+    }
+    return { sents, durs, total, startIdx, timeAtStart: acc };
+  };
+
+  const playBrowserFrom = (fromTime) => {
     window.speechSynthesis.cancel();
     stopTimer();
     if (!script) return;
-
     const myGen = ++genRef.current;
-    const p = personaRef.current || GLOBAL_PERSONAS[0];
+    const p     = personaRef.current || GLOBAL_PERSONAS[0];
     const voice = getSmartVoice(p, allVoices, lang);
-    const { sentences, durations, total, startIdx, timeAtStart } = buildSentences(fromTime);
-
-    elapsedRef.current   = fromTime;
+    const { sents, durs, total, startIdx } = buildSentences(fromTime);
+    elapsedRef.current    = fromTime;
     timerStartRef.current = Date.now();
     setCurrentTime(fromTime);
     setPlaying(true);
     startTimer();
-
     const speakOne = (idx) => {
-      if (genRef.current !== myGen || idx >= sentences.length) {
-        if (genRef.current === myGen) {
-          stopTimer();
-          elapsedRef.current = total;
-          setCurrentTime(total);
-          setPlaying(false);
-        }
+      if (genRef.current !== myGen || idx >= sents.length) {
+        if (genRef.current === myGen) { stopTimer(); elapsedRef.current = total; setCurrentTime(total); setPlaying(false); }
         return;
       }
-      const u = new SpeechSynthesisUtterance(sentences[idx]);
-      u.rate   = speed * (p.rate  || 0.93);
-      u.pitch  = p.pitch || 1.0;
-      u.volume = 1.0;
-      u.lang   = lang;
+      const u   = new SpeechSynthesisUtterance(sents[idx]);
+      u.rate    = speed * (p.rate  || 0.93);
+      u.pitch   = p.pitch || 1.0;
+      u.volume  = 1.0;
+      u.lang    = lang;
       if (voice) u.voice = voice;
-      u.onend  = () => { if (genRef.current === myGen) speakOne(idx + 1); };
+      u.onend   = () => { if (genRef.current === myGen) speakOne(idx + 1); };
       u.onerror = () => { if (genRef.current === myGen) speakOne(idx + 1); };
       window.speechSynthesis.speak(u);
     };
     speakOne(startIdx);
   };
 
-  // ── Controls ──────────────────────────────────────────────────────────────
+  // ── Unified controls ─────────────────────────────────────────────────────────
   const handlePlay = () => {
-    if (playing) return;
-    playFrom(elapsedRef.current);
+    if (usePiper) {
+      if (piperReady && audioRef.current) {
+        audioRef.current.play().catch(console.warn);
+      } else {
+        generatePiper(0);
+      }
+    } else {
+      if (playing) return;
+      playBrowserFrom(elapsedRef.current);
+    }
   };
 
   const handlePause = () => {
-    // Stop gen loop + timer, freeze elapsed time
-    genRef.current++;
-    window.speechSynthesis.cancel();
-    stopTimer();
-    // Snap elapsed to actual timer value
-    elapsedRef.current = Math.min(
-      elapsedRef.current + (Date.now() - timerStartRef.current) / 1000,
-      totalDurRef.current
-    );
-    setCurrentTime(elapsedRef.current);
-    setPlaying(false);
+    if (usePiper && piperReady && audioRef.current) {
+      audioRef.current.pause();
+    } else {
+      genRef.current++;
+      window.speechSynthesis.cancel();
+      stopTimer();
+      elapsedRef.current = Math.min(
+        elapsedRef.current + (Date.now() - timerStartRef.current) / 1000,
+        totalDurRef.current
+      );
+      setCurrentTime(elapsedRef.current);
+      setPlaying(false);
+    }
   };
 
   const handleStop = () => {
-    genRef.current++;
-    window.speechSynthesis.cancel();
-    stopTimer();
-    elapsedRef.current = 0;
-    setCurrentTime(0);
-    setPlaying(false);
+    if (usePiper && audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      setCurrentTime(0);
+      setPlaying(false);
+    } else {
+      genRef.current++;
+      window.speechSynthesis.cancel();
+      stopTimer();
+      elapsedRef.current = 0;
+      setCurrentTime(0);
+      setPlaying(false);
+    }
   };
 
   const handleSeek = (newTime) => {
-    const wasPlaying = playing;
-    genRef.current++;
-    window.speechSynthesis.cancel();
-    stopTimer();
-    elapsedRef.current = Math.max(0, Math.min(newTime, totalDurRef.current));
-    setCurrentTime(elapsedRef.current);
-    if (wasPlaying) playFrom(elapsedRef.current);
+    const clamped = Math.max(0, Math.min(newTime, usePiper ? (audioRef.current?.duration || 0) : totalDurRef.current));
+    if (usePiper && piperReady && audioRef.current) {
+      audioRef.current.currentTime = clamped;
+      setCurrentTime(clamped);
+    } else {
+      const wasPlaying = playing;
+      genRef.current++;
+      window.speechSynthesis.cancel();
+      stopTimer();
+      elapsedRef.current = clamped;
+      setCurrentTime(clamped);
+      if (wasPlaying) playBrowserFrom(clamped);
+    }
   };
 
-  const handleSkip = (dir) => handleSeek(elapsedRef.current + dir * 10);
-
+  const handleSkip   = (dir) => handleSeek((usePiper ? (audioRef.current?.currentTime || 0) : elapsedRef.current) + dir * 10);
   const handleSeekBar = (e) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x    = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-    const pct  = Math.min(1, Math.max(0, x / rect.width));
-    handleSeek(pct * (totalDurRef.current || 0));
+    const rect  = e.currentTarget.getBoundingClientRect();
+    const x     = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+    const pct   = Math.min(1, Math.max(0, x / rect.width));
+    const total = usePiper ? (audioRef.current?.duration || 0) : totalDurRef.current;
+    handleSeek(pct * total);
   };
 
   const changeSpeed = (s) => {
     setSpeed(s);
-    if (playing) { const t = elapsedRef.current; handleStop(); setTimeout(() => playFrom(t), 30); }
+    if (usePiper) {
+      // Regenerate with new speed baked in
+      const t = audioRef.current?.currentTime || 0;
+      setPiperReady(false);
+      setTimeout(() => generatePiper(t), 50);
+    } else {
+      if (playing) { const t = elapsedRef.current; handleStop(); setTimeout(() => playBrowserFrom(t), 30); }
+    }
   };
 
-  const switchVoice = (i) => {
+  const switchServerVoice = (i) => {
+    setVoiceIdx(i);
+    setPiperReady(false);
+    setPiperError(null);
+    handleStop();
+    setShowPicker(false);
+  };
+
+  const switchBrowserVoice = (i) => {
     handleStop();
     setPersonaIdx(i);
     setShowPicker(false);
   };
 
-  // Start playing when script first arrives
+  // Estimate duration on script load (browser mode)
   useEffect(() => {
-    if (script && !loading) {
+    if (script && !loading && !usePiper) {
       elapsedRef.current = 0;
       setCurrentTime(0);
-      buildSentences(0); // sets duration
+      buildSentences(0);
     }
   }, [script]);
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────────────────────────
   const fmt = (s) => {
     if (!isFinite(s) || s < 0) return "0:00";
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = Math.floor(s % 60);
     return h > 0 ? `${h}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}` : `${m}:${String(sec).padStart(2,"0")}`;
   };
-  const progress = duration > 0 ? Math.min(1, currentTime / duration) : 0;
+  const dispTime = usePiper ? currentTime : currentTime;
+  const dispDur  = usePiper ? duration    : duration;
+  const progress = dispDur > 0 ? Math.min(1, dispTime / dispDur) : 0;
+  const isPlaying = playing;
 
-  // ── UI ─────────────────────────────────────────────────────────────────────
+  // ── UI ─────────────────────────────────────────────────────────────────────────
   return (
     <div style={{ background:"linear-gradient(160deg,#1e1b4b 0%,#0f172a 100%)", borderRadius:24, overflow:"hidden", fontFamily:"'DM Sans',sans-serif" }}>
       {loading ? (
@@ -6743,56 +6874,81 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
           {/* Header */}
           <div style={{ padding:"18px 20px 0", display:"flex", alignItems:"flex-start", justifyContent:"space-between" }}>
             <div>
-              <p style={{ fontSize:10, fontWeight:800, color:"#6366f1", letterSpacing:1.5, textTransform:"uppercase", marginBottom:4 }}>Study Podcast</p>
+              <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}>
+                <p style={{ fontSize:10, fontWeight:800, color:"#6366f1", letterSpacing:1.5, textTransform:"uppercase" }}>Study Podcast</p>
+                {usePiper && (
+                  <span style={{ fontSize:9, background:"linear-gradient(90deg,#6366f1,#a855f7)", color:"#fff", borderRadius:6, padding:"1px 7px", fontWeight:800, letterSpacing:.5 }}>
+                    PIPER ✦
+                  </span>
+                )}
+              </div>
               <p style={{ fontSize:14, fontWeight:700, color:"#e0e7ff", maxWidth:220, lineHeight:1.3 }}>{topic || "Your Study Session"}</p>
             </div>
             <button onClick={onClose} style={{ background:"rgba(255,255,255,.08)", border:"none", borderRadius:8, color:"#a5b4fc", cursor:"pointer", padding:"6px 10px", fontSize:12 }}>✕</button>
           </div>
 
+          {/* Piper loading bar */}
+          {piperLoading && (
+            <div style={{ margin:"12px 20px 0", background:"rgba(99,102,241,.15)", border:"1px solid rgba(99,102,241,.3)", borderRadius:10, padding:"10px 14px", display:"flex", alignItems:"center", gap:10 }}>
+              <div style={{ display:"flex", gap:3 }}>
+                {[0,1,2].map(i => <span key={i} style={{ width:4, height:14, background:"#6366f1", borderRadius:2, display:"inline-block", animation:`ppbar 0.8s ease-in-out ${i*0.15}s infinite` }}/>)}
+              </div>
+              <p style={{ color:"#a5b4fc", fontSize:12, margin:0 }}>Generating neural audio… this takes ~20s on first use</p>
+            </div>
+          )}
+
+          {/* Error */}
+          {piperError && (
+            <div style={{ margin:"12px 20px 0", background:"rgba(220,38,38,.15)", border:"1px solid rgba(220,38,38,.3)", borderRadius:10, padding:"8px 12px" }}>
+              <p style={{ color:"#fca5a5", fontSize:12, margin:0 }}>{piperError}</p>
+            </div>
+          )}
+
           {/* Controls */}
           <div style={{ padding:"16px 20px 8px" }}>
             {/* Time */}
             <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
-              <span style={{ fontSize:11, color:"#818cf8", fontVariantNumeric:"tabular-nums" }}>{fmt(currentTime)}</span>
-              <span style={{ fontSize:11, color:"#4b5563", fontVariantNumeric:"tabular-nums" }}>{fmt(duration)}</span>
+              <span style={{ fontSize:11, color:"#818cf8", fontVariantNumeric:"tabular-nums" }}>{fmt(dispTime)}</span>
+              <span style={{ fontSize:11, color:"#4b5563", fontVariantNumeric:"tabular-nums" }}>{fmt(dispDur)}</span>
             </div>
 
             {/* Progress bar */}
             <div onClick={handleSeekBar} onTouchStart={handleSeekBar}
               style={{ height:6, background:"rgba(255,255,255,.1)", borderRadius:3, cursor:"pointer", marginBottom:16, position:"relative", userSelect:"none" }}>
-              <div style={{ height:"100%", width:`${progress*100}%`, background:"linear-gradient(90deg,#6366f1,#a855f7)", borderRadius:3 }}/>
+              <div style={{ height:"100%", width:`${progress*100}%`, background:"linear-gradient(90deg,#6366f1,#a855f7)", borderRadius:3, transition:"width .15s linear" }}/>
               <div style={{ position:"absolute", top:"50%", left:`${progress*100}%`, transform:"translate(-50%,-50%)", width:13, height:13, borderRadius:"50%", background:"#fff", boxShadow:"0 0 6px rgba(99,102,241,.8)", pointerEvents:"none" }}/>
             </div>
 
-            {/* Transport buttons */}
+            {/* Transport */}
             <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:16, marginBottom:12 }}>
-
               {/* Rewind 10s */}
-              <button onClick={() => handleSkip(-1)} title="Back 10s"
+              <button onClick={() => handleSkip(-1)}
                 style={{ background:"none", border:"none", color:"#a5b4fc", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:1, padding:4 }}>
                 <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12.5 3a9 9 0 1 0 6.5 15.5l-1.4-1.4A7 7 0 1 1 12.5 5V3z"/>
                   <path d="M12.5 3L8 7.5l4.5 4.5V3z"/>
-                  <text x="12" y="15" textAnchor="middle" fontSize="5.5" fill="currentColor" fontWeight="bold" fontFamily="sans-serif">10</text>
+                  <text x="12" y="15.5" textAnchor="middle" fontSize="5.5" fill="currentColor" fontWeight="bold" fontFamily="sans-serif">10</text>
                 </svg>
               </button>
 
               {/* Play / Pause */}
-              <button onClick={playing ? handlePause : handlePlay}
-                style={{ width:60, height:60, borderRadius:"50%", background:"linear-gradient(135deg,#6366f1,#a855f7)", border:"none", color:"#fff", cursor:"pointer", boxShadow:"0 6px 24px rgba(99,102,241,.5)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                {playing
-                  ? <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-                  : <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+              <button onClick={isPlaying ? handlePause : handlePlay} disabled={piperLoading}
+                style={{ width:60, height:60, borderRadius:"50%", background: piperLoading ? "rgba(99,102,241,.4)" : "linear-gradient(135deg,#6366f1,#a855f7)", border:"none", color:"#fff", cursor: piperLoading ? "not-allowed" : "pointer", boxShadow:"0 6px 24px rgba(99,102,241,.5)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                {piperLoading
+                  ? <div style={{ display:"flex", gap:3 }}>{[0,1,2].map(i=><span key={i} style={{ width:3, height:12, background:"#fff", borderRadius:2, animation:`ppbar 0.8s ease-in-out ${i*0.15}s infinite` }}/>)}</div>
+                  : isPlaying
+                    ? <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                    : <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
                 }
               </button>
 
               {/* Forward 10s */}
-              <button onClick={() => handleSkip(1)} title="Forward 10s"
+              <button onClick={() => handleSkip(1)}
                 style={{ background:"none", border:"none", color:"#a5b4fc", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:1, padding:4 }}>
                 <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M11.5 3a9 9 0 1 1-6.5 15.5l1.4-1.4A7 7 0 1 0 11.5 5V3z"/>
                   <path d="M11.5 3L16 7.5l-4.5 4.5V3z"/>
-                  <text x="12" y="15" textAnchor="middle" fontSize="5.5" fill="currentColor" fontWeight="bold" fontFamily="sans-serif">10</text>
+                  <text x="12" y="15.5" textAnchor="middle" fontSize="5.5" fill="currentColor" fontWeight="bold" fontFamily="sans-serif">10</text>
                 </svg>
               </button>
 
@@ -6823,31 +6979,77 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
           {/* Voice picker */}
           {showPicker && (
             <div style={{ margin:"0 12px 12px", background:"rgba(0,0,0,.4)", borderRadius:16, padding:"12px 10px", border:"1px solid rgba(255,255,255,.08)" }}>
-              <p style={{ fontSize:9, fontWeight:800, color:"#818cf8", letterSpacing:1.2, marginBottom:10, textTransform:"uppercase", textAlign:"center" }}>Choose a Voice</p>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
-                {GLOBAL_PERSONAS.map((p, i) => {
-                  const sel = personaIdx === i;
-                  return (
-                    <button key={p.id} onClick={() => switchVoice(i)}
-                      style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3, padding:"8px 4px", borderRadius:12, border:"none", cursor:"pointer",
-                        background:sel?`${p.color}44`:"rgba(255,255,255,.06)", outline:sel?`2px solid ${p.color}`:"2px solid transparent", transition:"all .15s" }}>
-                      <span style={{ width:16, height:16, borderRadius:"50%", background:p.color, display:"block", boxShadow:`0 0 6px ${p.color}88` }}/>
-                      <span style={{ fontSize:11, fontWeight:800, color:"#fff" }}>{p.label}</span>
-                      <span style={{ fontSize:9, color:"#a5b4fc", textAlign:"center" }}>{p.gender==="female"?"♀":p.gender==="male"?"♂":"◇"} {p.desc}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <p style={{ fontSize:9, color:"#4b5563", textAlign:"center", marginTop:8 }}>Best voices in Edge & Chrome · Uses your device voices</p>
+              {usePiper ? (
+                <>
+                  <p style={{ fontSize:9, fontWeight:800, color:"#818cf8", letterSpacing:1.2, marginBottom:10, textTransform:"uppercase", textAlign:"center" }}>
+                    Piper Neural Voices
+                    <span style={{ marginLeft:6, fontSize:8, background:"linear-gradient(90deg,#6366f1,#a855f7)", color:"#fff", borderRadius:4, padding:"1px 5px" }}>NEURAL ✦</span>
+                  </p>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
+                    {SERVER_VOICES.map((v, i) => {
+                      const sel = voiceIdx === i;
+                      return (
+                        <button key={v.id} onClick={() => switchServerVoice(i)}
+                          style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3, padding:"8px 4px", borderRadius:12, border:"none", cursor:"pointer",
+                            background:sel?`${v.color}44`:"rgba(255,255,255,.06)", outline:sel?`2px solid ${v.color}`:"2px solid transparent" }}>
+                          <span style={{ width:16, height:16, borderRadius:"50%", background:`linear-gradient(135deg,${v.color},${v.color}99)`, display:"block", boxShadow:`0 0 8px ${v.color}88` }}/>
+                          <span style={{ fontSize:11, fontWeight:800, color:"#fff" }}>{v.label}</span>
+                          <span style={{ fontSize:9, color:"#a5b4fc", textAlign:"center" }}>{v.gender==="female"?"♀":"♂"} {v.desc}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p style={{ fontSize:9, fontWeight:800, color:"#818cf8", letterSpacing:1.2, marginBottom:10, textTransform:"uppercase", textAlign:"center" }}>Browser Voices</p>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
+                    {GLOBAL_PERSONAS.map((p, i) => {
+                      const sel = personaIdx === i;
+                      return (
+                        <button key={p.id} onClick={() => switchBrowserVoice(i)}
+                          style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3, padding:"8px 4px", borderRadius:12, border:"none", cursor:"pointer",
+                            background:sel?`${p.color}44`:"rgba(255,255,255,.06)", outline:sel?`2px solid ${p.color}`:"2px solid transparent" }}>
+                          <span style={{ width:16, height:16, borderRadius:"50%", background:p.color, display:"block", boxShadow:`0 0 6px ${p.color}88` }}/>
+                          <span style={{ fontSize:11, fontWeight:800, color:"#fff" }}>{p.label}</span>
+                          <span style={{ fontSize:9, color:"#a5b4fc", textAlign:"center" }}>{p.gender==="female"?"♀":p.gender==="male"?"♂":"◇"} {p.desc}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p style={{ fontSize:9, color:"#4b5563", textAlign:"center", marginTop:8 }}>Best in Edge & Chrome</p>
+                </>
+              )}
             </div>
           )}
 
           {/* Current voice badge */}
           {!showPicker && (
             <div style={{ padding:"0 20px 10px", display:"flex", alignItems:"center", justifyContent:"center", gap:6, flexWrap:"wrap" }}>
-              <span style={{ width:10, height:10, borderRadius:"50%", background:persona.color, display:"inline-block", boxShadow:`0 0 6px ${persona.color}` }}/>
-              <span style={{ fontSize:11, color:"#c7d2fe", fontWeight:700 }}>{persona.label}</span>
-              <span style={{ fontSize:11, color:"#6366f1" }}>· {persona.gender==="female"?"♀":persona.gender==="male"?"♂":"◇"} · {persona.desc}</span>
+              {usePiper ? (
+                <>
+                  <span style={{ width:10, height:10, borderRadius:"50%", background:serverVoice.color, display:"inline-block", boxShadow:`0 0 6px ${serverVoice.color}` }}/>
+                  <span style={{ fontSize:11, color:"#c7d2fe", fontWeight:700 }}>{serverVoice.label}</span>
+                  <span style={{ fontSize:11, color:"#6366f1" }}>· {serverVoice.gender==="female"?"♀":"♂"} · {serverVoice.desc}</span>
+                  <span style={{ fontSize:9, background:"linear-gradient(90deg,rgba(99,102,241,.4),rgba(168,85,247,.4))", color:"#c7d2fe", borderRadius:6, padding:"1px 7px", fontWeight:800 }}>PIPER ✦</span>
+                  {!piperReady && !piperLoading && <span style={{ fontSize:9, color:"#f59e0b" }}>▶ Press play to generate</span>}
+                </>
+              ) : (
+                <>
+                  <span style={{ width:10, height:10, borderRadius:"50%", background:persona.color, display:"inline-block", boxShadow:`0 0 6px ${persona.color}` }}/>
+                  <span style={{ fontSize:11, color:"#c7d2fe", fontWeight:700 }}>{persona.label}</span>
+                  <span style={{ fontSize:11, color:"#6366f1" }}>· {persona.gender==="female"?"♀":persona.gender==="male"?"♂":"◇"} · {persona.desc}</span>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* No server banner */}
+          {!usePiper && (
+            <div style={{ margin:"0 12px 12px", background:"rgba(99,102,241,.08)", border:"1px dashed rgba(99,102,241,.3)", borderRadius:10, padding:"8px 12px", textAlign:"center" }}>
+              <p style={{ color:"#6366f1", fontSize:11, margin:0 }}>
+                ✦ <strong>Piper neural voices</strong> available — deploy the TTS server and set <code style={{ background:"rgba(99,102,241,.2)", padding:"0 3px", borderRadius:3 }}>window.__CLASSIO_TTS_URL__</code>
+              </p>
             </div>
           )}
 
