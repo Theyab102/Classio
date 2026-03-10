@@ -650,8 +650,8 @@ const GS = `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@3
   .chat-input-row{flex-wrap:wrap;gap:6px!important}
   /* Ensure nothing overflows horizontally */
   .page-inner{overflow-x:hidden!important}
-  /* Make all buttons at least 44px tall for touch */
-  button{min-height:44px!important}
+  /* Touch targets — only for action buttons, not icon/color buttons */
+  button:not(.no-min-h){min-height:36px}
   /* Fix podcast player on mobile */
   .podcast-player{margin:0!important;border-radius:0!important}
   /* File/folder names don't overflow */
@@ -664,6 +664,22 @@ const GS = `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@3
   .content-card{width:100%!important;max-width:100%!important;box-sizing:border-box!important}
   /* Prevent horizontal scroll on the whole page */
   body{overflow-x:hidden!important}
+  /* Force circles to stay circular */
+  [style*="border-radius: 50%"],[style*="borderRadius:"50%""],[style*="border-radius:50%"]{
+    aspect-ratio:1!important;
+    min-height:unset!important;
+    flex-shrink:0!important;
+  }
+  /* Color picker swatches */
+  .color-swatch{
+    width:36px!important;
+    height:36px!important;
+    min-height:unset!important;
+    border-radius:50%!important;
+    aspect-ratio:1!important;
+    flex-shrink:0!important;
+    padding:0!important;
+  }
 }
 
 /* Landscape phone (height < 500px) */
@@ -691,6 +707,8 @@ const GS = `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@3
 /* Hard cap on AdSense iframe */
 ins.adsbygoogle{max-height:46px!important;overflow:hidden!important}
 ins.adsbygoogle iframe{max-height:46px!important}
+/* Global: any button with border-radius 50% must stay perfectly circular */
+button[style*="border-radius: 50%"],button[style*="borderRadius"]{aspect-ratio:1;flex-shrink:0}
 
 @keyframes bounce{0%,80%,100%{transform:scale(.8);opacity:.5}40%{transform:scale(1.1);opacity:1}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
@@ -1315,16 +1333,18 @@ export default function App() {
           <div style={{ marginBottom:16 }}>
             <div style={{ display:"flex", gap:7, flexWrap:"wrap", marginBottom:8, alignItems:"center" }}>
               {FOLDER_COLORS.map(col => (
-                <button key={col} onClick={() => { setNewColor(col); setShowFolderPicker(false); }}
-                  style={{ width:28, height:28, borderRadius:"50%", background:col, cursor:"pointer", flexShrink:0,
+                <button key={col} className="color-swatch no-min-h" onClick={() => { setNewColor(col); setShowFolderPicker(false); }}
+                  style={{ width:36, height:36, borderRadius:"50%", background:col, cursor:"pointer", flexShrink:0,
                     border:`3px solid ${newColor===col?C.text:"transparent"}`,
-                    boxShadow:`0 1px 4px rgba(0,0,0,${newColor===col?".35":".15"})` }} />
+                    boxShadow:`0 1px 4px rgba(0,0,0,${newColor===col?".35":".15"})`,
+                    padding:0, minHeight:"unset" }} />
               ))}
-              <button onClick={() => setShowFolderPicker(p => !p)}
-                style={{ width:28, height:28, borderRadius:"50%", cursor:"pointer",
+              <button className="no-min-h" onClick={() => setShowFolderPicker(p => !p)}
+                style={{ width:36, height:36, borderRadius:"50%", cursor:"pointer",
                   border:"2px dashed #bbb", background:showFolderPicker?"#4361ee":"transparent",
                   display:"flex", alignItems:"center", justifyContent:"center",
-                  fontSize:14, color:showFolderPicker?"#fff":"#888" }}>
+                  fontSize:14, color:showFolderPicker?"#fff":"#888",
+                  padding:0, minHeight:"unset", flexShrink:0 }}>
                 {showFolderPicker ? "×" : "+"}
               </button>
             </div>
