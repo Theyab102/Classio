@@ -1220,7 +1220,7 @@ export default function App() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'DM Sans', sans-serif", paddingBottom: 50 }}>
+    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'DM Sans', sans-serif", paddingBottom: 50, overflowX: "hidden", width: "100%", boxSizing: "border-box" }}>
       <style>{GS}</style>
       <Header user={isGuest ? { displayName: guestName, photoURL: null } : user} saveStatus={saveStatus} isGuest={isGuest} onSignOut={isGuest ? handleGuestSignOut : () => signOut(auth)} character={character} onOpenCharacter={() => setShowCharacter(true)} homeTab={homeTab} onSetHomeTab={setHomeTab} onOpenAI={() => setShowHomeAI(true)} />
       {showCharacter && <CharacterModal character={character} onChange={c => { setCharacter(c); localStorage.setItem("classio_char", JSON.stringify(c)); }} onClose={() => setShowCharacter(false)} />}
@@ -1231,7 +1231,7 @@ export default function App() {
         onClose={() => setShowStudyGroupLobby(false)}
       />}
       <AdBanner />
-      <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 14px" }}>
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "12px 10px" : "24px 14px" }}>
         {/* ── Action buttons row ── */}
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:20, justifyContent:"flex-end" }}>
           <button onClick={()=>setShowStudyGroupLobby(true)} className="hov"
@@ -1388,19 +1388,20 @@ function AdBanner() {
 
 // ─── HEADER ───────────────────────────────────────────────────────────────────
 function Header({ user, saveStatus, isGuest, onSignOut, character, onOpenCharacter, homeTab, onSetHomeTab, onOpenAI }) {
+  const { isMobile } = useResponsive();
   return (
-    <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 16px", height:56, display:"flex", alignItems:"center", gap:12 }}>
+    <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:isMobile?"0 10px":"0 16px", height:isMobile?48:56, display:"flex", alignItems:"center", gap:isMobile?6:12, width:"100%", boxSizing:"border-box", overflow:"hidden" }}>
       {/* Logo */}
-      <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
-        <div style={{ width:30, height:30, background:C.accent, borderRadius:9, display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <Icon d={I.sparkle} size={15} color="#fff" sw={2} />
+      <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
+        <div style={{ width:isMobile?26:30, height:isMobile?26:30, background:C.accent, borderRadius:9, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <Icon d={I.sparkle} size={isMobile?13:15} color="#fff" sw={2} />
         </div>
-        <span style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:700, color:C.text, letterSpacing:-0.5 }}>Classio</span>
+        {!isMobile && <span style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:700, color:C.text, letterSpacing:-0.5 }}>Classio</span>}
       </div>
 
       {/* Center — tabs + AI button (only on home screen, i.e. when homeTab is defined) */}
       {onSetHomeTab && (
-        <div style={{ display:"flex", alignItems:"center", gap:8, flex:1 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:isMobile?4:8, flex:1 }}>
           {/* Tab switcher */}
           <div style={{ display:"flex", background:C.bg, borderRadius:10, border:`1px solid ${C.border}`, padding:3, gap:2 }}>
             {[
@@ -1408,11 +1409,11 @@ function Header({ user, saveStatus, isGuest, onSignOut, character, onOpenCharact
               ["about","About",<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>],
             ].map(([id,label,icon])=>(
               <button key={id} onClick={()=>onSetHomeTab(id)}
-                style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 14px", borderRadius:7, fontSize:13, fontWeight:700,
+                style={{ display:"flex", alignItems:"center", gap:5, padding:isMobile?"6px 10px":"5px 14px", borderRadius:7, fontSize:13, fontWeight:700,
                   border:"none", cursor:"pointer", transition:"all .15s",
                   background:homeTab===id?C.accent:"transparent",
                   color:homeTab===id?"#fff":C.muted }}>
-                {icon}{label}
+                {icon}{!isMobile && label}
               </button>
             ))}
           </div>
@@ -1420,31 +1421,31 @@ function Header({ user, saveStatus, isGuest, onSignOut, character, onOpenCharact
           <button onClick={onOpenAI}
             style={{ display:"flex", alignItems:"center", gap:6,
               background:"linear-gradient(135deg,#6366f1,#8b5cf6)",
-              color:"#fff", border:"none", borderRadius:10, padding:"6px 14px",
+              color:"#fff", border:"none", borderRadius:10, padding:isMobile?"6px 10px":"6px 14px",
               fontSize:13, fontWeight:700, cursor:"pointer",
               boxShadow:"0 2px 10px rgba(99,102,241,.4)" }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8M12 5V3"/><circle cx="12" cy="3" r="1"/></svg>
-            AI Assistant
+            {!isMobile && "AI Assistant"}
           </button>
         </div>
       )}
 
       {/* Right side */}
-      <div style={{ display:"flex", alignItems:"center", gap:8, marginLeft:"auto", flexShrink:0 }}>
-        {!isGuest && saveStatus !== "idle" && (
+      <div style={{ display:"flex", alignItems:"center", gap:isMobile?4:8, marginLeft:"auto", flexShrink:0 }}>
+        {!isMobile && !isGuest && saveStatus !== "idle" && (
           <span style={{ fontSize:12, fontWeight:600,
             color: saveStatus==="saved" ? C.green : saveStatus==="error" ? "#e53e3e" : C.muted }}>
             {saveStatus==="saving" ? "Saving…" : saveStatus==="saved" ? "✓ Saved" : "⚠ Save failed"}
           </span>
         )}
-        {isGuest && <span className="desktop-only" style={{ fontSize:11, background:C.warmL, color:C.warm, border:`1px solid ${C.warm}44`, borderRadius:20, padding:"3px 8px", fontWeight:600 }}>Guest</span>}
+        {!isMobile && isGuest && <span style={{ fontSize:11, background:C.warmL, color:C.warm, border:`1px solid ${C.warm}44`, borderRadius:20, padding:"3px 8px", fontWeight:600 }}>Guest</span>}
         <button onClick={onOpenCharacter} title="Edit my avatar"
-          style={{ background:"none", border:"none", borderRadius:"50%", width:36, height:36, padding:0, cursor:"pointer", overflow:"hidden", flexShrink:0, boxShadow:"0 2px 8px rgba(0,0,0,.15)" }}>
-          <MiniAvatar character={character} size={36} />
+          style={{ background:"none", border:"none", borderRadius:"50%", width:isMobile?30:36, height:isMobile?30:36, padding:0, cursor:"pointer", overflow:"hidden", flexShrink:0, boxShadow:"0 2px 8px rgba(0,0,0,.15)" }}>
+          <MiniAvatar character={character} size={isMobile?30:36} />
         </button>
-        <span className="desktop-only" style={{ fontSize:13, fontWeight:600, color:C.text }}>{isGuest ? user?.displayName : user?.displayName?.split(" ")[0]}</span>
+        {!isMobile && <span style={{ fontSize:13, fontWeight:600, color:C.text }}>{isGuest ? user?.displayName : user?.displayName?.split(" ")[0]}</span>}
         <button onClick={onSignOut} className="hov"
-          style={{ fontSize:12, color:C.muted, background:"none", border:`1px solid ${C.border}`, borderRadius:7, padding:"4px 9px", cursor:"pointer", whiteSpace:"nowrap" }}>{isGuest ? "Exit" : "Sign out"}</button>
+          style={{ fontSize:isMobile?11:12, color:C.muted, background:"none", border:`1px solid ${C.border}`, borderRadius:7, padding:isMobile?"4px 7px":"4px 9px", cursor:"pointer", whiteSpace:"nowrap" }}>{isGuest ? "Exit" : isMobile ? "Out" : "Sign out"}</button>
       </div>
     </div>
   );
