@@ -4277,6 +4277,7 @@ Context (for fixing mis-heard words only — do NOT add this as content): ${cont
     setPodcastLoading(true);
     setShowPodcast(true);
     setPodcastScript("");
+    _setPodcastBlob(null); // free current blob when regenerating
     const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[^\x00-\x7F\s]+\s*/g,'') || lang;
     try {
       const script = await callClaude(
@@ -6594,7 +6595,17 @@ function ListeningGame({ cards, onBack }) {
 const _TTS_SERVER_URL = (typeof window !== "undefined" && window.__CLASSIO_TTS_URL__)
   ? String(window.__CLASSIO_TTS_URL__).replace(/\/$/, "")
   : "";
-
+// Single active blob URL — only 1 podcast blob in RAM at a time.
+// The server handles caching per voice+script on disk, so re-requesting
+// a previously used voice is fast (server cache hit) without storing
+// multiple blobs on the client.
+const _podcastActiveBlobUrl = { current: null };
+function _setPodcastBlob(newUrl) {
+  if (_podcastActiveBlobUrl.current && _podcastActiveBlobUrl.current !== newUrl) {
+    URL.revokeObjectURL(_podcastActiveBlobUrl.current); // free previous blob immediately
+  }
+  _podcastActiveBlobUrl.current = newUrl;
+}
 function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose }) {
   // ── TTS Server URL ───────────────────────────────────────────────────────────
   const TTS_SERVER = _TTS_SERVER_URL;
@@ -6687,32 +6698,34 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
   // ── Piper audio generation ───────────────────────────────────────────────────
   const generatePiper = async (fromTime = 0) => {
     if (!script || piperLoading) return;
+    const audio = audioRef.current;
+
     setPiperLoading(true);
     setPiperError(null);
     setPiperReady(false);
-    const audio = audioRef.current;
     if (audio) { audio.pause(); audio.src = ""; }
     setPlaying(false); setCurrentTime(0); setDuration(0);
 
     try {
+      // Server caches audio by voice+script hash on disk — repeat requests are instant
       const resp = await fetch(`${TTS_SERVER}/generate-podcast`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          text:   script,
-          voice:  serverVoice.id,
-          speed:  speed,
-          format: "mp3",
+          text:  script,
+          voice: serverVoice.id,
+          speed: 1.0, // always 1x — playbackRate handles speed locally
         }),
       });
       if (!resp.ok) {
         const err = await resp.text().catch(() => "Server error");
         throw new Error(err);
       }
-      const blob   = await resp.blob();
+      const blob    = await resp.blob();
       const blobUrl = URL.createObjectURL(blob);
+      _setPodcastBlob(blobUrl); // revokes previous blob, keeping RAM at 1 blob max
       audio.src          = blobUrl;
-      audio.playbackRate = 1.0; // speed already baked in by server
+      audio.playbackRate = speed;
       audio.load();
       await new Promise((res) => {
         const done = () => { audio.removeEventListener("canplay", done); res(); };
@@ -6864,10 +6877,8 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
   const changeSpeed = (s) => {
     setSpeed(s);
     if (usePiper) {
-      // Regenerate with new speed baked in
-      const t = audioRef.current?.currentTime || 0;
-      setPiperReady(false);
-      setTimeout(() => generatePiper(t), 50);
+      // Apply speed instantly via playbackRate — no re-generation needed
+      if (audioRef.current) audioRef.current.playbackRate = s;
     } else {
       if (playing) { const t = elapsedRef.current; handleStop(); setTimeout(() => playBrowserFrom(t), 30); }
     }
