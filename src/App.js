@@ -1871,6 +1871,38 @@ function MiniAvatar({ character: ch, size = 40, uid = "" }) {
       <circle cx={s*.66} cy={s*.1} r={s*.088} fill={hd}/><circle cx={s*.66} cy={s*.1} r={s*.072} fill={ch.hair}/>
       <ellipse cx={s*.645} cy={s*.08} rx={s*.032} ry={s*.02} fill={hl} opacity={.48}/>
     </>,
+    14: /* Mohawk — centre strip, shaved sides */ <>
+      {/* shaved side shadow */}
+      <ellipse cx={s*.28} cy={s*.26} rx={s*.08} ry={s*.14} fill={hd} opacity={.18}/>
+      <ellipse cx={s*.72} cy={s*.26} rx={s*.08} ry={s*.14} fill={hd} opacity={.18}/>
+      {/* centre strip */}
+      <path d={`M${s*.44} ${s*.56} L${s*.44} ${s*.14} Q${cx} ${s*.08} ${s*.56} ${s*.14} L${s*.56} ${s*.56}`} fill={ch.hair}/>
+      <path d={`M${s*.46} ${s*.56} L${s*.46} ${s*.15} Q${cx} ${s*.095} ${s*.54} ${s*.15} L${s*.54} ${s*.56}`} fill={hl} opacity={.25}/>
+      {/* spiky tips */}
+      {[-.04,-.02,0,.02,.04].map((ox,i)=><path key={i} d={`M${cx+s*ox} ${s*.08} L${cx+s*(ox-.018)} ${s*.14} L${cx+s*(ox+.018)} ${s*.14} Z`} fill={ch.hair}/>)}
+    </>,
+    15: /* Dreadlocks — thick rope-like strands */ <>
+      <path d={`M${s*.28} ${s*.35} Q${s*.27} ${s*.16} ${cx} ${s*.14} Q${s*.73} ${s*.16} ${s*.72} ${s*.35}`} fill={ch.hair}/>
+      <ellipse cx={cx} cy={s*.155} rx={s*.22} ry={s*.075} fill={ch.hair}/>
+      {/* rope strands left */}
+      {[.22,.28,.34].map((bx,i)=><>
+        <path key={"l"+i} d={`M${s*bx} ${s*.38} Q${s*(bx-.03)} ${s*.62} ${s*(bx-.01)} ${s*.82}`} stroke={ch.hair} strokeWidth={s*.038} fill="none" strokeLinecap="round"/>
+        <path key={"lh"+i} d={`M${s*bx} ${s*.38} Q${s*(bx-.03)} ${s*.62} ${s*(bx-.01)} ${s*.82}`} stroke={hl} strokeWidth={s*.012} fill="none" strokeLinecap="round" opacity={.22}/>
+      </>)}
+      {/* rope strands right */}
+      {[.78,.72,.66].map((bx,i)=><>
+        <path key={"r"+i} d={`M${s*bx} ${s*.38} Q${s*(bx+.03)} ${s*.62} ${s*(bx+.01)} ${s*.82}`} stroke={ch.hair} strokeWidth={s*.038} fill="none" strokeLinecap="round"/>
+        <path key={"rh"+i} d={`M${s*bx} ${s*.38} Q${s*(bx+.03)} ${s*.62} ${s*(bx+.01)} ${s*.82}`} stroke={hl} strokeWidth={s*.012} fill="none" strokeLinecap="round" opacity={.22}/>
+      </>)}
+    </>,
+    16: /* Slick back — sleek combed-back with sheen */ <>
+      <path d={`M${s*.28} ${s*.35} Q${s*.27} ${s*.15} ${cx} ${s*.13} Q${s*.73} ${s*.15} ${s*.72} ${s*.35}`} fill={ch.hair}/>
+      <ellipse cx={cx} cy={s*.15} rx={s*.22} ry={s*.07} fill={ch.hair}/>
+      {/* slick sheen lines */}
+      <path d={`M${s*.38} ${s*.18} Q${s*.42} ${s*.14} ${cx} ${s*.13}`} stroke={hl} strokeWidth={s*.014} fill="none" opacity={.45} strokeLinecap="round"/>
+      <path d={`M${s*.42} ${s*.22} Q${s*.46} ${s*.16} ${cx} ${s*.14}`} stroke={hl} strokeWidth={s*.01} fill="none" opacity={.3} strokeLinecap="round"/>
+      <path d={`M${s*.62} ${s*.18} Q${s*.58} ${s*.14} ${cx} ${s*.13}`} stroke={hl} strokeWidth={s*.014} fill="none" opacity={.45} strokeLinecap="round"/>
+    </>,
   };
 
   // ── Mouth ─────────────────────────────────────────────────────────────────
@@ -2037,6 +2069,20 @@ function MiniAvatar({ character: ch, size = 40, uid = "" }) {
       <line x1={s*.312} y1={s*.358} x2={s*.272} y2={s*.354} stroke={gc} strokeWidth={s*.016}/>
       <line x1={s*.688} y1={s*.358} x2={s*.728} y2={s*.354} stroke={gc} strokeWidth={s*.016}/>
     </>,
+    6: /* Aviator — teardrop lenses */ <>
+      <path d={`M${s*.353} ${s*.354} Q${s*.356} ${s*.314} ${s*.417} ${s*.314} Q${s*.468} ${s*.314} ${s*.468} ${s*.362} Q${s*.468} ${s*.41} ${s*.417} ${s*.414} Q${s*.358} ${s*.418} ${s*.353} ${s*.354} Z`} fill="rgba(0,0,0,.2)" stroke={gc} strokeWidth={s*.014}/>
+      <path d={`M${s*.353} ${s*.354} Q${s*.356} ${s*.314} ${s*.417} ${s*.314} Q${s*.468} ${s*.314} ${s*.468} ${s*.362} Q${s*.468} ${s*.41} ${s*.417} ${s*.414} Q${s*.358} ${s*.418} ${s*.353} ${s*.354} Z`} fill="rgba(255,255,255,.1)"/>
+      <path d={`M${s*.647} ${s*.354} Q${s*.644} ${s*.314} ${s*.583} ${s*.314} Q${s*.532} ${s*.314} ${s*.532} ${s*.362} Q${s*.532} ${s*.41} ${s*.583} ${s*.414} Q${s*.642} ${s*.418} ${s*.647} ${s*.354} Z`} fill="rgba(0,0,0,.2)" stroke={gc} strokeWidth={s*.014}/>
+      <path d={`M${s*.647} ${s*.354} Q${s*.644} ${s*.314} ${s*.583} ${s*.314} Q${s*.532} ${s*.314} ${s*.532} ${s*.362} Q${s*.532} ${s*.41} ${s*.583} ${s*.414} Q${s*.642} ${s*.418} ${s*.647} ${s*.354} Z`} fill="rgba(255,255,255,.1)"/>
+      <path d={`M${s*.468} ${s*.336} Q${cx} ${s*.326} ${s*.532} ${s*.336}`} stroke={gc} strokeWidth={s*.012} fill="none"/>
+      <line x1={s*.353} y1={s*.354} x2={s*.278} y2={s*.368} stroke={gc} strokeWidth={s*.013}/>
+      <line x1={s*.647} y1={s*.354} x2={s*.722} y2={s*.368} stroke={gc} strokeWidth={s*.013}/>
+    </>,
+    7: /* Monocle — single eye glass on right */ <>
+      <circle cx={s*.616} cy={s*.368} r={s*.062} fill="rgba(180,220,255,.2)" stroke={gc} strokeWidth={s*.017}/>
+      <ellipse cx={s*.602} cy={s*.355} rx={s*.024} ry={s*.016} fill="rgba(255,255,255,.4)"/>
+      <path d={`M${s*.678} ${s*.412} Q${s*.702} ${s*.452} ${s*.692} ${s*.524}`} stroke={gc} strokeWidth={s*.011} fill="none" opacity={.75}/>
+    </>,
   };
 
   // ── Facial hair ───────────────────────────────────────────────────────────
@@ -2098,6 +2144,17 @@ function MiniAvatar({ character: ch, size = 40, uid = "" }) {
         return <circle key={i} cx={x} cy={y} r={s*.015} fill={i%2===0?nc:ncd}/>;
       })}
     </>,
+    4: /* Choker — thick band */ <>
+      <path d={`M${s*.36} ${s*.645} Q${cx} ${s*.625} ${s*.64} ${s*.645}`} stroke={nc} strokeWidth={s*.022} fill="none" strokeLinecap="round"/>
+      <path d={`M${s*.36} ${s*.645} Q${cx} ${s*.625} ${s*.64} ${s*.645}`} stroke="rgba(255,255,255,.3)" strokeWidth={s*.007} fill="none" strokeLinecap="round"/>
+    </>,
+    5: /* Pearl necklace — dots along curve */ <>
+      <path d={`M${s*.36} ${s*.66} Q${cx} ${s*.64} ${s*.64} ${s*.66}`} stroke={nc} strokeWidth={s*.006} fill="none" opacity={.4}/>
+      {[-.22,-.16,-.1,-.04,0,.04,.1,.16,.22].map((ox,i)=>{
+        const px=cx+s*ox; const py=s*(.648+Math.abs(ox)*.08);
+        return <><circle key={i} cx={px} cy={py} r={s*.013} fill={nc}/><ellipse key={"sh"+i} cx={px-s*.004} cy={py-s*.005} rx={s*.005} ry={s*.005} fill="rgba(255,255,255,.55)"/></>;
+      })}
+    </>,
   };
 
   // ── Earring styles ────────────────────────────────────────────────────────
@@ -2130,89 +2187,197 @@ function MiniAvatar({ character: ch, size = 40, uid = "" }) {
         <polygon points={[0,1,2,3,4].map(pt=>{const a=(pt*72-90)*Math.PI/180;return `${Math.cos(a)*s*.022},${Math.sin(a)*s*.022}`;}).join(' ')} fill={ec} opacity={.85}/>
       </g>)}
     </>,
+    5: /* Dangles — long teardrop chain */ <>
+      <ellipse cx={s*.267} cy={s*.39} rx={s*.014} ry={s*.014} fill={ec}/>
+      <line x1={s*.267} y1={s*.404} x2={s*.267} y2={s*.48} stroke={ec} strokeWidth={s*.008}/>
+      <ellipse cx={s*.267} cy={s*.494} rx={s*.018} ry={s*.024} fill={ec}/>
+      <ellipse cx={s*.267} cy={s*.488} rx={s*.008} ry={s*.009} fill="rgba(255,255,255,.45)"/>
+      <ellipse cx={s*.733} cy={s*.39} rx={s*.014} ry={s*.014} fill={ec}/>
+      <line x1={s*.733} y1={s*.404} x2={s*.733} y2={s*.48} stroke={ec} strokeWidth={s*.008}/>
+      <ellipse cx={s*.733} cy={s*.494} rx={s*.018} ry={s*.024} fill={ec}/>
+      <ellipse cx={s*.733} cy={s*.488} rx={s*.008} ry={s*.009} fill="rgba(255,255,255,.45)"/>
+    </>,
+    6: /* Crosses — stud with cross charm */ <>
+      <ellipse cx={s*.267} cy={s*.39} rx={s*.013} ry={s*.013} fill={ec}/>
+      <line x1={s*.267} y1={s*.406} x2={s*.267} y2={s*.44} stroke={ec} strokeWidth={s*.009}/>
+      <line x1={s*.255} y1={s*.42} x2={s*.279} y2={s*.42} stroke={ec} strokeWidth={s*.009}/>
+      <ellipse cx={s*.733} cy={s*.39} rx={s*.013} ry={s*.013} fill={ec}/>
+      <line x1={s*.733} y1={s*.406} x2={s*.733} y2={s*.44} stroke={ec} strokeWidth={s*.009}/>
+      <line x1={s*.721} y1={s*.42} x2={s*.745} y2={s*.42} stroke={ec} strokeWidth={s*.009}/>
+    </>,
   };
 
   // Legacy accessory field — no longer used (hat/glasses/earring/necklace replace it)
   // Kept as empty map for backward compat only
   const ACC = {};
 
-  // ── Body / outfit — topStyle 0-11 ────────────────────────────────────────
+  // ── Body / outfit — topStyle 0-15 ────────────────────────────────────────
+  // All outfits use radial gradient (url(#b)) for 3-D depth + shadow overlay
   const ts = ch.topStyle || 0;
   const bodyPath = `M${s*.04} ${s*1.04} C${s*.1} ${s*.82} ${s*.25} ${s*.7} ${s*.36} ${s*.66} Q${cx} ${s*.63} ${s*.64} ${s*.66} C${s*.75} ${s*.7} ${s*.9} ${s*.82} ${s*.96} ${s*1.04} Z`;
   const tankPath = `M${s*.04} ${s*1.04} C${s*.06} ${s*.84} ${s*.18} ${s*.72} ${s*.28} ${s*.67} Q${cx} ${s*.64} ${s*.72} ${s*.67} C${s*.82} ${s*.72} ${s*.94} ${s*.84} ${s*.96} ${s*1.04} Z`;
+  // Shared 3-D fabric shadow overlay — applied on top of all body shapes
+  const fabricShadow = <path d={bodyPath} fill="rgba(0,0,0,.07)" clipPath={`url(#c${gid})`} style={{mixBlendMode:"multiply"}}/>;
   const body = <>
-    {/* Base body shape */}
-    {ts!==3 && ts!==9 && <path d={bodyPath} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>}
-    {/* ts 0 = T-Shirt (plain) — just collar stripe */}
-    {ts===1 && /* Hoodie */ <>
+    {/* Base body shape with 3-D gradient */}
+    {ts!==3 && ts!==9 && ts!==13 && <path d={bodyPath} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>}
+    {/* Fabric depth shadow on all styles */}
+    {ts!==3 && ts!==9 && ts!==13 && fabricShadow}
+
+    {/* ts 0 = T-Shirt — shoulder seam highlight for depth */}
+    {ts===0 && <>
+      <path d={`M${s*.36} ${s*.66} Q${s*.42} ${s*.64} ${cx} ${s*.635} Q${s*.58} ${s*.64} ${s*.64} ${s*.66}`} stroke={tl} strokeWidth={s*.012} fill="none" opacity={.5} clipPath={`url(#c${gid})`}/>
+    </>}
+
+    {ts===1 && /* Hoodie — 3-D hood, zip, kangaroo pocket */ <>
       <ellipse cx={cx} cy={s*.88} rx={s*.09} ry={s*.055} fill={td} clipPath={`url(#c${gid})`}/>
       <line x1={s*.47} y1={s*.66} x2={s*.455} y2={s*.91} stroke={td} strokeWidth={s*.017} clipPath={`url(#c${gid})`}/>
       <line x1={s*.53} y1={s*.66} x2={s*.545} y2={s*.91} stroke={td} strokeWidth={s*.017} clipPath={`url(#c${gid})`}/>
-      {/* Hood outline */}
       <path d={`M${s*.34} ${s*.66} Q${cx} ${s*.58} ${s*.66} ${s*.66}`} stroke={td} strokeWidth={s*.022} fill="none" clipPath={`url(#c${gid})`}/>
+      {/* hood inner shadow for depth */}
+      <path d={`M${s*.36} ${s*.66} Q${cx} ${s*.60} ${s*.64} ${s*.66}`} stroke="rgba(0,0,0,.15)" strokeWidth={s*.014} fill="none" clipPath={`url(#c${gid})`}/>
     </>}
-    {ts===2 && /* Jacket */ <>
+
+    {ts===2 && /* Jacket — lapels with 3-D crease */ <>
       <path d={`M${s*.5} ${s*.63} L${s*.41} ${s*.72} L${s*.36} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
       <path d={`M${s*.5} ${s*.63} L${s*.59} ${s*.72} L${s*.64} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
+      {/* lapel crease highlights */}
+      <path d={`M${s*.5} ${s*.63} L${s*.43} ${s*.70}`} stroke={tl} strokeWidth={s*.01} opacity={.5} clipPath={`url(#c${gid})`}/>
+      <path d={`M${s*.5} ${s*.63} L${s*.57} ${s*.70}`} stroke={tl} strokeWidth={s*.01} opacity={.5} clipPath={`url(#c${gid})`}/>
       {[0,1,2].map(i=><circle key={i} cx={cx} cy={s*(.72+i*.09)} r={s*.013} fill={tl} clipPath={`url(#c${gid})`}/>)}
     </>}
-    {ts===3 && /* Tank top — narrow straps */ <>
+
+    {ts===3 && /* Tank top — narrow straps with gradient */ <>
       <path d={tankPath} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
-      {/* straps */}
+      <path d={tankPath} fill="rgba(0,0,0,.06)" clipPath={`url(#c${gid})`}/>
       <rect x={s*.41} y={s*.57} width={s*.06} height={s*.1} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
       <rect x={s*.53} y={s*.57} width={s*.06} height={s*.1} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
+      {/* strap highlight */}
+      <rect x={s*.43} y={s*.57} width={s*.02} height={s*.09} fill={tl} opacity={.3} clipPath={`url(#c${gid})`}/>
+      <rect x={s*.55} y={s*.57} width={s*.02} height={s*.09} fill={tl} opacity={.3} clipPath={`url(#c${gid})`}/>
     </>}
-    {ts===4 && /* Suit + tie */ <>
+
+    {ts===4 && /* Suit + tie — detailed lapels */ <>
       <path d={`M${s*.5} ${s*.63} L${s*.42} ${s*.73} L${s*.37} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
       <path d={`M${s*.5} ${s*.63} L${s*.58} ${s*.73} L${s*.63} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
+      {/* lapel sheen */}
+      <path d={`M${s*.5} ${s*.63} L${s*.44} ${s*.71}`} stroke={tl} strokeWidth={s*.009} opacity={.45} clipPath={`url(#c${gid})`}/>
+      <path d={`M${s*.5} ${s*.63} L${s*.56} ${s*.71}`} stroke={tl} strokeWidth={s*.009} opacity={.45} clipPath={`url(#c${gid})`}/>
+      {/* tie with knot */}
       <path d={`M${s*.48} ${s*.66} L${s*.5} ${s*.76} L${s*.52} ${s*.66}`} fill="#c0392b" clipPath={`url(#c${gid})`}/>
       <path d={`M${s*.5} ${s*.76} L${s*.49} ${s*.94} L${s*.5} ${s*.975} L${s*.51} ${s*.94} Z`} fill="#c0392b" clipPath={`url(#c${gid})`}/>
+      <path d={`M${s*.49} ${s*.77} L${s*.5} ${s*.82}`} stroke="#a93226" strokeWidth={s*.008} clipPath={`url(#c${gid})`}/>
     </>}
-    {ts===5 && /* Crop top */ <>
+
+    {ts===5 && /* Crop top — ribbed hem */ <>
       <rect x={s*.1} y={s*.76} width={s*.8} height={s*.3} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
+      <rect x={s*.1} y={s*.76} width={s*.8} height={s*.3} fill="rgba(0,0,0,.06)" clipPath={`url(#c${gid})`}/>
+      {/* rib lines */}
+      {[0,1,2].map(i=><line key={i} x1={s*.1} y1={s*(.775+i*.018)} x2={s*.9} y2={s*(.775+i*.018)} stroke={td} strokeWidth={s*.007} opacity={.3} clipPath={`url(#c${gid})`}/>)}
     </>}
-    {ts===6 && /* Polo / school shirt — collar + buttons */ <>
-      {/* collar points */}
+
+    {ts===6 && /* Polo — collar + placket buttons */ <>
       <path d={`M${s*.46} ${s*.645} L${s*.43} ${s*.70} L${s*.5} ${s*.685}`} fill={tl} clipPath={`url(#c${gid})`}/>
       <path d={`M${s*.54} ${s*.645} L${s*.57} ${s*.70} L${s*.5} ${s*.685}`} fill={tl} clipPath={`url(#c${gid})`}/>
+      <path d={`M${s*.46} ${s*.648} L${s*.44} ${s*.694}`} stroke={td} strokeWidth={s*.008} opacity={.4} clipPath={`url(#c${gid})`}/>
+      <path d={`M${s*.54} ${s*.648} L${s*.56} ${s*.694}`} stroke={td} strokeWidth={s*.008} opacity={.4} clipPath={`url(#c${gid})`}/>
       {[0,1].map(i=><circle key={i} cx={cx} cy={s*(.73+i*.08)} r={s*.011} fill={td} clipPath={`url(#c${gid})`}/>)}
     </>}
-    {ts===7 && /* Sport jersey — side stripes */ <>
+
+    {ts===7 && /* Sport jersey — side stripes + number */ <>
       <rect x={s*.04} y={s*.66} width={s*.08} height={s*.38} fill={tl} opacity={.7} clipPath={`url(#c${gid})`}/>
       <rect x={s*.88} y={s*.66} width={s*.08} height={s*.38} fill={tl} opacity={.7} clipPath={`url(#c${gid})`}/>
-      {/* number badge */}
       <rect x={s*.41} y={s*.73} width={s*.18} height={s*.14} rx={s*.02} fill={td} clipPath={`url(#c${gid})`}/>
       <text x={cx} y={s*.845} textAnchor="middle" fontSize={s*.09} fill={tl} fontWeight="900" fontFamily="sans-serif" clipPath={`url(#c${gid})`}>10</text>
+      {/* jersey mesh lines */}
+      {[0,1].map(i=><line key={i} x1={s*.14} y1={s*(.75+i*.1)} x2={s*.1} y2={s*(.75+i*.1)} stroke={tl} strokeWidth={s*.007} opacity={.4} clipPath={`url(#c${gid})`}/>)}
     </>}
-    {ts===8 && /* Streetwear hoodie — oversized, zip */ <>
-      {/* wider body for oversized look */}
+
+    {ts===8 && /* Streetwear hoodie — oversized, zip, pocket */ <>
       <path d={`M${s*.00} ${s*1.04} C${s*.04} ${s*.80} ${s*.22} ${s*.68} ${s*.34} ${s*.65} Q${cx} ${s*.62} ${s*.66} ${s*.65} C${s*.78} ${s*.68} ${s*.96} ${s*.80} ${s*1.0} ${s*1.04} Z`} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
-      {/* zip */}
+      <path d={`M${s*.00} ${s*1.04} C${s*.04} ${s*.80} ${s*.22} ${s*.68} ${s*.34} ${s*.65} Q${cx} ${s*.62} ${s*.66} ${s*.65} C${s*.78} ${s*.68} ${s*.96} ${s*.80} ${s*1.0} ${s*1.04} Z`} fill="rgba(0,0,0,.06)" clipPath={`url(#c${gid})`}/>
       <line x1={cx} y1={s*.63} x2={cx} y2={s*.98} stroke={td} strokeWidth={s*.014} clipPath={`url(#c${gid})`}/>
       {[0,1,2,3].map(i=><line key={i} x1={s*.495} y1={s*(.68+i*.07)} x2={s*.505} y2={s*(.68+i*.07)} stroke={tl} strokeWidth={s*.016} clipPath={`url(#c${gid})`}/>)}
-      {/* kangaroo pocket */}
       <path d={`M${s*.36} ${s*.85} Q${cx} ${s*.82} ${s*.64} ${s*.85} L${s*.64} ${s*1.0} Q${cx} ${s*1.02} ${s*.36} ${s*1.0} Z`} fill={td} clipPath={`url(#c${gid})`}/>
     </>}
-    {ts===9 && /* Dress / casual */ <>
+
+    {ts===9 && /* Dress — flared with waistband + sheen */ <>
       <path d={`M${s*.3} ${s*.64} Q${cx} ${s*.61} ${s*.7} ${s*.64} L${s*.82} ${s*1.04} Q${cx} ${s*1.06} ${s*.18} ${s*1.04} Z`} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
-      {/* waist band */}
+      <path d={`M${s*.3} ${s*.64} Q${cx} ${s*.61} ${s*.7} ${s*.64} L${s*.82} ${s*1.04} Q${cx} ${s*1.06} ${s*.18} ${s*1.04} Z`} fill="rgba(0,0,0,.05)" clipPath={`url(#c${gid})`}/>
       <path d={`M${s*.32} ${s*.72} Q${cx} ${s*.70} ${s*.68} ${s*.72}`} stroke={td} strokeWidth={s*.018} fill="none" clipPath={`url(#c${gid})`}/>
+      {/* fabric sheen */}
+      <path d={`M${s*.38} ${s*.65} Q${s*.42} ${s*.72} ${s*.4} ${s*.9}`} stroke={tl} strokeWidth={s*.01} fill="none" opacity={.25} clipPath={`url(#c${gid})`}/>
     </>}
-    {ts===10 && /* Blazer (school/smart) */ <>
-      {/* lapels */}
+
+    {ts===10 && /* Blazer — lapels + pocket square + buttons */ <>
       <path d={`M${s*.5} ${s*.63} L${s*.40} ${s*.74} L${s*.36} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
       <path d={`M${s*.5} ${s*.63} L${s*.60} ${s*.74} L${s*.64} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
-      {/* pocket square */}
+      <path d={`M${s*.5} ${s*.63} L${s*.42} ${s*.72}`} stroke={tl} strokeWidth={s*.009} opacity={.5} clipPath={`url(#c${gid})`}/>
+      <path d={`M${s*.5} ${s*.63} L${s*.58} ${s*.72}`} stroke={tl} strokeWidth={s*.009} opacity={.5} clipPath={`url(#c${gid})`}/>
       <rect x={s*.38} y={s*.77} width={s*.07} height={s*.055} rx={s*.01} fill={tl} clipPath={`url(#c${gid})`}/>
-      {/* 2 buttons */}
       {[0,1].map(i=><circle key={i} cx={cx} cy={s*(.77+i*.1)} r={s*.013} fill={tl} clipPath={`url(#c${gid})`}/>)}
     </>}
-    {ts===11 && /* Graphic tee — print on chest */ <>
+
+    {ts===11 && /* Graphic tee — bold chest print */ <>
       <rect x={s*.38} y={s*.70} width={s*.24} height={s*.18} rx={s*.025} fill={td} clipPath={`url(#c${gid})`}/>
       <circle cx={cx} cy={s*.79} r={s*.06} fill={tl} opacity={.7} clipPath={`url(#c${gid})`}/>
+      {/* star sparkle */}
+      <line x1={cx} y1={s*.745} x2={cx} y2={s*.835} stroke={tl} strokeWidth={s*.009} opacity={.6} clipPath={`url(#c${gid})`}/>
+      <line x1={s*.455} y1={s*.79} x2={s*.545} y2={s*.79} stroke={tl} strokeWidth={s*.009} opacity={.6} clipPath={`url(#c${gid})`}/>
     </>}
-    {/* Collar highlight on all non-tank styles */}
-    {ts!==3 && ts!==5 && ts!==9 && <path d={`M${s*.38} ${s*.645} Q${cx} ${s*.605} ${s*.62} ${s*.645}`} stroke={tl} strokeWidth={s*.017} fill="none" opacity={.44} clipPath={`url(#c${gid})`}/>}
+
+    {ts===12 && /* Varsity jacket — ribbed cuffs, chenille patch */ <>
+      {/* dark sleeves */}
+      <path d={`M${s*.04} ${s*1.04} C${s*.08} ${s*.82} ${s*.2} ${s*.70} ${s*.32} ${s*.67} L${s*.36} ${s*.66} L${s*.36} ${s*1.04} Z`} fill={td} clipPath={`url(#c${gid})`}/>
+      <path d={`M${s*.96} ${s*1.04} C${s*.92} ${s*.82} ${s*.8} ${s*.70} ${s*.68} ${s*.67} L${s*.64} ${s*.66} L${s*.64} ${s*1.04} Z`} fill={td} clipPath={`url(#c${gid})`}/>
+      {/* ribbed hem */}
+      {[0,1,2].map(i=><line key={i} x1={s*.36} y1={s*(.97+i*.024)} x2={s*.64} y2={s*(.97+i*.024)} stroke={td} strokeWidth={s*.01} opacity={.4} clipPath={`url(#c${gid})`}/>)}
+      {/* snap buttons */}
+      {[0,1,2].map(i=><circle key={i} cx={cx} cy={s*(.71+i*.1)} r={s*.012} fill={td} clipPath={`url(#c${gid})`}/>)}
+      {/* letter patch */}
+      <rect x={s*.41} y={s*.74} width={s*.18} height={s*.14} rx={s*.025} fill={tl} opacity={.85} clipPath={`url(#c${gid})`}/>
+      <text x={cx} y={s*.845} textAnchor="middle" fontSize={s*.085} fill={td} fontWeight="900" fontFamily="serif" clipPath={`url(#c${gid})`}>V</text>
+    </>}
+
+    {ts===13 && /* Kimono/robe — wide collar, sash */ <>
+      <path d={`M${s*.2} ${s*.64} Q${cx} ${s*.60} ${s*.8} ${s*.64} L${s*.92} ${s*1.04} Q${cx} ${s*1.07} ${s*.08} ${s*1.04} Z`} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
+      <path d={`M${s*.2} ${s*.64} Q${cx} ${s*.60} ${s*.8} ${s*.64} L${s*.92} ${s*1.04} Q${cx} ${s*1.07} ${s*.08} ${s*1.04} Z`} fill="rgba(0,0,0,.05)" clipPath={`url(#c${gid})`}/>
+      {/* wide collar flaps */}
+      <path d={`M${s*.5} ${s*.62} L${s*.34} ${s*.78} L${s*.3} ${s*1.04}`} fill={tl} opacity={.7} clipPath={`url(#c${gid})`}/>
+      <path d={`M${s*.5} ${s*.62} L${s*.66} ${s*.78} L${s*.7} ${s*1.04}`} fill={tl} opacity={.7} clipPath={`url(#c${gid})`}/>
+      {/* sash */}
+      <path d={`M${s*.3} ${s*.82} Q${cx} ${s*.79} ${s*.7} ${s*.82}`} stroke={td} strokeWidth={s*.025} fill="none" clipPath={`url(#c${gid})`}/>
+      {/* fabric sheen */}
+      <path d={`M${s*.38} ${s*.65} Q${s*.36} ${s*.78} ${s*.34} ${s*.95}`} stroke={tl} strokeWidth={s*.012} fill="none" opacity={.28} clipPath={`url(#c${gid})`}/>
+    </>}
+
+    {ts===14 && /* Turtleneck — ribbed collar */ <>
+      {/* turtleneck roll */}
+      <path d={`M${s*.38} ${s*.58} Q${cx} ${s*.55} ${s*.62} ${s*.58} L${s*.62} ${s*.68} Q${cx} ${s*.71} ${s*.38} ${s*.68} Z`} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
+      {/* rib lines on collar */}
+      {[0,1,2].map(i=><path key={i} d={`M${s*.38} ${s*(.595+i*.024)} Q${cx} ${s*(.565+i*.024)} ${s*.62} ${s*(.595+i*.024)}`} stroke={td} strokeWidth={s*.007} fill="none" opacity={.35} clipPath={`url(#c${gid})`}/>)}
+      {/* collar shadow */}
+      <path d={`M${s*.38} ${s*.68} Q${cx} ${s*.715} ${s*.62} ${s*.68}`} stroke="rgba(0,0,0,.12)" strokeWidth={s*.014} fill="none" clipPath={`url(#c${gid})`}/>
+    </>}
+
+    {ts===15 && /* Denim jacket — stitching + chest pockets */ <>
+      <path d={`M${s*.5} ${s*.63} L${s*.40} ${s*.74} L${s*.36} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
+      <path d={`M${s*.5} ${s*.63} L${s*.60} ${s*.74} L${s*.64} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
+      {/* stitch lines on lapels */}
+      <path d={`M${s*.425} ${s*.685} L${s*.38} ${s*.78}`} stroke={tl} strokeWidth={s*.007} strokeDasharray={`${s*.014} ${s*.01}`} opacity={.6} clipPath={`url(#c${gid})`}/>
+      <path d={`M${s*.575} ${s*.685} L${s*.62} ${s*.78}`} stroke={tl} strokeWidth={s*.007} strokeDasharray={`${s*.014} ${s*.01}`} opacity={.6} clipPath={`url(#c${gid})`}/>
+      {/* chest pockets */}
+      <rect x={s*.36} y={s*.73} width={s*.09} height={s*.065} rx={s*.01} fill={td} clipPath={`url(#c${gid})`}/>
+      <rect x={s*.55} y={s*.73} width={s*.09} height={s*.065} rx={s*.01} fill={td} clipPath={`url(#c${gid})`}/>
+      {/* pocket stitching */}
+      <rect x={s*.36} y={s*.73} width={s*.09} height={s*.065} rx={s*.01} fill="none" stroke={tl} strokeWidth={s*.006} opacity={.5} clipPath={`url(#c${gid})`}/>
+      <rect x={s*.55} y={s*.73} width={s*.09} height={s*.065} rx={s*.01} fill="none" stroke={tl} strokeWidth={s*.006} opacity={.5} clipPath={`url(#c${gid})`}/>
+      {/* buttons */}
+      {[0,1].map(i=><circle key={i} cx={cx} cy={s*(.74+i*.1)} r={s*.012} fill={tl} clipPath={`url(#c${gid})`}/>)}
+    </>}
+
+    {/* Collar highlight on fitted styles */}
+    {ts!==3 && ts!==5 && ts!==9 && ts!==13 && ts!==14 && <path d={`M${s*.38} ${s*.645} Q${cx} ${s*.605} ${s*.62} ${s*.645}`} stroke={tl} strokeWidth={s*.017} fill="none" opacity={.44} clipPath={`url(#c${gid})`}/>}
   </>;
 
   return (
@@ -2321,6 +2486,7 @@ function AvatarChip({ ch, field, value, label, size=62, onApply }) {
   const preview = { ...ch, [field]: value };
   const sel = ch[field] === value;
   const A = "#4361ee";
+  // Use CSS variable so size never gets stretched by flexbox on mobile
   return (
     <button
       onClick={() => onApply(field, value)}
@@ -2328,7 +2494,8 @@ function AvatarChip({ ch, field, value, label, size=62, onApply }) {
       style={{
         display:"flex", flexDirection:"column", alignItems:"center", gap:5,
         padding:"7px 6px 6px", borderRadius:14, border:"none", cursor:"pointer",
-        flexShrink:0,
+        flexShrink:0, flexGrow:0,
+        width:size+14, minWidth:size+14, maxWidth:size+14, // fixed width — no stretch
         background: sel ? "#eef1ff" : "#f5f6fa",
         outline: sel ? `2.5px solid ${A}` : "2px solid transparent",
         outlineOffset:2,
@@ -2337,7 +2504,8 @@ function AvatarChip({ ch, field, value, label, size=62, onApply }) {
       }}
     >
       <div style={{
-        width:size, height:size, borderRadius:"50%", overflow:"hidden", flexShrink:0,
+        width:size, height:size, minWidth:size, minHeight:size, // fixed — never squish
+        borderRadius:"50%", overflow:"hidden", flexShrink:0,
         boxShadow: sel ? `0 0 0 2.5px ${A}, 0 2px 8px rgba(67,97,238,.3)` : "0 1px 4px rgba(0,0,0,.13)",
       }}>
         <MiniAvatar character={preview} size={size} uid={field+String(value)} />
@@ -2355,7 +2523,11 @@ function AvatarChip({ ch, field, value, label, size=62, onApply }) {
 // ─── AVATAR CHIP GRID ────────────────────────────────────────────────────────
 function AvatarChipGrid({ ch, field, items, size=62, onApply }) {
   return (
-    <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+    <div style={{
+      display:"flex", flexWrap:"wrap", gap:8,
+      // On mobile ensure items never stretch — each chip has fixed width
+      alignItems:"flex-start",
+    }}>
       {items.map((item, i) => {
         const value = typeof item === "object" ? item.id : i;
         const label = typeof item === "object" ? item.label : item;
@@ -2459,8 +2631,9 @@ function AvatarSwatches({
           <button key={v}
             onClick={() => { onApply(field, v); setOpen(false); }}
             style={{
-              width:sz, height:sz, borderRadius:"50%", background:v,
-              cursor:"pointer", flexShrink:0, border:"none", padding:0,
+              width:sz, height:sz, minWidth:sz, minHeight:sz, // fixed — no stretch on mobile
+              borderRadius:"50%", background:v,
+              cursor:"pointer", flexShrink:0, flexGrow:0, border:"none", padding:0,
               ...ring(ch[field] === v),
             }}
           />
@@ -2472,8 +2645,9 @@ function AvatarSwatches({
             <button
               onClick={() => { onApply(field, v); setOpen(false); }}
               style={{
-                width:sz, height:sz, borderRadius:"50%", background:v,
-                cursor:"pointer", border:"none", padding:0,
+                width:sz, height:sz, minWidth:sz, minHeight:sz,
+                borderRadius:"50%", background:v,
+                cursor:"pointer", flexShrink:0, flexGrow:0, border:"none", padding:0,
                 ...ring(ch[field] === v),
               }}
             />
@@ -2498,7 +2672,8 @@ function AvatarSwatches({
             onClick={handleOpen}
             title="Custom colour"
             style={{
-              width:sz, height:sz, borderRadius:"50%", flexShrink:0,
+              width:sz, height:sz, minWidth:sz, minHeight:sz,
+              borderRadius:"50%", flexShrink:0, flexGrow:0,
               cursor:"pointer", border:"2px dashed #bbb",
               background: open ? A : "rgba(67,97,238,.06)",
               display:"flex", alignItems:"center", justifyContent:"center",
@@ -2657,20 +2832,21 @@ function CharacterModal({ character, onChange, onClose }) {
   const JEWEL_C = ["#f0c040","#FFD700","#C0C0C0","#E8E8E8","#B87333","#E74C3C","#2980B9","#27AE60","#8E44AD","#FF69B4","#00CED1","#fff"];
 
   // ── Option lists ───────────────────────────────────────────────────────────
-  const HAIR_NAMES    = ["Buzz","Side-part","Fringe","Textured","Long","Wavy","Ponytail","Bun","Afro","Box braids","Curly","Locs","Faux hawk","Space buns"];
+  const HAIR_NAMES    = ["Buzz","Side-part","Fringe","Textured","Long","Wavy","Ponytail","Bun","Afro","Box braids","Curly","Locs","Faux hawk","Space buns","Mohawk","Dreadlocks","Slick back"];
   const EYE_S         = ["Round","Almond","Cat-eye"];
   const BROWS         = ["Arched","Straight","Thick","Sad"];
   const MOUTHS        = ["Smile","Frown","Open","Smirk","Neutral"];
   const HAT_NAMES     = ["None","Beanie","Cap","Cowboy","Grad cap","Crown","Party hat","Headband","Bucket hat"];
-  const GLASS_NAMES   = ["None","Round","Rectangular","Cat-eye","Sunglasses","Heart"];
+  const GLASS_NAMES   = ["None","Round","Rectangular","Cat-eye","Sunglasses","Heart","Aviator","Monocle"];
   const FACIAL_NAMES  = ["None","Stubble","Moustache","Short beard","Full beard","Goatee"];
-  const NECKLACE_NAMES= ["None","Gold chain","Pendant","Beads"];
-  const EARRING_NAMES = ["None","Studs","Drops","Hoops","Stars"];
+  const NECKLACE_NAMES= ["None","Gold chain","Pendant","Beads","Choker","Pearl"];
+  const EARRING_NAMES = ["None","Studs","Drops","Hoops","Stars","Dangles","Crosses"];
   const TOPS_S = [
     {id:0,label:"T-Shirt"},{id:1,label:"Hoodie"},{id:2,label:"Jacket"},
     {id:3,label:"Tank Top"},{id:4,label:"Suit & Tie"},{id:5,label:"Crop Top"},
     {id:6,label:"Polo"},{id:7,label:"Jersey"},{id:8,label:"Streetwear"},
     {id:9,label:"Dress"},{id:10,label:"Blazer"},{id:11,label:"Graphic Tee"},
+    {id:12,label:"Varsity"},{id:13,label:"Kimono"},{id:14,label:"Turtleneck"},{id:15,label:"Denim"},
   ];
   const TABS = [
     {id:"face",  label:"FACE"},
