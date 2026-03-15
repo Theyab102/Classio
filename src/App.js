@@ -3474,7 +3474,6 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
     {id:"ai",      label:"AI Assistant",    icon:I.ai},
     {id:"game",    label:"Game Mode",       icon:I.game},
     {id:"youtube", label:"YouTube",         icon:I.link},
-    {id:"explain", label:"AI Explain",      icon:I.sparkle},
   ];
   const fc = getFileColor(file);
 
@@ -3528,7 +3527,6 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
             {tab==="ai" && <AITab file={file} allFiles={allFiles} folder={folder} onUpdate={onUpdate} />}
             {tab==="game" && <GameTab file={file} />}
             {tab==="youtube" && <YouTubeTab file={file} onUpdate={onUpdate} />}
-            {tab==="explain" && <ContinuousExplanationTab file={file} />}
           </div>
       }
     </div>
@@ -4551,7 +4549,11 @@ STRICT RULES — follow every single one:
 
       {/* Sub-tabs */}
       <div style={{ display:"flex", gap:8, marginBottom:22, borderBottom:`1.5px solid ${C.border}`, paddingBottom:12 }}>
-        {[{id:"record",label:"Voice Notes"},{id:"podcast",label:"Podcast"}].map(t => (
+        {[
+          {id:"record",  label:"Voice Notes"},
+          {id:"podcast", label:"Podcast"},
+          {id:"explain", label:"✨ AI Explain"},
+        ].map(t => (
           <button key={t.id} onClick={() => setSubTab(t.id)} style={{
             padding:"8px 20px", borderRadius:20, border:"none", cursor:"pointer",
             fontWeight:700, fontSize:13,
@@ -4706,6 +4708,11 @@ STRICT RULES — follow every single one:
             />
           )}
         </div>
+      )}
+
+      {/* ─── AI EXPLAIN ─── */}
+      {subTab === "explain" && (
+        <ContinuousExplanationTab file={file} />
       )}
     </div>
   );
