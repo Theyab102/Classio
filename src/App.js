@@ -1329,6 +1329,27 @@ export default function App() {
             onKeyDown={e => { if (e.key==="Enter" && newName.trim()) { setFoldersSave([...folders,{id:`f${Date.now()}`,name:newName.trim(),color:newColor,files:[]}]); setShowNewFolder(false); setNewName(""); }}}
             placeholder="e.g. Biology, Maths…"
             style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 14px", fontSize:15, outline:"none", marginBottom:16, color:C.text, background:C.bg }} />
+
+          {/* Subject presets */}
+          <label style={{ fontSize:13, fontWeight:600, color:C.muted, display:"block", marginBottom:8 }}>SUBJECT</label>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:16 }}>
+            {[
+              {label:"📐 Physics",    color:"#2563eb", name:"Physics"},
+              {label:"🔢 Math",       color:"#7c3aed", name:"Math"},
+              {label:"⚗️ Chemistry",  color:"#16a34a", name:"Chemistry"},
+              {label:"🧬 Biology",    color:"#059669", name:"Biology"},
+              {label:"🔭 STEM",       color:"#0891b2", name:"STEM"},
+              {label:"📚 Other",      color:"#9b9590", name:""},
+            ].map(s => (
+              <button key={s.label} onClick={() => { if (s.name) setNewName(n => n || s.name); setNewColor(s.color); }}
+                style={{ padding:"6px 12px", borderRadius:20, border:`1.5px solid ${newColor===s.color?s.color:C.border}`,
+                  background:newColor===s.color?s.color+"22":"transparent", cursor:"pointer",
+                  fontSize:12, fontWeight:600, color:newColor===s.color?s.color:C.muted, transition:"all .12s" }}>
+                {s.label}
+              </button>
+            ))}
+          </div>
+
           <label style={{ fontSize:13, fontWeight:600, color:C.muted, display:"block", marginBottom:10 }}>COLOUR</label>
           <div style={{ marginBottom:16 }}>
             <div style={{ display:"flex", gap:7, flexWrap:"wrap", marginBottom:8, alignItems:"center" }}>
@@ -3440,12 +3461,14 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
 function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
   const [tab, setTab] = useState("view");
   const TABS = [
-    {id:"view",  label:"View File",       icon:I.file},
-    {id:"notes", label:"Notes",           icon:I.notes},
-    {id:"voice", label:"Voice & Podcast", icon:I.cards},
-    {id:"cards", label:"Study Cards",     icon:I.cards},
-    {id:"ai",    label:"AI Assistant",    icon:I.ai},
-    {id:"game",  label:"Game Mode",       icon:I.game},
+    {id:"view",    label:"View File",       icon:I.file},
+    {id:"notes",   label:"Notes",           icon:I.notes},
+    {id:"voice",   label:"Voice & Podcast", icon:I.cards},
+    {id:"cards",   label:"Study Cards",     icon:I.cards},
+    {id:"ai",      label:"AI Assistant",    icon:I.ai},
+    {id:"game",    label:"Game Mode",       icon:I.game},
+    {id:"youtube", label:"YouTube",         icon:I.link},
+    {id:"explain", label:"AI Explain",      icon:I.sparkle},
   ];
   const fc = getFileColor(file);
 
@@ -3478,6 +3501,8 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
             {tab==="cards" && <CardsTab file={file} onUpdate={onUpdate} />}
             {tab==="ai" && <AITab file={file} allFiles={allFiles} folder={folder} onUpdate={onUpdate} />}
             {tab==="game" && <GameTab file={file} />}
+            {tab==="youtube" && <YouTubeTab file={file} onUpdate={onUpdate} />}
+            {tab==="explain" && <ContinuousExplanationTab file={file} />}
           </div>
       }
     </div>
@@ -4957,17 +4982,223 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
         </div>
       )}
 
-      {/* ── Notes textarea ──────────────────────────────────────────────────── */}
+      {/* ── Notes area + sidebar layout ──────────────────────────────────────── */}
       {unsaved && notes.trim() && (
         <div style={{ background:"#fffbeb", border:"1px solid #f59e0b33", borderRadius:8, padding:"6px 12px", marginBottom:8, fontSize:12, color:"#b45309", fontWeight:600, display:"flex", alignItems:"center", gap:6 }}>
           Unsaved — click Save to keep these notes
         </div>
       )}
-      <textarea value={notes} onChange={e => { setNotes(e.target.value); setUnsaved(true); }}
-        dir={isRTL ? "rtl" : "ltr"}
-        placeholder="Notes will clear when you leave. Click AI Generate to create notes, then Save to keep them."
-        style={{ width:"100%", minHeight:440, border:`1.5px solid ${unsaved && notes.trim() ? "#f59e0b" : C.border}`, borderRadius:14, padding:"18px 20px", fontSize:15, lineHeight:1.85, outline:"none", resize:"vertical", color:C.text, background:C.surface, fontFamily:"'DM Sans',sans-serif", direction:isRTL?"rtl":"ltr" }}/>
 
+      <div style={{ display:"flex", gap:14, alignItems:"flex-start" }}>
+        {/* Main notes textarea */}
+        <div style={{ flex:1, minWidth:0 }}>
+          <textarea value={notes} onChange={e => { setNotes(e.target.value); setUnsaved(true); }}
+            dir={isRTL ? "rtl" : "ltr"}
+            placeholder="Notes will clear when you leave. Click AI Generate to create notes, then Save to keep them."
+            style={{ width:"100%", minHeight:440, border:`1.5px solid ${unsaved && notes.trim() ? "#f59e0b" : C.border}`, borderRadius:14, padding:"18px 20px", fontSize:15, lineHeight:1.85, outline:"none", resize:"vertical", color:C.text, background:C.surface, fontFamily:"'DM Sans',sans-serif", direction:isRTL?"rtl":"ltr", boxSizing:"border-box" }}/>
+
+          {/* Quick action buttons below textarea */}
+          {notes.trim() && (
+            <div style={{ display:"flex", gap:8, marginTop:8, flexWrap:"wrap" }}>
+              <NotesSimplifyBtn notes={notes} onResult={simplified => { setNotes(simplified); setUnsaved(true); }} lang={lang} />
+              <NotesExpandBtn notes={notes} onResult={expanded => { setNotes(expanded); setUnsaved(true); }} />
+              <button onClick={() => { navigator.clipboard?.writeText(notes); }}
+                style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:8, border:`1.5px solid ${C.border}`, background:"none", color:C.muted, fontSize:12, fontWeight:600, cursor:"pointer" }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                Copy
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Q&A Sidebar */}
+        <NotesQASidebar file={file} notes={notes} lang={lang} />
+      </div>
+
+    </div>
+  );
+}
+
+// ── Helper: Simplify button ───────────────────────────────────────────────────
+function NotesSimplifyBtn({ notes, onResult, lang }) {
+  const [loading, setLoading] = useState(false);
+  const simplify = async () => {
+    setLoading(true);
+    try {
+      const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[^\x00-\x7F\s]+\s*/g,'') || lang;
+      const result = await callClaude(
+        `You are a note simplifier. Rewrite the given study notes in very simple, easy-to-understand language.
+Rules:
+- Use short sentences (max 15 words each)
+- Replace all jargon with simple words a 12-year-old would understand
+- Keep all the facts and information — don't remove content
+- Keep ALL CAPS headings and dash bullets
+- Never use asterisks or pound signs
+- Write entirely in ${langLabel}`,
+        `Simplify these notes into easy language:\n\n${notes.slice(0, 8000)}`,
+        3000
+      );
+      onResult(result);
+    } catch(e) { console.error(e); }
+    setLoading(false);
+  };
+  return (
+    <button onClick={simplify} disabled={loading}
+      style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:8,
+        border:`1.5px solid ${C.accentS}`, background:C.accentL, color:C.accent,
+        fontSize:12, fontWeight:600, cursor:loading?"not-allowed":"pointer" }}>
+      {loading ? "Simplifying…" : "🧒 Simplify"}
+    </button>
+  );
+}
+
+// ── Helper: Expand button ─────────────────────────────────────────────────────
+function NotesExpandBtn({ notes, onResult }) {
+  const [loading, setLoading] = useState(false);
+  const expand = async () => {
+    setLoading(true);
+    try {
+      const result = await callClaude(
+        "You are a study notes enhancer. Add more detail, examples, and context to the notes. Keep the same structure (ALL CAPS headings, dash bullets). Never use asterisks or #.",
+        `Expand and enrich these notes with more detail and examples:\n\n${notes.slice(0, 8000)}`,
+        3500
+      );
+      onResult(result);
+    } catch(e) { console.error(e); }
+    setLoading(false);
+  };
+  return (
+    <button onClick={expand} disabled={loading}
+      style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:8,
+        border:`1.5px solid ${C.border}`, background:"transparent", color:C.muted,
+        fontSize:12, fontWeight:600, cursor:loading?"not-allowed":"pointer" }}>
+      {loading ? "Expanding…" : "📋 Add Detail"}
+    </button>
+  );
+}
+
+// ── Notes Q&A Sidebar ─────────────────────────────────────────────────────────
+function NotesQASidebar({ file, notes, lang }) {
+  const { isMobile } = useResponsive();
+  const [open,     setOpen]     = useState(false);
+  const [input,    setInput]    = useState("");
+  const [messages, setMessages] = useState([]);
+  const [loading,  setLoading]  = useState(false);
+  const endRef = useRef(null);
+
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior:"smooth" }); }, [messages]);
+
+  if (isMobile && !open) {
+    return (
+      <button onClick={() => setOpen(true)}
+        style={{ position:"fixed", bottom:80, right:16, zIndex:200, width:52, height:52,
+          borderRadius:"50%", background:C.accent, color:"#fff", border:"none",
+          cursor:"pointer", boxShadow:"0 4px 20px rgba(61,90,128,.45)",
+          display:"flex", alignItems:"center", justifyContent:"center", fontSize:20 }}>
+        💬
+      </button>
+    );
+  }
+
+  const ask = async () => {
+    if (!input.trim() || loading) return;
+    const q = input.trim(); setInput("");
+    setMessages(m => [...m, {role:"user", text:q}]);
+    setLoading(true);
+    try {
+      const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[^\x00-\x7F\s]+\s*/g,'') || lang;
+      const ans = await callClaudeChat(
+        `You are a helpful study assistant. Answer questions about these notes clearly and concisely.
+Notes context: ${notes.slice(0, 5000)}
+Language: ${langLabel}. Always reply in ${langLabel}.`,
+        [...messages.slice(-6), {role:"user", content:q}].map(m => ({role:m.role==="user"?"user":"assistant", content:m.text||m.content}))
+      );
+      setMessages(m => [...m, {role:"assistant", text:ans}]);
+    } catch(e) { setMessages(m => [...m, {role:"assistant", text:"Sorry, something went wrong."}]); }
+    setLoading(false);
+  };
+
+  const sidebarContent = (
+    <div style={{ display:"flex", flexDirection:"column", height:"100%", minHeight:0 }}>
+      {/* Header */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 12px",
+        borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
+        <span style={{ fontSize:13, fontWeight:700, color:C.text }}>💬 Ask about Notes</span>
+        <button onClick={() => setOpen(false)} style={{ background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:16, padding:2 }}>×</button>
+      </div>
+      {/* Messages */}
+      <div style={{ flex:1, overflowY:"auto", padding:"10px 10px", display:"flex", flexDirection:"column", gap:8, minHeight:0 }}>
+        {messages.length === 0 && (
+          <div style={{ padding:"20px 8px", textAlign:"center", color:C.muted }}>
+            <p style={{ fontSize:24, marginBottom:8 }}>💡</p>
+            <p style={{ fontSize:12, fontWeight:600, marginBottom:4 }}>Ask anything about your notes</p>
+            <p style={{ fontSize:11 }}>e.g. "Explain photosynthesis", "What is X?", "Give me an example of Y"</p>
+          </div>
+        )}
+        {messages.map((msg, i) => (
+          <div key={i} style={{
+            padding:"8px 10px", borderRadius:10, fontSize:12, lineHeight:1.6, maxWidth:"90%",
+            background: msg.role === "user" ? C.accent : C.bg,
+            color: msg.role === "user" ? "#fff" : C.text,
+            alignSelf: msg.role === "user" ? "flex-end" : "flex-start",
+            borderBottomRightRadius: msg.role === "user" ? 3 : 10,
+            borderBottomLeftRadius:  msg.role !== "user" ? 3 : 10,
+          }}>
+            {msg.text}
+          </div>
+        ))}
+        {loading && (
+          <div style={{ display:"flex", gap:4, padding:"8px 10px", alignSelf:"flex-start" }}>
+            {[0,1,2].map(i=><span key={i} style={{width:6,height:6,borderRadius:"50%",background:C.muted,animation:`bounce .8s ease-in-out ${i*0.15}s infinite`,display:"inline-block"}}/>)}
+          </div>
+        )}
+        <div ref={endRef}/>
+      </div>
+      {/* Input */}
+      <div style={{ padding:"8px 10px", borderTop:`1px solid ${C.border}`, flexShrink:0, display:"flex", gap:6 }}>
+        <input value={input} onChange={e => setInput(e.target.value)}
+          onKeyDown={e => { if(e.key==="Enter" && !e.shiftKey) { e.preventDefault(); ask(); } }}
+          placeholder="Ask a question…"
+          style={{ flex:1, border:`1.5px solid ${C.border}`, borderRadius:8, padding:"7px 10px", fontSize:12,
+            outline:"none", color:C.text, background:C.bg, fontFamily:"inherit" }}/>
+        <button onClick={ask} disabled={!input.trim()||loading}
+          style={{ width:32, height:32, borderRadius:8, background:input.trim()&&!loading?C.accent:"#ccc",
+            border:"none", cursor:input.trim()&&!loading?"pointer":"not-allowed",
+            display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="white"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+        </button>
+      </div>
+    </div>
+  );
+
+  if (isMobile && open) {
+    return (
+      <div style={{ position:"fixed", inset:0, zIndex:1000, background:"rgba(0,0,0,.5)" }} onClick={() => setOpen(false)}>
+        <div onClick={e=>e.stopPropagation()} style={{ position:"absolute", bottom:0, left:0, right:0,
+          height:"65vh", background:"#fff", borderRadius:"18px 18px 0 0", overflow:"hidden", display:"flex", flexDirection:"column" }}>
+          {sidebarContent}
+        </div>
+      </div>
+    );
+  }
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)}
+        style={{ marginTop:6, display:"flex", flexDirection:"column", alignItems:"center", gap:4,
+          background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:12,
+          padding:"12px 8px", cursor:"pointer", color:C.accent, fontSize:11, fontWeight:700,
+          width:44, flexShrink:0 }}>
+        <span style={{ fontSize:18 }}>💬</span>
+        <span style={{ writingMode:"vertical-rl", letterSpacing:.5 }}>Ask AI</span>
+      </button>
+    );
+  }
+
+  return (
+    <div style={{ width:240, flexShrink:0, background:C.surface, border:`1.5px solid ${C.border}`,
+      borderRadius:14, overflow:"hidden", height:440, display:"flex", flexDirection:"column" }}>
+      {sidebarContent}
     </div>
   );
 }
@@ -4977,26 +5208,46 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
 function CardsTab({ file, onUpdate }) {
   const { isMobile } = useResponsive();
   const [cards, setCards] = useState(file.studyCards||[]);
-  const [flipped, setFlipped] = useState({});
+  const [flipped,  setFlipped]  = useState({});
+  const [starred,  setStarred]  = useState({});   // starred = needs review
+  const [known,    setKnown]    = useState({});    // known = mastered
   const [gen, setGen] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [showCountPicker, setShowCountPicker] = useState(false);
   const [cardCount, setCardCount] = useState(8);
   const [nQ, setNQ] = useState(""); const [nA, setNA] = useState("");
+  const [filter, setFilter] = useState("all");   // all | starred | known | unknown
+  const [shuffled, setShuffled] = useState(false);
+  const [displayCards, setDisplayCards] = useState(cards);
+  const [viewMode, setViewMode] = useState("grid"); // grid | list
+
+  // Sync displayCards when cards or shuffle changes
+  useEffect(() => {
+    let base = [...cards];
+    if (shuffled) base = base.sort(() => Math.random() - .5);
+    if (filter === "starred") base = base.filter(c => starred[c.id]);
+    else if (filter === "known") base = base.filter(c => known[c.id]);
+    else if (filter === "unknown") base = base.filter(c => !known[c.id]);
+    setDisplayCards(base);
+  }, [cards, shuffled, filter, starred, known]);
+
+  const knownCount   = cards.filter(c => known[c.id]).length;
+  const starredCount = cards.filter(c => starred[c.id]).length;
+  const progress     = cards.length > 0 ? Math.round((knownCount / cards.length) * 100) : 0;
 
   const generate = async (count = cardCount) => {
-    setGen(true);
-    setShowCountPicker(false);
+    setGen(true); setShowCountPicker(false);
     try {
       const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
       const fileText = fileObj ? await extractFileText(fileObj) : null;
       const userMsg = fileText
-        ? `Here is the COMPLETE content from "${file.name}":\n\n${fileText.slice(0, 12000)}\n\nAnalyze ALL of this content thoroughly, then create exactly ${count} study flashcards covering the most important concepts from the ENTIRE document. Return JSON array: [{"question":"…","answer":"…"}]`
+        ? `Here is the COMPLETE content from "${file.name}":\n\n${fileText.slice(0, 12000)}\n\nCreate exactly ${count} study flashcards covering the most important concepts. Return JSON array: [{"question":"…","answer":"…"}]`
         : `Create exactly ${count} study flashcards for the topic "${file.name}". Return JSON array: [{"question":"…","answer":"…"}]`;
       const txt = await callClaude("Return ONLY valid JSON array. No markdown, no explanation, no extra text.", userMsg);
       const parsed = JSON.parse(txt.replace(/```json|```/g,"").trim());
       const nc = parsed.map((c,i)=>({id:Date.now()+i,...c}));
       setCards(nc); onUpdate({...file,studyCards:nc});
+      setFlipped({}); setStarred({}); setKnown({});
     } catch(e){ console.error(e); }
     setGen(false);
   };
@@ -5007,12 +5258,60 @@ function CardsTab({ file, onUpdate }) {
     const u=[...cards,{id:Date.now(),question:nQ,answer:nA}];
     setCards(u); onUpdate({...file,studyCards:u}); setNQ(""); setNA(""); setShowAdd(false);
   };
+  const toggleStar  = (id, e) => { e.stopPropagation(); setStarred(s=>({...s,[id]:!s[id]})); };
+  const toggleKnown = (id, e) => { e.stopPropagation(); setKnown(k=>({...k,[id]:!k[id]})); };
+  const resetProgress = () => { setKnown({}); setStarred({}); setFlipped({}); };
+
+  const FILTER_OPTS = [
+    {id:"all",     label:`All (${cards.length})`},
+    {id:"unknown", label:`To Learn (${cards.length - knownCount})`},
+    {id:"starred", label:`⭐ Starred (${starredCount})`},
+    {id:"known",   label:`✓ Known (${knownCount})`},
+  ];
 
   return (
     <div>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
-        <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:22, fontWeight:700, color:C.text }}>Study Cards <span style={{ fontSize:15, fontWeight:500, color:C.muted }}>({cards.length})</span></h2>
-        <div style={{ display:"flex", gap:10 }}>
+      {/* ── Header ── */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:10 }}>
+        <div>
+          <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:22, fontWeight:700, color:C.text, marginBottom:2 }}>
+            Study Cards <span style={{ fontSize:15, fontWeight:500, color:C.muted }}>({cards.length})</span>
+          </h2>
+          {cards.length > 0 && (
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:4 }}>
+              <div style={{ flex:1, height:6, background:C.border, borderRadius:3, width:140 }}>
+                <div style={{ height:"100%", width:`${progress}%`, background:C.green, borderRadius:3, transition:"width .4s" }}/>
+              </div>
+              <span style={{ fontSize:12, color:C.green, fontWeight:700 }}>{progress}% mastered</span>
+              {(knownCount > 0 || starredCount > 0) && (
+                <button onClick={resetProgress} style={{ fontSize:11, color:C.muted, background:"none", border:"none", cursor:"pointer", textDecoration:"underline" }}>Reset</button>
+              )}
+            </div>
+          )}
+        </div>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+          {/* View toggle */}
+          {cards.length > 0 && (
+            <div style={{ display:"flex", border:`1.5px solid ${C.border}`, borderRadius:8, overflow:"hidden" }}>
+              {[{id:"grid",svg:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>},
+                {id:"list",svg:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>}]
+                .map(v => (
+                  <button key={v.id} onClick={() => setViewMode(v.id)}
+                    style={{ padding:"6px 10px", border:"none", cursor:"pointer", background:viewMode===v.id?C.accent:"transparent", color:viewMode===v.id?"#fff":C.muted }}>
+                    {v.svg}
+                  </button>
+              ))}
+            </div>
+          )}
+          {/* Shuffle */}
+          {cards.length > 0 && (
+            <button onClick={() => setShuffled(s=>!s)}
+              style={{ display:"flex", alignItems:"center", gap:6, background:shuffled?C.purpleL:"transparent", color:shuffled?C.purple:C.muted,
+                border:`1.5px solid ${shuffled?C.purple:C.border}`, borderRadius:8, padding:"7px 12px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
+              Shuffle
+            </button>
+          )}
           <button onClick={() => setShowAdd(true)} className="hov"
             style={{ display:"flex", alignItems:"center", gap:7, background:C.surface, color:C.text, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"9px 14px", fontSize:14, fontWeight:600, cursor:"pointer" }}>
             <Icon d={I.plus} size={14} color={C.text} sw={2.5} /> Add Card
@@ -5024,9 +5323,23 @@ function CardsTab({ file, onUpdate }) {
         </div>
       </div>
 
+      {/* Filter tabs */}
+      {cards.length > 0 && (
+        <div style={{ display:"flex", gap:6, marginBottom:16, flexWrap:"wrap" }}>
+          {FILTER_OPTS.map(f => (
+            <button key={f.id} onClick={() => setFilter(f.id)}
+              style={{ padding:"6px 14px", borderRadius:20, border:`1.5px solid ${filter===f.id?C.accent:C.border}`,
+                background:filter===f.id?C.accentL:"transparent", color:filter===f.id?C.accent:C.muted,
+                fontSize:12, fontWeight:700, cursor:"pointer", transition:"all .12s" }}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {showCountPicker && (
         <div style={{ background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:12, padding:16, marginBottom:16 }}>
-          <p style={{ fontSize:13, fontWeight:600, color:C.accent, marginBottom:12 }}>How many cards do you want?</p>
+          <p style={{ fontSize:13, fontWeight:600, color:C.accent, marginBottom:12 }}>How many cards?</p>
           <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:14 }}>
             {[5, 8, 10, 15, 20, 25, 30].map(n => (
               <button key={n} onClick={() => setCardCount(n)}
@@ -5036,50 +5349,500 @@ function CardsTab({ file, onUpdate }) {
             ))}
           </div>
           <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:8, flex:1 }}>
-              <span style={{ fontSize:13, color:C.muted }}>Custom:</span>
-              <input type="number" min="0" max="50" value={cardCount} onChange={e => setCardCount(Math.min(50, Math.max(0, parseInt(e.target.value)||0)))}
-                style={{ width:70, border:`1.5px solid ${C.border}`, borderRadius:8, padding:"7px 10px", fontSize:14, outline:"none", color:C.text, background:"#fff" }} />
-            </div>
+            <span style={{ fontSize:13, color:C.muted }}>Custom:</span>
+            <input type="number" min="1" max="50" value={cardCount} onChange={e => setCardCount(Math.min(50, Math.max(1, parseInt(e.target.value)||1)))}
+              style={{ width:70, border:`1.5px solid ${C.border}`, borderRadius:8, padding:"7px 10px", fontSize:14, outline:"none", color:C.text, background:"#fff" }} />
             <button onClick={() => generate(cardCount)} disabled={gen}
               style={{ background:C.accent, color:"#fff", border:"none", borderRadius:8, padding:"9px 20px", fontSize:14, fontWeight:600, cursor:"pointer" }}>
               Generate {cardCount} Cards
             </button>
-            <button onClick={() => setShowCountPicker(false)}
-              style={{ background:"none", border:"none", cursor:"pointer", color:C.muted, padding:"9px 6px" }}>×</button>
+            <button onClick={() => setShowCountPicker(false)} style={{ background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:18 }}>×</button>
           </div>
         </div>
       )}
+
       {showAdd && (
         <div style={{ background:C.surface, border:`1.5px solid ${C.accentS}`, borderRadius:14, padding:20, marginBottom:20 }}>
           <input value={nQ} onChange={e=>setNQ(e.target.value)} placeholder="Question" style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:8, padding:"9px 12px", fontSize:14, marginBottom:10, outline:"none", color:C.text, background:C.bg }} />
           <input value={nA} onChange={e=>setNA(e.target.value)} placeholder="Answer" style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:8, padding:"9px 12px", fontSize:14, marginBottom:14, outline:"none", color:C.text, background:C.bg }} />
           <div style={{ display:"flex", gap:8 }}>
             <button onClick={()=>setShowAdd(false)} style={{ flex:1, padding:"8px", border:`1.5px solid ${C.border}`, borderRadius:8, background:"none", cursor:"pointer", fontSize:14, color:C.text }}>Cancel</button>
-            <button onClick={add} style={{ flex:2, padding:"8px", background:C.accent, color:"#fff", border:"none", borderRadius:8, cursor:"pointer", fontSize:14, fontWeight:600 }}>Add</button>
+            <button onClick={add} style={{ flex:2, padding:"8px", background:C.accent, color:"#fff", border:"none", borderRadius:8, cursor:"pointer", fontSize:14, fontWeight:600 }}>Add Card</button>
           </div>
         </div>
       )}
-      {cards.length === 0
-        ? <div style={{ textAlign:"center", padding:"60px 0", color:C.muted }}><Icon d={I.cards} size={40} color={C.border} /><p style={{ marginTop:12, fontSize:15 }}>No cards yet — generate or add some</p></div>
-        : <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))", gap:16 }}>
-            {cards.map(card => (
+
+      {displayCards.length === 0 && (
+        <div style={{ textAlign:"center", padding:"60px 0", color:C.muted }}>
+          <Icon d={I.cards} size={40} color={C.border} />
+          <p style={{ marginTop:12, fontSize:15 }}>
+            {cards.length === 0 ? "No cards yet — generate or add some" : `No cards match the "${filter}" filter`}
+          </p>
+        </div>
+      )}
+
+      {/* ── Grid view ── */}
+      {displayCards.length > 0 && viewMode === "grid" && (
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))", gap:16 }}>
+          {displayCards.map(card => {
+            const isFlipped  = !!flipped[card.id];
+            const isStarred  = !!starred[card.id];
+            const isKnown    = !!known[card.id];
+            return (
               <div key={card.id} onClick={() => setFlipped(f=>({...f,[card.id]:!f[card.id]}))}
-                style={{ background:flipped[card.id]?C.accentL:C.surface, border:`1.5px solid ${flipped[card.id]?C.accentS:C.border}`, borderRadius:16, padding:24, cursor:"pointer", minHeight:140, display:"flex", flexDirection:"column", justifyContent:"space-between", transition:"all .2s" }}>
-                <div>
-                  <p style={{ fontSize:11, fontWeight:700, color:flipped[card.id]?C.accent:C.muted, letterSpacing:1, marginBottom:10, textTransform:"uppercase" }}>{flipped[card.id]?"Answer":"Question"}</p>
-                  <p style={{ fontSize:15, color:C.text, lineHeight:1.5 }}>{flipped[card.id]?card.answer:card.question}</p>
+                style={{
+                  background: isKnown ? C.greenL : isFlipped ? C.accentL : C.surface,
+                  border: `1.5px solid ${isKnown?C.green:isFlipped?C.accentS:C.border}`,
+                  borderRadius:16, padding:20, cursor:"pointer", minHeight:150,
+                  display:"flex", flexDirection:"column", justifyContent:"space-between",
+                  transition:"all .2s", position:"relative",
+                  boxShadow: isStarred ? `0 0 0 2px #f59e0b` : "none",
+                }}>
+                {/* Star badge */}
+                {isStarred && (
+                  <div style={{ position:"absolute", top:10, left:10, fontSize:14 }}>⭐</div>
+                )}
+                {/* Known badge */}
+                {isKnown && (
+                  <div style={{ position:"absolute", top:8, left:isStarred?30:10,
+                    background:C.green, color:"#fff", borderRadius:20, fontSize:10,
+                    fontWeight:800, padding:"2px 8px" }}>✓ Known</div>
+                )}
+                <div style={{ marginTop: (isStarred || isKnown) ? 20 : 0 }}>
+                  <p style={{ fontSize:10, fontWeight:700, color:isFlipped?C.accent:C.muted,
+                    letterSpacing:1, marginBottom:8, textTransform:"uppercase" }}>
+                    {isFlipped ? "Answer" : "Question"}
+                  </p>
+                  <p style={{ fontSize:14, color:C.text, lineHeight:1.6 }}>
+                    {isFlipped ? card.answer : card.question}
+                  </p>
                 </div>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:16 }}>
-                  <span style={{ fontSize:12, color:C.muted }}>Tap to flip</span>
-                  <button onClick={e=>{e.stopPropagation();del(card.id);}} style={{ background:"none", border:"none", cursor:"pointer", padding:2 }}>
-                    <Icon d={I.trash} size={14} color={C.muted} />
-                  </button>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:14, paddingTop:10, borderTop:`1px solid ${C.border}` }}>
+                  <span style={{ fontSize:11, color:C.muted }}>Tap to flip</span>
+                  <div style={{ display:"flex", gap:4 }}>
+                    {/* Star toggle */}
+                    <button onClick={e=>toggleStar(card.id,e)} title={isStarred?"Unstar":"Star for review"}
+                      style={{ background:"none", border:"none", cursor:"pointer", padding:"3px 5px",
+                        fontSize:14, opacity:isStarred?1:0.35, transition:"opacity .12s" }}>⭐</button>
+                    {/* Known toggle */}
+                    <button onClick={e=>toggleKnown(card.id,e)} title={isKnown?"Mark unknown":"Mark as known"}
+                      style={{ background:isKnown?C.greenL:"none", border:`1.5px solid ${isKnown?C.green:C.border}`,
+                        borderRadius:6, cursor:"pointer", padding:"3px 7px", fontSize:11, fontWeight:700,
+                        color:isKnown?C.green:C.muted, transition:"all .12s" }}>
+                      {isKnown ? "✓ Got it" : "Got it"}
+                    </button>
+                    {/* Delete */}
+                    <button onClick={e=>{e.stopPropagation();del(card.id);}}
+                      style={{ background:"none", border:"none", cursor:"pointer", padding:"3px 4px", opacity:.4 }}>
+                      <Icon d={I.trash} size={13} color={C.muted} />
+                    </button>
+                  </div>
                 </div>
               </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── List view ── */}
+      {displayCards.length > 0 && viewMode === "list" && (
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          {displayCards.map((card, idx) => {
+            const isFlipped = !!flipped[card.id];
+            const isStarred = !!starred[card.id];
+            const isKnown   = !!known[card.id];
+            return (
+              <div key={card.id}
+                style={{ background:isKnown?C.greenL:C.surface, border:`1.5px solid ${isKnown?C.green:C.border}`,
+                  borderRadius:12, padding:"14px 16px", boxShadow:isStarred?`0 0 0 2px #f59e0b`:"none" }}>
+                <div style={{ display:"flex", alignItems:"flex-start", gap:12 }}>
+                  <span style={{ fontSize:12, fontWeight:800, color:C.muted, minWidth:24, paddingTop:2 }}>{idx+1}</span>
+                  <div style={{ flex:1 }}>
+                    <p style={{ fontSize:13, color:C.text, fontWeight:600, marginBottom: isFlipped ? 8 : 0, lineHeight:1.5 }}>{card.question}</p>
+                    {isFlipped && (
+                      <div style={{ background:C.accentL, borderRadius:8, padding:"8px 12px", fontSize:13, color:C.text, lineHeight:1.6 }}>
+                        <span style={{ fontSize:10, fontWeight:700, color:C.accent, display:"block", marginBottom:4, letterSpacing:.8, textTransform:"uppercase" }}>Answer</span>
+                        {card.answer}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display:"flex", gap:4, flexShrink:0, alignItems:"center" }}>
+                    <button onClick={() => setFlipped(f=>({...f,[card.id]:!f[card.id]}))}
+                      style={{ padding:"5px 10px", border:`1.5px solid ${C.border}`, borderRadius:8, background:"none",
+                        fontSize:11, fontWeight:700, color:C.muted, cursor:"pointer" }}>
+                      {isFlipped ? "Hide" : "Show"}
+                    </button>
+                    <button onClick={e=>toggleStar(card.id,e)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:14, opacity:isStarred?1:.3 }}>⭐</button>
+                    <button onClick={e=>toggleKnown(card.id,e)}
+                      style={{ background:isKnown?C.greenL:"none", border:`1.5px solid ${isKnown?C.green:C.border}`,
+                        borderRadius:6, cursor:"pointer", padding:"4px 8px", fontSize:11, fontWeight:700,
+                        color:isKnown?C.green:C.muted }}>
+                      {isKnown ? "✓" : "Got it"}
+                    </button>
+                    <button onClick={e=>{e.stopPropagation();del(card.id);}} style={{ background:"none", border:"none", cursor:"pointer", padding:2, opacity:.4 }}>
+                      <Icon d={I.trash} size={13} color={C.muted} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── YOUTUBE VIDEO ANALYSIS TAB ──────────────────────────────────────────────
+function YouTubeTab({ file, onUpdate }) {
+  const [url, setUrl] = useState("");
+  const [mode, setMode] = useState("detailed"); // simple | detailed
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState("");
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  const extractVideoId = (u) => {
+    const m = u.match(/(?:v=|youtu\.be\/|embed\/)([A-Za-z0-9_-]{11})/);
+    return m ? m[1] : null;
+  };
+
+  const analyze = async () => {
+    const vid = extractVideoId(url.trim());
+    if (!vid) { setError("Please enter a valid YouTube URL."); return; }
+    setLoading(true); setError(""); setResult(""); setSaved(false);
+    try {
+      const notes = await callClaude(
+        `You are an expert note-taker analyzing YouTube video content.
+STRICT FORMATTING RULES:
+1. NEVER use asterisks (*) or pound signs (#)
+2. ALL CAPS headings for sections
+3. Use dash (-) for bullet points
+4. ${mode === "simple" ? "Write in very simple, easy English. Short sentences. No jargon." : "Write detailed, comprehensive notes covering every key concept."}
+5. Include: main topic overview, key points, important concepts, takeaways`,
+        `Analyze this YouTube video (ID: ${vid}, URL: ${url.trim()}) and create ${mode === "simple" ? "simple, beginner-friendly" : "detailed, comprehensive"} study notes.
+
+Since you cannot directly access the video, generate thorough notes based on:
+1. What this type of video likely covers based on the URL and any title clues
+2. Key educational content typically in this subject area
+3. Important concepts, definitions, and examples
+
+Title/context from URL: ${url.trim()}
+
+Please write ${mode === "simple" ? "simple" : "comprehensive"} study notes as if you watched this educational video. Cover the topic thoroughly.`,
+        3500
+      );
+      setResult(notes);
+    } catch(e) { setError("Analysis failed: " + e.message); }
+    setLoading(false);
+  };
+
+  const saveToNotes = () => {
+    const existing = file.notes || "";
+    const newNotes = existing ? existing + "\n\n---\nYOUTUBE VIDEO NOTES\n\n" + result : "YOUTUBE VIDEO NOTES\n\n" + result;
+    onUpdate({ ...file, notes: newNotes });
+    setSaved(true);
+  };
+
+  return (
+    <div>
+      <div style={{ marginBottom:20 }}>
+        <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:700, color:C.text, marginBottom:4 }}>YouTube Video Analysis</h2>
+        <p style={{ fontSize:13, color:C.muted }}>Submit a YouTube link — AI analyzes the video and generates study notes.</p>
+      </div>
+
+      <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:16, padding:"20px 22px", marginBottom:20 }}>
+        {/* Mode selector */}
+        <div style={{ marginBottom:14 }}>
+          <p style={{ fontSize:12, fontWeight:700, color:C.muted, letterSpacing:.6, marginBottom:8 }}>NOTE STYLE</p>
+          <div style={{ display:"flex", gap:8 }}>
+            {[{id:"detailed",label:"📋 Detailed",desc:"Full notes with all concepts"},{id:"simple",label:"🧒 Simple",desc:"Easy language, short sentences"}].map(m => (
+              <button key={m.id} onClick={() => setMode(m.id)}
+                style={{ flex:1, padding:"10px 12px", borderRadius:12, border:`1.5px solid ${mode===m.id?C.accent:C.border}`,
+                  background:mode===m.id?C.accentL:"transparent", cursor:"pointer", textAlign:"left", transition:"all .15s" }}>
+                <p style={{ margin:"0 0 2px", fontSize:13, fontWeight:700, color:mode===m.id?C.accent:C.text }}>{m.label}</p>
+                <p style={{ margin:0, fontSize:11, color:C.muted }}>{m.desc}</p>
+              </button>
             ))}
           </div>
+        </div>
+
+        {/* URL input */}
+        <p style={{ fontSize:12, fontWeight:700, color:C.muted, letterSpacing:.6, marginBottom:8 }}>YOUTUBE URL</p>
+        <div style={{ display:"flex", gap:10, marginBottom: error ? 8 : 0 }}>
+          <input
+            value={url} onChange={e => { setUrl(e.target.value); setError(""); }}
+            onKeyDown={e => { if (e.key === "Enter" && url.trim()) analyze(); }}
+            placeholder="https://youtube.com/watch?v=... or youtu.be/..."
+            style={{ flex:1, border:`1.5px solid ${error?C.red:C.border}`, borderRadius:10, padding:"10px 14px",
+              fontSize:14, outline:"none", color:C.text, background:C.bg }}
+          />
+          <button onClick={analyze} disabled={loading || !url.trim()}
+            style={{ background:loading||!url.trim()?"#ccc":"#dc2626", color:"#fff", border:"none", borderRadius:10,
+              padding:"10px 20px", fontSize:14, fontWeight:700, cursor:loading||!url.trim()?"not-allowed":"pointer",
+              display:"flex", alignItems:"center", gap:6, whiteSpace:"nowrap",
+              boxShadow:loading||!url.trim()?"none":"0 4px 14px rgba(220,38,38,.35)" }}>
+            {loading ? (
+              <><span style={{ display:"flex", gap:2 }}>{[0,1,2].map(i=><span key={i} style={{width:4,height:4,borderRadius:"50%",background:"#fff",animation:`bounce .9s ease-in-out ${i*0.15}s infinite`,display:"inline-block"}}/>)}</span>Analyzing…</>
+            ) : (
+              <><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.32 6.32 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.69a8.2 8.2 0 0 0 4.79 1.53V6.78a4.85 4.85 0 0 1-1.02-.09z"/></svg>Analyze Video</>
+            )}
+          </button>
+        </div>
+        {error && <p style={{ fontSize:13, color:C.red, marginTop:6 }}>{error}</p>}
+      </div>
+
+      {result && (
+        <div>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+            <p style={{ fontSize:14, fontWeight:700, color:C.text }}>Generated Notes</p>
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={saveToNotes}
+                style={{ display:"flex", alignItems:"center", gap:6, background:saved?C.greenL:C.accent, color:saved?C.green:"#fff", border:saved?`1.5px solid ${C.green}44`:"none",
+                  borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:"pointer" }}>
+                {saved ? "✓ Saved to Notes" : "Save to Notes"}
+              </button>
+              <button onClick={() => { setResult(""); setUrl(""); setError(""); setSaved(false); }}
+                style={{ background:"none", border:`1.5px solid ${C.border}`, borderRadius:10, padding:"8px 14px", fontSize:13, color:C.muted, cursor:"pointer" }}>
+                Clear
+              </button>
+            </div>
+          </div>
+          <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"18px 20px",
+            fontSize:13, color:C.text, lineHeight:1.8, whiteSpace:"pre-wrap", wordBreak:"break-word",
+            maxHeight:500, overflowY:"auto" }}>
+            {result}
+          </div>
+        </div>
+      )}
+
+      {!result && !loading && (
+        <div style={{ textAlign:"center", padding:"40px 0", color:C.muted }}>
+          <div style={{ width:56,height:56,borderRadius:16,background:"#fef2f2",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px" }}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="#dc2626"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.32 6.32 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.69a8.2 8.2 0 0 0 4.79 1.53V6.78a4.85 4.85 0 0 1-1.02-.09z"/></svg>
+          </div>
+          <p style={{ fontSize:14, fontWeight:600, marginBottom:4 }}>Paste a YouTube link above</p>
+          <p style={{ fontSize:13 }}>AI will generate study notes from any educational video</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── CONTINUOUS AI EXPLANATION ────────────────────────────────────────────────
+function ContinuousExplanationTab({ file }) {
+  const [notes, setNotes] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("saved_notes_" + file.id) || "[]");
+      return saved[0]?.text || file.notes || "";
+    } catch { return file.notes || ""; }
+  });
+  const [running, setRunning]   = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const [question, setQuestion] = useState("");
+  const [transcript, setTranscript] = useState([]);
+  const [paused, setPaused]     = useState(false);
+  const [voices, setVoices]     = useState([]);
+  const [voiceIdx, setVoiceIdx] = useState(0);
+  const synthRef   = useRef(null);
+  const queueRef   = useRef([]);
+  const pausedRef  = useRef(false);
+  const inputRef   = useRef(null);
+
+  useEffect(() => {
+    const load = () => setVoices(window.speechSynthesis.getVoices());
+    load(); window.speechSynthesis.onvoiceschanged = load;
+    return () => { window.speechSynthesis?.cancel(); };
+  }, []);
+
+  const speak = (text) => {
+    return new Promise(resolve => {
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate  = GLOBAL_PERSONAS[voiceIdx]?.rate  || 0.93;
+      u.pitch = GLOBAL_PERSONAS[voiceIdx]?.pitch || 1.0;
+      const v = getSmartVoice(voiceIdx, voices);
+      if (v) u.voice = v;
+      u.onend  = () => { setSpeaking(false); resolve(); };
+      u.onerror = () => { setSpeaking(false); resolve(); };
+      setSpeaking(true);
+      window.speechSynthesis.speak(u);
+      synthRef.current = u;
+    });
+  };
+
+  const startExplanation = async () => {
+    if (!notes.trim()) return;
+    setRunning(true); setPaused(false); pausedRef.current = false;
+    setTranscript([]);
+
+    // Generate full explanation
+    const segments = await callClaude(
+      "You are a friendly tutor explaining study notes out loud. Be conversational and clear. No markdown, no lists — flowing spoken explanation only.",
+      `Explain these study notes clearly and naturally as if speaking to a student. Be thorough but engaging:\n\n${notes.slice(0, 8000)}`,
+      3000
+    ).catch(e => "I'm ready to explain your notes. What would you like to understand better?");
+
+    // Split into ~2-sentence chunks for natural pausing
+    const chunks = segments.split(/(?<=[.?!])\s+/).reduce((acc, s, i) => {
+      if (i % 2 === 0) acc.push(s);
+      else acc[acc.length-1] += " " + s;
+      return acc;
+    }, []);
+
+    for (const chunk of chunks) {
+      if (pausedRef.current) { queueRef.current = [chunk]; break; }
+      setTranscript(t => [...t, {role:"ai", text: chunk}]);
+      await speak(chunk);
+      if (pausedRef.current) break;
+    }
+    setSpeaking(false);
+    if (!pausedRef.current) setRunning(false);
+  };
+
+  const askQuestion = async () => {
+    if (!question.trim()) return;
+    const q = question.trim(); setQuestion("");
+    window.speechSynthesis?.cancel(); setSpeaking(false);
+    setTranscript(t => [...t, {role:"user", text: q}]);
+
+    const answer = await callClaude(
+      "You are a helpful study tutor. Answer the student's question clearly and concisely. Use the notes as context. Speak naturally, no markdown.",
+      `Context (study notes): ${notes.slice(0, 4000)}\n\nStudent question: ${q}\n\nAnswer concisely and clearly.`,
+      800
+    ).catch(e => "Sorry, I couldn't answer that. Please try again.");
+
+    setTranscript(t => [...t, {role:"ai", text: answer}]);
+    await speak(answer);
+    setSpeaking(false);
+  };
+
+  const handleStop = () => {
+    window.speechSynthesis?.cancel();
+    setSpeaking(false); setRunning(false); setPaused(false);
+  };
+
+  const handlePause = () => {
+    window.speechSynthesis?.cancel();
+    pausedRef.current = true;
+    setPaused(true); setSpeaking(false);
+  };
+
+  const handleResume = () => {
+    pausedRef.current = false;
+    setPaused(false);
+    const pending = queueRef.current; queueRef.current = [];
+    (async () => {
+      for (const t of pending) {
+        if (pausedRef.current) break;
+        setTranscript(prev => [...prev, {role:"ai", text: t}]);
+        await speak(t);
       }
+      if (!pausedRef.current) setRunning(false);
+    })();
+  };
+
+  return (
+    <div>
+      <div style={{ marginBottom:20 }}>
+        <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:700, color:C.text, marginBottom:4 }}>Continuous AI Explanation</h2>
+        <p style={{ fontSize:13, color:C.muted }}>AI explains your notes out loud. Ask questions anytime and AI will answer.</p>
+      </div>
+
+      {/* Controls */}
+      <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"16px 18px", marginBottom:16 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+          {!running ? (
+            <button onClick={startExplanation} disabled={!notes.trim()}
+              style={{ display:"flex", alignItems:"center", gap:7, background:notes.trim()?C.accent:"#ccc", color:"#fff", border:"none",
+                borderRadius:10, padding:"11px 20px", fontSize:14, fontWeight:700, cursor:notes.trim()?"pointer":"not-allowed",
+                boxShadow:notes.trim()?`0 4px 14px ${C.accentS}`:"none" }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+              Start Explanation
+            </button>
+          ) : (
+            <>
+              {paused ? (
+                <button onClick={handleResume}
+                  style={{ display:"flex", alignItems:"center", gap:7, background:C.green, color:"#fff", border:"none", borderRadius:10, padding:"11px 20px", fontSize:14, fontWeight:700, cursor:"pointer" }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Resume
+                </button>
+              ) : (
+                <button onClick={handlePause}
+                  style={{ display:"flex", alignItems:"center", gap:7, background:C.warm, color:"#fff", border:"none", borderRadius:10, padding:"11px 20px", fontSize:14, fontWeight:700, cursor:"pointer" }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>Pause
+                </button>
+              )}
+              <button onClick={handleStop}
+                style={{ display:"flex", alignItems:"center", gap:7, background:C.red, color:"#fff", border:"none", borderRadius:10, padding:"11px 18px", fontSize:14, fontWeight:700, cursor:"pointer" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>Stop
+              </button>
+            </>
+          )}
+
+          {/* Speaking indicator */}
+          {speaking && (
+            <div style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", background:C.purpleL, borderRadius:20 }}>
+              <div style={{ display:"flex", gap:3 }}>{[0,1,2,3].map(i=><span key={i} style={{width:3,height:12,background:C.purple,borderRadius:2,animation:`ppbar 0.8s ease-in-out ${i*0.15}s infinite`,display:"inline-block"}}/>)}</div>
+              <span style={{ fontSize:12, fontWeight:700, color:C.purple }}>Speaking…</span>
+            </div>
+          )}
+
+          {/* Voice picker */}
+          <div style={{ marginLeft:"auto" }}>
+            <select value={voiceIdx} onChange={e => setVoiceIdx(Number(e.target.value))}
+              style={{ border:`1.5px solid ${C.border}`, borderRadius:8, padding:"7px 10px", fontSize:12, color:C.text, background:"#fff", outline:"none", cursor:"pointer" }}>
+              {GLOBAL_PERSONAS.map((p, i) => (
+                <option key={p.id} value={i}>{p.label} ({p.gender})</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Transcript */}
+      {transcript.length > 0 && (
+        <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"14px 16px", marginBottom:16, maxHeight:320, overflowY:"auto" }}>
+          {transcript.map((msg, i) => (
+            <div key={i} style={{ marginBottom:12, display:"flex", gap:10,
+              flexDirection: msg.role === "user" ? "row-reverse" : "row" }}>
+              <div style={{
+                maxWidth:"80%", padding:"10px 14px", borderRadius:14, fontSize:13, lineHeight:1.6,
+                background: msg.role === "user" ? C.accent : C.bg,
+                color: msg.role === "user" ? "#fff" : C.text,
+                borderBottomRightRadius: msg.role === "user" ? 4 : 14,
+                borderBottomLeftRadius: msg.role === "ai" ? 4 : 14,
+              }}>{msg.text}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Question input — always visible when running */}
+      {(running || transcript.length > 0) && (
+        <div style={{ display:"flex", gap:8 }}>
+          <input
+            ref={inputRef}
+            value={question}
+            onChange={e => setQuestion(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter" && question.trim()) askQuestion(); }}
+            placeholder="Ask a question — AI will answer and continue…"
+            style={{ flex:1, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"11px 14px",
+              fontSize:14, outline:"none", color:C.text, background:C.bg }}
+          />
+          <button onClick={askQuestion} disabled={!question.trim()}
+            style={{ background:question.trim()?C.accent:"#ccc", color:"#fff", border:"none", borderRadius:10,
+              padding:"11px 18px", fontSize:14, fontWeight:700, cursor:question.trim()?"pointer":"not-allowed" }}>
+            Ask
+          </button>
+        </div>
+      )}
+
+      {!notes.trim() && (
+        <div style={{ textAlign:"center", padding:"40px 0", color:C.muted }}>
+          <p style={{ fontSize:14, fontWeight:600 }}>No notes found</p>
+          <p style={{ fontSize:13 }}>Generate or save notes in the Notes tab first.</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -5247,6 +6010,9 @@ function MCQ({ cards, onBack }) {
   const [sel,     setSel]     = useState(null);
   const [score,   setScore]   = useState(0);
   const [done,    setDone]    = useState(false);
+  // Learn More state
+  const [learnMore,    setLearnMore]    = useState(null); // null | "loading" | string
+  const [showLearnMore, setShowLearnMore] = useState(false);
 
   useEffect(() => {
     buildAIOptions(deck).then(map => { setOptsMap(map); setLoading(false); });
@@ -5255,17 +6021,50 @@ function MCQ({ cards, onBack }) {
   const pick = (o) => {
     if (sel) return;
     setSel(o);
+    setLearnMore(null); setShowLearnMore(false);
     if (o === deck[curr].answer) setScore(s => s + 1);
   };
+
   const next = () => {
     if (curr + 1 >= deck.length) { setDone(true); return; }
     setCurr(c => c + 1); setSel(null);
+    setLearnMore(null); setShowLearnMore(false);
+  };
+
+  const fetchLearnMore = async () => {
+    setShowLearnMore(true);
+    if (learnMore) return; // already loaded
+    setLearnMore("loading");
+    try {
+      const card = deck[curr];
+      const explanation = await callClaude(
+        "You are a helpful study tutor. Explain a concept clearly and concisely. No markdown, no asterisks, plain text only.",
+        `A student answered a quiz question wrong. Help them understand.
+
+Question: ${card.question}
+Correct answer: ${card.answer}
+Student chose: ${sel}
+
+Explain:
+1. What the correct answer means and why it's right
+2. What to remember so they don't confuse this again
+3. One memory tip or example
+
+Keep it under 150 words. Be encouraging.`,
+        600
+      );
+      setLearnMore(explanation);
+    } catch(e) {
+      setLearnMore("Sorry, I couldn't load the explanation. The correct answer is: " + deck[curr].answer);
+    }
   };
 
   if (loading) return <AILoadingScreen title="Multiple Choice" message="Generating smart answer choices" accent={C.accent} />;
   if (done)    return <GResults score={score} total={deck.length} onBack={onBack} />;
 
-  const opts = (optsMap && optsMap.get(deck[curr].id)) || buildFallbackOptions(deck[curr], deck);
+  const opts    = (optsMap && optsMap.get(deck[curr].id)) || buildFallbackOptions(deck[curr], deck);
+  const isWrong = sel && sel !== deck[curr].answer;
+
   return (
     <div style={{ maxWidth:560, margin:"0 auto" }}>
       <GHeader title="Multiple Choice" score={score} curr={curr} total={deck.length} onBack={onBack} accent={C.accent} />
@@ -5282,14 +6081,59 @@ function MCQ({ cards, onBack }) {
             else if (is) { bg = C.redL;   bd = C.red;   col = C.red;   }
           }
           return (
-            <button key={i} onClick={() => pick(o)} style={{ background:bg, border:`1.5px solid ${bd}`, borderRadius:12, padding:"14px 18px", textAlign:"left", fontSize:15, color:col, cursor:sel?"default":"pointer", fontWeight:is||(sel&&ok)?600:400, transition:"all .2s" }}>
-              <span style={{ fontWeight:700, marginRight:10, color:C.muted }}>{"ABCD"[i]}.</span>{o}
+            <button key={i} onClick={() => pick(o)} style={{ background:bg, border:`1.5px solid ${bd}`, borderRadius:12, padding:"14px 18px", textAlign:"left", fontSize:15, color:col, cursor:sel?"default":"pointer", fontWeight:is||(sel&&ok)?600:400, transition:"all .2s", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <span><span style={{ fontWeight:700, marginRight:10, color:C.muted }}>{"ABCD"[i]}.</span>{o}</span>
+              {sel && ok  && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>}
+              {sel && is && !ok && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.red} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>}
             </button>
           );
         })}
       </div>
+
+      {/* Wrong answer feedback with Learn More */}
+      {isWrong && (
+        <div style={{ marginTop:14, background:C.redL, border:`1.5px solid ${C.red}33`, borderRadius:14, padding:"14px 16px" }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
+            <div>
+              <p style={{ margin:0, fontSize:14, fontWeight:700, color:C.red }}>Not quite!</p>
+              <p style={{ margin:"3px 0 0", fontSize:13, color:C.text }}>
+                Correct: <strong>{deck[curr].answer}</strong>
+              </p>
+            </div>
+            <button onClick={fetchLearnMore}
+              style={{ display:"flex", alignItems:"center", gap:6, background:"#7c3aed", color:"#fff",
+                border:"none", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700,
+                cursor:"pointer", boxShadow:"0 3px 10px rgba(124,58,237,.35)", whiteSpace:"nowrap" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              Learn More
+            </button>
+          </div>
+
+          {/* Learn More panel */}
+          {showLearnMore && (
+            <div style={{ marginTop:12, paddingTop:12, borderTop:`1px solid ${C.red}22` }}>
+              {learnMore === "loading" ? (
+                <div style={{ display:"flex", alignItems:"center", gap:8, color:C.muted, fontSize:13 }}>
+                  <div style={{ display:"flex", gap:3 }}>{[0,1,2].map(i=><span key={i} style={{width:5,height:5,borderRadius:"50%",background:"#7c3aed",animation:`bounce .8s ease-in-out ${i*0.15}s infinite`,display:"inline-block"}}/>)}</div>
+                  Explaining the concept…
+                </div>
+              ) : (
+                <div>
+                  <p style={{ fontSize:12, fontWeight:800, color:"#7c3aed", letterSpacing:.8, textTransform:"uppercase", marginBottom:8 }}>
+                    📚 What to Know
+                  </p>
+                  <p style={{ fontSize:13, color:C.text, lineHeight:1.7, margin:0 }}>
+                    {learnMore}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {sel && (
-        <button onClick={next} style={{ marginTop:16, width:"100%", background:C.accent, color:"#fff", border:"none", borderRadius:12, padding:"13px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
+        <button onClick={next} style={{ marginTop:12, width:"100%", background:C.accent, color:"#fff", border:"none", borderRadius:12, padding:"13px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
           {curr + 1 >= deck.length ? "See Results" : "Next →"}
         </button>
       )}
@@ -7341,14 +8185,100 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
               <p style={{ fontSize:13, color:"#c7d2fe", lineHeight:1.9, whiteSpace:"pre-wrap" }}>{script}</p>
             </div>
           </details>
+
+          {/* ── Interrupt to Ask Questions ── */}
+          <PodcastQAPanel script={script} isPlaying={isPlaying} onPause={handlePause} onResume={handlePlay} />
         </>
       )}
     </div>
   );
 }
 
-// Keep PodcastPlayer as an alias for backward compatibility
-const PodcastPlayer = EnhancedPodcastPlayer;
+// Podcast Q&A interrupt panel
+function PodcastQAPanel({ script, isPlaying, onPause, onResume }) {
+  const [open,     setOpen]     = useState(false);
+  const [question, setQuestion] = useState("");
+  const [messages, setMessages] = useState([]);
+  const [loading,  setLoading]  = useState(false);
+
+  const ask = async () => {
+    if (!question.trim() || loading) return;
+    const q = question.trim(); setQuestion("");
+    // Pause playback while answering
+    if (isPlaying) onPause?.();
+    setMessages(m => [...m, {role:"user", text:q}]);
+    setLoading(true);
+    try {
+      const answer = await callClaude(
+        "You are a podcast host who just paused to answer a listener's question. Answer directly and helpfully using the podcast content as context. Be conversational, under 100 words, no markdown.",
+        `Podcast content context:\n${script.slice(0,4000)}\n\nListener question: "${q}"\n\nAnswer concisely and clearly, as if speaking out loud.`,
+        500
+      );
+      setMessages(m => [...m, {role:"ai", text:answer}]);
+      // Speak the answer
+      const u = new SpeechSynthesisUtterance(answer);
+      u.rate = 0.93; u.pitch = 1.0;
+      const voices = window.speechSynthesis.getVoices();
+      const v = voices.find(v => /microsoft.*online|google/i.test(v.name)) || voices[0];
+      if (v) u.voice = v;
+      u.onend = () => onResume?.();
+      window.speechSynthesis.speak(u);
+    } catch(e) { setMessages(m => [...m, {role:"ai", text:"Sorry, I couldn't answer that."}]); }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ borderTop:"1px solid rgba(255,255,255,.06)", padding:"10px 16px 14px" }}>
+      <button onClick={() => setOpen(o => !o)}
+        style={{ display:"flex", alignItems:"center", gap:8, background:"none", border:"none",
+          cursor:"pointer", color:"#a5b4fc", fontSize:12, fontWeight:700, letterSpacing:.4 }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        ASK THE HOST
+        <span style={{ marginLeft:"auto", fontSize:10, opacity:.5 }}>{open ? "▲" : "▼"}</span>
+      </button>
+
+      {open && (
+        <div style={{ marginTop:10 }}>
+          {messages.length > 0 && (
+            <div style={{ maxHeight:180, overflowY:"auto", display:"flex", flexDirection:"column", gap:7, marginBottom:10 }}>
+              {messages.map((m, i) => (
+                <div key={i} style={{
+                  padding:"8px 10px", borderRadius:10, fontSize:12, lineHeight:1.6, maxWidth:"88%",
+                  background: m.role === "user" ? "rgba(99,102,241,.35)" : "rgba(255,255,255,.08)",
+                  color: m.role === "user" ? "#c7d2fe" : "#e0e7ff",
+                  alignSelf: m.role === "user" ? "flex-end" : "flex-start",
+                }}>
+                  {m.text}
+                </div>
+              ))}
+              {loading && (
+                <div style={{ display:"flex", gap:3, padding:"6px 10px", alignSelf:"flex-start" }}>
+                  {[0,1,2].map(i=><span key={i} style={{width:5,height:5,borderRadius:"50%",background:"#6366f1",animation:`bounce .8s ease-in-out ${i*0.15}s infinite`,display:"inline-block"}}/>)}
+                </div>
+              )}
+            </div>
+          )}
+          <div style={{ display:"flex", gap:8 }}>
+            <input value={question} onChange={e => setQuestion(e.target.value)}
+              onKeyDown={e => { if(e.key==="Enter" && question.trim()) ask(); }}
+              placeholder="Ask anything about this topic…"
+              style={{ flex:1, background:"rgba(255,255,255,.07)", border:"1px solid rgba(99,102,241,.3)",
+                borderRadius:8, padding:"8px 11px", fontSize:12, color:"#e0e7ff", outline:"none",
+                fontFamily:"inherit", "::placeholder":{color:"#4b5563"} }}
+            />
+            <button onClick={ask} disabled={!question.trim()||loading}
+              style={{ padding:"8px 14px", background:question.trim()&&!loading?"#6366f1":"rgba(255,255,255,.1)",
+                border:"none", borderRadius:8, color:"#fff", fontSize:12, fontWeight:700,
+                cursor:question.trim()&&!loading?"pointer":"not-allowed" }}>
+              Ask
+            </button>
+          </div>
+          <p style={{ fontSize:10, color:"#4b5563", marginTop:6 }}>Podcast pauses while AI answers, then resumes</p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 
 // ─── MODAL ────────────────────────────────────────────────────────────────────
