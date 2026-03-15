@@ -4504,24 +4504,21 @@ Context (for fixing mis-heard words only — do NOT add this as content): ${cont
     const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[^\x00-\x7F\s]+\s*/g,'') || lang;
     try {
       const script = await callClaude(
-        `You are an expert teacher and engaging podcast host. Your job is to EXPLAIN the topic — not read the notes.
+        `You are an expert teacher creating a spoken audio lesson. Your ONLY job is to EXPLAIN and SIMPLIFY — never read or copy from the notes.
 Language: ${langLabel}. Write ENTIRELY in ${langLabel}.
 
-YOUR APPROACH:
-- You are a TEACHER who truly understands this topic. Explain it as if teaching a student who has never seen it before.
-- For each concept: say what it is, WHY it matters, HOW it works, and give a real-world example or analogy
-- Do NOT just restate the note text — paraphrase, elaborate, and make it understandable
-- Build understanding progressively — each concept should connect to the previous one
-- Aim for 8-12 minutes spoken (1200-1800 words)
-
-FORMAT (pure spoken audio):
-1. Open: "Hey! Today we're going to really understand [topic]…"
-2. For each concept — explain it deeply: "What this means is…", "Think of it like…", "A good example is…", "This matters because…"
-3. Use transitions: "Now that you understand X, let's look at Y…", "Building on that…"
-4. End: "So to wrap up — here are the key things you now understand…" then give a real summary
-5. NO markdown, NO asterisks, NO bullet symbols — pure spoken words only
-6. Convert symbols to words: 10⁻¹⁰ → "ten to the power of negative ten", × → "times", H₂O → "H two O"`,
-        `Here are the study notes. Turn them into a thorough EXPLANATION — teach the concepts, don't just read them:\n\n${notesText.slice(0, 14000)}`,
+STRICT RULES — follow every single one:
+1. SIMPLIFY everything as if the student has never seen this topic before.
+2. NEVER copy, quote, or closely paraphrase the notes. Always use your own fresh words.
+3. For every concept: explain (a) what it is in plain English, (b) why it matters, (c) how it works, (d) a simple real-world analogy.
+4. Use teacher phrases: "Think of it this way…", "The key idea is…", "In simple terms…", "Here's a useful way to remember this…", "What this really means is…"
+5. Connect ideas: "Now that you understand X, Y will make sense because…"
+6. Aim for 8-12 spoken minutes (1200-1800 words).
+7. Open: "Hey! Today we're going to really understand [topic from notes]…"
+8. Close: "So to wrap up — here are the key things you now understand…"
+9. NO markdown, NO asterisks, NO bullets, NO headers — pure flowing natural speech only.
+10. Convert ALL symbols to spoken words: H₂O → "H two O", 10⁻¹⁰ → "ten to the power of negative ten", × → "times", ² → "squared", = → "equals".`,
+        `Here are the study notes. Create a TEACHER'S EXPLANATION — simplify everything, use your own words, do NOT copy or read from the notes:\n\n${notesText.slice(0, 14000)}`,
         4000
       );
       setPodcastScript(script);
@@ -5400,65 +5397,78 @@ function CardsTab({ file, onUpdate }) {
 
       {/* ── Grid view ── */}
       {displayCards.length > 0 && viewMode === "grid" && (
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))", gap:16 }}>
-          {displayCards.map(card => {
-            const isFlipped  = !!flipped[card.id];
-            const isStarred  = !!starred[card.id];
-            const isKnown    = !!known[card.id];
-            return (
-              <div key={card.id} onClick={() => setFlipped(f=>({...f,[card.id]:!f[card.id]}))}
-                style={{
-                  background: isKnown ? C.greenL : isFlipped ? C.accentL : C.surface,
-                  border: `1.5px solid ${isKnown?C.green:isFlipped?C.accentS:C.border}`,
-                  borderRadius:16, padding:20, cursor:"pointer", minHeight:150,
-                  display:"flex", flexDirection:"column", justifyContent:"space-between",
-                  transition:"all .2s", position:"relative",
-                  boxShadow: isStarred ? `0 0 0 2px #f59e0b` : "none",
-                }}>
-                {/* Star badge */}
-                {isStarred && (
-                  <div style={{ position:"absolute", top:10, left:10, fontSize:14 }}>⭐</div>
-                )}
-                {/* Known badge */}
-                {isKnown && (
-                  <div style={{ position:"absolute", top:8, left:isStarred?30:10,
-                    background:C.green, color:"#fff", borderRadius:20, fontSize:10,
-                    fontWeight:800, padding:"2px 8px" }}>✓ Known</div>
-                )}
-                <div style={{ marginTop: (isStarred || isKnown) ? 20 : 0 }}>
-                  <p style={{ fontSize:10, fontWeight:700, color:isFlipped?C.accent:C.muted,
-                    letterSpacing:1, marginBottom:8, textTransform:"uppercase" }}>
-                    {isFlipped ? "Answer" : "Question"}
-                  </p>
-                  <p style={{ fontSize:14, color:C.text, lineHeight:1.6 }}>
-                    {isFlipped ? card.answer : card.question}
-                  </p>
-                </div>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:14, paddingTop:10, borderTop:`1px solid ${C.border}` }}>
-                  <span style={{ fontSize:11, color:C.muted }}>Tap to flip</span>
-                  <div style={{ display:"flex", gap:4 }}>
-                    {/* Star toggle */}
-                    <button onClick={e=>toggleStar(card.id,e)} title={isStarred?"Unstar":"Star for review"}
-                      style={{ background:"none", border:"none", cursor:"pointer", padding:"3px 5px",
-                        fontSize:14, opacity:isStarred?1:0.35, transition:"opacity .12s" }}>⭐</button>
-                    {/* Known toggle */}
-                    <button onClick={e=>toggleKnown(card.id,e)} title={isKnown?"Mark unknown":"Mark as known"}
-                      style={{ background:isKnown?C.greenL:"none", border:`1.5px solid ${isKnown?C.green:C.border}`,
-                        borderRadius:6, cursor:"pointer", padding:"3px 7px", fontSize:11, fontWeight:700,
-                        color:isKnown?C.green:C.muted, transition:"all .12s" }}>
-                      {isKnown ? "✓ Got it" : "Got it"}
-                    </button>
-                    {/* Delete */}
-                    <button onClick={e=>{e.stopPropagation();del(card.id);}}
-                      style={{ background:"none", border:"none", cursor:"pointer", padding:"3px 4px", opacity:.4 }}>
-                      <Icon d={I.trash} size={13} color={C.muted} />
-                    </button>
+        <>
+          <style>{`
+            .card-flip-inner{position:relative;width:100%;height:100%;transition:transform .45s cubic-bezier(.4,0,.2,1);transform-style:preserve-3d}
+            .card-flip-wrap:hover .card-flip-inner{box-shadow:0 8px 28px rgba(61,90,128,.14)}
+            .card-flip-wrap.is-flipped .card-flip-inner{transform:rotateY(180deg)}
+            .card-face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:14px;padding:20px;display:flex;flex-direction:column;justify-content:space-between}
+            .card-face-back{transform:rotateY(180deg)}
+            @media(max-width:600px){.cards-grid{grid-template-columns:1fr!important}}
+            @media(min-width:601px) and (max-width:1024px){.cards-grid{grid-template-columns:1fr 1fr!important}}
+          `}</style>
+          <div className="cards-grid" style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:14 }}>
+            {displayCards.map(card => {
+              const isFlipped  = !!flipped[card.id];
+              const isStarred  = !!starred[card.id];
+              const isKnown    = !!known[card.id];
+              return (
+                <div key={card.id}
+                  className={`card-flip-wrap${isFlipped ? " is-flipped" : ""}`}
+                  onClick={() => setFlipped(f=>({...f,[card.id]:!f[card.id]}))}
+                  style={{ height:180, perspective:1000, cursor:"pointer" }}>
+                  <div className="card-flip-inner">
+                    {/* Front face — Question */}
+                    <div className="card-face"
+                      style={{
+                        background: isKnown ? C.greenL : C.surface,
+                        border: `1.5px solid ${isKnown ? C.green : isStarred ? "#f59e0b" : C.border}`,
+                        boxShadow: isStarred ? "0 0 0 2px #f59e0b22" : "0 2px 8px rgba(0,0,0,.06)",
+                      }}>
+                      {isKnown && (
+                        <span style={{ position:"absolute", top:8, left:10, background:C.green, color:"#fff", borderRadius:20, fontSize:9, fontWeight:800, padding:"2px 7px" }}>✓ KNOWN</span>
+                      )}
+                      <div style={{ paddingTop: isKnown ? 18 : 0 }}>
+                        <p style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:1, textTransform:"uppercase", marginBottom:8 }}>QUESTION</p>
+                        <p style={{ fontSize:13, color:C.text, lineHeight:1.55, overflow:"hidden", display:"-webkit-box", WebkitLineClamp:4, WebkitBoxOrient:"vertical" }}>{card.question}</p>
+                      </div>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", paddingTop:8, borderTop:`1px solid ${C.border}`, marginTop:8 }}>
+                        <span style={{ fontSize:10, color:C.muted }}>Tap to flip</span>
+                        <div style={{ display:"flex", gap:3 }} onClick={e=>e.stopPropagation()}>
+                          <button onClick={e=>toggleStar(card.id,e)} className="no-min-h"
+                            style={{ background:"none", border:"none", cursor:"pointer", fontSize:13, opacity:isStarred?1:.3, padding:"2px 3px" }}>⭐</button>
+                          <button onClick={e=>toggleKnown(card.id,e)} className="no-min-h"
+                            style={{ background:isKnown?C.greenL:"none", border:`1.5px solid ${isKnown?C.green:C.border}`, borderRadius:5, cursor:"pointer", padding:"2px 6px", fontSize:10, fontWeight:700, color:isKnown?C.green:C.muted }}>
+                            {isKnown?"✓":"Got it"}
+                          </button>
+                          <button onClick={e=>{e.stopPropagation();del(card.id);}} className="no-min-h"
+                            style={{ background:"none", border:"none", cursor:"pointer", padding:"2px 3px", opacity:.35 }}>
+                            <Icon d={I.trash} size={12} color={C.muted} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    {/* Back face — Answer */}
+                    <div className="card-face card-face-back"
+                      style={{
+                        background: C.accentL,
+                        border: `1.5px solid ${C.accentS}`,
+                        boxShadow: "0 2px 8px rgba(61,90,128,.1)",
+                      }}>
+                      <div>
+                        <p style={{ fontSize:10, fontWeight:800, color:C.accent, letterSpacing:1, textTransform:"uppercase", marginBottom:8 }}>ANSWER</p>
+                        <p style={{ fontSize:13, color:C.text, lineHeight:1.55, overflow:"hidden", display:"-webkit-box", WebkitLineClamp:5, WebkitBoxOrient:"vertical" }}>{card.answer}</p>
+                      </div>
+                      <div style={{ display:"flex", justifyContent:"flex-end", paddingTop:8, borderTop:`1px solid ${C.accentS}`, marginTop:8 }}>
+                        <span style={{ fontSize:10, color:C.accent }}>Tap to flip back</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {/* ── List view ── */}
@@ -5512,51 +5522,143 @@ function CardsTab({ file, onUpdate }) {
 
 // ─── YOUTUBE VIDEO ANALYSIS TAB ──────────────────────────────────────────────
 function YouTubeTab({ file, onUpdate }) {
-  const [url, setUrl] = useState("");
-  const [mode, setMode] = useState("detailed"); // simple | detailed
+  const [url,     setUrl]     = useState("");
+  const [mode,    setMode]    = useState("detailed");
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState("");
-  const [error, setError] = useState("");
-  const [saved, setSaved] = useState(false);
+  const [result,  setResult]  = useState("");
+  const [error,   setError]   = useState("");
+  const [saved,   setSaved]   = useState(false);
+  const [status,  setStatus]  = useState(""); // progress message
 
   const extractVideoId = (u) => {
-    const m = u.match(/(?:v=|youtu\.be\/|embed\/)([A-Za-z0-9_-]{11})/);
+    const m = u.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([A-Za-z0-9_-]{11})/);
     return m ? m[1] : null;
+  };
+
+  // Step 1: Try to fetch the actual video transcript via YouTube's timedtext API
+  // This is the same endpoint YouTube's own player uses — no API key needed
+  const fetchTranscript = async (vid) => {
+    // First get the page to find available caption tracks
+    try {
+      const pageResp = await fetch(`https://corsproxy.io/?${encodeURIComponent(`https://www.youtube.com/watch?v=${vid}`)}`);
+      if (!pageResp.ok) throw new Error("page fetch failed");
+      const html = await pageResp.text();
+
+      // Extract the title from the page
+      const titleMatch = html.match(/<title>([^<]+)<\/title>/);
+      const title = titleMatch ? titleMatch[1].replace(" - YouTube","").trim() : "";
+
+      // Extract captions track URL from ytInitialPlayerResponse
+      const captionMatch = html.match(/"captionTracks":\s*(\[.*?\])/s);
+      if (!captionMatch) return { transcript: null, title };
+
+      const tracks = JSON.parse(captionMatch[1].replace(/\\u0026/g, "&").replace(/\\"/g, '"'));
+      // Prefer English, then first available
+      const track = tracks.find(t => t.languageCode === "en") ||
+                    tracks.find(t => t.languageCode?.startsWith("en")) ||
+                    tracks[0];
+      if (!track?.baseUrl) return { transcript: null, title };
+
+      // Fetch the caption XML
+      const capResp = await fetch(`https://corsproxy.io/?${encodeURIComponent(track.baseUrl)}`);
+      if (!capResp.ok) return { transcript: null, title };
+      const xml = await capResp.text();
+
+      // Parse XML to plain text — strip tags, decode HTML entities
+      const lines = [...xml.matchAll(/<text[^>]*>([\s\S]*?)<\/text>/g)]
+        .map(m => m[1]
+          .replace(/<[^>]+>/g, "")
+          .replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">")
+          .replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/\n/g," ")
+          .trim()
+        )
+        .filter(Boolean);
+
+      const transcript = lines.join(" ");
+      return { transcript: transcript.length > 100 ? transcript : null, title };
+    } catch {
+      return { transcript: null, title: "" };
+    }
+  };
+
+  // Step 2: Get title via oEmbed (no API key, always works)
+  const fetchTitle = async (vid) => {
+    try {
+      const r = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${vid}&format=json`);
+      if (!r.ok) return "";
+      const d = await r.json();
+      return d.title || "";
+    } catch { return ""; }
   };
 
   const analyze = async () => {
     const vid = extractVideoId(url.trim());
     if (!vid) { setError("Please enter a valid YouTube URL."); return; }
     setLoading(true); setError(""); setResult(""); setSaved(false);
+
     try {
-      const notes = await callClaude(
-        `You are an expert note-taker analyzing YouTube video content.
-STRICT FORMATTING RULES:
-1. NEVER use asterisks (*) or pound signs (#)
-2. ALL CAPS headings for sections
-3. Use dash (-) for bullet points
-4. ${mode === "simple" ? "Write in very simple, easy English. Short sentences. No jargon." : "Write detailed, comprehensive notes covering every key concept."}
-5. Include: main topic overview, key points, important concepts, takeaways`,
-        `Analyze this YouTube video (ID: ${vid}, URL: ${url.trim()}) and create ${mode === "simple" ? "simple, beginner-friendly" : "detailed, comprehensive"} study notes.
+      // 1. Try to get real transcript + title
+      setStatus("Fetching video transcript…");
+      let { transcript, title } = await fetchTranscript(vid);
 
-Since you cannot directly access the video, generate thorough notes based on:
-1. What this type of video likely covers based on the URL and any title clues
-2. Key educational content typically in this subject area
-3. Important concepts, definitions, and examples
+      // 2. If CORS blocked, try oEmbed for title at minimum
+      if (!title) {
+        setStatus("Getting video info…");
+        title = await fetchTitle(vid);
+      }
 
-Title/context from URL: ${url.trim()}
+      setStatus("Generating notes…");
 
-Please write ${mode === "simple" ? "simple" : "comprehensive"} study notes as if you watched this educational video. Cover the topic thoroughly.`,
-        3500
-      );
+      let notes;
+      if (transcript && transcript.length > 200) {
+        // We have real transcript — generate notes from it like a PDF
+        notes = await callClaude(
+          `You are an expert note-taker. You have the actual transcript of a YouTube video.
+Your job is to produce clean, structured study notes FROM THE TRANSCRIPT — exactly like notes from a lecture or PDF.
+
+RULES:
+1. Only include content that actually appears in the transcript — no guessing or inventing
+2. ALL CAPS for section headings (e.g. INTRODUCTION, MAIN CONCEPTS, EXAMPLES)
+3. Dash (-) for bullet points
+4. ${mode === "simple" ? "Use simple, plain language. Short sentences. Explain any jargon." : "Be detailed and thorough. Cover every important point."}
+5. Include: key definitions, explained concepts, examples given, any formulas or data mentioned
+6. NEVER use asterisks (*) or pound signs (#)
+7. If the speaker gives an example, include it — examples are the most useful part`,
+          `Video title: "${title || "Unknown"}"\n\nFULL TRANSCRIPT:\n${transcript.slice(0, 16000)}\n\nCreate structured study notes from this transcript.`,
+          4000
+        );
+      } else {
+        // No transcript available — tell user clearly and offer title-based notes if we have a title
+        if (title) {
+          notes = await callClaude(
+            `You are an expert note-taker. You could NOT access the video transcript, but you have the title.
+Based on the title, generate study notes covering what this topic actually involves.
+Be clear these are general topic notes, not specific video notes.
+
+RULES:
+1. Start with: "Note: Video transcript unavailable. These notes cover the topic based on the title: '${title}'"
+2. ALL CAPS headings, dash bullets, no asterisks, no pound signs
+3. ${mode === "simple" ? "Simple language, short sentences." : "Detailed and comprehensive."}
+4. Cover the topic genuinely — definitions, key concepts, how it works, examples`,
+            `Video title: "${title}"\n\nGenerate study notes on this topic.`,
+            3000
+          );
+        } else {
+          setError("Could not access this video's transcript or info. Try a video with captions enabled, or paste the transcript manually below.");
+          setLoading(false); setStatus(""); return;
+        }
+      }
+
       setResult(notes);
-    } catch(e) { setError("Analysis failed: " + e.message); }
-    setLoading(false);
+    } catch(e) {
+      setError("Analysis failed: " + e.message);
+    }
+    setLoading(false); setStatus("");
   };
 
   const saveToNotes = () => {
     const existing = file.notes || "";
-    const newNotes = existing ? existing + "\n\n---\nYOUTUBE VIDEO NOTES\n\n" + result : "YOUTUBE VIDEO NOTES\n\n" + result;
+    const newNotes = existing ? existing + "\n\n---\nYOUTUBE NOTES\n\n" + result : result;
     onUpdate({ ...file, notes: newNotes });
     setSaved(true);
   };
@@ -5564,33 +5666,29 @@ Please write ${mode === "simple" ? "simple" : "comprehensive"} study notes as if
   return (
     <div>
       <div style={{ marginBottom:20 }}>
-        <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:700, color:C.text, marginBottom:4 }}>YouTube Video Analysis</h2>
-        <p style={{ fontSize:13, color:C.muted }}>Submit a YouTube link — AI analyzes the video and generates study notes.</p>
+        <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:700, color:C.text, marginBottom:4 }}>YouTube Video Notes</h2>
+        <p style={{ fontSize:13, color:C.muted }}>Paste a YouTube link — AI reads the video transcript and generates study notes, just like a PDF.</p>
       </div>
 
-      <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:16, padding:"20px 22px", marginBottom:20 }}>
+      <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:16, padding:"18px 20px", marginBottom:20 }}>
         {/* Mode selector */}
-        <div style={{ marginBottom:14 }}>
-          <p style={{ fontSize:12, fontWeight:700, color:C.muted, letterSpacing:.6, marginBottom:8 }}>NOTE STYLE</p>
-          <div style={{ display:"flex", gap:8 }}>
-            {[{id:"detailed",label:"📋 Detailed",desc:"Full notes with all concepts"},{id:"simple",label:"🧒 Simple",desc:"Easy language, short sentences"}].map(m => (
-              <button key={m.id} onClick={() => setMode(m.id)}
-                style={{ flex:1, padding:"10px 12px", borderRadius:12, border:`1.5px solid ${mode===m.id?C.accent:C.border}`,
-                  background:mode===m.id?C.accentL:"transparent", cursor:"pointer", textAlign:"left", transition:"all .15s" }}>
-                <p style={{ margin:"0 0 2px", fontSize:13, fontWeight:700, color:mode===m.id?C.accent:C.text }}>{m.label}</p>
-                <p style={{ margin:0, fontSize:11, color:C.muted }}>{m.desc}</p>
-              </button>
-            ))}
-          </div>
+        <div style={{ marginBottom:14, display:"flex", gap:8 }}>
+          {[{id:"detailed",label:"📋 Detailed",desc:"Full notes"},{id:"simple",label:"🧒 Simple",desc:"Easy language"}].map(m => (
+            <button key={m.id} onClick={() => setMode(m.id)}
+              style={{ flex:1, padding:"9px 12px", borderRadius:10, border:`1.5px solid ${mode===m.id?C.accent:C.border}`,
+                background:mode===m.id?C.accentL:"transparent", cursor:"pointer", textAlign:"left", transition:"all .15s" }}>
+              <p style={{ margin:"0 0 1px", fontSize:13, fontWeight:700, color:mode===m.id?C.accent:C.text }}>{m.label}</p>
+              <p style={{ margin:0, fontSize:11, color:C.muted }}>{m.desc}</p>
+            </button>
+          ))}
         </div>
 
         {/* URL input */}
-        <p style={{ fontSize:12, fontWeight:700, color:C.muted, letterSpacing:.6, marginBottom:8 }}>YOUTUBE URL</p>
-        <div style={{ display:"flex", gap:10, marginBottom: error ? 8 : 0 }}>
+        <div style={{ display:"flex", gap:10 }}>
           <input
             value={url} onChange={e => { setUrl(e.target.value); setError(""); }}
-            onKeyDown={e => { if (e.key === "Enter" && url.trim()) analyze(); }}
-            placeholder="https://youtube.com/watch?v=... or youtu.be/..."
+            onKeyDown={e => { if (e.key==="Enter" && url.trim()) analyze(); }}
+            placeholder="https://youtube.com/watch?v=..."
             style={{ flex:1, border:`1.5px solid ${error?C.red:C.border}`, borderRadius:10, padding:"10px 14px",
               fontSize:14, outline:"none", color:C.text, background:C.bg }}
           />
@@ -5598,26 +5696,48 @@ Please write ${mode === "simple" ? "simple" : "comprehensive"} study notes as if
             style={{ background:loading||!url.trim()?"#ccc":"#dc2626", color:"#fff", border:"none", borderRadius:10,
               padding:"10px 20px", fontSize:14, fontWeight:700, cursor:loading||!url.trim()?"not-allowed":"pointer",
               display:"flex", alignItems:"center", gap:6, whiteSpace:"nowrap",
-              boxShadow:loading||!url.trim()?"none":"0 4px 14px rgba(220,38,38,.35)" }}>
-            {loading ? (
-              <><span style={{ display:"flex", gap:2 }}>{[0,1,2].map(i=><span key={i} style={{width:4,height:4,borderRadius:"50%",background:"#fff",animation:`bounce .9s ease-in-out ${i*0.15}s infinite`,display:"inline-block"}}/>)}</span>Analyzing…</>
-            ) : (
-              <><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.32 6.32 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.69a8.2 8.2 0 0 0 4.79 1.53V6.78a4.85 4.85 0 0 1-1.02-.09z"/></svg>Analyze Video</>
-            )}
+              boxShadow:loading||!url.trim()?"none":"0 4px 14px rgba(220,38,38,.3)" }}>
+            {loading
+              ? <><span style={{display:"flex",gap:3}}>{[0,1,2].map(i=><span key={i} style={{width:4,height:4,borderRadius:"50%",background:"#fff",animation:`bounce .9s ${i*0.15}s infinite`,display:"inline-block"}}/>)}</span>{status||"Working…"}</>
+              : <><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.32 6.32 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.69a8.2 8.2 0 0 0 4.79 1.53V6.78a4.85 4.85 0 0 1-1.02-.09z"/></svg>Get Notes</>
+            }
           </button>
         </div>
-        {error && <p style={{ fontSize:13, color:C.red, marginTop:6 }}>{error}</p>}
+        {error && <p style={{ fontSize:13, color:C.red, marginTop:8 }}>{error}</p>}
+
+        <p style={{ fontSize:11, color:C.muted, marginTop:10 }}>
+          Works with any video that has captions/subtitles enabled. If blocked by CORS, paste the transcript text directly below.
+        </p>
       </div>
 
+      {/* Manual paste fallback */}
+      <ManualTranscriptInput onGenerate={async (text) => {
+        if (!text.trim()) return;
+        setLoading(true); setError(""); setResult(""); setSaved(false); setStatus("Generating notes…");
+        try {
+          const notes = await callClaude(
+            `You are an expert note-taker. Generate clean structured study notes from this transcript.
+ALL CAPS headings, dash bullets, no asterisks, no pound signs.
+${mode === "simple" ? "Use simple language." : "Be detailed and thorough."}
+Only include what's in the transcript.`,
+            `TRANSCRIPT:\n${text.slice(0,16000)}\n\nCreate study notes.`,
+            4000
+          );
+          setResult(notes);
+        } catch(e) { setError(e.message); }
+        setLoading(false); setStatus("");
+      }} />
+
       {result && (
-        <div>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-            <p style={{ fontSize:14, fontWeight:700, color:C.text }}>Generated Notes</p>
+        <div style={{ marginTop:16 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+            <p style={{ fontSize:14, fontWeight:700, color:C.text }}>Study Notes</p>
             <div style={{ display:"flex", gap:8 }}>
               <button onClick={saveToNotes}
-                style={{ display:"flex", alignItems:"center", gap:6, background:saved?C.greenL:C.accent, color:saved?C.green:"#fff", border:saved?`1.5px solid ${C.green}44`:"none",
-                  borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:"pointer" }}>
-                {saved ? "✓ Saved to Notes" : "Save to Notes"}
+                style={{ background:saved?C.greenL:C.accent, color:saved?C.green:"#fff",
+                  border:saved?`1.5px solid ${C.green}44`:"none", borderRadius:10, padding:"8px 16px",
+                  fontSize:13, fontWeight:700, cursor:"pointer" }}>
+                {saved ? "✓ Saved" : "Save to Notes"}
               </button>
               <button onClick={() => { setResult(""); setUrl(""); setError(""); setSaved(false); }}
                 style={{ background:"none", border:`1.5px solid ${C.border}`, borderRadius:10, padding:"8px 14px", fontSize:13, color:C.muted, cursor:"pointer" }}>
@@ -5627,7 +5747,7 @@ Please write ${mode === "simple" ? "simple" : "comprehensive"} study notes as if
           </div>
           <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"18px 20px",
             fontSize:13, color:C.text, lineHeight:1.8, whiteSpace:"pre-wrap", wordBreak:"break-word",
-            maxHeight:500, overflowY:"auto" }}>
+            maxHeight:520, overflowY:"auto" }}>
             {result}
           </div>
         </div>
@@ -5635,11 +5755,49 @@ Please write ${mode === "simple" ? "simple" : "comprehensive"} study notes as if
 
       {!result && !loading && (
         <div style={{ textAlign:"center", padding:"40px 0", color:C.muted }}>
-          <div style={{ width:56,height:56,borderRadius:16,background:"#fef2f2",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px" }}>
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="#dc2626"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.32 6.32 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.69a8.2 8.2 0 0 0 4.79 1.53V6.78a4.85 4.85 0 0 1-1.02-.09z"/></svg>
+          <div style={{ width:52,height:52,borderRadius:16,background:"#fef2f2",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px" }}>
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="#dc2626"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.32 6.32 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.69a8.2 8.2 0 0 0 4.79 1.53V6.78a4.85 4.85 0 0 1-1.02-.09z"/></svg>
           </div>
           <p style={{ fontSize:14, fontWeight:600, marginBottom:4 }}>Paste a YouTube link above</p>
-          <p style={{ fontSize:13 }}>AI will generate study notes from any educational video</p>
+          <p style={{ fontSize:13 }}>Notes are generated from the real video transcript — same quality as PDF notes</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Collapsible manual transcript paste — fallback when CORS blocks YouTube
+function ManualTranscriptInput({ onGenerate }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  return (
+    <div style={{ marginBottom:4 }}>
+      <button onClick={() => setOpen(o => !o)}
+        style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, color:C.muted,
+          display:"flex", alignItems:"center", gap:5, padding:"4px 0" }}>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          {open ? <path d="M18 15l-6-6-6 6"/> : <path d="M6 9l6 6 6-6"/>}
+        </svg>
+        {open ? "Hide" : "Video not working? Paste transcript manually"}
+      </button>
+      {open && (
+        <div style={{ marginTop:8, background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:12, padding:14 }}>
+          <p style={{ fontSize:12, color:C.muted, marginBottom:8 }}>
+            Copy the transcript from YouTube (click ⋯ → Show transcript) and paste it here:
+          </p>
+          <textarea value={text} onChange={e => setText(e.target.value)}
+            placeholder="Paste video transcript here…"
+            style={{ width:"100%", minHeight:100, border:`1.5px solid ${C.border}`, borderRadius:8, padding:"9px 12px",
+              fontSize:13, outline:"none", resize:"vertical", color:C.text, background:C.bg,
+              fontFamily:"inherit", lineHeight:1.5, boxSizing:"border-box" }}
+          />
+          <button onClick={() => { onGenerate(text); setOpen(false); setText(""); }}
+            disabled={!text.trim()}
+            style={{ marginTop:8, background:text.trim()?C.accent:"#ccc", color:"#fff", border:"none",
+              borderRadius:8, padding:"8px 18px", fontSize:13, fontWeight:700,
+              cursor:text.trim()?"pointer":"not-allowed" }}>
+            Generate Notes from Transcript
+          </button>
         </div>
       )}
     </div>
@@ -5672,6 +5830,16 @@ function ContinuousExplanationTab({ file }) {
     load(); window.speechSynthesis.onvoiceschanged = load;
     return () => { window.speechSynthesis?.cancel(); };
   }, []);
+
+  // Auto-start when tab opens if notes are available
+  useEffect(() => {
+    if (notes.trim()) {
+      // Small delay so voices load first
+      const t = setTimeout(() => startExplanation(), 600);
+      return () => clearTimeout(t);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // only on mount
 
   useEffect(() => { transcriptEndRef.current?.scrollIntoView({ behavior:"smooth" }); }, [transcript]);
 
@@ -7966,9 +8134,12 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
   };
 
   const switchServerVoice = (i) => {
+    // Abort any in-flight Piper request first
+    if (piperAbortRef.current) { piperAbortRef.current.abort(); piperAbortRef.current = null; }
     const savedTime = audioRef.current ? audioRef.current.currentTime : 0;
     setVoiceIdx(i);
     setPiperReady(false);
+    setPiperLoading(false);
     setPiperError(null);
     if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ""; }
     setPlaying(false);
@@ -8063,7 +8234,18 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
               </div>
               <p style={{ fontSize:14, fontWeight:700, color:"#e0e7ff", maxWidth:220, lineHeight:1.3 }}>{topic || "Your Study Session"}</p>
             </div>
-            <button onClick={onClose} style={{ background:"rgba(255,255,255,.08)", border:"none", borderRadius:8, color:"#a5b4fc", cursor:"pointer", padding:"6px 10px", fontSize:12 }}>✕</button>
+            <button onClick={() => {
+              // Full cleanup: abort Piper fetch, stop audio, stop browser TTS
+              if (piperAbortRef.current) { piperAbortRef.current.abort(); piperAbortRef.current = null; }
+              if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ""; }
+              try { window.speechSynthesis?.cancel(); } catch {}
+              genRef.current++;
+              stopTimer();
+              setPlaying(false);
+              setPiperLoading(false);
+              setPiperReady(false);
+              onClose();
+            }} style={{ background:"rgba(255,255,255,.08)", border:"none", borderRadius:8, color:"#a5b4fc", cursor:"pointer", padding:"6px 10px", fontSize:12 }}>✕</button>
           </div>
 
           {/* Piper loading bar */}
@@ -8252,25 +8434,66 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
           </details>
 
           {/* ── Interrupt to Ask Questions ── */}
-          <PodcastQAPanel script={script} isPlaying={isPlaying} onPause={handlePause} onResume={handlePlay} />
+          <PodcastQAPanel
+            script={script}
+            isPlaying={isPlaying}
+            onPause={handlePause}
+            onResume={handlePlay}
+            usePiper={usePiper}
+            ttsServer={TTS_SERVER}
+            serverVoiceId={serverVoice.id}
+          />
         </>
       )}
     </div>
   );
 }
 
-// Podcast Q&A panel — always open, voice input + voice output
-function PodcastQAPanel({ script, isPlaying, onPause, onResume }) {
+// Podcast Q&A panel — always open, voice input + voice output (Piper or browser)
+function PodcastQAPanel({ script, isPlaying, onPause, onResume, usePiper, ttsServer, serverVoiceId }) {
   const [messages, setMessages] = useState([]);
   const [loading,  setLoading]  = useState(false);
   const [listening, setListening] = useState(false);
   const [transcript, setTranscript] = useState("");
   const recognitionRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const qaAudioRef = useRef(null); // dedicated Audio element for QA answers via Piper
+
+  useEffect(() => {
+    const audio = new Audio();
+    qaAudioRef.current = audio;
+    return () => { try { audio.pause(); audio.src = ""; } catch {} };
+  }, []);
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior:"smooth" }); }, [messages]);
 
-  const speakAnswer = (text) => {
+  // Speak answer: use Piper if active, else browser TTS
+  const speakAnswer = async (text) => {
+    if (usePiper && ttsServer) {
+      try {
+        const resp = await fetch(`${ttsServer}/generate-podcast`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, voice: serverVoiceId || "aria", speed: 1.0 }),
+        });
+        if (!resp.ok) throw new Error("Piper failed");
+        const blob = await resp.blob();
+        const url  = URL.createObjectURL(blob);
+        const audio = qaAudioRef.current;
+        if (audio) {
+          audio.src = url;
+          audio.load();
+          await new Promise(resolve => {
+            audio.onended = () => resolve();
+            audio.onerror = () => resolve();
+            audio.play().catch(() => resolve());
+          });
+          URL.revokeObjectURL(url);
+        }
+        return;
+      } catch { /* fall through to browser TTS */ }
+    }
+    // Browser TTS fallback
     return new Promise(resolve => {
       window.speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
