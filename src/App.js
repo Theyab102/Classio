@@ -5444,95 +5444,119 @@ function CardsTab({ file, onUpdate }) {
         </div>
       )}
 
-      {/* ── Study (Quizlet-style single card flipper) ── */}
-      {displayCards.length > 0 && viewMode === "study" && (() => {
-        const card = displayCards[studyIdx] || displayCards[0];
-        const isFlipped  = !!flipped[card?.id];
-        const isStarred  = !!starred[card?.id];
-        const isKnown    = !!known[card?.id];
+      {/* ── Study mode — fullscreen single card flipper ── */}
+      {viewMode === "study" && displayCards.length > 0 && (() => {
+        const card = displayCards[Math.min(studyIdx, displayCards.length-1)];
+        const isFlipped = !!flipped[card?.id];
+        const isStarred = !!starred[card?.id];
+        const isKnown   = !!known[card?.id];
+        const pct = Math.round(((studyIdx + 1) / displayCards.length) * 100);
         return (
-          <div>
+          <div style={{
+            position:"fixed", inset:0, zIndex:500,
+            background:C.bg,
+            display:"flex", flexDirection:"column",
+            fontFamily:"'DM Sans',sans-serif",
+          }}>
             <style>{`
-              .ql-card-inner{position:relative;width:100%;height:100%;transition:transform .5s cubic-bezier(.4,0,.2,1);transform-style:preserve-3d}
-              .ql-card-wrap.flipped .ql-card-inner{transform:rotateY(180deg)}
-              .ql-face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 48px;text-align:center}
-              .ql-face-back{transform:rotateY(180deg)}
+              .ql-wrap{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .5s cubic-bezier(.4,0,.2,1)}
+              .ql-wrap.flipped{transform:rotateY(180deg)}
+              .ql-side{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 56px;text-align:center;cursor:pointer}
+              .ql-back{transform:rotateY(180deg)}
             `}</style>
 
-            {/* Progress bar + counter */}
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
-              <button onClick={() => setViewMode("grid")} style={{ display:"flex", alignItems:"center", gap:5, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:13, fontWeight:600 }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-                All cards
+            {/* Top bar */}
+            <div style={{ flexShrink:0, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 28px", background:C.surface, borderBottom:`1px solid ${C.border}` }}>
+              <button onClick={() => { setViewMode("grid"); setFlipped({}); }}
+                style={{ display:"flex", alignItems:"center", gap:7, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14, fontWeight:600 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                Back
               </button>
-              <span style={{ fontSize:14, fontWeight:700, color:C.muted }}>
-                {studyIdx + 1} / {displayCards.length}
+
+              <span style={{ fontSize:15, fontWeight:700, color:C.text }}>
+                {studyIdx + 1} <span style={{ color:C.muted, fontWeight:400 }}>/ {displayCards.length}</span>
               </span>
-              <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                <button onClick={e=>toggleStar(card.id,e)} className="no-min-h"
-                  style={{ background:"none", border:"none", cursor:"pointer", fontSize:18, opacity:isStarred?1:.35 }}>⭐</button>
-                <button onClick={e=>toggleKnown(card.id,e)} className="no-min-h"
-                  style={{ background:isKnown?C.greenL:"none", border:`1.5px solid ${isKnown?C.green:C.border}`, borderRadius:8, cursor:"pointer", padding:"4px 10px", fontSize:12, fontWeight:700, color:isKnown?C.green:C.muted }}>
-                  {isKnown ? "✓ Known" : "Got it"}
+
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <button onClick={e => toggleStar(card.id, e)} className="no-min-h"
+                  style={{ background:"none", border:"none", cursor:"pointer", fontSize:20, opacity:isStarred?1:.3 }}>
+                  ⭐
+                </button>
+                <button onClick={() => setShuffled(s => !s)} className="no-min-h"
+                  style={{ display:"flex", alignItems:"center", gap:5, background:shuffled?C.purpleL:"transparent", border:`1.5px solid ${shuffled?C.purple:C.border}`, borderRadius:20, padding:"5px 14px", cursor:"pointer", fontSize:12, fontWeight:700, color:shuffled?C.purple:C.muted }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
+                  Shuffle
                 </button>
               </div>
             </div>
 
             {/* Progress bar */}
-            <div style={{ height:4, background:C.border, borderRadius:2, marginBottom:18 }}>
-              <div style={{ height:"100%", width:`${((studyIdx+1)/displayCards.length)*100}%`, background:C.accent, borderRadius:2, transition:"width .3s" }}/>
+            <div style={{ flexShrink:0, height:4, background:C.border }}>
+              <div style={{ height:"100%", width:`${pct}%`, background:C.accent, transition:"width .35s ease" }}/>
             </div>
 
-            {/* The card */}
-            <div
-              className={`ql-card-wrap${isFlipped ? " flipped" : ""}`}
-              onClick={() => setFlipped(f=>({...f,[card.id]:!f[card.id]}))}
-              style={{ height:340, perspective:1200, cursor:"pointer", userSelect:"none", marginBottom:20 }}>
-              <div className="ql-card-inner" style={{ boxShadow:"0 8px 40px rgba(0,0,0,.1)" }}>
-                {/* Front — Question */}
-                <div className="ql-face" style={{ background:isKnown?C.greenL:C.surface, border:`2px solid ${isKnown?C.green:isStarred?"#f59e0b":C.border}` }}>
-                  <p style={{ fontSize:11, fontWeight:800, color:C.muted, letterSpacing:1.5, textTransform:"uppercase", marginBottom:20 }}>QUESTION</p>
-                  <p style={{ fontSize:clamp(card.question?.length), color:C.text, lineHeight:1.6, fontWeight:500 }}>{card.question}</p>
-                  <p style={{ fontSize:12, color:C.muted, marginTop:24 }}>Click to reveal answer</p>
+            {/* Card */}
+            <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", padding:"32px 48px", minHeight:0 }}>
+              <div
+                className={`ql-wrap${isFlipped ? " flipped" : ""}`}
+                onClick={() => setFlipped(f => ({...f, [card.id]: !f[card.id]}))}
+                style={{ width:"100%", maxWidth:800, height:360, perspective:1400, cursor:"pointer", userSelect:"none" }}>
+
+                {/* Front */}
+                <div className="ql-side" style={{
+                  background: isKnown ? C.greenL : C.surface,
+                  border: `2px solid ${isKnown ? C.green : isStarred ? "#f59e0b" : C.border}`,
+                  boxShadow: "0 4px 32px rgba(0,0,0,.08)",
+                }}>
+                  <p style={{ fontSize:11, fontWeight:800, letterSpacing:2, textTransform:"uppercase", color:C.muted, marginBottom:24 }}>QUESTION</p>
+                  <p style={{ fontSize:clamp(card.question?.length), color:C.text, lineHeight:1.65, fontWeight:500, maxWidth:640 }}>{card.question}</p>
+                  <p style={{ fontSize:12, color:C.muted, marginTop:28 }}>Click to flip</p>
                 </div>
-                {/* Back — Answer */}
-                <div className="ql-face ql-face-back" style={{ background:C.accentL, border:`2px solid ${C.accentS}` }}>
-                  <p style={{ fontSize:11, fontWeight:800, color:C.accent, letterSpacing:1.5, textTransform:"uppercase", marginBottom:20 }}>ANSWER</p>
-                  <p style={{ fontSize:clamp(card.answer?.length), color:C.text, lineHeight:1.6, fontWeight:500 }}>{card.answer}</p>
-                  <p style={{ fontSize:12, color:C.accent, marginTop:24 }}>Click to flip back</p>
+
+                {/* Back */}
+                <div className="ql-side ql-back" style={{
+                  background: C.accentL,
+                  border: `2px solid ${C.accentS}`,
+                  boxShadow: "0 4px 32px rgba(61,90,128,.12)",
+                }}>
+                  <p style={{ fontSize:11, fontWeight:800, letterSpacing:2, textTransform:"uppercase", color:C.accent, marginBottom:24 }}>ANSWER</p>
+                  <p style={{ fontSize:clamp(card.answer?.length), color:C.text, lineHeight:1.65, fontWeight:500, maxWidth:640 }}>{card.answer}</p>
+                  <p style={{ fontSize:12, color:C.accent, marginTop:28 }}>Click to flip back</p>
                 </div>
               </div>
             </div>
 
-            {/* Navigation */}
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:20 }}>
-              <button onClick={() => { setStudyIdx(i=>Math.max(0,i-1)); setFlipped({}); }}
-                disabled={studyIdx === 0}
-                style={{ width:48, height:48, borderRadius:"50%", border:`1.5px solid ${C.border}`, background:C.surface, cursor:studyIdx===0?"not-allowed":"pointer", opacity:studyIdx===0?.35:1, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            {/* Bottom nav */}
+            <div style={{ flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", gap:20, padding:"20px 28px", background:C.surface, borderTop:`1px solid ${C.border}` }}>
+              <button onClick={() => { setStudyIdx(i => Math.max(0, i-1)); setFlipped({}); }}
+                disabled={studyIdx === 0} className="no-min-h"
+                style={{ width:50, height:50, borderRadius:"50%", border:`1.5px solid ${C.border}`, background:C.bg, cursor:studyIdx===0?"not-allowed":"pointer", opacity:studyIdx===0?.35:1, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.text} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
               </button>
 
-              {/* Shuffle */}
-              <button onClick={() => setShuffled(s=>!s)}
-                style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px", borderRadius:20, border:`1.5px solid ${shuffled?C.purple:C.border}`, background:shuffled?C.purpleL:"transparent", color:shuffled?C.purple:C.muted, cursor:"pointer", fontSize:12, fontWeight:700 }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
-                Shuffle
+              <button onClick={e => toggleKnown(card.id, e)} className="no-min-h"
+                style={{ padding:"11px 32px", borderRadius:24, border:"none", cursor:"pointer", fontSize:14, fontWeight:700, transition:"all .2s",
+                  background: isKnown ? C.green : C.accent,
+                  color: "#fff",
+                  boxShadow: `0 4px 16px ${isKnown ? C.green : C.accent}44` }}>
+                {isKnown ? "✓ Got it!" : "Got it"}
               </button>
 
-              <button onClick={() => { setStudyIdx(i=>Math.min(displayCards.length-1,i+1)); setFlipped({}); }}
-                disabled={studyIdx === displayCards.length - 1}
-                style={{ width:48, height:48, borderRadius:"50%", border:`1.5px solid ${C.border}`, background:C.surface, cursor:studyIdx===displayCards.length-1?"not-allowed":"pointer", opacity:studyIdx===displayCards.length-1?.35:1, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+              <button onClick={() => { setStudyIdx(i => Math.min(displayCards.length-1, i+1)); setFlipped({}); }}
+                disabled={studyIdx === displayCards.length - 1} className="no-min-h"
+                style={{ width:50, height:50, borderRadius:"50%", border:`1.5px solid ${C.border}`, background:C.bg, cursor:studyIdx===displayCards.length-1?"not-allowed":"pointer", opacity:studyIdx===displayCards.length-1?.35:1, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.text} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
               </button>
             </div>
 
-            {/* Keyboard hint */}
-            <p style={{ textAlign:"center", fontSize:11, color:C.muted, marginTop:14 }}>← → to navigate · Space to flip</p>
+            <p style={{ textAlign:"center", fontSize:11, color:C.muted, padding:"8px 0 12px", background:C.surface, flexShrink:0 }}>
+              ← → navigate &nbsp;·&nbsp; Space to flip
+            </p>
           </div>
         );
       })()}
 
-      {/* ── Grid view ── */}
+            {/* ── Grid view ── */}
       {displayCards.length > 0 && viewMode === "grid" && (
         <>
           <style>{`
