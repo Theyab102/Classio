@@ -665,21 +665,24 @@ const GS = `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@3
   /* Prevent horizontal scroll on the whole page */
   body{overflow-x:hidden!important}
   /* Force circles to stay circular */
-  [style*="border-radius: 50%"],[style*="borderRadius:"50%""],[style*="border-radius:50%"]{
+  [style*="border-radius: 50%"],[style*="border-radius:50%"]{
     aspect-ratio:1!important;
     min-height:unset!important;
+    min-width:unset!important;
     flex-shrink:0!important;
   }
   /* Color picker swatches */
-  .color-swatch{
-    width:36px!important;
-    height:36px!important;
+  .color-swatch,.folder-color-btn{
+    width:24px!important;
+    height:24px!important;
     min-height:unset!important;
+    min-width:unset!important;
     border-radius:50%!important;
     aspect-ratio:1!important;
     flex-shrink:0!important;
     padding:0!important;
   }
+  .color-swatch{width:36px!important;height:36px!important}
 }
 
 /* Landscape phone (height < 500px) */
@@ -708,7 +711,7 @@ const GS = `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@3
 ins.adsbygoogle{max-height:46px!important;overflow:hidden!important}
 ins.adsbygoogle iframe{max-height:46px!important}
 /* Global: any button with border-radius 50% must stay perfectly circular */
-button[style*="border-radius: 50%"],button[style*="borderRadius"]{aspect-ratio:1;flex-shrink:0}
+button.folder-color-btn,button.color-swatch,button.no-min-h{aspect-ratio:1;flex-shrink:0;min-height:unset!important;min-width:unset!important;padding:0}
 
 @keyframes bounce{0%,80%,100%{transform:scale(.8);opacity:.5}40%{transform:scale(1.1);opacity:1}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
@@ -3337,7 +3340,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
     onUpdate({ ...folder, files: [...folder.files, ...added] });
   };
 
-  const TABS = [{ id:"files", label:"Files", icon:I.file },{ id:"ai", label:"AI Assistant", icon:I.ai }];
+  const TABS = [{ id:"files", label:"Files", icon:I.file },{ id:"youtube", label:"YouTube", icon:I.link },{ id:"ai", label:"AI Assistant", icon:I.ai }];
 
   return (
     <div className="page-with-ad" style={{ minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif" }}>
@@ -3360,14 +3363,16 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
             : <h1 onClick={() => setEditingName(true)} style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:700, color:C.text, cursor:"text" }} title="Click to rename">{folder.name}</h1>
           }
         </div>
-        <div style={{ display:"flex", gap:6 }}>
+        <div style={{ display:"flex", gap:6, alignItems:"center", flexShrink:0 }}>
           {FOLDER_COLORS.map(col => (
             <button key={col} onClick={() => onUpdate({...folder,color:col})}
+              className="folder-color-btn no-min-h"
               style={{ width:22, height:22, borderRadius:"50%", background:col, cursor:"pointer", flexShrink:0,
                 border:`3px solid ${folder.color===col?C.text:"transparent"}`,
                 boxShadow:`0 1px 3px rgba(0,0,0,${folder.color===col?".35":".12"})` }} />
           ))}
           <button onClick={() => setShowFolderColorPicker(p=>!p)}
+            className="folder-color-btn no-min-h"
             style={{ width:22, height:22, borderRadius:"50%", cursor:"pointer",
               border:"2px dashed #aaa", background:showFolderColorPicker?"#4361ee":"transparent",
               display:"flex", alignItems:"center", justifyContent:"center",
@@ -3451,6 +3456,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
             }
           </>
         )}
+        {tab === "youtube" && <YouTubeTab file={{ id: folder.id + "_yt", name: folder.name, notes:"" }} onUpdate={() => {}} />}
         {tab === "ai" && <AITab file={null} allFiles={folder.files} folder={folder} onUpdate={()=>{}} />}
       </div>
     </div>
@@ -3472,11 +3478,31 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
   ];
   const fc = getFileColor(file);
 
+  // Stop all audio whenever switching away from voice tab or leaving FileView
+  const stopAllAudio = () => {
+    try { window.speechSynthesis?.cancel(); } catch {}
+    // Kill any playing HTML audio elements (Piper)
+    document.querySelectorAll("audio").forEach(a => { try { a.pause(); a.src = ""; } catch {} });
+  };
+
+  const handleTabChange = (newTab) => {
+    if (tab === "voice" && newTab !== "voice") stopAllAudio();
+    setTab(newTab);
+  };
+
+  const handleBack = () => {
+    stopAllAudio();
+    onBack();
+  };
+
+  // Stop audio when component unmounts (user navigates away entirely)
+  useEffect(() => { return () => stopAllAudio(); }, []);
+
   return (
     <div className="page-with-ad" style={{ minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif" }}>
       <style>{GS}</style>
       <div className="app-header" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", height:64, display:"flex", alignItems:"center", gap:14 }}>
-        <button onClick={onBack} className="hov" style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14 }}>
+        <button onClick={handleBack} className="hov" style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14 }}>
           <Icon d={I.back} size={18} color={C.muted} /> {folder.name}
         </button>
         <Icon d={I.chevron} size={14} color={C.border} />
@@ -3487,8 +3513,8 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
       </div>
       <div className="nav-tabs" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", display:"flex", gap:4 }}>
         {TABS.map(t => (
-          <button key={t.id} className="tab" onClick={() => setTab(t.id)}
-            className="nav-tab-btn" style={{ display:"flex", alignItems:"center", gap:7, padding:"14px 18px", border:"none", borderBottom:tab===t.id?`2px solid ${C.accent}`:"2px solid transparent", background:"none", cursor:"pointer", fontSize:14, fontWeight:tab===t.id?700:500, color:tab===t.id?C.accent:C.muted, marginBottom:-1 }}>
+          <button key={t.id} className="nav-tab-btn" onClick={() => handleTabChange(t.id)}
+            style={{ display:"flex", alignItems:"center", gap:7, padding:"14px 18px", border:"none", borderBottom:tab===t.id?`2px solid ${C.accent}`:"2px solid transparent", background:"none", cursor:"pointer", fontSize:14, fontWeight:tab===t.id?700:500, color:tab===t.id?C.accent:C.muted, marginBottom:-1 }}>
             <Icon d={t.icon} size={15} color={tab===t.id?C.accent:C.muted} />{t.label}
           </button>
         ))}
@@ -4462,49 +4488,40 @@ Context (for fixing mis-heard words only — do NOT add this as content): ${cont
   });
 
   const generatePodcast = async () => {
-    // Read notes fresh from every possible source — never use stale prop
-    // 1. Named saved notes (NotesTab saves here: "saved_notes_<id>")
     const savedArr = (() => { try { return JSON.parse(localStorage.getItem("saved_notes_" + file.id) || "[]"); } catch { return []; } })();
-    // 2. App state in classio_v2 (the file object's notes field persisted by the save system)
     const appState = (() => { try { return JSON.parse(localStorage.getItem("classio_v2") || "{}"); } catch { return {}; } })();
     const fileFromApp = (appState.folders || []).flatMap(f => f.files || []).find(f => f.id === file.id);
     const appNotes = fileFromApp?.notes || "";
-    // Pick the longest / most recent source
     const notesText = (savedArr.length > 0 ? savedArr[0].text : "") || appNotes || file.notes || "";
     if (!notesText.trim()) {
-      setVoiceStatus("No notes found. Go to the Notes tab, generate or write notes, then Save them — then come back here.");
+      setVoiceStatus("No notes found. Go to the Notes tab, generate or write notes, then Save — then come back here.");
       return;
     }
     setPodcastLoading(true);
     setShowPodcast(true);
     setPodcastScript("");
-    _setPodcastBlob(null); // free current blob when regenerating
+    _setPodcastBlob(null);
     const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[^\x00-\x7F\s]+\s*/g,'') || lang;
     try {
       const script = await callClaude(
-        `You are an engaging podcast host turning study notes into a thorough spoken lesson.
+        `You are an expert teacher and engaging podcast host. Your job is to EXPLAIN the topic — not read the notes.
 Language: ${langLabel}. Write ENTIRELY in ${langLabel}.
 
-CRITICAL RULES:
-- Base the podcast STRICTLY on the notes provided — do not add outside information
-- Cover EVERY concept, fact, definition, example, and detail in the notes — nothing skipped
-- The podcast must be long enough to fully explain all the material — aim for 8-12 minutes when spoken (≈ 1200-1800 words)
-- If the notes are long and detailed, the podcast must be equally long and detailed
+YOUR APPROACH:
+- You are a TEACHER who truly understands this topic. Explain it as if teaching a student who has never seen it before.
+- For each concept: say what it is, WHY it matters, HOW it works, and give a real-world example or analogy
+- Do NOT just restate the note text — paraphrase, elaborate, and make it understandable
+- Build understanding progressively — each concept should connect to the previous one
+- Aim for 8-12 minutes spoken (1200-1800 words)
 
-FORMAT (spoken audio only):
-1. Open warmly: "Hey! Today we're covering [topic]…" — briefly say what will be covered
-2. Go through EVERY section of the notes in order, explaining each concept fully and naturally
-3. For each concept: state it clearly, explain what it means, give context or examples from the notes
-4. Use natural transitions: "Moving on to…", "Now let's talk about…", "Here's something really important…", "Building on that…"
-5. Never rush — if the notes have 10 topics, cover all 10 in detail
-6. End with "So to wrap up today's session…" then summarise every key point covered
-7. NO markdown, NO asterisks, NO bullet symbols, NO headers — plain spoken words only
-8. Natural speech patterns: "Now,", "So,", "Think of it this way…", "In other words…", "What this means is…"
-9. Convert ALL symbols to spoken words for TTS: 10⁻¹⁰ → "ten to the power of negative ten", × → "times", ² → "squared", π → "pi", % → "percent", = → "equals", > → "greater than", < → "less than", → → "which gives us"
-10. Sound like a knowledgeable teacher who wants every student to fully understand — not a robot listing facts`,
-        `Turn ALL of these notes into a complete, detailed podcast script. Do not skip anything:
-
-${notesText.slice(0, 14000)}`,
+FORMAT (pure spoken audio):
+1. Open: "Hey! Today we're going to really understand [topic]…"
+2. For each concept — explain it deeply: "What this means is…", "Think of it like…", "A good example is…", "This matters because…"
+3. Use transitions: "Now that you understand X, let's look at Y…", "Building on that…"
+4. End: "So to wrap up — here are the key things you now understand…" then give a real summary
+5. NO markdown, NO asterisks, NO bullet symbols — pure spoken words only
+6. Convert symbols to words: 10⁻¹⁰ → "ten to the power of negative ten", × → "times", H₂O → "H two O"`,
+        `Here are the study notes. Turn them into a thorough EXPLANATION — teach the concepts, don't just read them:\n\n${notesText.slice(0, 14000)}`,
         4000
       );
       setPodcastScript(script);
@@ -5637,17 +5654,18 @@ function ContinuousExplanationTab({ file }) {
       return saved[0]?.text || file.notes || "";
     } catch { return file.notes || ""; }
   });
-  const [running, setRunning]   = useState(false);
-  const [speaking, setSpeaking] = useState(false);
-  const [question, setQuestion] = useState("");
+  const [running,   setRunning]   = useState(false);
+  const [speaking,  setSpeaking]  = useState(false);
   const [transcript, setTranscript] = useState([]);
-  const [paused, setPaused]     = useState(false);
-  const [voices, setVoices]     = useState([]);
-  const [voiceIdx, setVoiceIdx] = useState(0);
-  const synthRef   = useRef(null);
-  const queueRef   = useRef([]);
-  const pausedRef  = useRef(false);
-  const inputRef   = useRef(null);
+  const [paused,    setPaused]    = useState(false);
+  const [voices,    setVoices]    = useState([]);
+  const [voiceIdx,  setVoiceIdx]  = useState(0);
+  const [listening, setListening] = useState(false);
+  const [micText,   setMicText]   = useState("");
+  const queueRef    = useRef([]);
+  const pausedRef   = useRef(false);
+  const recognitionRef = useRef(null);
+  const transcriptEndRef = useRef(null);
 
   useEffect(() => {
     const load = () => setVoices(window.speechSynthesis.getVoices());
@@ -5655,43 +5673,49 @@ function ContinuousExplanationTab({ file }) {
     return () => { window.speechSynthesis?.cancel(); };
   }, []);
 
-  const speak = (text) => {
-    return new Promise(resolve => {
-      const u = new SpeechSynthesisUtterance(text);
-      u.rate  = GLOBAL_PERSONAS[voiceIdx]?.rate  || 0.93;
-      u.pitch = GLOBAL_PERSONAS[voiceIdx]?.pitch || 1.0;
-      const v = getSmartVoice(voiceIdx, voices);
-      if (v) u.voice = v;
-      u.onend  = () => { setSpeaking(false); resolve(); };
-      u.onerror = () => { setSpeaking(false); resolve(); };
-      setSpeaking(true);
-      window.speechSynthesis.speak(u);
-      synthRef.current = u;
-    });
-  };
+  useEffect(() => { transcriptEndRef.current?.scrollIntoView({ behavior:"smooth" }); }, [transcript]);
+
+  const speak = (text) => new Promise(resolve => {
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate  = GLOBAL_PERSONAS[voiceIdx]?.rate  || 0.93;
+    u.pitch = GLOBAL_PERSONAS[voiceIdx]?.pitch || 1.0;
+    const v = getSmartVoice(voiceIdx, voices);
+    if (v) u.voice = v;
+    u.onend   = () => { setSpeaking(false); resolve(); };
+    u.onerror = () => { setSpeaking(false); resolve(); };
+    setSpeaking(true);
+    window.speechSynthesis.speak(u);
+  });
 
   const startExplanation = async () => {
     if (!notes.trim()) return;
     setRunning(true); setPaused(false); pausedRef.current = false;
     setTranscript([]);
 
-    // Generate full explanation
-    const segments = await callClaude(
-      "You are a friendly tutor explaining study notes out loud. Be conversational and clear. No markdown, no lists — flowing spoken explanation only.",
-      `Explain these study notes clearly and naturally as if speaking to a student. Be thorough but engaging:\n\n${notes.slice(0, 8000)}`,
+    // Generate a real EXPLANATION, not a readback
+    const explanation = await callClaude(
+      `You are an expert teacher giving a spoken explanation of study material.
+Your job is to EXPLAIN — not read. Make the student truly understand.
+Rules:
+- For each concept: say what it IS, why it matters, how it works, and give a clear analogy or example
+- Use conversational language: "Think of it like this…", "What this really means is…", "A good way to picture it…"
+- Build understanding step by step — connect concepts to each other
+- No markdown, no bullet points, no asterisks — flowing natural speech only
+- Sound like a brilliant teacher, not a robot reading a document`,
+      `Explain this material clearly to a student. Teach them — don't just read the notes:\n\n${notes.slice(0, 8000)}`,
       3000
-    ).catch(e => "I'm ready to explain your notes. What would you like to understand better?");
+    ).catch(() => "I'm ready to explain. What would you like to know?");
 
-    // Split into ~2-sentence chunks for natural pausing
-    const chunks = segments.split(/(?<=[.?!])\s+/).reduce((acc, s, i) => {
+    // Split into natural chunks (~2 sentences each)
+    const chunks = explanation.split(/(?<=[.?!])\s+(?=[A-Z])/).reduce((acc, s, i) => {
       if (i % 2 === 0) acc.push(s);
-      else acc[acc.length-1] += " " + s;
+      else { acc[acc.length-1] += " " + s; }
       return acc;
     }, []);
 
     for (const chunk of chunks) {
-      if (pausedRef.current) { queueRef.current = [chunk]; break; }
-      setTranscript(t => [...t, {role:"ai", text: chunk}]);
+      if (pausedRef.current) { queueRef.current.push(chunk); continue; }
+      setTranscript(t => [...t, { role:"ai", text:chunk }]);
       await speak(chunk);
       if (pausedRef.current) break;
     }
@@ -5699,43 +5723,70 @@ function ContinuousExplanationTab({ file }) {
     if (!pausedRef.current) setRunning(false);
   };
 
-  const askQuestion = async () => {
-    if (!question.trim()) return;
-    const q = question.trim(); setQuestion("");
+  const askQuestion = async (q) => {
+    if (!q.trim()) return;
     window.speechSynthesis?.cancel(); setSpeaking(false);
-    setTranscript(t => [...t, {role:"user", text: q}]);
+    setTranscript(t => [...t, { role:"user", text:q }]);
 
     const answer = await callClaude(
-      "You are a helpful study tutor. Answer the student's question clearly and concisely. Use the notes as context. Speak naturally, no markdown.",
-      `Context (study notes): ${notes.slice(0, 4000)}\n\nStudent question: ${q}\n\nAnswer concisely and clearly.`,
-      800
-    ).catch(e => "Sorry, I couldn't answer that. Please try again.");
+      `You are a helpful teacher answering a student's question. 
+Give a clear, thorough EXPLANATION in your own words — don't quote the notes verbatim.
+Use simple language, give examples, help them truly understand.
+Under 120 words. No markdown.`,
+      `Notes context (for reference only):\n${notes.slice(0,3000)}\n\nStudent question: "${q}"\n\nExplain clearly.`,
+      600
+    ).catch(() => "Sorry, I couldn't answer that right now.");
 
-    setTranscript(t => [...t, {role:"ai", text: answer}]);
+    setTranscript(t => [...t, { role:"ai", text:answer }]);
     await speak(answer);
     setSpeaking(false);
   };
 
+  const startMic = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { const q = window.prompt("Ask your question:"); if (q?.trim()) askQuestion(q.trim()); return; }
+    // Pause explanation while listening
+    window.speechSynthesis?.cancel(); setSpeaking(false);
+    const rec = new SR();
+    rec.lang = "en-US"; rec.interimResults = true; rec.maxAlternatives = 1;
+    recognitionRef.current = rec;
+    setListening(true); setMicText("");
+    rec.onresult = (e) => {
+      const t = Array.from(e.results).map(r => r[0].transcript).join("");
+      setMicText(t);
+      if (e.results[e.results.length-1].isFinal) rec._final = t;
+    };
+    rec.onend = () => {
+      setListening(false);
+      const q = rec._final || micText;
+      setMicText("");
+      recognitionRef.current = null;
+      if (q.trim()) askQuestion(q.trim());
+    };
+    rec.onerror = () => { setListening(false); setMicText(""); };
+    rec.start();
+  };
+
+  const stopMic = () => { recognitionRef.current?.stop(); setListening(false); };
+
   const handleStop = () => {
-    window.speechSynthesis?.cancel();
-    setSpeaking(false); setRunning(false); setPaused(false);
+    window.speechSynthesis?.cancel(); setSpeaking(false); setRunning(false); setPaused(false);
+    pausedRef.current = false; queueRef.current = [];
   };
 
   const handlePause = () => {
-    window.speechSynthesis?.cancel();
-    pausedRef.current = true;
-    setPaused(true); setSpeaking(false);
+    window.speechSynthesis?.cancel(); setSpeaking(false);
+    pausedRef.current = true; setPaused(true);
   };
 
   const handleResume = () => {
-    pausedRef.current = false;
-    setPaused(false);
-    const pending = queueRef.current; queueRef.current = [];
+    pausedRef.current = false; setPaused(false);
+    const pending = [...queueRef.current]; queueRef.current = [];
     (async () => {
-      for (const t of pending) {
-        if (pausedRef.current) break;
-        setTranscript(prev => [...prev, {role:"ai", text: t}]);
-        await speak(t);
+      for (const chunk of pending) {
+        if (pausedRef.current) { queueRef.current.unshift(chunk); break; }
+        setTranscript(t => [...t, { role:"ai", text:chunk }]);
+        await speak(chunk);
       }
       if (!pausedRef.current) setRunning(false);
     })();
@@ -5743,106 +5794,111 @@ function ContinuousExplanationTab({ file }) {
 
   return (
     <div>
-      <div style={{ marginBottom:20 }}>
-        <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:700, color:C.text, marginBottom:4 }}>Continuous AI Explanation</h2>
-        <p style={{ fontSize:13, color:C.muted }}>AI explains your notes out loud. Ask questions anytime and AI will answer.</p>
+      <div style={{ marginBottom:18 }}>
+        <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:700, color:C.text, marginBottom:3 }}>AI Explain</h2>
+        <p style={{ fontSize:13, color:C.muted }}>AI explains your notes out loud — teaching, not reading. Press mic to ask questions anytime.</p>
       </div>
 
-      {/* Controls */}
-      <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"16px 18px", marginBottom:16 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-          {!running ? (
-            <button onClick={startExplanation} disabled={!notes.trim()}
-              style={{ display:"flex", alignItems:"center", gap:7, background:notes.trim()?C.accent:"#ccc", color:"#fff", border:"none",
-                borderRadius:10, padding:"11px 20px", fontSize:14, fontWeight:700, cursor:notes.trim()?"pointer":"not-allowed",
-                boxShadow:notes.trim()?`0 4px 14px ${C.accentS}`:"none" }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-              Start Explanation
+      {/* Controls row */}
+      <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"14px 16px", marginBottom:16, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+        {!running ? (
+          <button onClick={startExplanation} disabled={!notes.trim()}
+            style={{ display:"flex", alignItems:"center", gap:7, background:notes.trim()?"#7c3aed":"#ccc", color:"#fff",
+              border:"none", borderRadius:10, padding:"11px 22px", fontSize:14, fontWeight:700,
+              cursor:notes.trim()?"pointer":"not-allowed", boxShadow:notes.trim()?"0 4px 14px rgba(124,58,237,.35)":"none" }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            Start Explanation
+          </button>
+        ) : (
+          <>
+            {paused
+              ? <button onClick={handleResume} style={{ display:"flex", alignItems:"center", gap:7, background:C.green, color:"#fff", border:"none", borderRadius:10, padding:"11px 20px", fontSize:14, fontWeight:700, cursor:"pointer" }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Resume
+                </button>
+              : <button onClick={handlePause} style={{ display:"flex", alignItems:"center", gap:7, background:C.warm, color:"#fff", border:"none", borderRadius:10, padding:"11px 20px", fontSize:14, fontWeight:700, cursor:"pointer" }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>Pause
+                </button>
+            }
+            <button onClick={handleStop} style={{ display:"flex", alignItems:"center", gap:7, background:C.red, color:"#fff", border:"none", borderRadius:10, padding:"11px 16px", fontSize:14, fontWeight:700, cursor:"pointer" }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>Stop
             </button>
-          ) : (
-            <>
-              {paused ? (
-                <button onClick={handleResume}
-                  style={{ display:"flex", alignItems:"center", gap:7, background:C.green, color:"#fff", border:"none", borderRadius:10, padding:"11px 20px", fontSize:14, fontWeight:700, cursor:"pointer" }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Resume
-                </button>
-              ) : (
-                <button onClick={handlePause}
-                  style={{ display:"flex", alignItems:"center", gap:7, background:C.warm, color:"#fff", border:"none", borderRadius:10, padding:"11px 20px", fontSize:14, fontWeight:700, cursor:"pointer" }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>Pause
-                </button>
-              )}
-              <button onClick={handleStop}
-                style={{ display:"flex", alignItems:"center", gap:7, background:C.red, color:"#fff", border:"none", borderRadius:10, padding:"11px 18px", fontSize:14, fontWeight:700, cursor:"pointer" }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>Stop
-              </button>
-            </>
-          )}
+          </>
+        )}
 
-          {/* Speaking indicator */}
-          {speaking && (
-            <div style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", background:C.purpleL, borderRadius:20 }}>
-              <div style={{ display:"flex", gap:3 }}>{[0,1,2,3].map(i=><span key={i} style={{width:3,height:12,background:C.purple,borderRadius:2,animation:`ppbar 0.8s ease-in-out ${i*0.15}s infinite`,display:"inline-block"}}/>)}</div>
-              <span style={{ fontSize:12, fontWeight:700, color:C.purple }}>Speaking…</span>
-            </div>
-          )}
-
-          {/* Voice picker */}
-          <div style={{ marginLeft:"auto" }}>
-            <select value={voiceIdx} onChange={e => setVoiceIdx(Number(e.target.value))}
-              style={{ border:`1.5px solid ${C.border}`, borderRadius:8, padding:"7px 10px", fontSize:12, color:C.text, background:"#fff", outline:"none", cursor:"pointer" }}>
-              {GLOBAL_PERSONAS.map((p, i) => (
-                <option key={p.id} value={i}>{p.label} ({p.gender})</option>
-              ))}
-            </select>
+        {/* Speaking indicator */}
+        {speaking && (
+          <div style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 13px", background:C.purpleL, borderRadius:20 }}>
+            <div style={{ display:"flex", gap:2 }}>{[0,1,2,3].map(i=><span key={i} style={{width:3,height:12,background:C.purple,borderRadius:2,animation:`ppbar 0.8s ${i*0.15}s infinite`,display:"inline-block"}}/>)}</div>
+            <span style={{ fontSize:11, fontWeight:700, color:C.purple }}>Explaining…</span>
           </div>
-        </div>
+        )}
+
+        {/* Voice picker */}
+        <select value={voiceIdx} onChange={e => setVoiceIdx(Number(e.target.value))}
+          style={{ marginLeft:"auto", border:`1.5px solid ${C.border}`, borderRadius:8, padding:"6px 10px", fontSize:12, color:C.text, background:"#fff", outline:"none", cursor:"pointer" }}>
+          {GLOBAL_PERSONAS.map((p, i) => <option key={p.id} value={i}>{p.label} ({p.gender})</option>)}
+        </select>
       </div>
 
       {/* Transcript */}
-      {transcript.length > 0 && (
-        <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"14px 16px", marginBottom:16, maxHeight:320, overflowY:"auto" }}>
-          {transcript.map((msg, i) => (
-            <div key={i} style={{ marginBottom:12, display:"flex", gap:10,
-              flexDirection: msg.role === "user" ? "row-reverse" : "row" }}>
-              <div style={{
-                maxWidth:"80%", padding:"10px 14px", borderRadius:14, fontSize:13, lineHeight:1.6,
-                background: msg.role === "user" ? C.accent : C.bg,
-                color: msg.role === "user" ? "#fff" : C.text,
-                borderBottomRightRadius: msg.role === "user" ? 4 : 14,
-                borderBottomLeftRadius: msg.role === "ai" ? 4 : 14,
-              }}>{msg.text}</div>
-            </div>
-          ))}
-        </div>
-      )}
+      <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14,
+        minHeight:240, maxHeight:360, overflowY:"auto", padding:"14px 16px",
+        display:"flex", flexDirection:"column", gap:10, marginBottom:14 }}>
+        {transcript.length === 0 && !running && (
+          <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:8, opacity:.5 }}>
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+            <p style={{ fontSize:13, color:C.muted, textAlign:"center" }}>{notes.trim() ? "Press Start to hear an AI explanation of your notes" : "No notes found — generate notes in the Notes tab first"}</p>
+          </div>
+        )}
+        {transcript.map((msg, i) => (
+          <div key={i} style={{
+            padding:"10px 14px", borderRadius:14, fontSize:13, lineHeight:1.65,
+            maxWidth:"82%", wordBreak:"break-word",
+            background: msg.role === "user" ? C.accent : C.bg,
+            color:       msg.role === "user" ? "#fff" : C.text,
+            alignSelf:   msg.role === "user" ? "flex-end" : "flex-start",
+            borderBottomRightRadius: msg.role === "user" ? 4 : 14,
+            borderBottomLeftRadius:  msg.role === "ai"   ? 4 : 14,
+          }}>{msg.text}</div>
+        ))}
+        {running && !speaking && !paused && transcript.length > 0 && (
+          <div style={{ display:"flex", gap:4, padding:"6px 10px", alignSelf:"flex-start" }}>
+            {[0,1,2].map(i=><span key={i} style={{width:6,height:6,borderRadius:"50%",background:C.muted,animation:`bounce .8s ${i*0.15}s infinite`,display:"inline-block"}}/>)}
+          </div>
+        )}
+        <div ref={transcriptEndRef}/>
+      </div>
 
-      {/* Question input — always visible when running */}
-      {(running || transcript.length > 0) && (
-        <div style={{ display:"flex", gap:8 }}>
-          <input
-            ref={inputRef}
-            value={question}
-            onChange={e => setQuestion(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && question.trim()) askQuestion(); }}
-            placeholder="Ask a question — AI will answer and continue…"
-            style={{ flex:1, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"11px 14px",
-              fontSize:14, outline:"none", color:C.text, background:C.bg }}
-          />
-          <button onClick={askQuestion} disabled={!question.trim()}
-            style={{ background:question.trim()?C.accent:"#ccc", color:"#fff", border:"none", borderRadius:10,
-              padding:"11px 18px", fontSize:14, fontWeight:700, cursor:question.trim()?"pointer":"not-allowed" }}>
-            Ask
-          </button>
+      {/* Mic button to ask questions */}
+      <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+        <button
+          onClick={listening ? stopMic : startMic}
+          style={{
+            width:52, height:52, borderRadius:"50%", flexShrink:0, border:"none",
+            cursor:"pointer",
+            background: listening
+              ? "linear-gradient(135deg,#ef4444,#dc2626)"
+              : "linear-gradient(135deg,#7c3aed,#9333ea)",
+            boxShadow: listening
+              ? "0 0 0 8px rgba(239,68,68,.2), 0 4px 18px rgba(239,68,68,.4)"
+              : "0 4px 18px rgba(124,58,237,.4)",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            transition:"all .2s",
+          }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+        </button>
+        <div>
+          {listening
+            ? <p style={{ fontSize:13, fontWeight:700, color:C.red }}>{micText ? `"${micText}"` : "Listening…"}</p>
+            : <p style={{ fontSize:13, color:C.muted }}>Press mic to ask a question — AI will explain and continue</p>
+          }
         </div>
-      )}
-
-      {!notes.trim() && (
-        <div style={{ textAlign:"center", padding:"40px 0", color:C.muted }}>
-          <p style={{ fontSize:14, fontWeight:600 }}>No notes found</p>
-          <p style={{ fontSize:13 }}>Generate or save notes in the Notes tab first.</p>
-        </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -7640,6 +7696,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
   ];
   const hasPiper = TTS_SERVER.length > 0;
   const [usePiper,   setUsePiper]   = useState(TTS_SERVER.length > 0); // can toggle to browser
+  const piperAbortRef = useRef(null); // AbortController for in-flight Piper requests
 
   const [voiceIdx,   setVoiceIdx]   = useState(0);
   const [personaIdx, setPersonaIdx] = useState(0);
@@ -7717,9 +7774,13 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
 
   // ── Piper audio generation ───────────────────────────────────────────────────
   const generatePiper = async (fromTime = 0) => {
-    if (!script || piperLoading) return;
-    const audio = audioRef.current;
+    if (!script) return;
+    // Cancel any in-flight request
+    if (piperAbortRef.current) piperAbortRef.current.abort();
+    const controller = new AbortController();
+    piperAbortRef.current = controller;
 
+    const audio = audioRef.current;
     setPiperLoading(true);
     setPiperError(null);
     setPiperReady(false);
@@ -7727,14 +7788,14 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
     setPlaying(false); setCurrentTime(0); setDuration(0);
 
     try {
-      // Server caches audio by voice+script hash on disk — repeat requests are instant
       const resp = await fetch(`${TTS_SERVER}/generate-podcast`, {
         method: "POST",
+        signal: controller.signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           text:  script,
           voice: serverVoice.id,
-          speed: 1.0, // always 1x — playbackRate handles speed locally
+          speed: 1.0,
         }),
       });
       if (!resp.ok) {
@@ -7743,7 +7804,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
       }
       const blob    = await resp.blob();
       const blobUrl = URL.createObjectURL(blob);
-      _setPodcastBlob(blobUrl); // revokes previous blob, keeping RAM at 1 blob max
+      _setPodcastBlob(blobUrl);
       audio.src          = blobUrl;
       audio.playbackRate = speed;
       audio.load();
@@ -7753,7 +7814,6 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
         audio.onerror = () => res();
         setTimeout(res, 15000);
       });
-      // Seek to fromTime if resuming after voice/speed change
       if (fromTime > 0 && isFinite(audio.duration) && fromTime < audio.duration) {
         audio.currentTime = fromTime;
       }
@@ -7762,6 +7822,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
       setPiperLoading(false);
       audio.play().catch(e => console.warn("Piper play:", e));
     } catch(e) {
+      if (e.name === "AbortError") { setPiperLoading(false); return; } // cancelled — silent
       console.warn("Piper TTS error:", e);
       const msg = e.name === "AbortError"
         ? "Timed out — server may be downloading voice model. Try again in 30 seconds."
@@ -7939,10 +8000,14 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
   };
 
   const switchToBrowser = () => {
-    // Stop piper and switch to browser mode
-    if (audioRef.current) { audioRef.current.pause(); }
+    // Abort any in-flight Piper request
+    if (piperAbortRef.current) { piperAbortRef.current.abort(); piperAbortRef.current = null; }
+    // Stop piper audio
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ""; }
     setUsePiper(false);
     setPiperReady(false);
+    setPiperLoading(false);
+    setPiperError(null);
     setShowPicker(false);
     setPlaying(false);
     elapsedRef.current = 0;
@@ -8194,88 +8259,170 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
   );
 }
 
-// Podcast Q&A interrupt panel
+// Podcast Q&A panel — always open, voice input + voice output
 function PodcastQAPanel({ script, isPlaying, onPause, onResume }) {
-  const [open,     setOpen]     = useState(false);
-  const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState([]);
   const [loading,  setLoading]  = useState(false);
+  const [listening, setListening] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const recognitionRef = useRef(null);
+  const messagesEndRef = useRef(null);
 
-  const ask = async () => {
-    if (!question.trim() || loading) return;
-    const q = question.trim(); setQuestion("");
-    // Pause playback while answering
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior:"smooth" }); }, [messages]);
+
+  const speakAnswer = (text) => {
+    return new Promise(resolve => {
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = 0.93; u.pitch = 1.0;
+      const voices = window.speechSynthesis.getVoices();
+      const v = voices.find(v => /microsoft.*online/i.test(v.name)) ||
+                voices.find(v => /google/i.test(v.name)) || voices[0];
+      if (v) u.voice = v;
+      u.onend = () => resolve();
+      u.onerror = () => resolve();
+      window.speechSynthesis.speak(u);
+    });
+  };
+
+  const askQuestion = async (q) => {
+    if (!q.trim() || loading) return;
     if (isPlaying) onPause?.();
-    setMessages(m => [...m, {role:"user", text:q}]);
+    setMessages(m => [...m, { role:"user", text:q }]);
     setLoading(true);
     try {
       const answer = await callClaude(
-        "You are a podcast host who just paused to answer a listener's question. Answer directly and helpfully using the podcast content as context. Be conversational, under 100 words, no markdown.",
-        `Podcast content context:\n${script.slice(0,4000)}\n\nListener question: "${q}"\n\nAnswer concisely and clearly, as if speaking out loud.`,
-        500
+        `You are an expert tutor explaining a topic from a study podcast. 
+The student just asked a question. Give a clear, thorough explanation in your own words — do NOT just quote the notes.
+Break it down simply, use analogies if helpful, and make sure they truly understand.
+Be conversational. Under 120 words. No markdown, no asterisks.`,
+        `Podcast/notes context (use only for background, explain in your own words):\n${script.slice(0,3000)}\n\nStudent question: "${q}"\n\nExplain this clearly and thoroughly.`,
+        600
       );
-      setMessages(m => [...m, {role:"ai", text:answer}]);
-      // Speak the answer
-      const u = new SpeechSynthesisUtterance(answer);
-      u.rate = 0.93; u.pitch = 1.0;
-      const voices = window.speechSynthesis.getVoices();
-      const v = voices.find(v => /microsoft.*online|google/i.test(v.name)) || voices[0];
-      if (v) u.voice = v;
-      u.onend = () => onResume?.();
-      window.speechSynthesis.speak(u);
-    } catch(e) { setMessages(m => [...m, {role:"ai", text:"Sorry, I couldn't answer that."}]); }
+      setMessages(m => [...m, { role:"ai", text:answer }]);
+      await speakAnswer(answer);
+    } catch(e) {
+      const err = "Sorry, I couldn't answer that right now.";
+      setMessages(m => [...m, { role:"ai", text:err }]);
+      await speakAnswer(err);
+    }
     setLoading(false);
+    onResume?.();
+  };
+
+  const startListening = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      // Fallback: show text input briefly
+      const q = window.prompt("Ask your question:");
+      if (q?.trim()) askQuestion(q.trim());
+      return;
+    }
+    if (isPlaying) onPause?.();
+    const rec = new SpeechRecognition();
+    rec.lang = "en-US";
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
+    recognitionRef.current = rec;
+    setListening(true);
+    setTranscript("");
+    rec.onresult = (e) => {
+      const t = Array.from(e.results).map(r => r[0].transcript).join("");
+      setTranscript(t);
+    };
+    rec.onend = () => {
+      setListening(false);
+      const q = recognitionRef.current?._finalTranscript || transcript;
+      recognitionRef.current = null;
+      setTranscript("");
+      if (q.trim()) askQuestion(q.trim());
+    };
+    rec.onerror = () => { setListening(false); setTranscript(""); };
+    // Store final transcript on result
+    rec.onresult = (e) => {
+      const t = Array.from(e.results).map(r => r[0].transcript).join("");
+      setTranscript(t);
+      if (e.results[e.results.length-1].isFinal) rec._finalTranscript = t;
+    };
+    rec.start();
+  };
+
+  const stopListening = () => {
+    recognitionRef.current?.stop();
+    setListening(false);
   };
 
   return (
-    <div style={{ borderTop:"1px solid rgba(255,255,255,.06)", padding:"10px 16px 14px" }}>
-      <button onClick={() => setOpen(o => !o)}
-        style={{ display:"flex", alignItems:"center", gap:8, background:"none", border:"none",
-          cursor:"pointer", color:"#a5b4fc", fontSize:12, fontWeight:700, letterSpacing:.4 }}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-        ASK THE HOST
-        <span style={{ marginLeft:"auto", fontSize:10, opacity:.5 }}>{open ? "▲" : "▼"}</span>
-      </button>
+    <div style={{ borderTop:"1px solid rgba(255,255,255,.1)", padding:"12px 16px 16px" }}>
+      {/* Header */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+        <span style={{ fontSize:11, fontWeight:800, color:"#818cf8", letterSpacing:1, textTransform:"uppercase" }}>
+          🎙 Ask the Host
+        </span>
+        <span style={{ fontSize:10, color:"#4b5563" }}>Tap mic — AI answers & resumes</span>
+      </div>
 
-      {open && (
-        <div style={{ marginTop:10 }}>
-          {messages.length > 0 && (
-            <div style={{ maxHeight:180, overflowY:"auto", display:"flex", flexDirection:"column", gap:7, marginBottom:10 }}>
-              {messages.map((m, i) => (
-                <div key={i} style={{
-                  padding:"8px 10px", borderRadius:10, fontSize:12, lineHeight:1.6, maxWidth:"88%",
-                  background: m.role === "user" ? "rgba(99,102,241,.35)" : "rgba(255,255,255,.08)",
-                  color: m.role === "user" ? "#c7d2fe" : "#e0e7ff",
-                  alignSelf: m.role === "user" ? "flex-end" : "flex-start",
-                }}>
-                  {m.text}
-                </div>
-              ))}
-              {loading && (
-                <div style={{ display:"flex", gap:3, padding:"6px 10px", alignSelf:"flex-start" }}>
-                  {[0,1,2].map(i=><span key={i} style={{width:5,height:5,borderRadius:"50%",background:"#6366f1",animation:`bounce .8s ease-in-out ${i*0.15}s infinite`,display:"inline-block"}}/>)}
-                </div>
-              )}
+      {/* Messages */}
+      {messages.length > 0 && (
+        <div style={{ maxHeight:160, overflowY:"auto", display:"flex", flexDirection:"column", gap:6, marginBottom:10 }}>
+          {messages.map((m, i) => (
+            <div key={i} style={{
+              padding:"7px 10px", borderRadius:10, fontSize:12, lineHeight:1.55,
+              maxWidth:"86%", wordBreak:"break-word",
+              background: m.role === "user" ? "rgba(99,102,241,.4)" : "rgba(255,255,255,.09)",
+              color: m.role === "user" ? "#c7d2fe" : "#e0e7ff",
+              alignSelf: m.role === "user" ? "flex-end" : "flex-start",
+              borderBottomRightRadius: m.role === "user" ? 3 : 10,
+              borderBottomLeftRadius:  m.role === "ai"   ? 3 : 10,
+            }}>{m.text}</div>
+          ))}
+          {loading && (
+            <div style={{ display:"flex", gap:3, padding:"6px 10px", alignSelf:"flex-start", alignItems:"center", gap:6 }}>
+              <div style={{ display:"flex", gap:3 }}>{[0,1,2].map(i=><span key={i} style={{width:5,height:5,borderRadius:"50%",background:"#818cf8",animation:`bounce .8s ease-in-out ${i*0.15}s infinite`,display:"inline-block"}}/>)}</div>
+              <span style={{ fontSize:11, color:"#818cf8" }}>Thinking…</span>
             </div>
           )}
-          <div style={{ display:"flex", gap:8 }}>
-            <input value={question} onChange={e => setQuestion(e.target.value)}
-              onKeyDown={e => { if(e.key==="Enter" && question.trim()) ask(); }}
-              placeholder="Ask anything about this topic…"
-              style={{ flex:1, background:"rgba(255,255,255,.07)", border:"1px solid rgba(99,102,241,.3)",
-                borderRadius:8, padding:"8px 11px", fontSize:12, color:"#e0e7ff", outline:"none",
-                fontFamily:"inherit", "::placeholder":{color:"#4b5563"} }}
-            />
-            <button onClick={ask} disabled={!question.trim()||loading}
-              style={{ padding:"8px 14px", background:question.trim()&&!loading?"#6366f1":"rgba(255,255,255,.1)",
-                border:"none", borderRadius:8, color:"#fff", fontSize:12, fontWeight:700,
-                cursor:question.trim()&&!loading?"pointer":"not-allowed" }}>
-              Ask
-            </button>
-          </div>
-          <p style={{ fontSize:10, color:"#4b5563", marginTop:6 }}>Podcast pauses while AI answers, then resumes</p>
+          <div ref={messagesEndRef}/>
         </div>
       )}
+
+      {/* Mic button + transcript */}
+      <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+        <button
+          onClick={listening ? stopListening : startListening}
+          disabled={loading}
+          style={{
+            width:48, height:48, borderRadius:"50%", flexShrink:0, border:"none", cursor:loading?"not-allowed":"pointer",
+            background: listening
+              ? "linear-gradient(135deg,#ef4444,#dc2626)"
+              : "linear-gradient(135deg,#6366f1,#818cf8)",
+            boxShadow: listening
+              ? "0 0 0 6px rgba(239,68,68,.25), 0 4px 16px rgba(239,68,68,.4)"
+              : "0 4px 16px rgba(99,102,241,.5)",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            transition:"all .2s",
+            animation: listening ? "sg-pulse 1.2s ease infinite" : "none",
+          }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+        </button>
+
+        <div style={{ flex:1 }}>
+          {listening ? (
+            <div style={{ fontSize:12, color:"#f9a8d4", fontWeight:600 }}>
+              {transcript ? `"${transcript}"` : "Listening…"}
+            </div>
+          ) : (
+            <div style={{ fontSize:12, color:"#4b5563" }}>
+              {loading ? "Generating answer…" : "Press mic and ask your question out loud"}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
