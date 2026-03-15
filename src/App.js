@@ -5225,6 +5225,16 @@ Language: ${langLabel}. Always reply in ${langLabel}.`,
 }
 
 
+
+// Font size helper for study card — bigger text for short answers, smaller for long
+function clamp(len) {
+  if (!len) return 20;
+  if (len < 60)  return 22;
+  if (len < 120) return 18;
+  if (len < 200) return 15;
+  return 13;
+}
+
 // ─── STUDY CARDS TAB ──────────────────────────────────────────────────────────
 function CardsTab({ file, onUpdate }) {
   const { isMobile } = useResponsive();
@@ -5240,7 +5250,28 @@ function CardsTab({ file, onUpdate }) {
   const [filter, setFilter] = useState("all");   // all | starred | known | unknown
   const [shuffled, setShuffled] = useState(false);
   const [displayCards, setDisplayCards] = useState(cards);
-  const [viewMode, setViewMode] = useState("grid"); // grid | list
+  const [viewMode, setViewMode] = useState("grid"); // grid | list | study
+  const [studyIdx, setStudyIdx] = useState(0); // current card index in study mode
+
+  // Keyboard nav in study mode
+  useEffect(() => {
+    const handler = (e) => {
+      if (viewMode !== "study") return;
+      if (e.key === "ArrowRight" || e.key === " ") {
+        e.preventDefault();
+        if (e.key === " ") setFlipped(f => {
+          const card = displayCards[studyIdx];
+          if (!card) return f;
+          return {...f, [card.id]: !f[card.id]};
+        });
+        else setStudyIdx(i => Math.min(displayCards.length - 1, i + 1));
+        if (e.key === "ArrowRight") setFlipped({});
+      }
+      if (e.key === "ArrowLeft") { e.preventDefault(); setStudyIdx(i=>Math.max(0,i-1)); setFlipped({}); }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [viewMode, studyIdx, displayCards]);
 
   // Sync displayCards when cards or shuffle changes
   useEffect(() => {
@@ -5313,15 +5344,26 @@ function CardsTab({ file, onUpdate }) {
         <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
           {/* View toggle */}
           {cards.length > 0 && (
-            <div style={{ display:"flex", border:`1.5px solid ${C.border}`, borderRadius:8, overflow:"hidden" }}>
-              {[{id:"grid",svg:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>},
-                {id:"list",svg:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>}]
-                .map(v => (
-                  <button key={v.id} onClick={() => setViewMode(v.id)}
-                    style={{ padding:"6px 10px", border:"none", cursor:"pointer", background:viewMode===v.id?C.accent:"transparent", color:viewMode===v.id?"#fff":C.muted }}>
-                    {v.svg}
-                  </button>
-              ))}
+            <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+              <div style={{ display:"flex", border:`1.5px solid ${C.border}`, borderRadius:8, overflow:"hidden" }}>
+                {[{id:"grid",svg:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>},
+                  {id:"list",svg:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>}]
+                  .map(v => (
+                    <button key={v.id} onClick={() => setViewMode(v.id)}
+                      style={{ padding:"6px 10px", border:"none", cursor:"pointer", background:viewMode===v.id?C.accent:"transparent", color:viewMode===v.id?"#fff":C.muted }}>
+                      {v.svg}
+                    </button>
+                ))}
+              </div>
+              <button onClick={() => { setViewMode("study"); setStudyIdx(0); setFlipped({}); }}
+                style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px",
+                  background:viewMode==="study"?C.accent:C.surface,
+                  color:viewMode==="study"?"#fff":C.muted,
+                  border:`1.5px solid ${viewMode==="study"?C.accent:C.border}`,
+                  borderRadius:8, cursor:"pointer", fontSize:12, fontWeight:700 }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/></svg>
+                Study
+              </button>
             </div>
           )}
           {/* Shuffle */}
@@ -5401,6 +5443,94 @@ function CardsTab({ file, onUpdate }) {
           </p>
         </div>
       )}
+
+      {/* ── Study (Quizlet-style single card flipper) ── */}
+      {displayCards.length > 0 && viewMode === "study" && (() => {
+        const card = displayCards[studyIdx] || displayCards[0];
+        const isFlipped  = !!flipped[card?.id];
+        const isStarred  = !!starred[card?.id];
+        const isKnown    = !!known[card?.id];
+        return (
+          <div>
+            <style>{`
+              .ql-card-inner{position:relative;width:100%;height:100%;transition:transform .5s cubic-bezier(.4,0,.2,1);transform-style:preserve-3d}
+              .ql-card-wrap.flipped .ql-card-inner{transform:rotateY(180deg)}
+              .ql-face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 48px;text-align:center}
+              .ql-face-back{transform:rotateY(180deg)}
+            `}</style>
+
+            {/* Progress bar + counter */}
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+              <button onClick={() => setViewMode("grid")} style={{ display:"flex", alignItems:"center", gap:5, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:13, fontWeight:600 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                All cards
+              </button>
+              <span style={{ fontSize:14, fontWeight:700, color:C.muted }}>
+                {studyIdx + 1} / {displayCards.length}
+              </span>
+              <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                <button onClick={e=>toggleStar(card.id,e)} className="no-min-h"
+                  style={{ background:"none", border:"none", cursor:"pointer", fontSize:18, opacity:isStarred?1:.35 }}>⭐</button>
+                <button onClick={e=>toggleKnown(card.id,e)} className="no-min-h"
+                  style={{ background:isKnown?C.greenL:"none", border:`1.5px solid ${isKnown?C.green:C.border}`, borderRadius:8, cursor:"pointer", padding:"4px 10px", fontSize:12, fontWeight:700, color:isKnown?C.green:C.muted }}>
+                  {isKnown ? "✓ Known" : "Got it"}
+                </button>
+              </div>
+            </div>
+
+            {/* Progress bar */}
+            <div style={{ height:4, background:C.border, borderRadius:2, marginBottom:18 }}>
+              <div style={{ height:"100%", width:`${((studyIdx+1)/displayCards.length)*100}%`, background:C.accent, borderRadius:2, transition:"width .3s" }}/>
+            </div>
+
+            {/* The card */}
+            <div
+              className={`ql-card-wrap${isFlipped ? " flipped" : ""}`}
+              onClick={() => setFlipped(f=>({...f,[card.id]:!f[card.id]}))}
+              style={{ height:340, perspective:1200, cursor:"pointer", userSelect:"none", marginBottom:20 }}>
+              <div className="ql-card-inner" style={{ boxShadow:"0 8px 40px rgba(0,0,0,.1)" }}>
+                {/* Front — Question */}
+                <div className="ql-face" style={{ background:isKnown?C.greenL:C.surface, border:`2px solid ${isKnown?C.green:isStarred?"#f59e0b":C.border}` }}>
+                  <p style={{ fontSize:11, fontWeight:800, color:C.muted, letterSpacing:1.5, textTransform:"uppercase", marginBottom:20 }}>QUESTION</p>
+                  <p style={{ fontSize:clamp(card.question?.length), color:C.text, lineHeight:1.6, fontWeight:500 }}>{card.question}</p>
+                  <p style={{ fontSize:12, color:C.muted, marginTop:24 }}>Click to reveal answer</p>
+                </div>
+                {/* Back — Answer */}
+                <div className="ql-face ql-face-back" style={{ background:C.accentL, border:`2px solid ${C.accentS}` }}>
+                  <p style={{ fontSize:11, fontWeight:800, color:C.accent, letterSpacing:1.5, textTransform:"uppercase", marginBottom:20 }}>ANSWER</p>
+                  <p style={{ fontSize:clamp(card.answer?.length), color:C.text, lineHeight:1.6, fontWeight:500 }}>{card.answer}</p>
+                  <p style={{ fontSize:12, color:C.accent, marginTop:24 }}>Click to flip back</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Navigation */}
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:20 }}>
+              <button onClick={() => { setStudyIdx(i=>Math.max(0,i-1)); setFlipped({}); }}
+                disabled={studyIdx === 0}
+                style={{ width:48, height:48, borderRadius:"50%", border:`1.5px solid ${C.border}`, background:C.surface, cursor:studyIdx===0?"not-allowed":"pointer", opacity:studyIdx===0?.35:1, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+              </button>
+
+              {/* Shuffle */}
+              <button onClick={() => setShuffled(s=>!s)}
+                style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px", borderRadius:20, border:`1.5px solid ${shuffled?C.purple:C.border}`, background:shuffled?C.purpleL:"transparent", color:shuffled?C.purple:C.muted, cursor:"pointer", fontSize:12, fontWeight:700 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
+                Shuffle
+              </button>
+
+              <button onClick={() => { setStudyIdx(i=>Math.min(displayCards.length-1,i+1)); setFlipped({}); }}
+                disabled={studyIdx === displayCards.length - 1}
+                style={{ width:48, height:48, borderRadius:"50%", border:`1.5px solid ${C.border}`, background:C.surface, cursor:studyIdx===displayCards.length-1?"not-allowed":"pointer", opacity:studyIdx===displayCards.length-1?.35:1, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+              </button>
+            </div>
+
+            {/* Keyboard hint */}
+            <p style={{ textAlign:"center", fontSize:11, color:C.muted, marginTop:14 }}>← → to navigate · Space to flip</p>
+          </div>
+        );
+      })()}
 
       {/* ── Grid view ── */}
       {displayCards.length > 0 && viewMode === "grid" && (
@@ -5813,266 +5943,322 @@ function ManualTranscriptInput({ onGenerate }) {
 
 // ─── CONTINUOUS AI EXPLANATION ────────────────────────────────────────────────
 function ContinuousExplanationTab({ file }) {
-  const [notes, setNotes] = useState(() => {
+  const [notes] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem("saved_notes_" + file.id) || "[]");
       return saved[0]?.text || file.notes || "";
     } catch { return file.notes || ""; }
   });
-  const [running,   setRunning]   = useState(false);
-  const [speaking,  setSpeaking]  = useState(false);
+  const [running,    setRunning]    = useState(false);
+  const [speaking,   setSpeaking]   = useState(false);
   const [transcript, setTranscript] = useState([]);
-  const [paused,    setPaused]    = useState(false);
-  const [voices,    setVoices]    = useState([]);
-  const [voiceIdx,  setVoiceIdx]  = useState(0);
-  const [listening, setListening] = useState(false);
-  const [micText,   setMicText]   = useState("");
-  const queueRef    = useRef([]);
-  const pausedRef   = useRef(false);
+  const [paused,     setPaused]     = useState(false);
+  const [voices,     setVoices]     = useState([]);
+  const [voiceIdx,   setVoiceIdx]   = useState(0);
+  const [listening,  setListening]  = useState(false);
+  const [micText,    setMicText]    = useState("");
+
+  // Refs read by async loops — never go stale
+  const pausedRef      = useRef(false);
+  const stoppedRef     = useRef(false); // set true on unmount/stop so loops exit
+  const queueRef       = useRef([]);
   const recognitionRef = useRef(null);
   const transcriptEndRef = useRef(null);
+  const finalTransRef  = useRef(""); // final mic result stored here to avoid stale closure
 
+  // Load voices; cancel everything on unmount
   useEffect(() => {
     const load = () => setVoices(window.speechSynthesis.getVoices());
-    load(); window.speechSynthesis.onvoiceschanged = load;
-    return () => { window.speechSynthesis?.cancel(); };
+    load();
+    window.speechSynthesis.onvoiceschanged = load;
+    return () => {
+      stoppedRef.current = true;
+      pausedRef.current  = true;
+      try { window.speechSynthesis.cancel(); } catch {}
+      try { recognitionRef.current?.abort(); } catch {}
+    };
   }, []);
 
-  // Auto-start when tab opens if notes are available
   useEffect(() => {
-    if (notes.trim()) {
-      // Small delay so voices load first
-      const t = setTimeout(() => startExplanation(), 600);
-      return () => clearTimeout(t);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // only on mount
+    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [transcript]);
 
-  useEffect(() => { transcriptEndRef.current?.scrollIntoView({ behavior:"smooth" }); }, [transcript]);
+  // Store the resolve fn so cancel() can force-resolve the promise
+  const speakResolveRef = useRef(null);
 
+  // Speak one chunk — resolves when done, cancelled, or stopped
   const speak = (text) => new Promise(resolve => {
+    if (stoppedRef.current || pausedRef.current) { resolve(); return; }
+    // Cancel any previous utterance first
+    try { window.speechSynthesis.cancel(); } catch {}
     const u = new SpeechSynthesisUtterance(text);
     u.rate  = GLOBAL_PERSONAS[voiceIdx]?.rate  || 0.93;
     u.pitch = GLOBAL_PERSONAS[voiceIdx]?.pitch || 1.0;
     const v = getSmartVoice(voiceIdx, voices);
     if (v) u.voice = v;
-    u.onend   = () => { setSpeaking(false); resolve(); };
-    u.onerror = () => { setSpeaking(false); resolve(); };
+    speakResolveRef.current = resolve;
+    const done = () => {
+      speakResolveRef.current = null;
+      setSpeaking(false);
+      resolve();
+    };
+    u.onend   = done;
+    u.onerror = done; // fired on cancel() in most browsers
     setSpeaking(true);
     window.speechSynthesis.speak(u);
   });
 
-  const startExplanation = async () => {
-    if (!notes.trim()) return;
-    setRunning(true); setPaused(false); pausedRef.current = false;
-    setTranscript([]);
+  // Force-stop the current utterance and resolve its promise immediately
+  const cancelSpeech = () => {
+    try { window.speechSynthesis.cancel(); } catch {}
+    setSpeaking(false);
+    if (speakResolveRef.current) {
+      speakResolveRef.current();
+      speakResolveRef.current = null;
+    }
+  };
 
-    // Generate a real EXPLANATION, not a readback
+  const startExplanation = async () => {
+    if (!notes.trim() || running) return;
+    stoppedRef.current = false;
+    pausedRef.current  = false;
+    queueRef.current   = [];
+    setRunning(true); setPaused(false); setTranscript([]);
+
     const explanation = await callClaude(
       `You are an expert teacher giving a spoken explanation of study material.
-Your job is to EXPLAIN — not read. Make the student truly understand.
-Rules:
-- For each concept: say what it IS, why it matters, how it works, and give a clear analogy or example
-- Use conversational language: "Think of it like this…", "What this really means is…", "A good way to picture it…"
-- Build understanding step by step — connect concepts to each other
-- No markdown, no bullet points, no asterisks — flowing natural speech only
-- Sound like a brilliant teacher, not a robot reading a document`,
-      `Explain this material clearly to a student. Teach them — don't just read the notes:\n\n${notes.slice(0, 8000)}`,
+EXPLAIN — do not read or quote the notes. Make the student truly understand.
+- For each concept: what it IS, why it matters, how it works, a clear analogy
+- Conversational: "Think of it like this…", "What this really means is…"
+- Build step by step — connect each idea to the previous
+- No markdown, no bullets, no asterisks — flowing natural speech only`,
+      `Teach this material clearly. Don't read the notes — explain them:\n\n${notes.slice(0, 8000)}`,
       3000
     ).catch(() => "I'm ready to explain. What would you like to know?");
 
-    // Split into natural chunks (~2 sentences each)
-    const chunks = explanation.split(/(?<=[.?!])\s+(?=[A-Z])/).reduce((acc, s, i) => {
-      if (i % 2 === 0) acc.push(s);
-      else { acc[acc.length-1] += " " + s; }
-      return acc;
-    }, []);
+    if (stoppedRef.current) { setRunning(false); return; }
+
+    const chunks = explanation
+      .split(/(?<=[.?!])\s+(?=[A-Z"'])/)
+      .reduce((acc, s, i) => {
+        if (i % 2 === 0) acc.push(s);
+        else acc[acc.length - 1] += " " + s;
+        return acc;
+      }, [])
+      .filter(Boolean);
 
     for (const chunk of chunks) {
+      if (stoppedRef.current) break;
       if (pausedRef.current) { queueRef.current.push(chunk); continue; }
-      setTranscript(t => [...t, { role:"ai", text:chunk }]);
+      setTranscript(t => [...t, { role: "ai", text: chunk }]);
       await speak(chunk);
-      if (pausedRef.current) break;
     }
+
     setSpeaking(false);
-    if (!pausedRef.current) setRunning(false);
+    if (!stoppedRef.current) setRunning(false);
   };
 
   const askQuestion = async (q) => {
     if (!q.trim()) return;
-    window.speechSynthesis?.cancel(); setSpeaking(false);
-    setTranscript(t => [...t, { role:"user", text:q }]);
-
+    setTranscript(t => [...t, { role: "user", text: q }]);
     const answer = await callClaude(
-      `You are a helpful teacher answering a student's question. 
-Give a clear, thorough EXPLANATION in your own words — don't quote the notes verbatim.
-Use simple language, give examples, help them truly understand.
-Under 120 words. No markdown.`,
-      `Notes context (for reference only):\n${notes.slice(0,3000)}\n\nStudent question: "${q}"\n\nExplain clearly.`,
-      600
-    ).catch(() => "Sorry, I couldn't answer that right now.");
-
-    setTranscript(t => [...t, { role:"ai", text:answer }]);
+      `You are a helpful teacher. Answer the student's question clearly in your own words.
+Simple language, give an example, under 100 words. No markdown.`,
+      `Notes context:\n${notes.slice(0, 3000)}\n\nQuestion: "${q}"\n\nExplain clearly.`,
+      500
+    ).catch(() => "Sorry, I could not answer that right now.");
+    if (stoppedRef.current) return;
+    setTranscript(t => [...t, { role: "ai", text: answer }]);
     await speak(answer);
     setSpeaking(false);
   };
 
   const startMic = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { const q = window.prompt("Ask your question:"); if (q?.trim()) askQuestion(q.trim()); return; }
-    // Pause explanation while listening
-    window.speechSynthesis?.cancel(); setSpeaking(false);
+    if (!SR) {
+      const q = window.prompt("Ask your question:");
+      if (q?.trim()) askQuestion(q.trim());
+      return;
+    }
+    // Stop speech BEFORE starting mic — set flag first so loop sees it
+    pausedRef.current = true;
+    cancelSpeech(); // force-resolves current speak() promise immediately
+    finalTransRef.current = "";
+    setMicText(""); setListening(true);
     const rec = new SR();
     rec.lang = "en-US"; rec.interimResults = true; rec.maxAlternatives = 1;
     recognitionRef.current = rec;
-    setListening(true); setMicText("");
     rec.onresult = (e) => {
       const t = Array.from(e.results).map(r => r[0].transcript).join("");
       setMicText(t);
-      if (e.results[e.results.length-1].isFinal) rec._final = t;
+      if (e.results[e.results.length - 1].isFinal) finalTransRef.current = t;
     };
     rec.onend = () => {
-      setListening(false);
-      const q = rec._final || micText;
-      setMicText("");
+      setListening(false); setMicText("");
       recognitionRef.current = null;
-      if (q.trim()) askQuestion(q.trim());
+      const q = finalTransRef.current.trim();
+      finalTransRef.current = "";
+      pausedRef.current = false; // allow loop to resume after answer
+      if (q) askQuestion(q);
     };
-    rec.onerror = () => { setListening(false); setMicText(""); };
+    rec.onerror = (e) => {
+      console.warn("mic error:", e.error);
+      setListening(false); setMicText("");
+      recognitionRef.current = null;
+      finalTransRef.current = "";
+      pausedRef.current = false; // resume even on error
+    };
     rec.start();
   };
 
-  const stopMic = () => { recognitionRef.current?.stop(); setListening(false); };
+  const stopMic = () => {
+    try { recognitionRef.current?.stop(); } catch {}
+    setListening(false);
+  };
 
   const handleStop = () => {
-    window.speechSynthesis?.cancel(); setSpeaking(false); setRunning(false); setPaused(false);
-    pausedRef.current = false; queueRef.current = [];
+    stoppedRef.current = true; pausedRef.current = true; queueRef.current = [];
+    cancelSpeech();
+    try { recognitionRef.current?.abort(); } catch {}
+    setRunning(false); setPaused(false); setListening(false);
   };
 
   const handlePause = () => {
-    window.speechSynthesis?.cancel(); setSpeaking(false);
     pausedRef.current = true; setPaused(true);
+    cancelSpeech();
   };
 
   const handleResume = () => {
-    pausedRef.current = false; setPaused(false);
+    pausedRef.current = false; stoppedRef.current = false; setPaused(false);
     const pending = [...queueRef.current]; queueRef.current = [];
     (async () => {
       for (const chunk of pending) {
-        if (pausedRef.current) { queueRef.current.unshift(chunk); break; }
-        setTranscript(t => [...t, { role:"ai", text:chunk }]);
+        if (stoppedRef.current || pausedRef.current) { queueRef.current.unshift(chunk); break; }
+        setTranscript(t => [...t, { role: "ai", text: chunk }]);
         await speak(chunk);
       }
-      if (!pausedRef.current) setRunning(false);
+      if (!stoppedRef.current && !pausedRef.current) setRunning(false);
     })();
   };
 
   return (
     <div>
-      <div style={{ marginBottom:18 }}>
+      <div style={{ marginBottom:16 }}>
         <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:700, color:C.text, marginBottom:3 }}>AI Explain</h2>
-        <p style={{ fontSize:13, color:C.muted }}>AI explains your notes out loud — teaching, not reading. Press mic to ask questions anytime.</p>
+        <p style={{ fontSize:13, color:C.muted }}>AI teaches your notes out loud. Press mic anytime to ask a question.</p>
       </div>
 
-      {/* Controls row */}
-      <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"14px 16px", marginBottom:16, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+      {/* Controls */}
+      <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14,
+        padding:"12px 16px", marginBottom:14, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
         {!running ? (
           <button onClick={startExplanation} disabled={!notes.trim()}
-            style={{ display:"flex", alignItems:"center", gap:7, background:notes.trim()?"#7c3aed":"#ccc", color:"#fff",
-              border:"none", borderRadius:10, padding:"11px 22px", fontSize:14, fontWeight:700,
-              cursor:notes.trim()?"pointer":"not-allowed", boxShadow:notes.trim()?"0 4px 14px rgba(124,58,237,.35)":"none" }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            style={{ display:"flex", alignItems:"center", gap:7,
+              background:notes.trim()?"#7c3aed":"#ccc", color:"#fff", border:"none",
+              borderRadius:10, padding:"10px 22px", fontSize:14, fontWeight:700,
+              cursor:notes.trim()?"pointer":"not-allowed",
+              boxShadow:notes.trim()?"0 4px 14px rgba(124,58,237,.35)":"none" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
             Start Explanation
           </button>
         ) : (
           <>
             {paused
-              ? <button onClick={handleResume} style={{ display:"flex", alignItems:"center", gap:7, background:C.green, color:"#fff", border:"none", borderRadius:10, padding:"11px 20px", fontSize:14, fontWeight:700, cursor:"pointer" }}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Resume
+              ? <button onClick={handleResume} style={{ display:"flex", alignItems:"center", gap:7, background:C.green, color:"#fff", border:"none", borderRadius:10, padding:"10px 20px", fontSize:14, fontWeight:700, cursor:"pointer" }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Resume
                 </button>
-              : <button onClick={handlePause} style={{ display:"flex", alignItems:"center", gap:7, background:C.warm, color:"#fff", border:"none", borderRadius:10, padding:"11px 20px", fontSize:14, fontWeight:700, cursor:"pointer" }}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>Pause
+              : <button onClick={handlePause} style={{ display:"flex", alignItems:"center", gap:7, background:C.warm, color:"#fff", border:"none", borderRadius:10, padding:"10px 20px", fontSize:14, fontWeight:700, cursor:"pointer" }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>Pause
                 </button>
             }
-            <button onClick={handleStop} style={{ display:"flex", alignItems:"center", gap:7, background:C.red, color:"#fff", border:"none", borderRadius:10, padding:"11px 16px", fontSize:14, fontWeight:700, cursor:"pointer" }}>
+            <button onClick={handleStop} style={{ display:"flex", alignItems:"center", gap:7, background:C.red, color:"#fff", border:"none", borderRadius:10, padding:"10px 16px", fontSize:14, fontWeight:700, cursor:"pointer" }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>Stop
             </button>
           </>
         )}
-
-        {/* Speaking indicator */}
-        {speaking && (
-          <div style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 13px", background:C.purpleL, borderRadius:20 }}>
-            <div style={{ display:"flex", gap:2 }}>{[0,1,2,3].map(i=><span key={i} style={{width:3,height:12,background:C.purple,borderRadius:2,animation:`ppbar 0.8s ${i*0.15}s infinite`,display:"inline-block"}}/>)}</div>
+        {speaking && !listening && (
+          <div style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 12px", background:C.purpleL, borderRadius:20 }}>
+            <div style={{ display:"flex", gap:2 }}>
+              {[0,1,2,3].map(i=><span key={i} style={{width:3,height:12,background:C.purple,borderRadius:2,animation:`ppbar 0.8s ${i*0.15}s infinite`,display:"inline-block"}}/>)}
+            </div>
             <span style={{ fontSize:11, fontWeight:700, color:C.purple }}>Explaining…</span>
           </div>
         )}
-
-        {/* Voice picker */}
         <select value={voiceIdx} onChange={e => setVoiceIdx(Number(e.target.value))}
-          style={{ marginLeft:"auto", border:`1.5px solid ${C.border}`, borderRadius:8, padding:"6px 10px", fontSize:12, color:C.text, background:"#fff", outline:"none", cursor:"pointer" }}>
+          style={{ marginLeft:"auto", border:`1.5px solid ${C.border}`, borderRadius:8,
+            padding:"6px 10px", fontSize:12, color:C.text, background:"#fff", outline:"none", cursor:"pointer" }}>
           {GLOBAL_PERSONAS.map((p, i) => <option key={p.id} value={i}>{p.label} ({p.gender})</option>)}
         </select>
       </div>
 
       {/* Transcript */}
       <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14,
-        minHeight:240, maxHeight:360, overflowY:"auto", padding:"14px 16px",
+        minHeight:220, maxHeight:340, overflowY:"auto", padding:"14px 16px",
         display:"flex", flexDirection:"column", gap:10, marginBottom:14 }}>
         {transcript.length === 0 && !running && (
-          <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:8, opacity:.5 }}>
-            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
-            <p style={{ fontSize:13, color:C.muted, textAlign:"center" }}>{notes.trim() ? "Press Start to hear an AI explanation of your notes" : "No notes found — generate notes in the Notes tab first"}</p>
+          <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center",
+            justifyContent:"center", gap:8, opacity:.45, padding:"20px 0" }}>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={C.muted}
+              strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            </svg>
+            <p style={{ fontSize:13, color:C.muted, textAlign:"center" }}>
+              {notes.trim()
+                ? "Press Start — AI will explain your notes like a teacher"
+                : "No notes found — generate notes in the Notes tab first"}
+            </p>
           </div>
         )}
         {transcript.map((msg, i) => (
           <div key={i} style={{
             padding:"10px 14px", borderRadius:14, fontSize:13, lineHeight:1.65,
-            maxWidth:"82%", wordBreak:"break-word",
-            background: msg.role === "user" ? C.accent : C.bg,
-            color:       msg.role === "user" ? "#fff" : C.text,
-            alignSelf:   msg.role === "user" ? "flex-end" : "flex-start",
+            maxWidth:"84%", wordBreak:"break-word",
+            background:   msg.role === "user" ? C.accent : C.bg,
+            color:        msg.role === "user" ? "#fff"   : C.text,
+            alignSelf:    msg.role === "user" ? "flex-end" : "flex-start",
             borderBottomRightRadius: msg.role === "user" ? 4 : 14,
             borderBottomLeftRadius:  msg.role === "ai"   ? 4 : 14,
           }}>{msg.text}</div>
         ))}
         {running && !speaking && !paused && transcript.length > 0 && (
-          <div style={{ display:"flex", gap:4, padding:"6px 10px", alignSelf:"flex-start" }}>
+          <div style={{ display:"flex", gap:4, padding:"4px 8px", alignSelf:"flex-start" }}>
             {[0,1,2].map(i=><span key={i} style={{width:6,height:6,borderRadius:"50%",background:C.muted,animation:`bounce .8s ${i*0.15}s infinite`,display:"inline-block"}}/>)}
           </div>
         )}
         <div ref={transcriptEndRef}/>
       </div>
 
-      {/* Mic button to ask questions */}
-      <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-        <button
-          onClick={listening ? stopMic : startMic}
+      {/* Mic button */}
+      <div style={{ display:"flex", alignItems:"center", gap:14 }}>
+        <button onClick={listening ? stopMic : startMic}
           style={{
-            width:52, height:52, borderRadius:"50%", flexShrink:0, border:"none",
-            cursor:"pointer",
+            width:54, height:54, borderRadius:"50%", flexShrink:0, border:"none", cursor:"pointer",
             background: listening
               ? "linear-gradient(135deg,#ef4444,#dc2626)"
               : "linear-gradient(135deg,#7c3aed,#9333ea)",
             boxShadow: listening
-              ? "0 0 0 8px rgba(239,68,68,.2), 0 4px 18px rgba(239,68,68,.4)"
-              : "0 4px 18px rgba(124,58,237,.4)",
-            display:"flex", alignItems:"center", justifyContent:"center",
-            transition:"all .2s",
+              ? "0 0 0 8px rgba(239,68,68,.18),0 4px 18px rgba(239,68,68,.4)"
+              : "0 4px 18px rgba(124,58,237,.38)",
+            display:"flex", alignItems:"center", justifyContent:"center", transition:"all .2s",
           }}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff"
+            strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
             <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
             <line x1="12" y1="19" x2="12" y2="23"/>
-            <line x1="8" y1="23" x2="16" y2="23"/>
+            <line x1="8"  y1="23" x2="16" y2="23"/>
           </svg>
         </button>
-        <div>
+        <p style={{ fontSize:13, margin:0,
+          color:      listening ? C.red    : C.muted,
+          fontWeight: listening ? 700      : 400 }}>
           {listening
-            ? <p style={{ fontSize:13, fontWeight:700, color:C.red }}>{micText ? `"${micText}"` : "Listening…"}</p>
-            : <p style={{ fontSize:13, color:C.muted }}>Press mic to ask a question — AI will explain and continue</p>
-          }
-        </div>
+            ? (micText ? `"${micText}"` : "Listening — speak your question…")
+            : (running
+                ? "Press mic to ask a question — AI pauses and listens"
+                : "Start explanation first, then use mic to ask questions")}
+        </p>
       </div>
     </div>
   );
