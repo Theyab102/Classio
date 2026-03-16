@@ -718,6 +718,7 @@ button.folder-color-btn,button.color-swatch,button.no-min-h{aspect-ratio:1;flex-
 @keyframes sg-pulse{0%,100%{box-shadow:0 0 0 0 rgba(74,124,89,.6)}70%{box-shadow:0 0 0 6px rgba(74,124,89,0)}}
 @keyframes ppbar{0%,100%{transform:scaleY(.4);opacity:.5}50%{transform:scaleY(1);opacity:1}}
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes twcursor{0%,100%{opacity:1}50%{opacity:0}}
 `; 
 
 // Global file object store — survives navigation within the session
@@ -1055,8 +1056,93 @@ function AboutTab() {
   );
 }
 
+
+// ─── ONBOARDING TUTORIAL ──────────────────────────────────────────────────────
+const TUTORIAL_STEPS = [
+  { icon:"📁", title:"Create Subject Folders", desc:"Organise your study material by subject. Create a folder for Physics, Maths, Biology — anything you are studying.", tip:"Tap + New Folder on the home screen to get started." },
+  { icon:"📄", title:"Upload Your Files", desc:"Upload PDFs, PowerPoints, Word docs, or images. Classio reads them and unlocks all AI features for that file.", tip:"Supports PDF, PPTX, DOCX, images and more." },
+  { icon:"📝", title:"AI Notes", desc:"Open any file and go to the Notes tab. The AI generates structured study notes automatically. Ask the assistant panel any question about your notes.", tip:"The AI assistant on the right is always open — ask it anything." },
+  { icon:"🃏", title:"Study Cards", desc:"The Study Cards tab generates flashcards from your file. Flip through one at a time in Study mode, or browse the grid. Mark cards as known to track progress.", tip:"Press Space to flip a card, and arrow keys to navigate." },
+  { icon:"🎙", title:"AI Podcast", desc:"Voice and Podcast tab, then AI Podcast. The AI explains your notes out loud like a personal tutor. Tap the mic button to ask questions any time — it pauses and answers, then continues.", tip:"The podcast remembers where it was and resumes from that exact point." },
+  { icon:"🎮", title:"Game Mode and More", desc:"Make studying fun with Game Mode — quiz games, matching, and more all generated from your notes. Use the YouTube tab to turn any video into study notes and flashcards.", tip:"Everything is powered by your own uploaded content." },
+];
+
+function OnboardingTutorial({ onDone }) {
+  const [step, setStep] = useState(0);
+  const [leaving, setLeaving] = useState(false);
+  const s = TUTORIAL_STEPS[step];
+  const isLast = step === TUTORIAL_STEPS.length - 1;
+
+  const finish = () => {
+    setLeaving(true);
+    setTimeout(() => { try { localStorage.setItem("classio_onboarded","1"); } catch {} onDone(); }, 320);
+  };
+  const next = () => isLast ? finish() : setStep(n => n + 1);
+  const prev = () => setStep(n => Math.max(0, n - 1));
+
+  return (
+    <div style={{ position:"fixed", inset:0, zIndex:9000, background:"rgba(0,0,0,.6)",
+      display:"flex", alignItems:"center", justifyContent:"center", padding:20,
+      backdropFilter:"blur(6px)", opacity:leaving?0:1, transition:"opacity .32s ease" }}>
+      <div style={{ background:C.surface, borderRadius:24, width:"100%", maxWidth:460,
+        padding:"30px 28px 24px", boxShadow:"0 28px 70px rgba(0,0,0,.3)",
+        fontFamily:"'DM Sans',sans-serif" }}>
+
+        {/* Progress bar */}
+        <div style={{ display:"flex", gap:5, marginBottom:28, justifyContent:"center" }}>
+          {TUTORIAL_STEPS.map((_,i) => (
+            <div key={i} onClick={() => setStep(i)}
+              style={{ height:6, borderRadius:3, cursor:"pointer", transition:"all .3s",
+                width: i===step ? 28 : 8,
+                background: i===step ? C.accent : i<step ? C.accentS+"88" : C.border }} />
+          ))}
+        </div>
+
+        {/* Icon */}
+        <div style={{ textAlign:"center", fontSize:50, lineHeight:1, marginBottom:14 }}>{s.icon}</div>
+
+        {/* Title */}
+        <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:21, fontWeight:700, color:C.text,
+          textAlign:"center", marginBottom:10 }}>{s.title}</h2>
+
+        {/* Desc */}
+        <p style={{ fontSize:14, color:C.muted, lineHeight:1.75, textAlign:"center", marginBottom:14 }}>{s.desc}</p>
+
+        {/* Tip */}
+        <div style={{ background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:12,
+          padding:"10px 14px", marginBottom:22, display:"flex", alignItems:"flex-start", gap:8 }}>
+          <span style={{ fontSize:16, flexShrink:0 }}>💡</span>
+          <p style={{ fontSize:13, color:C.accent, fontWeight:600, margin:0, lineHeight:1.5 }}>{s.tip}</p>
+        </div>
+
+        {/* Buttons */}
+        <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+          {step > 0 && (
+            <button onClick={prev} style={{ padding:"10px 16px", borderRadius:10,
+              border:`1.5px solid ${C.border}`, background:"none", cursor:"pointer",
+              fontSize:13, fontWeight:600, color:C.muted }}>← Back</button>
+          )}
+          <button onClick={finish} style={{ padding:"10px 14px", borderRadius:10,
+            border:"none", background:"none", cursor:"pointer",
+            fontSize:13, fontWeight:600, color:C.muted }}>Skip</button>
+          <button onClick={next} style={{ flex:1, padding:"11px", borderRadius:10,
+            border:"none", background:C.accent, color:"#fff", cursor:"pointer",
+            fontSize:14, fontWeight:700, boxShadow:`0 4px 14px ${C.accentS}` }}>
+            {isLast ? "Get Started 🚀" : "Next →"}
+          </button>
+        </div>
+
+        <p style={{ textAlign:"center", fontSize:11, color:C.muted, marginTop:10 }}>{step+1} of {TUTORIAL_STEPS.length}</p>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const { isMobile, isTablet } = useResponsive();
+  const [showTutorial, setShowTutorial] = useState(() => {
+    try { return !localStorage.getItem("classio_onboarded"); } catch { return false; }
+  });
   const [user, setUser] = useState(undefined);
   const [isGuest, setIsGuest] = useState(false);
   const [guestName, setGuestName] = useState("");
@@ -1324,6 +1410,8 @@ export default function App() {
       {showHomeAI && <StandaloneAI onClose={() => setShowHomeAI(false)} />}
 
       </div>
+
+      {showTutorial && <OnboardingTutorial onDone={() => setShowTutorial(false)} />}
 
       {showNewFolder && (
         <Modal onClose={() => { setShowNewFolder(false); setNewName(""); }}>
@@ -5203,7 +5291,7 @@ function CardsTab({ file, onUpdate }) {
   const [filter, setFilter] = useState("all");   // all | starred | known | unknown
   const [shuffled, setShuffled] = useState(false);
   const [displayCards, setDisplayCards] = useState(cards);
-  const [viewMode, setViewMode] = useState("study"); // study | grid | list
+  const [viewMode, setViewMode] = useState("grid"); // grid | list | study
   const [studyIdx, setStudyIdx] = useState(0); // current card index in study mode
 
   // Keyboard nav in study mode
@@ -5981,6 +6069,31 @@ function ManualTranscriptInput({ onGenerate }) {
 }
 
 
+
+// Typewriter text animation — used in AI Podcast transcript
+function TypewriterText({ text, speed }) {
+  const sp = speed || 18;
+  const [displayed, setDisplayed] = React.useState("");
+  const [done, setDone] = React.useState(false);
+  const idxRef = React.useRef(0);
+  React.useEffect(() => {
+    setDisplayed(""); setDone(false); idxRef.current = 0;
+    if (!text) return;
+    const iv = setInterval(() => {
+      idxRef.current++;
+      setDisplayed(text.slice(0, idxRef.current));
+      if (idxRef.current >= text.length) { clearInterval(iv); setDone(true); }
+    }, sp);
+    return () => clearInterval(iv);
+  }, [text]);
+  return (
+    <span>
+      {displayed}
+      {!done && <span style={{ display:"inline-block", width:2, height:"1em", background:"currentColor", marginLeft:1, verticalAlign:"text-bottom", animation:"twcursor .7s step-end infinite" }}/>}
+    </span>
+  );
+}
+
 // ─── AI PODCAST PANEL ─────────────────────────────────────────────────────────
 // Merged Podcast + AI Explain: generates an explanation then speaks it chunk by
 // chunk. Pulsing audio indicator while speaking. Mic button to interrupt.
@@ -6008,11 +6121,13 @@ function AIPodcastPanel({ file, lang }) {
   const pausedRef       = useRef(false);
   const stoppedRef      = useRef(false);
   const queueRef        = useRef([]);
-  const resolveRef      = useRef(null); // force-resolve current speak() promise
-  const currentChunkRef = useRef(null); // chunk being spoken RIGHT NOW
+  const resolveRef      = useRef(null);
   const recognitionRef  = useRef(null);
   const finalTransRef   = useRef("");
   const endRef          = useRef(null);
+  // Store ALL chunks and track position — this is how we always know where to resume
+  const allChunksRef    = useRef([]);
+  const chunkIdxRef     = useRef(0); // index of the NEXT chunk to speak
 
   useEffect(() => {
     const load = () => setVoices(window.speechSynthesis.getVoices());
@@ -6027,11 +6142,6 @@ function AIPodcastPanel({ file, lang }) {
   useEffect(() => { endRef.current?.scrollIntoView({ behavior:"smooth" }); }, [transcript]);
 
   const cancelSpeech = () => {
-    // If a chunk is mid-speech, put it back at the front of the queue
-    if (currentChunkRef.current) {
-      queueRef.current.unshift(currentChunkRef.current);
-      currentChunkRef.current = null;
-    }
     try { window.speechSynthesis.cancel(); } catch {}
     if (resolveRef.current) { resolveRef.current(); resolveRef.current = null; }
   };
@@ -6044,44 +6154,34 @@ function AIPodcastPanel({ file, lang }) {
     u.pitch = GLOBAL_PERSONAS[voiceIdx]?.pitch || 1.0;
     const v = getSmartVoice(voiceIdx, voices);
     if (v) u.voice = v;
-    currentChunkRef.current = text; // track what's being spoken
     resolveRef.current = resolve;
-    const done = () => {
-      currentChunkRef.current = null;
-      resolveRef.current = null;
-      resolve();
-    };
+    const done = () => { resolveRef.current = null; resolve(); };
     u.onend = done; u.onerror = done;
     window.speechSynthesis.speak(u);
   });
 
-  const runChunks = async (chunks) => {
-    for (const chunk of chunks) {
+  // Play from chunkIdxRef.current through the end of allChunksRef.current
+  const runFromCurrentIdx = async () => {
+    const chunks = allChunksRef.current;
+    while (chunkIdxRef.current < chunks.length) {
       if (stoppedRef.current) break;
-      if (pausedRef.current) {
-        // Was already paused before this chunk — save it and all remaining
-        queueRef.current.push(chunk);
-        continue;
-      }
+      if (pausedRef.current) return; // handleResume will call us again
+      const idx   = chunkIdxRef.current;
+      const chunk = chunks[idx];
+      // Advance BEFORE speaking so any interruption leaves idx at the NEXT chunk
+      chunkIdxRef.current = idx + 1;
       setTranscript(t => [...t, { role:"ai", text:chunk }]);
       await speak(chunk);
-      // After speak() resolves: if we got interrupted MID-chunk,
-      // prepend the interrupted chunk back so it replays in full
-      if (pausedRef.current && !stoppedRef.current) {
-        // currentChunkRef is already null (done() cleared it), but chunk is still in scope
-        queueRef.current.unshift(chunk);
-        break;
-      }
     }
     if (!stoppedRef.current && !pausedRef.current) setPhase("done");
   };
 
   const startPodcast = async () => {
     if (!notes.trim()) return;
-    stoppedRef.current = false; pausedRef.current = false; queueRef.current = [];
+    stoppedRef.current = false; pausedRef.current = false;
+    allChunksRef.current = []; chunkIdxRef.current = 0;
     setPhase("generating"); setTranscript([]); setGenPct(0);
 
-    // Animate progress during API call
     let p = 0;
     const iv = setInterval(() => { p = Math.min(88, p + 3); setGenPct(p); }, 250);
 
@@ -6112,48 +6212,51 @@ Language: ${langLabel}. Write ENTIRELY in ${langLabel}.
       .reduce((acc, s, i) => { if (i%2===0) acc.push(s); else acc[acc.length-1]+=" "+s; return acc; }, [])
       .filter(Boolean);
 
-    await runChunks(chunks);
+    allChunksRef.current = chunks;
+    chunkIdxRef.current  = 0;
+    await runFromCurrentIdx();
   };
 
   const handleStop = () => {
-    stoppedRef.current = true; pausedRef.current = true; queueRef.current = [];
+    stoppedRef.current = true; pausedRef.current = true;
+    allChunksRef.current = []; chunkIdxRef.current = 0;
     cancelSpeech();
     try { recognitionRef.current?.abort(); } catch {}
     setPhase("idle"); setListening(false); setMicText("");
   };
 
-  const handlePause = () => { pausedRef.current = true; setPhase("paused"); cancelSpeech(); };
+  const handlePause = () => {
+    pausedRef.current = true; setPhase("paused");
+    cancelSpeech();
+    // chunkIdxRef stays where it is — resume will start from same chunk
+  };
 
   const handleResume = () => {
     pausedRef.current = false; stoppedRef.current = false; setPhase("speaking");
-    const pending = [...queueRef.current]; queueRef.current = [];
-    runChunks(pending);
+    runFromCurrentIdx();
   };
 
   const askQuestion = async (q) => {
     if (!q.trim()) return;
-    // cancelSpeech already put the interrupted chunk back in queueRef
-    // snapshot the queue now, clear it, resume after answering
-    const savedQueue = [...queueRef.current];
-    queueRef.current = [];
-
+    // Save where we are — chunkIdxRef.current already points to the next chunk
+    // cancelSpeech was called in startMic before this runs, so current chunk hasn't advanced
     setTranscript(t => [...t, { role:"user", text:q }]);
+
     const answer = await callClaude(
       `You are an AI podcast host who just paused to answer a listener's question.
 RULES:
-- If the message is a real question about the topic, answer it clearly and helpfully in 1-3 sentences. No markdown.
-- If it's just a filler word like "ok", "yeah", "continue", "go on", or not a question at all, reply with EXACTLY: "RESUME" and nothing else.
-- Never say you didn't mention something — if you explained it earlier, acknowledge it.
-- Be natural and conversational, like a podcast host.`,
-      `Topic context (from notes):\n${notes.slice(0,2000)}\n\nListener said: "${q}"\n\nRespond appropriately.`,
+- If it's a real question about the topic, answer it clearly in 1-3 sentences. No markdown.
+- If the listener says something like "ok", "continue", "go back", "carry on", "resume", or anything that means they want you to continue — reply with EXACTLY the word: RESUME
+- Never repeat the same answer you just gave.
+- Be natural and conversational.`,
+      `Topic (from notes):\n${notes.slice(0,2000)}\n\nListener said: "${q}"\n\nRespond.`,
       300
     ).catch(() => "RESUME");
 
     if (stoppedRef.current) return;
 
-    // If AI says RESUME (or similar), skip speaking and just continue
-    const shouldResume = answer.trim() === "RESUME" || answer.trim().toUpperCase() === "RESUME";
-    if (!shouldResume) {
+    const isResume = /^resume$/i.test(answer.trim());
+    if (!isResume) {
       setTranscript(t => [...t, { role:"ai", text:answer }]);
       pausedRef.current = false;
       await speak(answer);
@@ -6161,12 +6264,14 @@ RULES:
       pausedRef.current = false;
     }
 
-    // Resume the saved queue — continues exactly where it was interrupted
-    if (!stoppedRef.current && savedQueue.length > 0) {
-      setPhase("speaking");
-      await runChunks(savedQueue);
-    } else if (!stoppedRef.current) {
-      setPhase("done");
+    // Always resume the main explanation from exactly where we left off
+    if (!stoppedRef.current) {
+      if (allChunksRef.current.length > 0 && chunkIdxRef.current < allChunksRef.current.length) {
+        setPhase("speaking");
+        await runFromCurrentIdx();
+      } else {
+        setPhase("done");
+      }
     }
   };
 
@@ -6365,17 +6470,22 @@ RULES:
             </p>
           </div>
         )}
-        {transcript.map((msg, i) => (
-          <div key={i} style={{
-            padding:"9px 13px", borderRadius:12, fontSize:13, lineHeight:1.65,
-            maxWidth:"86%", wordBreak:"break-word",
-            background:   msg.role === "user" ? C.accent : C.bg,
-            color:        msg.role === "user" ? "#fff"   : C.text,
-            alignSelf:    msg.role === "user" ? "flex-end" : "flex-start",
-            borderBottomRightRadius: msg.role === "user" ? 4 : 12,
-            borderBottomLeftRadius:  msg.role === "ai"   ? 4 : 12,
-          }}>{msg.text}</div>
-        ))}
+        {transcript.map((msg, i) => {
+          const isLastAI = msg.role === "ai" && i === transcript.length - 1 && (phase === "speaking" || phase === "paused");
+          return (
+            <div key={i} style={{
+              padding:"9px 13px", borderRadius:12, fontSize:13, lineHeight:1.65,
+              maxWidth:"86%", wordBreak:"break-word",
+              background:   msg.role === "user" ? C.accent : C.bg,
+              color:        msg.role === "user" ? "#fff"   : C.text,
+              alignSelf:    msg.role === "user" ? "flex-end" : "flex-start",
+              borderBottomRightRadius: msg.role === "user" ? 4 : 12,
+              borderBottomLeftRadius:  msg.role === "ai"   ? 4 : 12,
+            }}>
+              {isLastAI ? <TypewriterText text={msg.text} speed={16} /> : msg.text}
+            </div>
+          );
+        })}
         {(isPlaying || phase === "generating") && transcript.length > 0 && (
           <div style={{ display:"flex", gap:4, padding:"4px 8px", alignSelf:"flex-start" }}>
             {[0,1,2].map(i => <span key={i} style={{ width:6, height:6, borderRadius:"50%", background:C.muted, animation:`bounce .8s ${i*0.15}s infinite`, display:"inline-block" }}/>)}
