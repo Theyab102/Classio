@@ -6073,10 +6073,10 @@ function ManualTranscriptInput({ onGenerate }) {
 // Typewriter text animation — used in AI Podcast transcript
 function TypewriterText({ text, speed }) {
   const sp = speed || 18;
-  const [displayed, setDisplayed] = React.useState("");
-  const [done, setDone] = React.useState(false);
-  const idxRef = React.useRef(0);
-  React.useEffect(() => {
+  const [displayed, setDisplayed] = useState("");
+  const [done, setDone] = useState(false);
+  const idxRef = useRef(0);
+  useEffect(() => {
     setDisplayed(""); setDone(false); idxRef.current = 0;
     if (!text) return;
     const iv = setInterval(() => {
