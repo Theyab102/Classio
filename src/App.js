@@ -4551,8 +4551,7 @@ STRICT RULES — follow every single one:
       <div style={{ display:"flex", gap:8, marginBottom:22, borderBottom:`1.5px solid ${C.border}`, paddingBottom:12 }}>
         {[
           {id:"record",  label:"Voice Notes"},
-          {id:"podcast", label:"Podcast"},
-          {id:"explain", label:"✨ AI Explain"},
+          {id:"podcast", label:"🎙 AI Podcast"},
         ].map(t => (
           <button key={t.id} onClick={() => setSubTab(t.id)} style={{
             padding:"8px 20px", borderRadius:20, border:"none", cursor:"pointer",
@@ -4676,44 +4675,8 @@ STRICT RULES — follow every single one:
         </div>
       )}
 
-      {/* ─── PODCAST ─── */}
-      {subTab === "podcast" && (
-        <div>
-          <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:16, padding:"20px 22px", marginBottom:18 }}>
-            <p style={{ fontSize:14, fontWeight:700, color:C.text, marginBottom:5 }}>Study Podcast</p>
-            <p style={{ fontSize:13, color:C.muted, marginBottom:14 }}>
-              Converts your saved notes into a natural spoken lesson. The podcast stays saved — it won't disappear when you switch tabs.
-            </p>
-            <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
-              <button onClick={generatePodcast} disabled={podcastLoading}
-                style={{ background:podcastLoading?"#ccc":"#7c3aed", color:"#fff", border:"none", borderRadius:12, padding:"11px 24px", fontSize:14, fontWeight:700, cursor:podcastLoading?"not-allowed":"pointer", boxShadow:podcastLoading?"none":"0 4px 16px rgba(124,58,237,.4)" }}>
-                {podcastLoading ? "Generating…" : podcastScript ? "Regenerate" : "Generate Podcast"}
-              </button>
-              {podcastScript && !podcastLoading && (
-                <button onClick={() => { setPodcastScript(""); setShowPodcast(false); try { localStorage.removeItem(PODCAST_KEY); } catch {} }}
-                  style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:12, padding:"11px 18px", fontSize:13, fontWeight:600, color:C.muted, cursor:"pointer" }}>
-                  Clear
-                </button>
-              )}
-            </div>
-          </div>
-
-          {showPodcast && (
-            <EnhancedPodcastPlayer
-              script={podcastScript}
-              loading={podcastLoading}
-              topic={file.name}
-              lang={lang}
-              onClose={() => { setShowPodcast(false); window.speechSynthesis?.cancel(); }}
-            />
-          )}
-        </div>
-      )}
-
-      {/* ─── AI EXPLAIN ─── */}
-      {subTab === "explain" && (
-        <ContinuousExplanationTab file={file} />
-      )}
+      {/* ─── AI PODCAST (merged) ─── */}
+      {subTab === "podcast" && <AIPodcastPanel file={file} lang={lang} />}
     </div>
   );
 }
@@ -5101,7 +5064,7 @@ function NotesExpandBtn({ notes, onResult }) {
 // ── Notes Q&A Sidebar ─────────────────────────────────────────────────────────
 function NotesQASidebar({ file, notes, lang }) {
   const { isMobile } = useResponsive();
-  const [open,     setOpen]     = useState(false);
+  const [open,     setOpen]     = useState(true); // always open on desktop
   const [input,    setInput]    = useState("");
   const [messages, setMessages] = useState([]);
   const [loading,  setLoading]  = useState(false);
@@ -5145,7 +5108,7 @@ Language: ${langLabel}. Always reply in ${langLabel}.`,
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 12px",
         borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
         <span style={{ fontSize:13, fontWeight:700, color:C.text }}>💬 Ask about Notes</span>
-        <button onClick={() => setOpen(false)} style={{ background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:16, padding:2 }}>×</button>
+        {/* Always open on desktop — no close button */}
       </div>
       {/* Messages */}
       <div style={{ flex:1, overflowY:"auto", padding:"10px 10px", display:"flex", flexDirection:"column", gap:8, minHeight:0 }}>
@@ -5203,22 +5166,11 @@ Language: ${langLabel}. Always reply in ${langLabel}.`,
     );
   }
 
-  if (!open) {
-    return (
-      <button onClick={() => setOpen(true)}
-        style={{ marginTop:6, display:"flex", flexDirection:"column", alignItems:"center", gap:4,
-          background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:12,
-          padding:"12px 8px", cursor:"pointer", color:C.accent, fontSize:11, fontWeight:700,
-          width:44, flexShrink:0 }}>
-        <span style={{ fontSize:18 }}>💬</span>
-        <span style={{ writingMode:"vertical-rl", letterSpacing:.5 }}>Ask AI</span>
-      </button>
-    );
-  }
-
+  // Desktop: always visible, wider, taller panel
   return (
-    <div style={{ width:240, flexShrink:0, background:C.surface, border:`1.5px solid ${C.border}`,
-      borderRadius:14, overflow:"hidden", height:440, display:"flex", flexDirection:"column" }}>
+    <div style={{ width:260, flexShrink:0, background:C.surface, border:`1.5px solid ${C.border}`,
+      borderRadius:14, overflow:"hidden", display:"flex", flexDirection:"column",
+      height:480, boxShadow:"0 2px 16px rgba(0,0,0,.06)" }}>
       {sidebarContent}
     </div>
   );
@@ -5250,7 +5202,7 @@ function CardsTab({ file, onUpdate }) {
   const [filter, setFilter] = useState("all");   // all | starred | known | unknown
   const [shuffled, setShuffled] = useState(false);
   const [displayCards, setDisplayCards] = useState(cards);
-  const [viewMode, setViewMode] = useState("grid"); // grid | list | study
+  const [viewMode, setViewMode] = useState("study"); // study | grid | list
   const [studyIdx, setStudyIdx] = useState(0); // current card index in study mode
 
   // Keyboard nav in study mode
@@ -5690,42 +5642,54 @@ function YouTubeTab({ file, onUpdate }) {
   const [error,   setError]   = useState("");
   const [saved,   setSaved]   = useState(false);
   const [status,  setStatus]  = useState(""); // progress message
+  const [ytCards, setYtCards] = useState([]);
+  const [cardsLoading, setCardsLoading] = useState(false);
 
   const extractVideoId = (u) => {
     const m = u.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([A-Za-z0-9_-]{11})/);
     return m ? m[1] : null;
   };
 
-  // Step 1: Try to fetch the actual video transcript via YouTube's timedtext API
-  // This is the same endpoint YouTube's own player uses — no API key needed
+  // Fetch transcript via our Hugging Face TTS server (no CORS issues, no API key)
   const fetchTranscript = async (vid) => {
-    // First get the page to find available caption tracks
+    const serverUrl = (typeof window !== "undefined" && window.__CLASSIO_TTS_URL__)
+      ? window.__CLASSIO_TTS_URL__ : "";
+
+    // Try our HF Space server first (most reliable)
+    if (serverUrl) {
+      try {
+        const resp = await fetch(`${serverUrl}/transcript/${vid}`);
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data.success && data.transcript) {
+            return { transcript: data.transcript, title: "" };
+          }
+        }
+      } catch { /* fall through to corsproxy */ }
+    }
+
+    // Fallback: corsproxy.io to scrape YouTube directly
     try {
       const pageResp = await fetch(`https://corsproxy.io/?${encodeURIComponent(`https://www.youtube.com/watch?v=${vid}`)}`);
       if (!pageResp.ok) throw new Error("page fetch failed");
       const html = await pageResp.text();
 
-      // Extract the title from the page
       const titleMatch = html.match(/<title>([^<]+)<\/title>/);
       const title = titleMatch ? titleMatch[1].replace(" - YouTube","").trim() : "";
 
-      // Extract captions track URL from ytInitialPlayerResponse
       const captionMatch = html.match(/"captionTracks":\s*(\[.*?\])/s);
       if (!captionMatch) return { transcript: null, title };
 
       const tracks = JSON.parse(captionMatch[1].replace(/\\u0026/g, "&").replace(/\\"/g, '"'));
-      // Prefer English, then first available
       const track = tracks.find(t => t.languageCode === "en") ||
                     tracks.find(t => t.languageCode?.startsWith("en")) ||
                     tracks[0];
       if (!track?.baseUrl) return { transcript: null, title };
 
-      // Fetch the caption XML
       const capResp = await fetch(`https://corsproxy.io/?${encodeURIComponent(track.baseUrl)}`);
       if (!capResp.ok) return { transcript: null, title };
       const xml = await capResp.text();
 
-      // Parse XML to plain text — strip tags, decode HTML entities
       const lines = [...xml.matchAll(/<text[^>]*>([\s\S]*?)<\/text>/g)]
         .map(m => m[1]
           .replace(/<[^>]+>/g, "")
@@ -5817,11 +5781,25 @@ RULES:
     setLoading(false); setStatus("");
   };
 
-  const saveToNotes = () => {
+  const saveAll = async () => {
+    // 1. Save notes
     const existing = file.notes || "";
-    const newNotes = existing ? existing + "\n\n---\nYOUTUBE NOTES\n\n" + result : result;
-    onUpdate({ ...file, notes: newNotes });
+    const merged = existing ? existing + "\n\n---\nYOUTUBE NOTES\n\n" + result : result;
+    onUpdate({ ...file, notes: merged });
     setSaved(true);
+    // 2. Auto-generate flashcards from the notes
+    setCardsLoading(true);
+    try {
+      const raw = await callClaude(
+        "Return ONLY a valid JSON array. No markdown, no explanation, no extra text.",
+        `Create 8 study flashcards from this content. JSON array format: [{"question":"…","answer":"…"}]\n\n${result.slice(0,8000)}`
+      );
+      const parsed = JSON.parse(raw.replace(/```json|```/g,"").trim());
+      const nc = parsed.map((c,i) => ({ id:Date.now()+i, ...c }));
+      setYtCards(nc);
+      onUpdate({ ...file, notes: merged, studyCards: nc });
+    } catch(e) { console.warn("YT card gen failed:", e); }
+    setCardsLoading(false);
   };
 
   return (
@@ -5894,11 +5872,12 @@ Only include what's in the transcript.`,
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
             <p style={{ fontSize:14, fontWeight:700, color:C.text }}>Study Notes</p>
             <div style={{ display:"flex", gap:8 }}>
-              <button onClick={saveToNotes}
+              <button onClick={saveAll} disabled={cardsLoading}
                 style={{ background:saved?C.greenL:C.accent, color:saved?C.green:"#fff",
                   border:saved?`1.5px solid ${C.green}44`:"none", borderRadius:10, padding:"8px 16px",
-                  fontSize:13, fontWeight:700, cursor:"pointer" }}>
-                {saved ? "✓ Saved" : "Save to Notes"}
+                  fontSize:13, fontWeight:700, cursor:cardsLoading?"not-allowed":"pointer",
+                  display:"flex", alignItems:"center", gap:6 }}>
+                {cardsLoading ? "Making cards…" : saved ? "✓ Saved + Cards made" : "💾 Save + Make Flashcards"}
               </button>
               <button onClick={() => { setResult(""); setUrl(""); setError(""); setSaved(false); }}
                 style={{ background:"none", border:`1.5px solid ${C.border}`, borderRadius:10, padding:"8px 14px", fontSize:13, color:C.muted, cursor:"pointer" }}>
@@ -5910,6 +5889,16 @@ Only include what's in the transcript.`,
             fontSize:13, color:C.text, lineHeight:1.8, whiteSpace:"pre-wrap", wordBreak:"break-word",
             maxHeight:520, overflowY:"auto" }}>
             {result}
+          </div>
+        </div>
+      )}
+
+      {ytCards.length > 0 && (
+        <div style={{ margin:"12px 0", background:C.greenL, border:`1.5px solid ${C.green}44`, borderRadius:12, padding:"12px 16px", display:"flex", alignItems:"center", gap:10 }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <div>
+            <p style={{ fontSize:13, fontWeight:700, color:C.green, margin:0 }}>{ytCards.length} flashcards created</p>
+            <p style={{ fontSize:11, color:C.muted, margin:0 }}>Open the Study Cards tab to review them.</p>
           </div>
         </div>
       )}
@@ -5961,6 +5950,317 @@ function ManualTranscriptInput({ onGenerate }) {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+
+// ─── AI PODCAST PANEL ─────────────────────────────────────────────────────────
+// Merged Podcast + AI Explain: generates an explanation then speaks it chunk by
+// chunk. Pulsing audio indicator while speaking. Mic button to interrupt.
+function AIPodcastPanel({ file, lang }) {
+  const [notes] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("saved_notes_" + file.id) || "[]");
+      const app = (() => { try { return JSON.parse(localStorage.getItem("classio_v2")||"{}"); } catch { return {}; } })();
+      const appNotes = (app.folders||[]).flatMap(f=>f.files||[]).find(f=>f.id===file.id)?.notes || "";
+      return saved[0]?.text || appNotes || file.notes || "";
+    } catch { return file.notes || ""; }
+  });
+
+  const SCRIPT_KEY = "aipodcast_" + file.id;
+  const [phase, setPhase]       = useState("idle"); // idle|generating|speaking|paused|done
+  const [script, setScript]     = useState(() => { try { return localStorage.getItem(SCRIPT_KEY)||""; } catch { return ""; } });
+  const [transcript, setTranscript] = useState([]);
+  const [voices,   setVoices]   = useState([]);
+  const [voiceIdx, setVoiceIdx] = useState(0);
+  const [listening, setListening] = useState(false);
+  const [micText,   setMicText]   = useState("");
+  const [genPct,    setGenPct]    = useState(0);
+
+  const pausedRef       = useRef(false);
+  const stoppedRef      = useRef(false);
+  const queueRef        = useRef([]);
+  const resolveRef      = useRef(null); // force-resolve current speak() promise
+  const recognitionRef  = useRef(null);
+  const finalTransRef   = useRef("");
+  const endRef          = useRef(null);
+
+  useEffect(() => {
+    const load = () => setVoices(window.speechSynthesis.getVoices());
+    load(); window.speechSynthesis.onvoiceschanged = load;
+    return () => {
+      stoppedRef.current = true; pausedRef.current = true;
+      cancelSpeech();
+      try { recognitionRef.current?.abort(); } catch {}
+    };
+  }, []);
+
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior:"smooth" }); }, [transcript]);
+
+  const cancelSpeech = () => {
+    try { window.speechSynthesis.cancel(); } catch {}
+    if (resolveRef.current) { resolveRef.current(); resolveRef.current = null; }
+  };
+
+  const speak = (text) => new Promise(resolve => {
+    if (stoppedRef.current || pausedRef.current) { resolve(); return; }
+    try { window.speechSynthesis.cancel(); } catch {}
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate  = GLOBAL_PERSONAS[voiceIdx]?.rate  || 0.93;
+    u.pitch = GLOBAL_PERSONAS[voiceIdx]?.pitch || 1.0;
+    const v = getSmartVoice(voiceIdx, voices);
+    if (v) u.voice = v;
+    resolveRef.current = resolve;
+    const done = () => { resolveRef.current = null; resolve(); };
+    u.onend = done; u.onerror = done;
+    window.speechSynthesis.speak(u);
+  });
+
+  const runChunks = async (chunks) => {
+    for (const chunk of chunks) {
+      if (stoppedRef.current) break;
+      if (pausedRef.current) { queueRef.current.push(chunk); continue; }
+      setTranscript(t => [...t, { role:"ai", text:chunk }]);
+      await speak(chunk);
+    }
+    if (!stoppedRef.current && !pausedRef.current) setPhase("done");
+  };
+
+  const startPodcast = async () => {
+    if (!notes.trim()) return;
+    stoppedRef.current = false; pausedRef.current = false; queueRef.current = [];
+    setPhase("generating"); setTranscript([]); setGenPct(0);
+
+    // Animate progress during API call
+    let p = 0;
+    const iv = setInterval(() => { p = Math.min(88, p + 3); setGenPct(p); }, 250);
+
+    const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[^\x00-\x7F\s]+\s*/g,'') || "English";
+    const explanation = await callClaude(
+      `You are an expert teacher creating a spoken AI podcast lesson.
+EXPLAIN — do not read or copy the notes. Teach the student from scratch.
+Language: ${langLabel}. Write ENTIRELY in ${langLabel}.
+- For every concept: what it IS, why it matters, how it works, a real analogy
+- Conversational: "Think of it like this…", "What this means is…", "Here's why…"
+- Build step by step. Connect each idea to the previous one.
+- Target 5-8 spoken minutes (800-1200 words)
+- NO markdown, NO bullets, NO asterisks — pure flowing spoken words only
+- Convert all symbols to speech: H₂O → "H two O", × → "times", ² → "squared"`,
+      `Teach this material like a podcast. Don't read the notes — explain them:\n\n${notes.slice(0, 10000)}`,
+      3500
+    ).catch(() => "I'm ready to explain your notes. Let's get started!");
+
+    clearInterval(iv); setGenPct(100);
+    if (stoppedRef.current) { setPhase("idle"); return; }
+
+    try { localStorage.setItem(SCRIPT_KEY, explanation); } catch {}
+    setScript(explanation);
+    setPhase("speaking");
+
+    const chunks = explanation
+      .split(/(?<=[.?!])\s+(?=[A-Z"'])/)
+      .reduce((acc, s, i) => { if (i%2===0) acc.push(s); else acc[acc.length-1]+=" "+s; return acc; }, [])
+      .filter(Boolean);
+
+    await runChunks(chunks);
+  };
+
+  const handleStop = () => {
+    stoppedRef.current = true; pausedRef.current = true; queueRef.current = [];
+    cancelSpeech();
+    try { recognitionRef.current?.abort(); } catch {}
+    setPhase("idle"); setListening(false); setMicText("");
+  };
+
+  const handlePause = () => { pausedRef.current = true; setPhase("paused"); cancelSpeech(); };
+
+  const handleResume = () => {
+    pausedRef.current = false; stoppedRef.current = false; setPhase("speaking");
+    const pending = [...queueRef.current]; queueRef.current = [];
+    runChunks(pending);
+  };
+
+  const askQuestion = async (q) => {
+    if (!q.trim()) return;
+    setTranscript(t => [...t, { role:"user", text:q }]);
+    const answer = await callClaude(
+      `You are a helpful teacher. Answer the student's question clearly and concisely.
+Use the notes as context. Under 80 words. No markdown.`,
+      `Notes context:\n${notes.slice(0,2000)}\n\nQuestion: "${q}"\n\nAnswer clearly.`,
+      400
+    ).catch(() => "Sorry, I could not answer that right now.");
+    if (stoppedRef.current) return;
+    setTranscript(t => [...t, { role:"ai", text:answer }]);
+    pausedRef.current = false;
+    await speak(answer);
+  };
+
+  const startMic = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      const q = window.prompt("Ask your question:");
+      if (q?.trim()) { pausedRef.current = true; cancelSpeech(); setTimeout(() => askQuestion(q.trim()), 100); }
+      return;
+    }
+    pausedRef.current = true; cancelSpeech();
+    finalTransRef.current = ""; setMicText(""); setListening(true);
+    const rec = new SR();
+    rec.lang = lang || "en-US"; rec.interimResults = true;
+    recognitionRef.current = rec;
+    rec.onresult = (e) => {
+      const t = Array.from(e.results).map(r => r[0].transcript).join("");
+      setMicText(t);
+      if (e.results[e.results.length-1].isFinal) finalTransRef.current = t;
+    };
+    rec.onend = () => {
+      setListening(false); setMicText(""); recognitionRef.current = null;
+      const q = finalTransRef.current.trim(); finalTransRef.current = "";
+      if (q) askQuestion(q); else pausedRef.current = false;
+    };
+    rec.onerror = () => {
+      setListening(false); setMicText(""); recognitionRef.current = null;
+      finalTransRef.current = ""; pausedRef.current = false;
+    };
+    rec.start();
+  };
+
+  const stopMic = () => { try { recognitionRef.current?.stop(); } catch {} setListening(false); };
+
+  const isPlaying = phase === "speaking";
+
+  return (
+    <div>
+      <div style={{ marginBottom:16 }}>
+        <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:700, color:C.text, marginBottom:3 }}>AI Podcast</h2>
+        <p style={{ fontSize:13, color:C.muted }}>AI teaches your notes out loud like a personal podcast. Tap mic to ask questions anytime.</p>
+      </div>
+
+      {/* Controls bar */}
+      <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"12px 16px", marginBottom:14 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+
+          {(phase === "idle" || phase === "done") && (
+            <button onClick={startPodcast} disabled={!notes.trim()}
+              style={{ display:"flex", alignItems:"center", gap:7,
+                background:notes.trim()?"#7c3aed":"#ccc", color:"#fff", border:"none",
+                borderRadius:10, padding:"10px 22px", fontSize:14, fontWeight:700,
+                cursor:notes.trim()?"pointer":"not-allowed",
+                boxShadow:notes.trim()?"0 4px 14px rgba(124,58,237,.35)":"none" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+              {phase === "done" ? "Replay" : script ? "Restart" : "Start Podcast"}
+            </button>
+          )}
+
+          {phase === "generating" && (
+            <div style={{ display:"flex", alignItems:"center", gap:12, flex:1 }}>
+              <div style={{ flex:1, height:6, background:C.border, borderRadius:3, overflow:"hidden" }}>
+                <div style={{ height:"100%", width:`${genPct}%`, background:"#7c3aed", borderRadius:3, transition:"width .3s" }}/>
+              </div>
+              <span style={{ fontSize:12, color:C.muted, whiteSpace:"nowrap" }}>Generating podcast…</span>
+              <button onClick={handleStop} style={{ fontSize:12, color:C.red, background:"none", border:"none", cursor:"pointer", fontWeight:600, whiteSpace:"nowrap" }}>Cancel</button>
+            </div>
+          )}
+
+          {phase === "paused" && (
+            <>
+              <button onClick={handleResume} style={{ display:"flex", alignItems:"center", gap:7, background:C.green, color:"#fff", border:"none", borderRadius:10, padding:"10px 20px", fontSize:14, fontWeight:700, cursor:"pointer" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Resume
+              </button>
+              <button onClick={handleStop} style={{ display:"flex", alignItems:"center", gap:7, background:C.red, color:"#fff", border:"none", borderRadius:10, padding:"10px 14px", fontSize:14, fontWeight:700, cursor:"pointer" }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>Stop
+              </button>
+            </>
+          )}
+
+          {phase === "speaking" && (
+            <>
+              <button onClick={handlePause} style={{ display:"flex", alignItems:"center", gap:7, background:C.warm, color:"#fff", border:"none", borderRadius:10, padding:"10px 20px", fontSize:14, fontWeight:700, cursor:"pointer" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>Pause
+              </button>
+              <button onClick={handleStop} style={{ display:"flex", alignItems:"center", gap:7, background:C.red, color:"#fff", border:"none", borderRadius:10, padding:"10px 14px", fontSize:14, fontWeight:700, cursor:"pointer" }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>Stop
+              </button>
+            </>
+          )}
+
+          {/* Pulsing audio indicator — only when speaking */}
+          {isPlaying && !listening && (
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <style>{`
+                @keyframes aipulse{0%,100%{transform:scale(1);opacity:.5}50%{transform:scale(1.5);opacity:1}}
+                @keyframes aipulse2{0%,100%{transform:scale(1);opacity:.25}50%{transform:scale(2);opacity:.5}}
+              `}</style>
+              <div style={{ position:"relative", width:20, height:20, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <div style={{ position:"absolute", width:20, height:20, borderRadius:"50%", background:C.purple, animation:"aipulse2 1.4s ease-in-out infinite" }}/>
+                <div style={{ position:"absolute", width:13, height:13, borderRadius:"50%", background:C.purple, animation:"aipulse 1.4s ease-in-out infinite" }}/>
+                <div style={{ width:7, height:7, borderRadius:"50%", background:C.purple, position:"relative" }}/>
+              </div>
+              <span style={{ fontSize:12, fontWeight:700, color:C.purple }}>Playing…</span>
+            </div>
+          )}
+
+          {/* Voice picker */}
+          <select value={voiceIdx} onChange={e => setVoiceIdx(Number(e.target.value))}
+            style={{ marginLeft:"auto", border:`1.5px solid ${C.border}`, borderRadius:8,
+              padding:"6px 10px", fontSize:12, color:C.text, background:"#fff", outline:"none", cursor:"pointer" }}>
+            {GLOBAL_PERSONAS.map((p, i) => <option key={p.id} value={i}>{p.label} ({p.gender})</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* Transcript */}
+      <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14,
+        minHeight:180, maxHeight:300, overflowY:"auto", padding:"12px 14px",
+        display:"flex", flexDirection:"column", gap:10, marginBottom:14 }}>
+        {transcript.length === 0 && phase !== "generating" && (
+          <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:8, opacity:.4, padding:"16px 0" }}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+            <p style={{ fontSize:13, color:C.muted, textAlign:"center", maxWidth:280 }}>
+              {notes.trim() ? "Press Start Podcast — AI will explain your notes out loud" : "No notes found — go to the Notes tab first"}
+            </p>
+          </div>
+        )}
+        {transcript.map((msg, i) => (
+          <div key={i} style={{
+            padding:"9px 13px", borderRadius:12, fontSize:13, lineHeight:1.65,
+            maxWidth:"86%", wordBreak:"break-word",
+            background:   msg.role === "user" ? C.accent : C.bg,
+            color:        msg.role === "user" ? "#fff"   : C.text,
+            alignSelf:    msg.role === "user" ? "flex-end" : "flex-start",
+            borderBottomRightRadius: msg.role === "user" ? 4 : 12,
+            borderBottomLeftRadius:  msg.role === "ai"   ? 4 : 12,
+          }}>{msg.text}</div>
+        ))}
+        {(isPlaying || phase === "generating") && transcript.length > 0 && (
+          <div style={{ display:"flex", gap:4, padding:"4px 8px", alignSelf:"flex-start" }}>
+            {[0,1,2].map(i => <span key={i} style={{ width:6, height:6, borderRadius:"50%", background:C.muted, animation:`bounce .8s ${i*0.15}s infinite`, display:"inline-block" }}/>)}
+          </div>
+        )}
+        <div ref={endRef}/>
+      </div>
+
+      {/* Mic button */}
+      <div style={{ display:"flex", alignItems:"center", gap:14 }}>
+        <button onClick={listening ? stopMic : startMic}
+          style={{ width:50, height:50, borderRadius:"50%", flexShrink:0, border:"none", cursor:"pointer",
+            background: listening ? "linear-gradient(135deg,#ef4444,#dc2626)" : "linear-gradient(135deg,#7c3aed,#9333ea)",
+            boxShadow: listening ? "0 0 0 8px rgba(239,68,68,.15),0 4px 18px rgba(239,68,68,.35)" : "0 4px 16px rgba(124,58,237,.35)",
+            display:"flex", alignItems:"center", justifyContent:"center", transition:"all .2s" }}>
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+        </button>
+        <p style={{ fontSize:13, margin:0, fontWeight:listening?700:400, color:listening?C.red:C.muted }}>
+          {listening ? (micText ? `"${micText}"` : "Listening…") : "Tap mic to ask a question — podcast pauses to answer"}
+        </p>
+      </div>
     </div>
   );
 }
