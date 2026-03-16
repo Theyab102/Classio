@@ -717,6 +717,7 @@ button.folder-color-btn,button.color-swatch,button.no-min-h{aspect-ratio:1;flex-
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
 @keyframes sg-pulse{0%,100%{box-shadow:0 0 0 0 rgba(74,124,89,.6)}70%{box-shadow:0 0 0 6px rgba(74,124,89,0)}}
 @keyframes ppbar{0%,100%{transform:scaleY(.4);opacity:.5}50%{transform:scaleY(1);opacity:1}}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 `; 
 
 // Global file object store — survives navigation within the session
@@ -5353,25 +5354,50 @@ function CardsTab({ file, onUpdate }) {
       )}
 
       {showCountPicker && (
-        <div style={{ background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:12, padding:16, marginBottom:16 }}>
-          <p style={{ fontSize:13, fontWeight:600, color:C.accent, marginBottom:12 }}>How many cards?</p>
-          <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:14 }}>
+        <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:16,
+          padding:"20px 20px 16px", marginBottom:16,
+          boxShadow:"0 4px 20px rgba(0,0,0,.07)" }}>
+          {/* Header */}
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
+            <div>
+              <p style={{ fontSize:15, fontWeight:700, color:C.text, margin:0 }}>How many cards?</p>
+              <p style={{ fontSize:12, color:C.muted, margin:"2px 0 0" }}>AI will generate from your file content</p>
+            </div>
+            <button onClick={() => setShowCountPicker(false)} className="no-min-h"
+              style={{ width:28, height:28, borderRadius:"50%", background:C.bg, border:`1px solid ${C.border}`,
+                cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:C.muted, fontSize:16 }}>×</button>
+          </div>
+          {/* Quick-pick chips */}
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:16 }}>
             {[5, 8, 10, 15, 20, 25, 30].map(n => (
-              <button key={n} onClick={() => setCardCount(n)}
-                style={{ width:48, height:40, borderRadius:8, border:`1.5px solid ${cardCount===n?C.accent:C.border}`, background:cardCount===n?C.accent:"#fff", color:cardCount===n?"#fff":C.text, fontSize:14, fontWeight:600, cursor:"pointer" }}>
+              <button key={n} onClick={() => setCardCount(n)} className="no-min-h"
+                style={{ padding:"8px 16px", borderRadius:20, fontSize:13, fontWeight:700, cursor:"pointer", transition:"all .12s",
+                  background: cardCount===n ? C.accent : C.bg,
+                  color:      cardCount===n ? "#fff"   : C.muted,
+                  border:     `1.5px solid ${cardCount===n ? C.accent : C.border}`,
+                  boxShadow:  cardCount===n ? `0 2px 8px ${C.accentS}` : "none" }}>
                 {n}
               </button>
             ))}
           </div>
+          {/* Custom + Generate row */}
           <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-            <span style={{ fontSize:13, color:C.muted }}>Custom:</span>
-            <input type="number" min="1" max="50" value={cardCount} onChange={e => setCardCount(Math.min(50, Math.max(1, parseInt(e.target.value)||1)))}
-              style={{ width:70, border:`1.5px solid ${C.border}`, borderRadius:8, padding:"7px 10px", fontSize:14, outline:"none", color:C.text, background:"#fff" }} />
+            <div style={{ display:"flex", alignItems:"center", gap:6, background:C.bg, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"6px 10px" }}>
+              <span style={{ fontSize:12, color:C.muted, whiteSpace:"nowrap" }}>Custom</span>
+              <input type="number" min="1" max="50" value={cardCount}
+                onChange={e => setCardCount(Math.min(50, Math.max(1, parseInt(e.target.value)||1)))}
+                style={{ width:52, border:"none", outline:"none", fontSize:14, fontWeight:700, color:C.text, background:"transparent", textAlign:"center" }}/>
+            </div>
             <button onClick={() => generate(cardCount)} disabled={gen}
-              style={{ background:C.accent, color:"#fff", border:"none", borderRadius:8, padding:"9px 20px", fontSize:14, fontWeight:600, cursor:"pointer" }}>
-              Generate {cardCount} Cards
+              style={{ flex:1, background:gen?"#ccc":C.accent, color:"#fff", border:"none", borderRadius:10,
+                padding:"10px 0", fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer",
+                boxShadow:gen?"none":`0 3px 12px ${C.accentS}`,
+                display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
+              {gen
+                ? <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Generating…</>
+                : <><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>Generate {cardCount} Cards</>
+              }
             </button>
-            <button onClick={() => setShowCountPicker(false)} style={{ background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:18 }}>×</button>
           </div>
         </div>
       )}
@@ -5974,6 +6000,7 @@ function AIPodcastPanel({ file, lang }) {
   const [transcript, setTranscript] = useState([]);
   const [voices,   setVoices]   = useState([]);
   const [voiceIdx, setVoiceIdx] = useState(0);
+  const [showVoicePicker, setShowVoicePicker] = useState(false);
   const [listening, setListening] = useState(false);
   const [micText,   setMicText]   = useState("");
   const [genPct,    setGenPct]    = useState(0);
@@ -6083,6 +6110,10 @@ Language: ${langLabel}. Write ENTIRELY in ${langLabel}.
 
   const askQuestion = async (q) => {
     if (!q.trim()) return;
+    // Snapshot whatever is left in the queue so we can resume it after answering
+    const savedQueue = [...queueRef.current];
+    queueRef.current = [];
+
     setTranscript(t => [...t, { role:"user", text:q }]);
     const answer = await callClaude(
       `You are a helpful teacher. Answer the student's question clearly and concisely.
@@ -6094,6 +6125,13 @@ Use the notes as context. Under 80 words. No markdown.`,
     setTranscript(t => [...t, { role:"ai", text:answer }]);
     pausedRef.current = false;
     await speak(answer);
+    // After answering, resume the saved queue (remaining explanation chunks)
+    if (!stoppedRef.current && savedQueue.length > 0) {
+      setPhase("speaking");
+      await runChunks(savedQueue);
+    } else if (!stoppedRef.current) {
+      setPhase("done");
+    }
   };
 
   const startMic = () => {
@@ -6184,30 +6222,90 @@ Use the notes as context. Under 80 words. No markdown.`,
             </>
           )}
 
-          {/* Pulsing audio indicator — only when speaking */}
-          {isPlaying && !listening && (
-            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-              <style>{`
-                @keyframes aipulse{0%,100%{transform:scale(1);opacity:.5}50%{transform:scale(1.5);opacity:1}}
-                @keyframes aipulse2{0%,100%{transform:scale(1);opacity:.25}50%{transform:scale(2);opacity:.5}}
-              `}</style>
-              <div style={{ position:"relative", width:20, height:20, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                <div style={{ position:"absolute", width:20, height:20, borderRadius:"50%", background:C.purple, animation:"aipulse2 1.4s ease-in-out infinite" }}/>
-                <div style={{ position:"absolute", width:13, height:13, borderRadius:"50%", background:C.purple, animation:"aipulse 1.4s ease-in-out infinite" }}/>
-                <div style={{ width:7, height:7, borderRadius:"50%", background:C.purple, position:"relative" }}/>
+          {/* Voice picker — pill button + dropdown */}
+          <div style={{ marginLeft:"auto", position:"relative" }}>
+            <button onClick={() => setShowVoicePicker(v => !v)}
+              style={{ display:"flex", alignItems:"center", gap:6, background:"#fff",
+                border:`1.5px solid ${showVoicePicker ? C.accent : C.border}`,
+                borderRadius:20, padding:"5px 12px 5px 8px", cursor:"pointer", fontSize:12, fontWeight:700,
+                color: showVoicePicker ? C.accent : C.text }}>
+              <span style={{ width:10, height:10, borderRadius:"50%", background:GLOBAL_PERSONAS[voiceIdx]?.color || C.accent, display:"inline-block", flexShrink:0 }}/>
+              {GLOBAL_PERSONAS[voiceIdx]?.label}
+              <span style={{ fontSize:10, color:C.muted }}>{GLOBAL_PERSONAS[voiceIdx]?.gender === "female" ? "♀" : GLOBAL_PERSONAS[voiceIdx]?.gender === "male" ? "♂" : "◇"}</span>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity:.5 }}><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            {showVoicePicker && (
+              <div style={{ position:"absolute", right:0, top:"calc(100% + 6px)", zIndex:200,
+                background:"#fff", border:`1.5px solid ${C.border}`, borderRadius:14,
+                padding:"8px 6px", minWidth:200, boxShadow:"0 8px 28px rgba(0,0,0,.12)" }}>
+                {/* Female */}
+                <p style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:1, padding:"2px 8px 6px", textTransform:"uppercase" }}>Female</p>
+                {GLOBAL_PERSONAS.filter(p => p.gender === "female").map((p, _) => {
+                  const i = GLOBAL_PERSONAS.indexOf(p);
+                  return (
+                    <button key={p.id} onClick={() => { setVoiceIdx(i); setShowVoicePicker(false); }}
+                      style={{ display:"flex", alignItems:"center", gap:8, width:"100%", padding:"7px 10px",
+                        background: voiceIdx === i ? C.accentL : "transparent",
+                        border:"none", borderRadius:8, cursor:"pointer", textAlign:"left" }}>
+                      <span style={{ width:10, height:10, borderRadius:"50%", background:p.color, flexShrink:0, display:"inline-block" }}/>
+                      <span style={{ fontSize:13, fontWeight:voiceIdx===i?700:500, color:voiceIdx===i?C.accent:C.text }}>{p.label}</span>
+                      <span style={{ fontSize:11, color:C.muted, marginLeft:"auto" }}>{p.desc}</span>
+                    </button>
+                  );
+                })}
+                {/* Male */}
+                <p style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:1, padding:"8px 8px 6px", textTransform:"uppercase" }}>Male</p>
+                {GLOBAL_PERSONAS.filter(p => p.gender === "male").map((p, _) => {
+                  const i = GLOBAL_PERSONAS.indexOf(p);
+                  return (
+                    <button key={p.id} onClick={() => { setVoiceIdx(i); setShowVoicePicker(false); }}
+                      style={{ display:"flex", alignItems:"center", gap:8, width:"100%", padding:"7px 10px",
+                        background: voiceIdx === i ? C.accentL : "transparent",
+                        border:"none", borderRadius:8, cursor:"pointer", textAlign:"left" }}>
+                      <span style={{ width:10, height:10, borderRadius:"50%", background:p.color, flexShrink:0, display:"inline-block" }}/>
+                      <span style={{ fontSize:13, fontWeight:voiceIdx===i?700:500, color:voiceIdx===i?C.accent:C.text }}>{p.label}</span>
+                      <span style={{ fontSize:11, color:C.muted, marginLeft:"auto" }}>{p.desc}</span>
+                    </button>
+                  );
+                })}
+                {/* Neutral */}
+                <p style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:1, padding:"8px 8px 6px", textTransform:"uppercase" }}>Neutral</p>
+                {GLOBAL_PERSONAS.filter(p => p.gender === "neutral").map((p, _) => {
+                  const i = GLOBAL_PERSONAS.indexOf(p);
+                  return (
+                    <button key={p.id} onClick={() => { setVoiceIdx(i); setShowVoicePicker(false); }}
+                      style={{ display:"flex", alignItems:"center", gap:8, width:"100%", padding:"7px 10px",
+                        background: voiceIdx === i ? C.accentL : "transparent",
+                        border:"none", borderRadius:8, cursor:"pointer", textAlign:"left" }}>
+                      <span style={{ width:10, height:10, borderRadius:"50%", background:p.color, flexShrink:0, display:"inline-block" }}/>
+                      <span style={{ fontSize:13, fontWeight:voiceIdx===i?700:500, color:voiceIdx===i?C.accent:C.text }}>{p.label}</span>
+                      <span style={{ fontSize:11, color:C.muted, marginLeft:"auto" }}>{p.desc}</span>
+                    </button>
+                  );
+                })}
               </div>
-              <span style={{ fontSize:12, fontWeight:700, color:C.purple }}>Playing…</span>
-            </div>
-          )}
-
-          {/* Voice picker */}
-          <select value={voiceIdx} onChange={e => setVoiceIdx(Number(e.target.value))}
-            style={{ marginLeft:"auto", border:`1.5px solid ${C.border}`, borderRadius:8,
-              padding:"6px 10px", fontSize:12, color:C.text, background:"#fff", outline:"none", cursor:"pointer" }}>
-            {GLOBAL_PERSONAS.map((p, i) => <option key={p.id} value={i}>{p.label} ({p.gender})</option>)}
-          </select>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Centered pulsing audio indicator */}
+      {isPlaying && !listening && (
+        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6, padding:"12px 0 6px" }}>
+          <style>{`
+            @keyframes aipulse{0%,100%{transform:scale(1);opacity:.4}50%{transform:scale(1.6);opacity:1}}
+            @keyframes aipulse2{0%,100%{transform:scale(1);opacity:.15}50%{transform:scale(2.2);opacity:.4}}
+            @keyframes aipulse3{0%,100%{transform:scale(1);opacity:.08}50%{transform:scale(2.8);opacity:.2}}
+          `}</style>
+          <div style={{ position:"relative", width:32, height:32, display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <div style={{ position:"absolute", width:32, height:32, borderRadius:"50%", background:C.purple, animation:"aipulse3 1.6s ease-in-out infinite" }}/>
+            <div style={{ position:"absolute", width:22, height:22, borderRadius:"50%", background:C.purple, animation:"aipulse2 1.6s ease-in-out 0.1s infinite" }}/>
+            <div style={{ position:"absolute", width:14, height:14, borderRadius:"50%", background:C.purple, animation:"aipulse 1.6s ease-in-out 0.2s infinite" }}/>
+            <div style={{ width:8, height:8, borderRadius:"50%", background:C.purple, position:"relative", zIndex:1 }}/>
+          </div>
+          <span style={{ fontSize:11, fontWeight:700, color:C.purple, letterSpacing:.5 }}>PLAYING</span>
+        </div>
+      )}
 
       {/* Transcript */}
       <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14,
