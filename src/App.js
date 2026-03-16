@@ -6009,6 +6009,7 @@ function AIPodcastPanel({ file, lang }) {
   const stoppedRef      = useRef(false);
   const queueRef        = useRef([]);
   const resolveRef      = useRef(null); // force-resolve current speak() promise
+  const currentChunkRef = useRef(null); // chunk being spoken RIGHT NOW
   const recognitionRef  = useRef(null);
   const finalTransRef   = useRef("");
   const endRef          = useRef(null);
@@ -6026,6 +6027,11 @@ function AIPodcastPanel({ file, lang }) {
   useEffect(() => { endRef.current?.scrollIntoView({ behavior:"smooth" }); }, [transcript]);
 
   const cancelSpeech = () => {
+    // If a chunk is mid-speech, put it back at the front of the queue
+    if (currentChunkRef.current) {
+      queueRef.current.unshift(currentChunkRef.current);
+      currentChunkRef.current = null;
+    }
     try { window.speechSynthesis.cancel(); } catch {}
     if (resolveRef.current) { resolveRef.current(); resolveRef.current = null; }
   };
@@ -6038,8 +6044,13 @@ function AIPodcastPanel({ file, lang }) {
     u.pitch = GLOBAL_PERSONAS[voiceIdx]?.pitch || 1.0;
     const v = getSmartVoice(voiceIdx, voices);
     if (v) u.voice = v;
+    currentChunkRef.current = text; // track what's being spoken
     resolveRef.current = resolve;
-    const done = () => { resolveRef.current = null; resolve(); };
+    const done = () => {
+      currentChunkRef.current = null;
+      resolveRef.current = null;
+      resolve();
+    };
     u.onend = done; u.onerror = done;
     window.speechSynthesis.speak(u);
   });
@@ -6047,9 +6058,20 @@ function AIPodcastPanel({ file, lang }) {
   const runChunks = async (chunks) => {
     for (const chunk of chunks) {
       if (stoppedRef.current) break;
-      if (pausedRef.current) { queueRef.current.push(chunk); continue; }
+      if (pausedRef.current) {
+        // Was already paused before this chunk — save it and all remaining
+        queueRef.current.push(chunk);
+        continue;
+      }
       setTranscript(t => [...t, { role:"ai", text:chunk }]);
       await speak(chunk);
+      // After speak() resolves: if we got interrupted MID-chunk,
+      // prepend the interrupted chunk back so it replays in full
+      if (pausedRef.current && !stoppedRef.current) {
+        // currentChunkRef is already null (done() cleared it), but chunk is still in scope
+        queueRef.current.unshift(chunk);
+        break;
+      }
     }
     if (!stoppedRef.current && !pausedRef.current) setPhase("done");
   };
@@ -6110,22 +6132,36 @@ Language: ${langLabel}. Write ENTIRELY in ${langLabel}.
 
   const askQuestion = async (q) => {
     if (!q.trim()) return;
-    // Snapshot whatever is left in the queue so we can resume it after answering
+    // cancelSpeech already put the interrupted chunk back in queueRef
+    // snapshot the queue now, clear it, resume after answering
     const savedQueue = [...queueRef.current];
     queueRef.current = [];
 
     setTranscript(t => [...t, { role:"user", text:q }]);
     const answer = await callClaude(
-      `You are a helpful teacher. Answer the student's question clearly and concisely.
-Use the notes as context. Under 80 words. No markdown.`,
-      `Notes context:\n${notes.slice(0,2000)}\n\nQuestion: "${q}"\n\nAnswer clearly.`,
-      400
-    ).catch(() => "Sorry, I could not answer that right now.");
+      `You are an AI podcast host who just paused to answer a listener's question.
+RULES:
+- If the message is a real question about the topic, answer it clearly and helpfully in 1-3 sentences. No markdown.
+- If it's just a filler word like "ok", "yeah", "continue", "go on", or not a question at all, reply with EXACTLY: "RESUME" and nothing else.
+- Never say you didn't mention something — if you explained it earlier, acknowledge it.
+- Be natural and conversational, like a podcast host.`,
+      `Topic context (from notes):\n${notes.slice(0,2000)}\n\nListener said: "${q}"\n\nRespond appropriately.`,
+      300
+    ).catch(() => "RESUME");
+
     if (stoppedRef.current) return;
-    setTranscript(t => [...t, { role:"ai", text:answer }]);
-    pausedRef.current = false;
-    await speak(answer);
-    // After answering, resume the saved queue (remaining explanation chunks)
+
+    // If AI says RESUME (or similar), skip speaking and just continue
+    const shouldResume = answer.trim() === "RESUME" || answer.trim().toUpperCase() === "RESUME";
+    if (!shouldResume) {
+      setTranscript(t => [...t, { role:"ai", text:answer }]);
+      pausedRef.current = false;
+      await speak(answer);
+    } else {
+      pausedRef.current = false;
+    }
+
+    // Resume the saved queue — continues exactly where it was interrupted
     if (!stoppedRef.current && savedQueue.length > 0) {
       setPhase("speaking");
       await runChunks(savedQueue);
@@ -6232,6 +6268,12 @@ Use the notes as context. Under 80 words. No markdown.`,
               <span style={{ width:10, height:10, borderRadius:"50%", background:GLOBAL_PERSONAS[voiceIdx]?.color || C.accent, display:"inline-block", flexShrink:0 }}/>
               {GLOBAL_PERSONAS[voiceIdx]?.label}
               <span style={{ fontSize:10, color:C.muted }}>{GLOBAL_PERSONAS[voiceIdx]?.gender === "female" ? "♀" : GLOBAL_PERSONAS[voiceIdx]?.gender === "male" ? "♂" : "◇"}</span>
+              {/* Show which engine is being used */}
+              <span style={{ fontSize:9, fontWeight:800, letterSpacing:.3, padding:"1px 5px", borderRadius:4,
+                background: (typeof window !== "undefined" && window.__CLASSIO_TTS_URL__) ? "linear-gradient(90deg,#6366f1,#a855f7)" : "#e5e7eb",
+                color: (typeof window !== "undefined" && window.__CLASSIO_TTS_URL__) ? "#fff" : "#6b7280" }}>
+                {(typeof window !== "undefined" && window.__CLASSIO_TTS_URL__) ? "PIPER" : "BROWSER"}
+              </span>
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity:.5 }}><path d="M6 9l6 6 6-6"/></svg>
             </button>
             {showVoicePicker && (
