@@ -6128,6 +6128,7 @@ function AIPodcastPanel({ file, lang }) {
   // Store ALL chunks and track position — this is how we always know where to resume
   const allChunksRef    = useRef([]);
   const chunkIdxRef     = useRef(0); // index of the NEXT chunk to speak
+  const speakingIdxRef  = useRef(0); // index of chunk currently mid-speech
 
   useEffect(() => {
     const load = () => setVoices(window.speechSynthesis.getVoices());
@@ -6168,10 +6169,15 @@ function AIPodcastPanel({ file, lang }) {
       if (pausedRef.current) return; // handleResume will call us again
       const idx   = chunkIdxRef.current;
       const chunk = chunks[idx];
-      // Advance BEFORE speaking so any interruption leaves idx at the NEXT chunk
-      chunkIdxRef.current = idx + 1;
+      speakingIdxRef.current = idx;    // record which chunk is mid-speech
+      chunkIdxRef.current    = idx + 1; // advance optimistically
       setTranscript(t => [...t, { role:"ai", text:chunk }]);
       await speak(chunk);
+      // If interrupted mid-chunk (paused while speaking), rewind so it replays
+      if (pausedRef.current && !stoppedRef.current) {
+        chunkIdxRef.current = idx; // step back to the interrupted chunk
+        return;
+      }
     }
     if (!stoppedRef.current && !pausedRef.current) setPhase("done");
   };
@@ -6219,7 +6225,7 @@ Language: ${langLabel}. Write ENTIRELY in ${langLabel}.
 
   const handleStop = () => {
     stoppedRef.current = true; pausedRef.current = true;
-    allChunksRef.current = []; chunkIdxRef.current = 0;
+    allChunksRef.current = []; chunkIdxRef.current = 0; speakingIdxRef.current = 0;
     cancelSpeech();
     try { recognitionRef.current?.abort(); } catch {}
     setPhase("idle"); setListening(false); setMicText("");
@@ -6238,19 +6244,24 @@ Language: ${langLabel}. Write ENTIRELY in ${langLabel}.
 
   const askQuestion = async (q) => {
     if (!q.trim()) return;
-    // Save where we are — chunkIdxRef.current already points to the next chunk
-    // cancelSpeech was called in startMic before this runs, so current chunk hasn't advanced
     setTranscript(t => [...t, { role:"user", text:q }]);
 
+    // Build context: what was just being explained (last 3 spoken chunks)
+    const chunks = allChunksRef.current;
+    const spokenSoFar = chunks.slice(Math.max(0, speakingIdxRef.current - 2), speakingIdxRef.current + 1);
+    const justExplaining = spokenSoFar.join(" ");
+
     const answer = await callClaude(
-      `You are an AI podcast host who just paused to answer a listener's question.
+      `You are an AI podcast host. You were explaining a topic when the listener interrupted with a question or comment.
 RULES:
-- If it's a real question about the topic, answer it clearly in 1-3 sentences. No markdown.
-- If the listener says something like "ok", "continue", "go back", "carry on", "resume", or anything that means they want you to continue — reply with EXACTLY the word: RESUME
-- Never repeat the same answer you just gave.
-- Be natural and conversational.`,
-      `Topic (from notes):\n${notes.slice(0,2000)}\n\nListener said: "${q}"\n\nRespond.`,
-      300
+- You know exactly what you were just saying (provided below as "WHAT I WAS JUST EXPLAINING").
+- If the listener asks about something you were explaining or just explained, answer it directly using what you know.
+- If it's any other question about the topic, answer it clearly in 1-3 sentences. No markdown.
+- If the listener says "ok", "continue", "go on", "carry on", "resume", "go back", "yes", or anything meaning "keep going" — reply with EXACTLY: RESUME
+- Never say "I didn't cover that" if it appears in your recent explanation context.
+- Be natural and conversational, like a podcast host.`,
+      `NOTES (full topic context):\n${notes.slice(0,2000)}\n\nWHAT I WAS JUST EXPLAINING:\n"${justExplaining}"\n\nLISTENER SAID: "${q}"\n\nRespond.`,
+      350
     ).catch(() => "RESUME");
 
     if (stoppedRef.current) return;
@@ -6264,7 +6275,7 @@ RULES:
       pausedRef.current = false;
     }
 
-    // Always resume the main explanation from exactly where we left off
+    // Resume explanation from exactly where it was interrupted
     if (!stoppedRef.current) {
       if (allChunksRef.current.length > 0 && chunkIdxRef.current < allChunksRef.current.length) {
         setPhase("speaking");
