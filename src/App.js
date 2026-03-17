@@ -123,6 +123,55 @@ const GLOBAL_PERSONAS = [
 // so we never return the same physical voice for two different personas.
 const _voiceCache = new Map(); // key: lang → resolved assignments
 
+
+// Strip LaTeX/markdown and render math as readable text in AI responses
+function renderAIText(text) {
+  if (!text) return "";
+  let t = text;
+  // Remove display math \[...\] and $...$
+  t = t.replace(/\\\[([\s\S]*?)\\\]/g, (_, m) => " " + m.trim() + " ");
+  t = t.replace(/\$\$([\s\S]*?)\$\$/g, (_, m) => " " + m.trim() + " ");
+  // Remove inline math $...$ 
+  t = t.replace(/\$([^$\n]+?)\$/g, (_, m) => m.trim());
+  // Remove \(...\) inline math
+  t = t.replace(/\\\(([\s\S]*?)\\\)/g, (_, m) => m.trim());
+  // Convert common LaTeX commands to readable symbols
+  t = t.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1)/($2)');
+  t = t.replace(/\\sqrt\{([^}]+)\}/g, '√($1)');
+  t = t.replace(/\\sqrt\b/g, '√');
+  t = t.replace(/\^\{([^}]+)\}/g, '^($1)');
+  t = t.replace(/\_\{([^}]+)\}/g, '_($1)');
+  t = t.replace(/\\cdot/g, '·');
+  t = t.replace(/\\times/g, '×');
+  t = t.replace(/\\div/g, '÷');
+  t = t.replace(/\\pm/g, '±');
+  t = t.replace(/\\leq/g, '≤');
+  t = t.replace(/\\geq/g, '≥');
+  t = t.replace(/\\neq/g, '≠');
+  t = t.replace(/\\approx/g, '≈');
+  t = t.replace(/\\infty/g, '∞');
+  t = t.replace(/\\pi/g, 'π');
+  t = t.replace(/\\alpha/g, 'α');
+  t = t.replace(/\\beta/g, 'β');
+  t = t.replace(/\\theta/g, 'θ');
+  t = t.replace(/\\Delta/g, 'Δ');
+  t = t.replace(/\\delta/g, 'δ');
+  t = t.replace(/\\sum/g, 'Σ');
+  t = t.replace(/\\int/g, '∫');
+  t = t.replace(/\\[a-zA-Z]+/g, ''); // remove remaining LaTeX commands
+  t = t.replace(/[{}]/g, '');           // remove remaining braces
+  // Remove markdown asterisks/underscores used for bold/italic
+  t = t.replace(/\*\*([^*]+)\*\*/g, '$1');
+  t = t.replace(/\*([^*]+)\*/g, '$1');
+  t = t.replace(/__([^_]+)__/g, '$1');
+  t = t.replace(/_([^_]+)_/g, '$1');
+  // Remove markdown headers
+  t = t.replace(/^#{1,6}\s+/gm, '');
+  // Clean up extra whitespace
+  t = t.replace(/  +/g, ' ').trim();
+  return t;
+}
+
 function getSmartVoice(personaOrIdx, allVoices, lang = "en-US") {
   const persona = typeof personaOrIdx === "number" ? GLOBAL_PERSONAS[personaOrIdx] : personaOrIdx;
   if (!persona || !allVoices || !allVoices.length) return null;
@@ -588,24 +637,75 @@ const I = {
 };
 
 // ─── TEXT FORMATTER ───────────────────────────────────────────────────────────
+// Strip LaTeX math notation and render clean readable text
+function stripLatex(text) {
+  if (!text) return "";
+  let t = text;
+  // Remove $ display math
+  t = t.replace(/\$\$([\s\S]*?)\$\$/g, (_, m) => " " + m.trim() + " ");
+  // Remove $ inline math — but keep the content
+  t = t.replace(/\$([^$\n]{1,200})\$/g, (_, m) => m.trim());
+  // Remove \[ \] display math
+  t = t.replace(/\\[([\s\S]*?)\\]/g, (_, m) => " " + m.trim() + " ");
+  // Remove \( \) inline math
+  t = t.replace(/\\(([\s\S]*?)\\)/g, (_, m) => m.trim());
+  // Convert \frac{a}{b} → (a)/(b)
+  t = t.replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, '($1)/($2)');
+  // Handle nested \frac (simple pass)
+  t = t.replace(/\\frac\{([^{}]*)\}\{([^{}]*)\}/g, '($1)/($2)');
+  // \sqrt{x} → √(x)
+  t = t.replace(/\\sqrt\{([^{}]+)\}/g, '√($1)');
+  t = t.replace(/\\sqrt\s/g, '√');
+  // Superscripts {1/2} → ^(1/2), but x^{2} → x²
+  t = t.replace(/\^\{2\}/g, '²');
+  t = t.replace(/\^\{3\}/g, '³');
+  t = t.replace(/\^\{([^{}]+)\}/g, '^($1)');
+  // Subscripts
+  t = t.replace(/\_\{([^{}]+)\}/g, '_($1)');
+  // Common symbols
+  t = t.replace(/\\cdot/g, '·');
+  t = t.replace(/\\times/g, '×');
+  t = t.replace(/\\div/g, '÷');
+  t = t.replace(/\\pm/g, '±');
+  t = t.replace(/\\leq/g, '≤');
+  t = t.replace(/\\geq/g, '≥');
+  t = t.replace(/\\neq/g, '≠');
+  t = t.replace(/\\approx/g, '≈');
+  t = t.replace(/\\infty/g, '∞');
+  t = t.replace(/\\pi/g, 'π');
+  t = t.replace(/\\alpha/g, 'α');
+  t = t.replace(/\\beta/g, 'β');
+  t = t.replace(/\\theta/g, 'θ');
+  t = t.replace(/\\Delta/g, 'Δ');
+  t = t.replace(/\\delta/g, 'δ');
+  t = t.replace(/\\sum/g, 'Σ');
+  t = t.replace(/\\int/g, '∫');
+  t = t.replace(/\\to/g, '→');
+  t = t.replace(/\\rightarrow/g, '→');
+  t = t.replace(/\\leftarrow/g, '←');
+  // Remove remaining LaTeX commands like \text{}, \mathrm{} — keep content
+  t = t.replace(/\\(?:text|mathrm|mathbf|mathit|operatorname)\{([^{}]*)\}/g, '$1');
+  // Remove remaining LaTeX commands
+  t = t.replace(/\\[a-zA-Z]+/g, '');
+  // Remove lone curly braces
+  t = t.replace(/[{}]/g, '');
+  // Clean extra spaces
+  t = t.replace(/  +/g, ' ').trim();
+  return t;
+}
+
 const Fmt = ({ text }) => (
-  <div>{(text||"").split('\n').map((line, i) => {
-    // Strip ALL markdown symbols
+  <div>{stripLatex(text||"").split('\n').map((line, i) => {
     const clean = line.replace(/^#+\s*/, "").replace(/\*\*/g, "").replace(/\*/g, "").trim();
     if (!line.trim()) return <br key={i} />;
-    // ALL CAPS heading line
     if (/^[A-Z][A-Z\s]{3,}$/.test(clean) || line.startsWith('# ') || line.startsWith('## ')) 
       return <p key={i} style={{ fontWeight:700, fontSize:14, marginBottom:4, marginTop:12, color:"#1a202c", letterSpacing:.3 }}>{clean}</p>;
-    // Bold heading (** wrapped)
     if (/^\*\*[^*]+\*\*$/.test(line.trim())) 
       return <p key={i} style={{ fontWeight:700, fontSize:14, marginBottom:4, marginTop:10, color:"#2d3748" }}>{clean}</p>;
-    // Bullet point
     if (line.startsWith('• ') || line.startsWith('- ') || line.startsWith('* ') || line.startsWith('· ')) 
       return <p key={i} style={{ paddingLeft:14, marginBottom:3, display:"flex", gap:6, lineHeight:1.6 }}><span style={{flexShrink:0, color:"#666"}}>•</span><span>{clean.replace(/^[•\-\*·]\s*/,"")}</span></p>;
-    // Numbered list
     if (/^\d+\.\s/.test(line)) 
       return <p key={i} style={{ paddingLeft:14, marginBottom:3, lineHeight:1.6 }}>{clean}</p>;
-    // Normal text - strip any remaining * 
     return <p key={i} style={{ marginBottom:3, lineHeight:1.6 }}>{clean}</p>;
   })}</div>
 );
@@ -4225,10 +4325,23 @@ ${lt}
         }
       }
       const sys = fileContext
-        ? `You are a study AI. Use the following file content plus any image provided to answer. Plain text, no asterisks, no markdown.
+        ? `You are a study AI. Use the following file content plus any image provided to answer.
+FORMATTING — strictly follow:
+- No LaTeX. No dollar signs ($). No \\frac, \\sqrt, \\cdot or any backslash commands.
+- Write fractions inline: (3x-5)/x² not \\frac notation
+- Write roots as √(x), powers as x² or x^(1/2)
+- No markdown asterisks, no pound signs
+- Steps: use "Step 1:", "Step 2:", "Answer:"
 
 ${fileContext}`
-        : `You are a study AI helping a student. Analyze images, solve problems, and explain clearly. Plain text, no asterisks.`;
+        : `You are a study AI helping a student. Analyze images, solve problems, and explain clearly.
+FORMATTING — strictly follow:
+- No LaTeX. No dollar signs. No \\frac or \\sqrt commands.
+- Write fractions as (top)/(bottom): (3x-5)/x²
+- Write powers as x^2 or x²
+- Write square roots as √(x)
+- No markdown asterisks. No pound signs.
+- Step by step: use "Step 1:", "Step 2:", "Answer:"`;
       // Use vision model if image attached, regular chat otherwise
       const apiMsgs = newMsgs.map(m => ({ role: m.role, content: m.content }));
       const reply = imgToSend
@@ -4392,6 +4505,61 @@ ${fileContext}`
   );
 }
 
+
+
+// Styled language picker — matches app design
+function LangPicker({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const current = LANG_OPTIONS.find(([c]) => c === value) || LANG_OPTIONS[0];
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div ref={ref} style={{ position:"relative" }}>
+      <button onClick={() => setOpen(o => !o)}
+        style={{ display:"flex", alignItems:"center", gap:7, background:C.surface,
+          border:`1.5px solid ${open ? C.accent : C.border}`, borderRadius:10,
+          padding:"7px 12px", cursor:"pointer", fontSize:13, fontWeight:600,
+          color:open ? C.accent : C.text, transition:"all .15s",
+          boxShadow: open ? `0 0 0 3px ${C.accentS}` : "none" }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+        </svg>
+        <span>{current[1]}</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ opacity:.5, transition:"transform .2s", transform:open?"rotate(180deg)":"none" }}>
+          <path d="M6 9l6 6 6-6"/>
+        </svg>
+      </button>
+      {open && (
+        <div style={{ position:"absolute", right:0, top:"calc(100% + 6px)", zIndex:300,
+          background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:12,
+          minWidth:180, maxHeight:260, overflowY:"auto", boxShadow:"0 8px 28px rgba(0,0,0,.12)",
+          padding:"4px 0",
+          animation:"lfadein .15s ease" }}>
+          <style>{`@keyframes lfadein{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}`}</style>
+          {LANG_OPTIONS.map(([code, label]) => (
+            <button key={code} onClick={() => { onChange(code); setOpen(false); }}
+              style={{ display:"block", width:"100%", textAlign:"left", padding:"8px 14px",
+                background: value===code ? C.accentL : "transparent",
+                border:"none", cursor:"pointer", fontSize:13, fontWeight:value===code?700:400,
+                color: value===code ? C.accent : C.text, transition:"background .1s" }}
+              onMouseEnter={e => { if(value!==code) e.target.style.background=C.bg; }}
+              onMouseLeave={e => { if(value!==code) e.target.style.background="transparent"; }}>
+              {label}
+              {value===code && <span style={{ marginLeft:"auto", float:"right", color:C.accent }}>✓</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── LANGUAGE OPTIONS ─────────────────────────────────────────────────────────
 const LANG_OPTIONS = [["en-US","English (US)"],["en-GB","English (UK)"],["ar-SA","Arabic"],["ar-EG","Arabic (Egypt)"],["es-ES","Spanish"],["es-MX","Spanish (Mexico)"],["fr-FR","French"],["de-DE","German"],["it-IT","Italian"],["pt-BR","Portuguese"],["zh-CN","Chinese"],["ja-JP","Japanese"],["ko-KR","Korean"],["hi-IN","Hindi"],["ru-RU","Russian"],["tr-TR","Turkish"]];
@@ -4625,15 +4793,7 @@ STRICT RULES — follow every single one:
           <p style={{ fontSize:13, color:C.muted }}>Record voice notes or generate a study podcast from your notes</p>
         </div>
         {/* Language selector */}
-        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <span style={{ fontSize:12, fontWeight:600, color:C.muted }}>Language:</span>
-          <select value={lang} onChange={e => setLang(e.target.value)}
-            style={{ border:`1.5px solid ${C.border}`, borderRadius:10, padding:"6px 10px", fontSize:13, outline:"none", color:C.text, background:"#fff", cursor:"pointer" }}>
-            {LANG_OPTIONS.map(([code, label]) => (
-              <option key={code} value={code}>{label}</option>
-            ))}
-          </select>
-        </div>
+        <LangPicker value={lang} onChange={setLang} />
       </div>
 
       {/* Sub-tabs */}
@@ -5183,7 +5343,8 @@ function NotesQASidebar({ file, notes, lang }) {
       const ans = await callClaudeChat(
         `You are a helpful study assistant. Answer questions about these notes clearly and concisely.
 Notes context: ${notes.slice(0, 5000)}
-Language: ${langLabel}. Always reply in ${langLabel}.`,
+Language: ${langLabel}. Always reply in ${langLabel}.
+Formatting: plain text only — no LaTeX, no dollar signs, no markdown asterisks, no pound signs.`,
         [...messages.slice(-6), {role:"user", content:q}].map(m => ({role:m.role==="user"?"user":"assistant", content:m.text||m.content}))
       );
       setMessages(m => [...m, {role:"assistant", text:ans}]);
@@ -5952,7 +6113,7 @@ RULES:
               boxShadow:loading||!url.trim()?"none":"0 4px 14px rgba(220,38,38,.3)" }}>
             {loading
               ? <><span style={{display:"flex",gap:3}}>{[0,1,2].map(i=><span key={i} style={{width:4,height:4,borderRadius:"50%",background:"#fff",animation:`bounce .9s ${i*0.15}s infinite`,display:"inline-block"}}/>)}</span>{status||"Working…"}</>
-              : <><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.32 6.32 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.69a8.2 8.2 0 0 0 4.79 1.53V6.78a4.85 4.85 0 0 1-1.02-.09z"/></svg>Get Notes</>
+              : <><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8z"/><polygon fill="#fff" points="9.75,15.5 15.5,12 9.75,8.5"/></svg>Get Notes</>
             }
           </button>
         </div>
@@ -6020,7 +6181,7 @@ Only include what's in the transcript.`,
       {!result && !loading && (
         <div style={{ textAlign:"center", padding:"40px 0", color:C.muted }}>
           <div style={{ width:52,height:52,borderRadius:16,background:"#fef2f2",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px" }}>
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="#dc2626"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.32 6.32 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V8.69a8.2 8.2 0 0 0 4.79 1.53V6.78a4.85 4.85 0 0 1-1.02-.09z"/></svg>
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="#dc2626"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8z"/><polygon fill="#fff" points="9.75,15.5 15.5,12 9.75,8.5"/></svg>
           </div>
           <p style={{ fontSize:14, fontWeight:600, marginBottom:4 }}>Paste a YouTube link above</p>
           <p style={{ fontSize:13 }}>Notes are generated from the real video transcript — same quality as PDF notes</p>
@@ -6290,29 +6451,37 @@ RULES:
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
       const q = window.prompt("Ask your question:");
-      if (q?.trim()) { pausedRef.current = true; cancelSpeech(); setTimeout(() => askQuestion(q.trim()), 100); }
+      if (q?.trim()) { pausedRef.current = true; cancelSpeech(); setTimeout(() => askQuestion(q.trim()), 150); }
       return;
     }
-    pausedRef.current = true; cancelSpeech();
+    // Set paused FIRST, then cancel speech, then wait before starting mic
+    // This prevents speech synthesis / recognition conflict on iOS/Safari
+    pausedRef.current = true;
+    cancelSpeech();
     finalTransRef.current = ""; setMicText(""); setListening(true);
-    const rec = new SR();
-    rec.lang = lang || "en-US"; rec.interimResults = true;
-    recognitionRef.current = rec;
-    rec.onresult = (e) => {
-      const t = Array.from(e.results).map(r => r[0].transcript).join("");
-      setMicText(t);
-      if (e.results[e.results.length-1].isFinal) finalTransRef.current = t;
-    };
-    rec.onend = () => {
-      setListening(false); setMicText(""); recognitionRef.current = null;
-      const q = finalTransRef.current.trim(); finalTransRef.current = "";
-      if (q) askQuestion(q); else pausedRef.current = false;
-    };
-    rec.onerror = () => {
-      setListening(false); setMicText(""); recognitionRef.current = null;
-      finalTransRef.current = ""; pausedRef.current = false;
-    };
-    rec.start();
+    // Delay rec.start() so the browser fully stops synthesis before opening mic
+    setTimeout(() => {
+      if (stoppedRef.current) { setListening(false); return; }
+      const rec = new SR();
+      rec.lang = lang || "en-US"; rec.interimResults = true; rec.continuous = false;
+      recognitionRef.current = rec;
+      rec.onresult = (e) => {
+        const t = Array.from(e.results).map(r => r[0].transcript).join("");
+        setMicText(t);
+        if (e.results[e.results.length-1].isFinal) finalTransRef.current = t;
+      };
+      rec.onend = () => {
+        setListening(false); setMicText(""); recognitionRef.current = null;
+        const q = finalTransRef.current.trim(); finalTransRef.current = "";
+        if (q) askQuestion(q); else pausedRef.current = false;
+      };
+      rec.onerror = (err) => {
+        console.warn("Mic error:", err.error);
+        setListening(false); setMicText(""); recognitionRef.current = null;
+        finalTransRef.current = ""; pausedRef.current = false;
+      };
+      try { rec.start(); } catch(e) { console.warn("rec.start failed:", e); setListening(false); pausedRef.current = false; }
+    }, 200);
   };
 
   const stopMic = () => { try { recognitionRef.current?.stop(); } catch {} setListening(false); };
@@ -6665,35 +6834,37 @@ Simple language, give an example, under 100 words. No markdown.`,
       if (q?.trim()) askQuestion(q.trim());
       return;
     }
-    // Stop speech BEFORE starting mic — set flag first so loop sees it
     pausedRef.current = true;
-    cancelSpeech(); // force-resolves current speak() promise immediately
+    cancelSpeech();
     finalTransRef.current = "";
     setMicText(""); setListening(true);
-    const rec = new SR();
-    rec.lang = "en-US"; rec.interimResults = true; rec.maxAlternatives = 1;
-    recognitionRef.current = rec;
-    rec.onresult = (e) => {
-      const t = Array.from(e.results).map(r => r[0].transcript).join("");
-      setMicText(t);
-      if (e.results[e.results.length - 1].isFinal) finalTransRef.current = t;
-    };
-    rec.onend = () => {
-      setListening(false); setMicText("");
-      recognitionRef.current = null;
-      const q = finalTransRef.current.trim();
-      finalTransRef.current = "";
-      pausedRef.current = false; // allow loop to resume after answer
-      if (q) askQuestion(q);
-    };
-    rec.onerror = (e) => {
-      console.warn("mic error:", e.error);
-      setListening(false); setMicText("");
-      recognitionRef.current = null;
-      finalTransRef.current = "";
-      pausedRef.current = false; // resume even on error
-    };
-    rec.start();
+    setTimeout(() => {
+      if (stoppedRef.current) { setListening(false); return; }
+      const rec = new SR();
+      rec.lang = "en-US"; rec.interimResults = true; rec.maxAlternatives = 1; rec.continuous = false;
+      recognitionRef.current = rec;
+      rec.onresult = (e) => {
+        const t = Array.from(e.results).map(r => r[0].transcript).join("");
+        setMicText(t);
+        if (e.results[e.results.length - 1].isFinal) finalTransRef.current = t;
+      };
+      rec.onend = () => {
+        setListening(false); setMicText("");
+        recognitionRef.current = null;
+        const q = finalTransRef.current.trim();
+        finalTransRef.current = "";
+        pausedRef.current = false;
+        if (q) askQuestion(q);
+      };
+      rec.onerror = (err) => {
+        console.warn("mic error:", err.error);
+        setListening(false); setMicText("");
+        recognitionRef.current = null;
+        finalTransRef.current = "";
+        pausedRef.current = false;
+      };
+      try { rec.start(); } catch(e) { console.warn("rec.start failed:", e); setListening(false); pausedRef.current = false; }
+    }, 200);
   };
 
   const stopMic = () => {
