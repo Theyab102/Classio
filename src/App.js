@@ -129,12 +129,12 @@ function renderAIText(text) {
   if (!text) return "";
   let t = text;
   // Remove display math \[...\] and $...$
-  t = t.replace(/\\\[([\s\S]*?)\\\]/g, (_, m) => " " + m.trim() + " ");
+  t = t.replace(/\\\[[\s\S]*?\\\]/g, (m) => " " + m.slice(2, -2).trim() + " ");
   t = t.replace(/\$\$([\s\S]*?)\$\$/g, (_, m) => " " + m.trim() + " ");
   // Remove inline math $...$ 
   t = t.replace(/\$([^$\n]+?)\$/g, (_, m) => m.trim());
   // Remove \(...\) inline math
-  t = t.replace(/\\\(([\s\S]*?)\\\)/g, (_, m) => m.trim());
+  t = t.replace(/\\\([\s\S]*?\\\)/g, (m) => m.slice(2, -2).trim());
   // Convert common LaTeX commands to readable symbols
   t = t.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1)/($2)');
   t = t.replace(/\\sqrt\{([^}]+)\}/g, '√($1)');
@@ -646,9 +646,9 @@ function stripLatex(text) {
   // Remove $ inline math — but keep the content
   t = t.replace(/\$([^$\n]{1,200})\$/g, (_, m) => m.trim());
   // Remove \[ \] display math
-  t = t.replace(/\\[([\s\S]*?)\\]/g, (_, m) => " " + m.trim() + " ");
+  t = t.replace(/\\\[[\s\S]*?\\\]/g, (m) => " " + m.slice(2, -2).trim() + " ");
   // Remove \( \) inline math
-  t = t.replace(/\\(([\s\S]*?)\\)/g, (_, m) => m.trim());
+  t = t.replace(/\\\([\s\S]*?\\\)/g, (m) => m.slice(2, -2).trim());
   // Convert \frac{a}{b} → (a)/(b)
   t = t.replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, '($1)/($2)');
   // Handle nested \frac (simple pass)
