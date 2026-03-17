@@ -5089,10 +5089,7 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
         <div style={{ display:"flex", gap:7, flexWrap:"wrap", alignItems:"center" }}>
 
           {/* Language */}
-          <select value={lang} onChange={e => setLang(e.target.value)}
-            style={{ border:`1.5px solid ${C.border}`, borderRadius:10, padding:"6px 9px", fontSize:12, outline:"none", color:C.text, background:"#fff", cursor:"pointer" }}>
-            {LANG_OPTIONS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
-          </select>
+          <LangPicker value={lang} onChange={setLang} />
 
           {/* AI Generate */}
           <button onClick={generate} disabled={gen} className="hov"
@@ -6553,21 +6550,40 @@ RULES:
               <span style={{ width:10, height:10, borderRadius:"50%", background:GLOBAL_PERSONAS[voiceIdx]?.color || C.accent, display:"inline-block", flexShrink:0 }}/>
               {GLOBAL_PERSONAS[voiceIdx]?.label}
               <span style={{ fontSize:10, color:C.muted }}>{GLOBAL_PERSONAS[voiceIdx]?.gender === "female" ? "♀" : GLOBAL_PERSONAS[voiceIdx]?.gender === "male" ? "♂" : "◇"}</span>
-              {/* Show which engine is being used */}
+              {/* Engine badge always visible in the pill */}
               <span style={{ fontSize:9, fontWeight:800, letterSpacing:.3, padding:"1px 5px", borderRadius:4,
                 background: (typeof window !== "undefined" && window.__CLASSIO_TTS_URL__) ? "linear-gradient(90deg,#6366f1,#a855f7)" : "#e5e7eb",
                 color: (typeof window !== "undefined" && window.__CLASSIO_TTS_URL__) ? "#fff" : "#6b7280" }}>
-                {(typeof window !== "undefined" && window.__CLASSIO_TTS_URL__) ? "PIPER" : "BROWSER"}
+                {(typeof window !== "undefined" && window.__CLASSIO_TTS_URL__) ? "PIPER ✦" : "BROWSER"}
               </span>
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity:.5 }}><path d="M6 9l6 6 6-6"/></svg>
             </button>
             {showVoicePicker && (
               <div style={{ position:"absolute", right:0, top:"calc(100% + 6px)", zIndex:200,
                 background:"#fff", border:`1.5px solid ${C.border}`, borderRadius:14,
-                padding:"8px 6px", minWidth:200, boxShadow:"0 8px 28px rgba(0,0,0,.12)" }}>
+                padding:"8px 6px", minWidth:220, maxHeight:380, overflowY:"auto",
+                boxShadow:"0 8px 28px rgba(0,0,0,.12)" }}>
+
+                {/* Engine info header */}
+                <div style={{ padding:"4px 10px 10px", borderBottom:`1px solid ${C.border}`, marginBottom:8 }}>
+                  {(typeof window !== "undefined" && window.__CLASSIO_TTS_URL__) ? (
+                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                      <span style={{ fontSize:9, fontWeight:800, padding:"2px 7px", borderRadius:4,
+                        background:"linear-gradient(90deg,#6366f1,#a855f7)", color:"#fff" }}>PIPER ✦</span>
+                      <span style={{ fontSize:11, color:C.muted }}>Neural TTS server active</span>
+                    </div>
+                  ) : (
+                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                      <span style={{ fontSize:9, fontWeight:800, padding:"2px 7px", borderRadius:4,
+                        background:"#e5e7eb", color:"#6b7280" }}>BROWSER</span>
+                      <span style={{ fontSize:11, color:C.muted }}>Using device voices</span>
+                    </div>
+                  )}
+                </div>
+
                 {/* Female */}
                 <p style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:1, padding:"2px 8px 6px", textTransform:"uppercase" }}>Female</p>
-                {GLOBAL_PERSONAS.filter(p => p.gender === "female").map((p, _) => {
+                {GLOBAL_PERSONAS.filter(p => p.gender === "female").map((p) => {
                   const i = GLOBAL_PERSONAS.indexOf(p);
                   return (
                     <button key={p.id} onClick={() => { setVoiceIdx(i); setShowVoicePicker(false); }}
@@ -6576,13 +6592,19 @@ RULES:
                         border:"none", borderRadius:8, cursor:"pointer", textAlign:"left" }}>
                       <span style={{ width:10, height:10, borderRadius:"50%", background:p.color, flexShrink:0, display:"inline-block" }}/>
                       <span style={{ fontSize:13, fontWeight:voiceIdx===i?700:500, color:voiceIdx===i?C.accent:C.text }}>{p.label}</span>
-                      <span style={{ fontSize:11, color:C.muted, marginLeft:"auto" }}>{p.desc}</span>
+                      <span style={{ fontSize:10, color:C.muted, flex:1 }}>{p.desc}</span>
+                      <span style={{ fontSize:8, fontWeight:800, padding:"1px 4px", borderRadius:3, flexShrink:0,
+                        background: (typeof window !== "undefined" && window.__CLASSIO_TTS_URL__) ? "rgba(99,102,241,.15)" : "#f3f4f6",
+                        color: (typeof window !== "undefined" && window.__CLASSIO_TTS_URL__) ? "#6366f1" : "#9ca3af" }}>
+                        {(typeof window !== "undefined" && window.__CLASSIO_TTS_URL__) ? "PIPER" : "BROWSER"}
+                      </span>
                     </button>
                   );
                 })}
+
                 {/* Male */}
                 <p style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:1, padding:"8px 8px 6px", textTransform:"uppercase" }}>Male</p>
-                {GLOBAL_PERSONAS.filter(p => p.gender === "male").map((p, _) => {
+                {GLOBAL_PERSONAS.filter(p => p.gender === "male").map((p) => {
                   const i = GLOBAL_PERSONAS.indexOf(p);
                   return (
                     <button key={p.id} onClick={() => { setVoiceIdx(i); setShowVoicePicker(false); }}
@@ -6591,13 +6613,19 @@ RULES:
                         border:"none", borderRadius:8, cursor:"pointer", textAlign:"left" }}>
                       <span style={{ width:10, height:10, borderRadius:"50%", background:p.color, flexShrink:0, display:"inline-block" }}/>
                       <span style={{ fontSize:13, fontWeight:voiceIdx===i?700:500, color:voiceIdx===i?C.accent:C.text }}>{p.label}</span>
-                      <span style={{ fontSize:11, color:C.muted, marginLeft:"auto" }}>{p.desc}</span>
+                      <span style={{ fontSize:10, color:C.muted, flex:1 }}>{p.desc}</span>
+                      <span style={{ fontSize:8, fontWeight:800, padding:"1px 4px", borderRadius:3, flexShrink:0,
+                        background: (typeof window !== "undefined" && window.__CLASSIO_TTS_URL__) ? "rgba(99,102,241,.15)" : "#f3f4f6",
+                        color: (typeof window !== "undefined" && window.__CLASSIO_TTS_URL__) ? "#6366f1" : "#9ca3af" }}>
+                        {(typeof window !== "undefined" && window.__CLASSIO_TTS_URL__) ? "PIPER" : "BROWSER"}
+                      </span>
                     </button>
                   );
                 })}
+
                 {/* Neutral */}
                 <p style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:1, padding:"8px 8px 6px", textTransform:"uppercase" }}>Neutral</p>
-                {GLOBAL_PERSONAS.filter(p => p.gender === "neutral").map((p, _) => {
+                {GLOBAL_PERSONAS.filter(p => p.gender === "neutral").map((p) => {
                   const i = GLOBAL_PERSONAS.indexOf(p);
                   return (
                     <button key={p.id} onClick={() => { setVoiceIdx(i); setShowVoicePicker(false); }}
@@ -6606,7 +6634,12 @@ RULES:
                         border:"none", borderRadius:8, cursor:"pointer", textAlign:"left" }}>
                       <span style={{ width:10, height:10, borderRadius:"50%", background:p.color, flexShrink:0, display:"inline-block" }}/>
                       <span style={{ fontSize:13, fontWeight:voiceIdx===i?700:500, color:voiceIdx===i?C.accent:C.text }}>{p.label}</span>
-                      <span style={{ fontSize:11, color:C.muted, marginLeft:"auto" }}>{p.desc}</span>
+                      <span style={{ fontSize:10, color:C.muted, flex:1 }}>{p.desc}</span>
+                      <span style={{ fontSize:8, fontWeight:800, padding:"1px 4px", borderRadius:3, flexShrink:0,
+                        background: (typeof window !== "undefined" && window.__CLASSIO_TTS_URL__) ? "rgba(99,102,241,.15)" : "#f3f4f6",
+                        color: (typeof window !== "undefined" && window.__CLASSIO_TTS_URL__) ? "#6366f1" : "#9ca3af" }}>
+                        {(typeof window !== "undefined" && window.__CLASSIO_TTS_URL__) ? "PIPER" : "BROWSER"}
+                      </span>
                     </button>
                   );
                 })}
