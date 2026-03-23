@@ -666,8 +666,7 @@ function parseMathSegments(text) {
   if (!text) return [{ type: "text", content: "" }];
   const segments = [];
   // Regex: match display math ($$...$$, \[...\]) or inline math ($...$, \(...\))
-  const mathRe = /(\$\$[\s\S]*?\$\$|\\[[\s\S]*?\\]|\$[^$
-]{1,300}\$|\\([\s\S]*?\\))/g;
+  const mathRe = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\$[^$\n]{1,300}\$|\\\([\s\S]*?\\\))/g;
   let last = 0;
   let match;
   while ((match = mathRe.exec(text)) !== null) {
