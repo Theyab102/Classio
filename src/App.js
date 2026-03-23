@@ -638,75 +638,120 @@ const I = {
 
 // ─── TEXT FORMATTER ───────────────────────────────────────────────────────────
 // Strip LaTeX math notation and render clean readable text
+// ─── KATEX MATH RENDERER ─────────────────────────────────────────────────────
+// Renders LaTeX math using KaTeX (loaded via CDN in index.html)
+// Falls back to clean plain text if KaTeX not loaded yet
+
+function renderMathInline(latex) {
+  try {
+    if (window.katex) {
+      return window.katex.renderToString(latex, { throwOnError: false, displayMode: false });
+    }
+  } catch(e) {}
+  return latex;
+}
+
+function renderMathDisplay(latex) {
+  try {
+    if (window.katex) {
+      return window.katex.renderToString(latex, { throwOnError: false, displayMode: true });
+    }
+  } catch(e) {}
+  return latex;
+}
+
+// Split text into segments: math vs plain text
+// Handles $$...$$, $...$, \[...\], \(...\)
+function parseMathSegments(text) {
+  if (!text) return [{ type: "text", content: "" }];
+  const segments = [];
+  // Regex: match display math ($$...$$, \[...\]) or inline math ($...$, \(...\))
+  const mathRe = /(\$\$[\s\S]*?\$\$|\\[[\s\S]*?\\]|\$[^$
+]{1,300}\$|\\([\s\S]*?\\))/g;
+  let last = 0;
+  let match;
+  while ((match = mathRe.exec(text)) !== null) {
+    if (match.index > last) {
+      segments.push({ type: "text", content: text.slice(last, match.index) });
+    }
+    const raw = match[0];
+    const isDisplay = raw.startsWith("$$") || raw.startsWith("\\[");
+    let latex = raw;
+    if (raw.startsWith("$$")) latex = raw.slice(2, -2);
+    else if (raw.startsWith("\\[")) latex = raw.slice(2, -2);
+    else if (raw.startsWith("$")) latex = raw.slice(1, -1);
+    else if (raw.startsWith("\\(")) latex = raw.slice(2, -2);
+    segments.push({ type: isDisplay ? "display" : "inline", content: latex.trim() });
+    last = match.index + raw.length;
+  }
+  if (last < text.length) segments.push({ type: "text", content: text.slice(last) });
+  return segments;
+}
+
+// stripLatex kept for podcast/TTS (audio can't render math visually)
 function stripLatex(text) {
   if (!text) return "";
   let t = text;
-  // Remove $ display math
   t = t.replace(/\$\$([\s\S]*?)\$\$/g, (_, m) => " " + m.trim() + " ");
-  // Remove $ inline math — but keep the content
   t = t.replace(/\$([^$\n]{1,200})\$/g, (_, m) => m.trim());
-  // Remove \[ \] display math
   t = t.replace(/\\\[[\s\S]*?\\\]/g, (m) => " " + m.slice(2, -2).trim() + " ");
-  // Remove \( \) inline math
   t = t.replace(/\\\([\s\S]*?\\\)/g, (m) => m.slice(2, -2).trim());
-  // Convert \frac{a}{b} → (a)/(b)
   t = t.replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, '($1)/($2)');
-  // Handle nested \frac (simple pass)
-  t = t.replace(/\\frac\{([^{}]*)\}\{([^{}]*)\}/g, '($1)/($2)');
-  // \sqrt{x} → √(x)
   t = t.replace(/\\sqrt\{([^{}]+)\}/g, '√($1)');
-  t = t.replace(/\\sqrt\s/g, '√');
-  // Superscripts {1/2} → ^(1/2), but x^{2} → x²
-  t = t.replace(/\^\{2\}/g, '²');
-  t = t.replace(/\^\{3\}/g, '³');
+  t = t.replace(/\^\{2\}/g, '²'); t = t.replace(/\^\{3\}/g, '³');
   t = t.replace(/\^\{([^{}]+)\}/g, '^($1)');
-  // Subscripts
-  t = t.replace(/\_\{([^{}]+)\}/g, '_($1)');
-  // Common symbols
-  t = t.replace(/\\cdot/g, '·');
-  t = t.replace(/\\times/g, '×');
-  t = t.replace(/\\div/g, '÷');
-  t = t.replace(/\\pm/g, '±');
-  t = t.replace(/\\leq/g, '≤');
-  t = t.replace(/\\geq/g, '≥');
-  t = t.replace(/\\neq/g, '≠');
-  t = t.replace(/\\approx/g, '≈');
-  t = t.replace(/\\infty/g, '∞');
-  t = t.replace(/\\pi/g, 'π');
-  t = t.replace(/\\alpha/g, 'α');
-  t = t.replace(/\\beta/g, 'β');
-  t = t.replace(/\\theta/g, 'θ');
-  t = t.replace(/\\Delta/g, 'Δ');
-  t = t.replace(/\\delta/g, 'δ');
-  t = t.replace(/\\sum/g, 'Σ');
-  t = t.replace(/\\int/g, '∫');
-  t = t.replace(/\\to/g, '→');
-  t = t.replace(/\\rightarrow/g, '→');
-  t = t.replace(/\\leftarrow/g, '←');
-  // Remove remaining LaTeX commands like \text{}, \mathrm{} — keep content
+  t = t.replace(/\\cdot/g, '·'); t = t.replace(/\\times/g, '×');
+  t = t.replace(/\\div/g, '÷'); t = t.replace(/\\pm/g, '±');
+  t = t.replace(/\\leq/g, '≤'); t = t.replace(/\\geq/g, '≥');
+  t = t.replace(/\\neq/g, '≠'); t = t.replace(/\\approx/g, '≈');
+  t = t.replace(/\\infty/g, '∞'); t = t.replace(/\\pi/g, 'π');
+  t = t.replace(/\\alpha/g, 'α'); t = t.replace(/\\beta/g, 'β');
+  t = t.replace(/\\theta/g, 'θ'); t = t.replace(/\\Delta/g, 'Δ');
+  t = t.replace(/\\sum/g, 'Σ'); t = t.replace(/\\int/g, '∫');
+  t = t.replace(/\\to/g, '→'); t = t.replace(/\\rightarrow/g, '→');
   t = t.replace(/\\(?:text|mathrm|mathbf|mathit|operatorname)\{([^{}]*)\}/g, '$1');
-  // Remove remaining LaTeX commands
-  t = t.replace(/\\[a-zA-Z]+/g, '');
-  // Remove lone curly braces
-  t = t.replace(/[{}]/g, '');
-  // Clean extra spaces
+  t = t.replace(/\\[a-zA-Z]+/g, ''); t = t.replace(/[{}]/g, '');
   t = t.replace(/  +/g, ' ').trim();
   return t;
 }
 
+// MathText: renders a string that may contain mixed math and plain text
+function MathText({ text, style }) {
+  const segments = parseMathSegments(text || "");
+  const hasKatex = typeof window !== "undefined" && window.katex;
+  if (!hasKatex) {
+    // Fallback: strip latex and show plain
+    return <span style={style}>{stripLatex(text || "")}</span>;
+  }
+  return (
+    <span style={style}>
+      {segments.map((seg, i) => {
+        if (seg.type === "text") return <span key={i}>{seg.content}</span>;
+        if (seg.type === "display") {
+          const html = renderMathDisplay(seg.content);
+          return <span key={i} style={{ display:"block", textAlign:"center", margin:"8px 0", overflowX:"auto" }}
+            dangerouslySetInnerHTML={{ __html: html }} />;
+        }
+        const html = renderMathInline(seg.content);
+        return <span key={i} dangerouslySetInnerHTML={{ __html: html }} />;
+      })}
+    </span>
+  );
+}
+
 const Fmt = ({ text }) => (
-  <div>{stripLatex(text||"").split('\n').map((line, i) => {
+  <div>{(text||"").split('\n').map((line, i) => {
     const clean = line.replace(/^#+\s*/, "").replace(/\*\*/g, "").replace(/\*/g, "").trim();
     if (!line.trim()) return <br key={i} />;
-    if (/^[A-Z][A-Z\s]{3,}$/.test(clean) || line.startsWith('# ') || line.startsWith('## ')) 
-      return <p key={i} style={{ fontWeight:700, fontSize:14, marginBottom:4, marginTop:12, color:"#1a202c", letterSpacing:.3 }}>{clean}</p>;
-    if (/^\*\*[^*]+\*\*$/.test(line.trim())) 
-      return <p key={i} style={{ fontWeight:700, fontSize:14, marginBottom:4, marginTop:10, color:"#2d3748" }}>{clean}</p>;
-    if (line.startsWith('• ') || line.startsWith('- ') || line.startsWith('* ') || line.startsWith('· ')) 
-      return <p key={i} style={{ paddingLeft:14, marginBottom:3, display:"flex", gap:6, lineHeight:1.6 }}><span style={{flexShrink:0, color:"#666"}}>•</span><span>{clean.replace(/^[•\-\*·]\s*/,"")}</span></p>;
-    if (/^\d+\.\s/.test(line)) 
-      return <p key={i} style={{ paddingLeft:14, marginBottom:3, lineHeight:1.6 }}>{clean}</p>;
-    return <p key={i} style={{ marginBottom:3, lineHeight:1.6 }}>{clean}</p>;
+    if (/^[A-Z][A-Z\s]{3,}$/.test(clean) || line.startsWith('# ') || line.startsWith('## '))
+      return <p key={i} style={{ fontWeight:700, fontSize:14, marginBottom:4, marginTop:12, color:"#1a202c", letterSpacing:.3 }}><MathText text={clean} /></p>;
+    if (/^\*\*[^*]+\*\*$/.test(line.trim()))
+      return <p key={i} style={{ fontWeight:700, fontSize:14, marginBottom:4, marginTop:10, color:"#2d3748" }}><MathText text={clean} /></p>;
+    if (line.startsWith('• ') || line.startsWith('- ') || line.startsWith('* ') || line.startsWith('· '))
+      return <p key={i} style={{ paddingLeft:14, marginBottom:3, display:"flex", gap:6, lineHeight:1.6 }}><span style={{flexShrink:0, color:"#666"}}>•</span><span><MathText text={clean.replace(/^[•\-\*·]\s*/,"")} /></span></p>;
+    if (/^\d+\.\s/.test(line))
+      return <p key={i} style={{ paddingLeft:14, marginBottom:3, lineHeight:1.6 }}><MathText text={clean} /></p>;
+    return <p key={i} style={{ marginBottom:3, lineHeight:1.6 }}><MathText text={clean} /></p>;
   })}</div>
 );
 
@@ -6695,7 +6740,7 @@ RULES:
               borderBottomRightRadius: msg.role === "user" ? 4 : 12,
               borderBottomLeftRadius:  msg.role === "ai"   ? 4 : 12,
             }}>
-              {isLastAI ? <TypewriterText text={msg.text} speed={16} /> : msg.text}
+              {isLastAI ? <TypewriterText text={msg.text} speed={16} /> : <MathText text={msg.text} />}
             </div>
           );
         })}
@@ -7008,7 +7053,7 @@ Simple language, give an example, under 100 words. No markdown.`,
             alignSelf:    msg.role === "user" ? "flex-end" : "flex-start",
             borderBottomRightRadius: msg.role === "user" ? 4 : 14,
             borderBottomLeftRadius:  msg.role === "ai"   ? 4 : 14,
-          }}>{msg.text}</div>
+          }}><MathText text={msg.text} /></div>
         ))}
         {running && !speaking && !paused && transcript.length > 0 && (
           <div style={{ display:"flex", gap:4, padding:"4px 8px", alignSelf:"flex-start" }}>
