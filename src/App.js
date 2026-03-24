@@ -863,26 +863,6 @@ button.folder-color-btn,button.color-swatch,button.no-min-h{aspect-ratio:1;flex-
 @keyframes ppbar{0%,100%{transform:scaleY(.4);opacity:.5}50%{transform:scaleY(1);opacity:1}}
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 @keyframes twcursor{0%,100%{opacity:1}50%{opacity:0}}
-
-/* ── INTERACTION ANIMATIONS ─────────────────────────────────── */
-@keyframes btn-press{0%{transform:scale(1)}50%{transform:scale(.94)}100%{transform:scale(1)}}
-@keyframes correct-pop{0%{transform:scale(1)}30%{transform:scale(1.08)}60%{transform:scale(.97)}100%{transform:scale(1)}}
-@keyframes wrong-shake{0%,100%{transform:translateX(0)}15%{transform:translateX(-7px)}30%{transform:translateX(7px)}45%{transform:translateX(-5px)}60%{transform:translateX(5px)}75%{transform:translateX(-3px)}90%{transform:translateX(3px)}}
-@keyframes fade-up{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-@keyframes known-bounce{0%{transform:scale(1)}25%{transform:scale(1.12) rotate(2deg)}50%{transform:scale(.96)}75%{transform:scale(1.04)}100%{transform:scale(1)}}
-@keyframes float-up{0%{opacity:1;transform:translateY(0) scale(1)}100%{opacity:0;transform:translateY(-40px) scale(.6)}}
-
-.btn-anim{transition:transform .12s ease,box-shadow .12s ease,background .12s ease,opacity .12s ease}
-.btn-anim:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.15)!important}
-.btn-anim:active{animation:btn-press .18s ease forwards}
-.card-hov{transition:transform .2s ease,box-shadow .2s ease}
-.card-hov:hover{transform:translateY(-3px) scale(1.01);box-shadow:0 10px 28px rgba(0,0,0,.12)!important}
-.card-hov:active{transform:scale(.98)}
-.tab-anim{transition:color .15s ease,border-color .15s ease,background .15s ease}
-.answer-correct{animation:correct-pop .4s ease forwards}
-.answer-wrong{animation:wrong-shake .45s ease forwards}
-.page-fade{animation:fade-up .22s ease forwards}
-.known-anim{animation:known-bounce .4s ease forwards}
 `; 
 
 // Global file object store — survives navigation within the session
@@ -1506,7 +1486,7 @@ export default function App() {
       <div style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "12px 10px" : "24px 14px" }}>
         {/* ── Action buttons row ── */}
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:20, justifyContent:"flex-end" }}>
-          <button onClick={()=>setShowStudyGroupLobby(true)} className="hov btn-anim"
+          <button onClick={()=>setShowStudyGroupLobby(true)} className="hov"
             style={{ display:"flex", alignItems:"center", gap:7, background:"#7c3aed",
               color:"#fff", border:"none", borderRadius:12, padding:"10px 18px",
               fontSize:14, fontWeight:600, cursor:"pointer",
@@ -1515,7 +1495,7 @@ export default function App() {
             Study Group
           </button>
           {homeTab==="folders" && (
-            <button onClick={()=>setShowNewFolder(true)} className="hov btn-anim"
+            <button onClick={()=>setShowNewFolder(true)} className="hov"
               style={{ display:"flex", alignItems:"center", gap:8, background:C.accent,
                 color:"#fff", border:"none", borderRadius:12, padding:"10px 20px",
                 fontSize:14, fontWeight:600, cursor:"pointer" }}>
@@ -1538,7 +1518,7 @@ export default function App() {
             </div>
             <p style={{ fontSize:18, fontWeight:600, color:C.text, marginBottom:8 }}>No folders yet</p>
             <p style={{ fontSize:14, color:C.muted, maxWidth:280, margin:"0 auto 24px" }}>Create a folder for each subject to organise your files</p>
-            <button onClick={()=>setShowNewFolder(true)} className="hov btn-anim"
+            <button onClick={()=>setShowNewFolder(true)} className="hov"
               style={{ background:C.accent, color:"#fff", border:"none", borderRadius:10, padding:"10px 24px", fontSize:14, fontWeight:600, cursor:"pointer" }}>
               Create First Folder
             </button>
@@ -1741,7 +1721,7 @@ function Header({ user, saveStatus, isGuest, onSignOut, character, onOpenCharact
           <MiniAvatar character={character} size={isMobile?30:36} />
         </button>
         {!isMobile && <span style={{ fontSize:13, fontWeight:600, color:C.text }}>{isGuest ? user?.displayName : user?.displayName?.split(" ")[0]}</span>}
-        <button onClick={onSignOut} className="hov btn-anim"
+        <button onClick={onSignOut} className="hov"
           style={{ fontSize:isMobile?11:12, color:C.muted, background:"none", border:`1px solid ${C.border}`, borderRadius:7, padding:isMobile?"4px 7px":"4px 9px", cursor:"pointer", whiteSpace:"nowrap" }}>{isGuest ? "Exit" : isMobile ? "Out" : "Sign out"}</button>
       </div>
     </div>
@@ -3407,7 +3387,7 @@ function LinkBtn({ file, allFiles, onSave }) {
 
   return (
     <>
-      <button onClick={() => setOpen(true)} className="hov btn-anim"
+      <button onClick={() => setOpen(true)} className="hov"
         style={{ display:"flex", alignItems:"center", gap:5, background:linked.length>0?C.accentL:"none", color:C.accent, border:`1px solid ${C.border}`, borderRadius:8, padding:"5px 10px", fontSize:12, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap" }}>
         {linked.length > 0 ? `${linked.length} linked` : "Link files"}
       </button>
@@ -3495,7 +3475,7 @@ function SignIn({ onSignIn, onGuest }) {
         </div>
         <h1 style={{ fontFamily:"'Fraunces',serif", fontSize:34, fontWeight:700, color:C.text, letterSpacing:-0.5, marginBottom:10 }}>Classio</h1>
         <p style={{ fontSize:15, color:C.muted, marginBottom:40, lineHeight:1.6 }}>Your AI-powered study space.<br/>Sign in to save across devices.</p>
-        <button onClick={onSignIn} className="hov btn-anim"
+        <button onClick={onSignIn} className="hov"
           style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:12, background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"14px 20px", fontSize:15, fontWeight:600, cursor:"pointer", color:C.text, boxShadow:"0 2px 8px rgba(0,0,0,.06)", marginBottom:14 }}>
           <svg width="20" height="20" viewBox="0 0 48 48">
             <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
@@ -3510,7 +3490,7 @@ function SignIn({ onSignIn, onGuest }) {
           <span style={{ fontSize:13, color:C.muted }}>or</span>
           <div style={{ flex:1, height:1, background:C.border }} />
         </div>
-        <button onClick={() => setShowGuest(true)} className="hov btn-anim"
+        <button onClick={() => setShowGuest(true)} className="hov"
           style={{ width:"100%", background:"transparent", border:`1.5px solid ${C.border}`, borderRadius:14, padding:"13px 20px", fontSize:15, fontWeight:600, cursor:"pointer", color:C.muted }}>
           Continue as Guest
         </button>
@@ -3600,7 +3580,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
       <style>{GS}</style>
       {/* Top bar */}
       <div className="app-header" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", height:64, display:"flex", alignItems:"center", gap:16 }}>
-        <button onClick={onBack} className="hov btn-anim" style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14 }}>
+        <button onClick={onBack} className="hov" style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14 }}>
           <Icon d={I.back} size={18} color={C.muted} /> Back
         </button>
         <div style={{ width:1, height:20, background:C.border }} />
@@ -3693,11 +3673,11 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
                             onPick={(patch) => onUpdate({...folder,files:folder.files.map(f=>f.id===file.id?{...f,...patch}:f)})}/>
                           <LinkBtn file={file} allFiles={folder.files}
                             onSave={ids => onUpdate({...folder,files:folder.files.map(f=>f.id===file.id?{...f,linkedFileIds:ids}:f)})} />
-                          <button onClick={() => onOpenFile(file)} className="hov btn-anim"
+                          <button onClick={() => onOpenFile(file)} className="hov"
                             style={{ display:"flex", alignItems:"center", gap:6, background:C.accentL, color:C.accent, border:"none", borderRadius:8, padding:"7px 14px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
                             <Icon d={I.edit} size={13} color={C.accent} /> Open
                           </button>
-                          <button onClick={() => { idbDelete(file.id); FILE_STORE.delete(file.id); onUpdate({...folder,files:folder.files.filter(f=>f.id!==file.id)}); }} className="hov btn-anim"
+                          <button onClick={() => { idbDelete(file.id); FILE_STORE.delete(file.id); onUpdate({...folder,files:folder.files.filter(f=>f.id!==file.id)}); }} className="hov"
                             style={{ background:"none", border:"none", cursor:"pointer", padding:4 }}>
                             <Icon d={I.trash} size={16} color={C.muted} />
                           </button>
@@ -3754,7 +3734,7 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
     <div className="page-with-ad" style={{ minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif" }}>
       <style>{GS}</style>
       <div className="app-header" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", height:64, display:"flex", alignItems:"center", gap:14 }}>
-        <button onClick={handleBack} className="hov btn-anim" style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14 }}>
+        <button onClick={handleBack} className="hov" style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14 }}>
           <Icon d={I.back} size={18} color={C.muted} /> {folder.name}
         </button>
         <Icon d={I.chevron} size={14} color={C.border} />
@@ -3774,12 +3754,12 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
       {tab==="view"
         ? <ViewTab file={file} onUpdate={onUpdate} />
         : <div className="page-inner" style={{ maxWidth:900, margin:"0 auto", padding:"32px 24px" }}>
-            {tab==="notes" && <div key="notes" className="page-fade"><NotesTab key={file.id} file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} /></div>}
-            {tab==="voice" && <div key="voice" className="page-fade"><VoicePodcastTab file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} /></div>}
-            {tab==="cards" && <div key="cards" className="page-fade"><CardsTab file={file} onUpdate={onUpdate} /></div>}
-            {tab==="ai" && <div key="ai" className="page-fade"><AITab file={file} allFiles={allFiles} folder={folder} onUpdate={onUpdate} /></div>}
-            {tab==="game" && <div key="game" className="page-fade"><GameTab file={file} /></div>}
-            {tab==="youtube" && <div key="youtube" className="page-fade"><YouTubeTab file={file} onUpdate={onUpdate} /></div>}
+            {tab==="notes" && <NotesTab key={file.id} file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} />}
+            {tab==="voice" && <VoicePodcastTab file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} />}
+            {tab==="cards" && <CardsTab file={file} onUpdate={onUpdate} />}
+            {tab==="ai" && <AITab file={file} allFiles={allFiles} folder={folder} onUpdate={onUpdate} />}
+            {tab==="game" && <GameTab file={file} />}
+            {tab==="youtube" && <YouTubeTab file={file} onUpdate={onUpdate} />}
           </div>
       }
     </div>
@@ -4824,7 +4804,7 @@ Context (for fixing mis-heard words only — do NOT add this as content): ${cont
     try {
       const script = await callClaude(
         `You are an expert teacher creating a spoken audio lesson. Your ONLY job is to EXPLAIN and SIMPLIFY — never read or copy from the notes.
-Language: ${langLabel}. Write ENTIRELY in ${langLabel}.
+CRITICAL: Write EXCLUSIVELY in ${langLabel}. Every single word must be in ${langLabel}. No mixing of languages.
 
 STRICT RULES — follow every single one:
 1. SIMPLIFY everything as if the student has never seen this topic before.
@@ -5091,7 +5071,7 @@ function NotesTab({ file, onUpdate, user, isGuest }) {
 
       const txt = await callClaude(
         `${effectiveStyle}
-Language: ${langLabel}. Write ALL notes entirely in ${langLabel} — never mix languages.
+CRITICAL LANGUAGE RULE: Write ENTIRELY and EXCLUSIVELY in ${langLabel}. Every single word, heading, bullet, and sentence must be in ${langLabel}. Do NOT mix in any other language — no English words if the language is Arabic, no Chinese if the language is Arabic, etc. If you are unsure of a translation, still write in ${langLabel}.
 
 STRICT FORMATTING RULES — follow exactly:
 1. NEVER use asterisks (*) or double asterisks (**) anywhere
@@ -5130,7 +5110,7 @@ STRICT FORMATTING RULES — follow exactly:
         ? `File "${file.name}":\n\n${safeText2}\n\nCreate detailed study notes specifically about "${topic}" from this document.`
         : `Create comprehensive study notes about: "${topic}". Make them detailed and useful for exam revision.`;
       const txt = await callClaude(
-        `You are an expert study notes writer. Language: ${langLabel}. Write ONLY in ${langLabel}.
+        `You are an expert study notes writer. CRITICAL: Write EXCLUSIVELY in ${langLabel}. Every word must be in ${langLabel}. Do NOT mix languages under any circumstances.
 RULES: No asterisks, no #, ALL CAPS headings, dashes for bullets, plain text.
 Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "metres", π not "pi", etc.`,
         userMsg
@@ -5156,13 +5136,13 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
           <LangPicker value={lang} onChange={setLang} />
 
           {/* AI Generate */}
-          <button onClick={generate} disabled={gen} className="hov btn-anim"
+          <button onClick={generate} disabled={gen} className="hov"
             style={{ display:"flex", alignItems:"center", gap:6, background:C.accentL, color:C.accent, border:"none", borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:600, cursor:gen?"not-allowed":"pointer" }}>
             <Icon d={gen?I.refresh:I.sparkle} size={14} color={C.accent}/>{gen?"Generating…":"AI Generate"}
           </button>
 
           {/* Custom Topic */}
-          <button onClick={() => setShowTopicInput(t => !t)} disabled={gen} className="hov btn-anim"
+          <button onClick={() => setShowTopicInput(t => !t)} disabled={gen} className="hov"
             style={{ display:"flex", alignItems:"center", gap:6, background:C.surface, color:C.text, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
             <Icon d={I.edit} size={13} color={C.text}/> Topic
           </button>
@@ -5170,7 +5150,7 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
           {/* Saved notes dropdown */}
           {savedNotes.length > 0 && (
             <div style={{ position:"relative" }}>
-              <button onClick={() => setShowDropdown(d => !d)} className="hov btn-anim"
+              <button onClick={() => setShowDropdown(d => !d)} className="hov"
                 style={{ display:"flex", alignItems:"center", gap:5, background:C.greenL, color:C.green, border:`1px solid ${C.green}44`, borderRadius:10, padding:"8px 13px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
                 Saved ({savedNotes.length}) ▾
               </button>
@@ -5202,7 +5182,7 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
           )}
 
           {/* Save — always rightmost */}
-          <button onClick={() => { if(notes.trim()) { setNewNoteName(""); setShowSaveModal(true); } }} disabled={!notes.trim()} className="hov btn-anim"
+          <button onClick={() => { if(notes.trim()) { setNewNoteName(""); setShowSaveModal(true); } }} disabled={!notes.trim()} className="hov"
             style={{ display:"flex", alignItems:"center", gap:6, background:notes.trim()?C.accent:"#ccc", color:"#fff", border:"none", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:notes.trim()?"pointer":"not-allowed", opacity:notes.trim()?1:0.6 }}>
             <Icon d={I.check} size={13} color="#fff"/> Save
           </button>
@@ -5328,7 +5308,7 @@ Rules:
 - Keep all the facts and information — don't remove content
 - Keep ALL CAPS headings and dash bullets
 - Never use asterisks or pound signs
-- Write entirely in ${langLabel}`,
+- Write ENTIRELY and EXCLUSIVELY in ${langLabel}. Every word must be in ${langLabel}. Do NOT use any other language.`,
         `Simplify these notes into easy language:\n\n${notes.slice(0, 8000)}`,
         3000
       );
@@ -5638,11 +5618,11 @@ function CardsTab({ file, onUpdate }) {
               Shuffle
             </button>
           )}
-          <button onClick={() => setShowAdd(true)} className="hov btn-anim"
+          <button onClick={() => setShowAdd(true)} className="hov"
             style={{ display:"flex", alignItems:"center", gap:7, background:C.surface, color:C.text, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"9px 14px", fontSize:14, fontWeight:600, cursor:"pointer" }}>
             <Icon d={I.plus} size={14} color={C.text} sw={2.5} /> Add Card
           </button>
-          <button onClick={() => setShowCountPicker(p => !p)} disabled={gen} className="hov btn-anim"
+          <button onClick={() => setShowCountPicker(p => !p)} disabled={gen} className="hov"
             style={{ display:"flex", alignItems:"center", gap:7, background:C.accentL, color:C.accent, border:"none", borderRadius:10, padding:"9px 16px", fontSize:14, fontWeight:600, cursor:gen?"not-allowed":"pointer" }}>
             <Icon d={gen?I.refresh:I.sparkle} size={15} color={C.accent} />{gen?"Generating…":"AI Generate"}
           </button>
@@ -5784,11 +5764,11 @@ function CardsTab({ file, onUpdate }) {
             </div>
 
             {/* Card */}
-            <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", padding:"32px 48px", minHeight:0 }}>
+            <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", padding:"24px 32px", minHeight:0, perspective:1400 }}>
               <div
                 className={`ql-wrap${isFlipped ? " flipped" : ""}`}
                 onClick={() => setFlipped(f => ({...f, [card.id]: !f[card.id]}))}
-                style={{ width:"100%", maxWidth:800, height:360, perspective:1400, cursor:"pointer", userSelect:"none" }}>
+                style={{ width:"100%", maxWidth:760, height:"min(360px, calc(100vh - 240px))", cursor:"pointer", userSelect:"none" }}>
 
                 {/* Front */}
                 <div className="ql-side" style={{
@@ -5986,27 +5966,40 @@ function YouTubeTab({ file, onUpdate }) {
     return m ? m[1] : null;
   };
 
-  // Fetch transcript via our Hugging Face TTS server (no CORS issues, no API key)
+  // Fetch transcript using multiple free methods
   const fetchTranscript = async (vid) => {
     const serverUrl = (typeof window !== "undefined" && window.__CLASSIO_TTS_URL__)
       ? window.__CLASSIO_TTS_URL__ : "";
 
-    // Try our HF Space server first (most reliable)
+    // Method 1: Our HF Space server (most reliable — add /transcript endpoint to app.py)
     if (serverUrl) {
       try {
-        const resp = await fetch(`${serverUrl}/transcript/${vid}`);
+        const resp = await fetch(`${serverUrl}/transcript/${vid}`, { signal: AbortSignal.timeout(12000) });
         if (resp.ok) {
           const data = await resp.json();
           if (data.success && data.transcript) {
-            return { transcript: data.transcript, title: "" };
+            return { transcript: data.transcript, title: data.title || "" };
           }
         }
-      } catch { /* fall through to corsproxy */ }
+      } catch { /* fall through */ }
     }
 
-    // Fallback: corsproxy.io to scrape YouTube directly
+    // Method 2: youtubetranscript.com free API (no key needed)
     try {
-      const pageResp = await fetch(`https://corsproxy.io/?${encodeURIComponent(`https://www.youtube.com/watch?v=${vid}`)}`);
+      const r = await fetch(`https://youtubetranscript.com/?server_vid2=${vid}`, { signal: AbortSignal.timeout(10000) });
+      if (r.ok) {
+        const xml = await r.text();
+        const lines = [...xml.matchAll(/<text[^>]*>([\s\S]*?)<\/text>/g)]
+          .map(m => m[1].replace(/<[^>]+>/g,"").replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&#39;/g,"'").trim())
+          .filter(Boolean);
+        if (lines.length > 10) return { transcript: lines.join(" "), title: "" };
+      }
+    } catch { /* fall through */ }
+
+    // Method 3: corsproxy scrape of YouTube page for captions
+    try {
+      const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`https://www.youtube.com/watch?v=${vid}`)}`;
+      const pageResp = await fetch(proxyUrl, { signal: AbortSignal.timeout(12000) });
       if (!pageResp.ok) throw new Error("page fetch failed");
       const html = await pageResp.text();
 
@@ -6022,19 +6015,12 @@ function YouTubeTab({ file, onUpdate }) {
                     tracks[0];
       if (!track?.baseUrl) return { transcript: null, title };
 
-      const capResp = await fetch(`https://corsproxy.io/?${encodeURIComponent(track.baseUrl)}`);
+      const capResp = await fetch(`https://corsproxy.io/?${encodeURIComponent(track.baseUrl)}`, { signal: AbortSignal.timeout(10000) });
       if (!capResp.ok) return { transcript: null, title };
       const xml = await capResp.text();
-
       const lines = [...xml.matchAll(/<text[^>]*>([\s\S]*?)<\/text>/g)]
-        .map(m => m[1]
-          .replace(/<[^>]+>/g, "")
-          .replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">")
-          .replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/\n/g," ")
-          .trim()
-        )
+        .map(m => m[1].replace(/<[^>]+>/g,"").replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/\n/g," ").trim())
         .filter(Boolean);
-
       const transcript = lines.join(" ");
       return { transcript: transcript.length > 100 ? transcript : null, title };
     } catch {
@@ -6417,7 +6403,7 @@ function AIPodcastPanel({ file, lang }) {
     const explanation = await callClaude(
       `You are an expert teacher creating a spoken AI podcast lesson.
 EXPLAIN — do not read or copy the notes. Teach the student from scratch.
-Language: ${langLabel}. Write ENTIRELY in ${langLabel}.
+CRITICAL: Write EXCLUSIVELY in ${langLabel}. Every single word must be in ${langLabel}. No mixing of languages.
 - For every concept: what it IS, why it matters, how it works, a real analogy
 - Conversational: "Think of it like this…", "What this means is…", "Here's why…"
 - Build step by step. Connect each idea to the previous one.
@@ -7283,7 +7269,6 @@ function MCQ({ cards, onBack }) {
   // Learn More state
   const [learnMore,    setLearnMore]    = useState(null); // null | "loading" | string
   const [showLearnMore, setShowLearnMore] = useState(false);
-  const [answerAnim,   setAnswerAnim]   = useState(null); // null | {idx, type:"correct"|"wrong"}
 
   useEffect(() => {
     buildAIOptions(deck).then(map => { setOptsMap(map); setLoading(false); });
@@ -7293,12 +7278,7 @@ function MCQ({ cards, onBack }) {
     if (sel) return;
     setSel(o);
     setLearnMore(null); setShowLearnMore(false);
-    const isCorrect = o === deck[curr].answer;
-    if (isCorrect) setScore(s => s + 1);
-    // Trigger animation
-    const idx = ((optsMap && optsMap.get(deck[curr].id)) || buildFallbackOptions(deck[curr], deck)).indexOf(o);
-    setAnswerAnim({ idx, type: isCorrect ? "correct" : "wrong" });
-    setTimeout(() => setAnswerAnim(null), 500);
+    if (o === deck[curr].answer) setScore(s => s + 1);
   };
 
   const next = () => {
@@ -7357,9 +7337,7 @@ Keep it under 150 words. Be encouraging.`,
             else if (is) { bg = C.redL;   bd = C.red;   col = C.red;   }
           }
           return (
-            <button key={i} onClick={() => pick(o)}
-              className={answerAnim && answerAnim.idx === i ? (answerAnim.type === "correct" ? "answer-correct" : "answer-wrong") : "btn-anim"}
-              style={{ background:bg, border:`1.5px solid ${bd}`, borderRadius:12, padding:"14px 18px", textAlign:"left", fontSize:15, color:col, cursor:sel?"default":"pointer", fontWeight:is||(sel&&ok)?600:400, transition:"all .2s", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+            <button key={i} onClick={() => pick(o)} style={{ background:bg, border:`1.5px solid ${bd}`, borderRadius:12, padding:"14px 18px", textAlign:"left", fontSize:15, color:col, cursor:sel?"default":"pointer", fontWeight:is||(sel&&ok)?600:400, transition:"all .2s", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
               <span><span style={{ fontWeight:700, marginRight:10, color:C.muted }}>{"ABCD"[i]}.</span>{o}</span>
               {sel && ok  && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>}
               {sel && is && !ok && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.red} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>}
