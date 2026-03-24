@@ -293,6 +293,46 @@ function buildFallbackOptions(card, cards) {
 // ─── MATH FORMATTER ──────────────────────────────────────────────────────────
 // Converts spoken/written math phrases into proper numeric/symbol notation.
 // Works on AI-generated notes and voice transcriptions.
+// Remove foreign script characters that don't belong in the target language
+// e.g. removes Chinese/Korean chars from Arabic notes, removes Arabic from English, etc.
+function fixLanguage(text, langCode) {
+  if (!text || !langCode) return text;
+  // Define which Unicode blocks are ALLOWED for each language
+  // Common allowed: Latin punctuation, digits, math symbols always allowed
+  const alwaysOk = /[\u0020-\u007E\u00A0-\u00FF\u2000-\u206F\u2200-\u22FF\u00B0-\u00BF]/;
+
+  const isArabic    = /[\u0600-\u06FF]/;
+  const isChinese   = /[\u4E00-\u9FFF\u3400-\u4DBF]/;
+  const isJapanese  = /[\u3040-\u309F\u30A0-\u30FF]/;
+  const isKorean    = /[\uAC00-\uD7AF\u1100-\u11FF]/;
+  const isCyrillic  = /[\u0400-\u04FF]/;
+  const isHindi     = /[\u0900-\u097F]/;
+
+  // For Arabic: remove Chinese, Japanese, Korean, Cyrillic, Hindi that slip in
+  if (langCode.startsWith("ar")) {
+    return text.split("").filter(c => {
+      if (isChinese.test(c) || isJapanese.test(c) || isKorean.test(c) || isCyrillic.test(c) || isHindi.test(c)) return false;
+      return true;
+    }).join("");
+  }
+  // For English: remove Arabic, Chinese, Japanese, Korean, Cyrillic, Hindi
+  if (langCode.startsWith("en")) {
+    return text.split("").filter(c => {
+      if (isArabic.test(c) || isChinese.test(c) || isJapanese.test(c) || isKorean.test(c) || isCyrillic.test(c) || isHindi.test(c)) return false;
+      return true;
+    }).join("");
+  }
+  // For Chinese: remove Arabic, Korean, Cyrillic, Hindi
+  if (langCode.startsWith("zh")) {
+    return text.split("").filter(c => {
+      if (isArabic.test(c) || isKorean.test(c) || isCyrillic.test(c) || isHindi.test(c)) return false;
+      return true;
+    }).join("");
+  }
+  // For other languages: just return as-is (their scripts are safe enough)
+  return text;
+}
+
 function fixMath(text) {
   if (!text) return text;
   let t = text;
@@ -4608,6 +4648,32 @@ function LangPicker({ value, onChange }) {
 // ─── LANGUAGE OPTIONS ─────────────────────────────────────────────────────────
 const LANG_OPTIONS = [["en-US","English (US)"],["en-GB","English (UK)"],["ar-SA","Arabic"],["ar-EG","Arabic (Egypt)"],["es-ES","Spanish"],["es-MX","Spanish (Mexico)"],["fr-FR","French"],["de-DE","German"],["it-IT","Italian"],["pt-BR","Portuguese"],["zh-CN","Chinese"],["ja-JP","Japanese"],["ko-KR","Korean"],["hi-IN","Hindi"],["ru-RU","Russian"],["tr-TR","Turkish"]];
 
+// Maps language code to a native example phrase — forces the model to use correct script
+const LANG_EXAMPLES = {
+  "en-US": "Example: The atom has a nucleus.",
+  "en-GB": "Example: The atom has a nucleus.",
+  "ar-SA": "مثال: الذرة لها نواة. اكتب كل شيء باللغة العربية فقط.",
+  "ar-EG": "مثال: الذرة لها نواة. اكتب كل شيء باللغة العربية فقط.",
+  "es-ES": "Ejemplo: El átomo tiene un núcleo.",
+  "es-MX": "Ejemplo: El átomo tiene un núcleo.",
+  "fr-FR": "Exemple: L'atome a un noyau.",
+  "de-DE": "Beispiel: Das Atom hat einen Kern.",
+  "it-IT": "Esempio: L'atomo ha un nucleo.",
+  "pt-BR": "Exemplo: O átomo tem um núcleo.",
+  "zh-CN": "例子：原子有一个核。请用中文写所有内容。",
+  "ja-JP": "例：原子には核がある。すべて日本語で書いてください。",
+  "ko-KR": "예시: 원자에는 핵이 있습니다. 모든 내용을 한국어로 작성하세요.",
+  "hi-IN": "उदाहरण: परमाणु में एक नाभिक होता है। सब कुछ हिंदी में लिखें।",
+  "ru-RU": "Пример: Атом имеет ядро. Пишите всё на русском языке.",
+  "tr-TR": "Örnek: Atomun bir çekirdeği var. Her şeyi Türkçe yazın.",
+};
+
+function getLangInstruction(langCode) {
+  const label = LANG_OPTIONS.find(l => l[0] === langCode)?.[1] || langCode;
+  const example = LANG_EXAMPLES[langCode] || "";
+  return `LANGUAGE: ${label} ONLY. Every single word — headings, bullets, explanations — must be written in ${label}. Do NOT use any other language or script. ${example}`;
+}
+
 // ─── VOICE & PODCAST TAB ─────────────────────────────────────────────────────
 // All audio features: Voice Notes recording + Podcast player
 function VoicePodcastTab({ file, user, isGuest, onUpdate }) {
@@ -4704,7 +4770,7 @@ function VoicePodcastTab({ file, user, isGuest, onUpdate }) {
     setProcessing(true);
     setVoiceStatus("Organising your notes…");
     try {
-      const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[^\x00-\x7F\s]+\s*/g,'') || lang;
+      const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1] || lang;
       const context = `File: "${file.name}". Topic context (for fixing speech recognition errors): ${(file.notes || "").slice(0, 300) || "none"}.`;
       const result = await callClaude(
         `You are an expert note-taker. A student has just spoken aloud — your job is to turn their speech into clean, well-organised study notes.
@@ -4737,7 +4803,7 @@ Output: Hi, we will study English.
 Context (for fixing mis-heard words only — do NOT add this as content): ${context}`,
         `Turn this spoken recording into clean study notes:\n\n"${raw}"`
       );
-      const fixedResult = fixMath(result);
+      const fixedResult = fixLanguage(fixMath(result), "en-US"); // YouTube always English
       const newNotes = notes ? notes + "\n\n---\n\n" + fixedResult : fixedResult;
       setNotes(newNotes);
       onUpdate({ ...file, notes: newNotes });
@@ -4800,11 +4866,11 @@ Context (for fixing mis-heard words only — do NOT add this as content): ${cont
     setShowPodcast(true);
     setPodcastScript("");
     _setPodcastBlob(null);
-    const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[^\x00-\x7F\s]+\s*/g,'') || lang;
+    const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1] || lang;
     try {
       const script = await callClaude(
         `You are an expert teacher creating a spoken audio lesson. Your ONLY job is to EXPLAIN and SIMPLIFY — never read or copy from the notes.
-CRITICAL: Write EXCLUSIVELY in ${langLabel}. Every single word must be in ${langLabel}. No mixing of languages.
+${getLangInstruction(lang)}
 
 STRICT RULES — follow every single one:
 1. SIMPLIFY everything as if the student has never seen this topic before.
@@ -5053,7 +5119,7 @@ function NotesTab({ file, onUpdate, user, isGuest }) {
       const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
       const fileText = fileObj ? await extractFileText(fileObj) : null;
       const safeText = fileText ? fileText.slice(0, 16000) : null;
-      const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[\u{1F1E0}-\u{1F1FF}]{2}\s*/gu, '') || lang;
+      const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1] || lang;
 
       const userMsg = safeText
         ? `Here is the COMPLETE content from the file "${file.name}":\n\n${safeText}\n\nCRITICAL: You MUST cover EVERY SINGLE section, concept, definition, formula, and fact in the above content. Do not skip anything. Write notes section by section, following the document structure. Include ALL details.`
@@ -5071,7 +5137,7 @@ function NotesTab({ file, onUpdate, user, isGuest }) {
 
       const txt = await callClaude(
         `${effectiveStyle}
-CRITICAL LANGUAGE RULE: Write ENTIRELY and EXCLUSIVELY in ${langLabel}. Every single word, heading, bullet, and sentence must be in ${langLabel}. Do NOT mix in any other language — no English words if the language is Arabic, no Chinese if the language is Arabic, etc. If you are unsure of a translation, still write in ${langLabel}.
+${getLangInstruction(lang)}
 
 STRICT FORMATTING RULES — follow exactly:
 1. NEVER use asterisks (*) or double asterisks (**) anywhere
@@ -5091,7 +5157,7 @@ STRICT FORMATTING RULES — follow exactly:
         userMsg,
         4000
       );
-      const fixedTxt = fixMath(txt);
+      const fixedTxt = fixLanguage(fixMath(txt), lang);
       setNotes(fixedTxt);
       setUnsaved(true);
       // Don't auto-save to file — user must click Save
@@ -5105,17 +5171,17 @@ STRICT FORMATTING RULES — follow exactly:
       const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
       const fileText = fileObj ? await extractFileText(fileObj) : null;
       const safeText2 = fileText ? fileText.slice(0, 16000) : null;
-      const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[\u{1F1E0}-\u{1F1FF}]{2}\s*/gu, '') || lang;
+      const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1] || lang;
       const userMsg = safeText2
         ? `File "${file.name}":\n\n${safeText2}\n\nCreate detailed study notes specifically about "${topic}" from this document.`
         : `Create comprehensive study notes about: "${topic}". Make them detailed and useful for exam revision.`;
       const txt = await callClaude(
-        `You are an expert study notes writer. CRITICAL: Write EXCLUSIVELY in ${langLabel}. Every word must be in ${langLabel}. Do NOT mix languages under any circumstances.
+        `You are an expert study notes writer. ${getLangInstruction(lang)}
 RULES: No asterisks, no #, ALL CAPS headings, dashes for bullets, plain text.
 Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "metres", π not "pi", etc.`,
         userMsg
       );
-      const fixedTxt2 = fixMath(txt);
+      const fixedTxt2 = fixLanguage(fixMath(txt), lang);
       setNotes(fixedTxt2); setUnsaved(true);
     } catch(e) { setNotes(`Error: ${e.message}`); }
     setGen(false);
@@ -5299,7 +5365,7 @@ function NotesSimplifyBtn({ notes, onResult, lang }) {
   const simplify = async () => {
     setLoading(true);
     try {
-      const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[^\x00-\x7F\s]+\s*/g,'') || lang;
+      const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1] || lang;
       const result = await callClaude(
         `You are a note simplifier. Rewrite the given study notes in very simple, easy-to-understand language.
 Rules:
@@ -5308,7 +5374,7 @@ Rules:
 - Keep all the facts and information — don't remove content
 - Keep ALL CAPS headings and dash bullets
 - Never use asterisks or pound signs
-- Write ENTIRELY and EXCLUSIVELY in ${langLabel}. Every word must be in ${langLabel}. Do NOT use any other language.`,
+- ${getLangInstruction(lang)}`,
         `Simplify these notes into easy language:\n\n${notes.slice(0, 8000)}`,
         3000
       );
@@ -5380,11 +5446,11 @@ function NotesQASidebar({ file, notes, lang }) {
     setMessages(m => [...m, {role:"user", text:q}]);
     setLoading(true);
     try {
-      const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[^\x00-\x7F\s]+\s*/g,'') || lang;
+      const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1] || lang;
       const ans = await callClaudeChat(
         `You are a helpful study assistant. Answer questions about these notes clearly and concisely.
 Notes context: ${notes.slice(0, 5000)}
-Language: ${langLabel}. Always reply in ${langLabel}.
+${getLangInstruction(lang)}
 Formatting: plain text only — no LaTeX, no dollar signs, no markdown asterisks, no pound signs.`,
         [...messages.slice(-6), {role:"user", content:q}].map(m => ({role:m.role==="user"?"user":"assistant", content:m.text||m.content}))
       );
@@ -6399,11 +6465,11 @@ function AIPodcastPanel({ file, lang }) {
     let p = 0;
     const iv = setInterval(() => { p = Math.min(88, p + 3); setGenPct(p); }, 250);
 
-    const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[^\x00-\x7F\s]+\s*/g,'') || "English";
+    const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1] || "English";
     const explanation = await callClaude(
       `You are an expert teacher creating a spoken AI podcast lesson.
 EXPLAIN — do not read or copy the notes. Teach the student from scratch.
-CRITICAL: Write EXCLUSIVELY in ${langLabel}. Every single word must be in ${langLabel}. No mixing of languages.
+${getLangInstruction(lang)}
 - For every concept: what it IS, why it matters, how it works, a real analogy
 - Conversational: "Think of it like this…", "What this means is…", "Here's why…"
 - Build step by step. Connect each idea to the previous one.
@@ -8306,8 +8372,11 @@ function VoiceAnswer({ cards, onBack }) {
           if (countdown <= 0) {
             clearInterval(timer);
             countdownRef.current = null;
-            setVoiceCountdown(null);
-            checkAnswer(lastFinal.trim());
+            // Show 0 briefly before submitting
+            setTimeout(() => {
+              setVoiceCountdown(null);
+              checkAnswer(lastFinal.trim());
+            }, 400);
           }
         }, 400);
         countdownRef.current = timer;
