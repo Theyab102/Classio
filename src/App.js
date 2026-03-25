@@ -27,40 +27,29 @@ const googleProvider = new GoogleAuthProvider();
 // Get a free key at console.groq.com — no credit card needed!
 const GROQ_KEY = process.env.REACT_APP_GROQ_KEY || "";
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-
-// ── Gemini primary → Groq (Llama) fallback ────────────────────────────────────
-const GEMINI_KEYS = [
-  process.env.REACT_APP_GEMINI_KEY_1 || "",
-  process.env.REACT_APP_GEMINI_KEY_2 || "",
-  process.env.REACT_APP_GEMINI_KEY_3 || "",
-].filter(Boolean);
+const GEMINI_KEYS = [process.env.REACT_APP_GEMINI_KEY_1||"",process.env.REACT_APP_GEMINI_KEY_2||"",process.env.REACT_APP_GEMINI_KEY_3||""].filter(Boolean);
 
 async function _callGemini(prompt, maxTok=3000) {
   for (const key of GEMINI_KEYS) {
     try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,
         { method:"POST", headers:{"Content-Type":"application/json"},
-          body: JSON.stringify({ contents:[{ parts:[{ text:prompt }] }], generationConfig:{ maxOutputTokens:maxTok, temperature:0.7 } }) }
-      );
-      if (res.status === 429) continue;
-      if (!res.ok) throw new Error("Gemini " + res.status);
+          body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:maxTok,temperature:0.7}}) });
+      if (res.status===429) continue;
+      if (!res.ok) throw new Error("Gemini "+res.status);
       const d = await res.json();
-      const txt = d.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const txt = d.candidates?.[0]?.content?.parts?.[0]?.text||"";
       if (txt) return txt;
     } catch(e) { if (String(e).includes("429")) continue; throw e; }
   }
-  throw new Error("Gemini keys exhausted");
+  throw new Error("Gemini exhausted");
 }
 
 async function callClaude(system, userMessage, maxTok = 3000) {
-  // Try Gemini first
-  if (GEMINI_KEYS.length > 0) {
-    try {
-      return await _callGemini((system ? system + "\n\n" : "") + userMessage, maxTok);
-    } catch(e) { console.warn("Gemini→Groq fallback:", e.message); }
+  if (GEMINI_KEYS.length>0) {
+    try { return await _callGemini((system?system+"\n\n":"")+userMessage, maxTok); }
+    catch(e) { console.warn("Gemini→Groq:", e.message); }
   }
-  // Groq fallback
   const res = await fetch(GROQ_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_KEY}` },
@@ -76,12 +65,11 @@ async function callClaude(system, userMessage, maxTok = 3000) {
 }
 
 async function callClaudeChat(system, messages) {
-  const sysPrompt = system + "\n\nIMPORTANT: Always reply in the SAME language the user wrote in. If Arabic → Arabic. If French → French. Match exactly.";
-  // Try Gemini first
-  if (GEMINI_KEYS.length > 0) {
+  const sysP = system + "\n\nIMPORTANT: Always reply in the SAME language the user wrote in. If Arabic → Arabic. If French → French. Match exactly.";
+  if (GEMINI_KEYS.length>0) {
     try {
-      const history = messages.map(m => `${m.role === "user" ? "User" : "Assistant"}: ${typeof m.content === "string" ? m.content : ""}`).join("\n");
-      return await _callGemini(sysPrompt + "\n\n" + history, 1200);
+      const hist = messages.map(m=>`${m.role==="user"?"User":"Assistant"}: ${typeof m.content==="string"?m.content:""}`).join("\n");
+      return await _callGemini(sysP+"\n\n"+hist, 1200);
     } catch(e) { console.warn("Gemini chat fallback:", e.message); }
   }
   const res = await fetch(GROQ_URL, {
@@ -89,7 +77,7 @@ async function callClaudeChat(system, messages) {
     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_KEY}` },
     body: JSON.stringify({
       model: "llama-3.3-70b-versatile",
-      messages: [{ role: "system", content: sysPrompt }, ...messages],
+      messages: [{ role: "system", content: sysP }, ...messages],
       max_tokens: 1200,
     }),
   });
@@ -1445,50 +1433,43 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
     );
   }
 
-  // Desktop: slim icon sidebar (Turbo-style)
+  // Desktop: slim icon sidebar
   const [expanded, setExpanded] = React.useState(false);
   const sideW = expanded ? 220 : 60;
 
   const NavBtn = ({ n }) => {
     const active = (n.id==="home" && (screen==="home"||screen==="folder"||screen==="file")) || (n.id==="guides" && homeTab==="about");
     return (
-      <div style={{ position:"relative" }}>
-        <button onClick={()=>onNavigate(n.id)}
-          title={n.label}
-          style={{ width:"100%", display:"flex", alignItems:"center", gap:12, padding:expanded?"9px 14px":"12px", borderRadius:10, border:"none", cursor:"pointer",
-            background:active?T.sidebarActive:"transparent",
-            color:active?T.text:T.muted, fontWeight:active?600:400, fontSize:14, transition:"all .12s",
-            justifyContent:expanded?"flex-start":"center" }}
-          onMouseEnter={e=>{ if(!active){ e.currentTarget.style.background=T.sidebarActive; e.currentTarget.style.color=T.text; }}}
-          onMouseLeave={e=>{ if(!active){ e.currentTarget.style.background="transparent"; e.currentTarget.style.color=T.muted; }}}>
-          <span style={{ flexShrink:0, display:"flex" }}>{n.icon}</span>
-          {expanded && <span style={{ whiteSpace:"nowrap", overflow:"hidden" }}>{n.label}</span>}
-          {active && expanded && <div style={{ width:5, height:5, borderRadius:"50%", background:T.accent, marginLeft:"auto", flexShrink:0 }}/>}
-        </button>
-      </div>
+      <button onClick={()=>onNavigate(n.id)} title={n.label}
+        style={{ width:"100%", display:"flex", alignItems:"center", gap:12, padding:expanded?"9px 14px":"12px", borderRadius:10, border:"none", cursor:"pointer",
+          background:active?T.sidebarActive:"transparent", color:active?T.text:T.muted,
+          fontWeight:active?600:400, fontSize:14, transition:"all .12s", justifyContent:expanded?"flex-start":"center" }}
+        onMouseEnter={e=>{ if(!active){e.currentTarget.style.background=T.sidebarActive; e.currentTarget.style.color=T.text;}}}
+        onMouseLeave={e=>{ if(!active){e.currentTarget.style.background="transparent"; e.currentTarget.style.color=T.muted;}}}>
+        <span style={{ flexShrink:0, display:"flex" }}>{n.icon}</span>
+        {expanded && <span style={{ whiteSpace:"nowrap" }}>{n.label}</span>}
+        {active && expanded && <div style={{ width:5, height:5, borderRadius:"50%", background:T.accent, marginLeft:"auto" }}/>}
+      </button>
     );
   };
 
   return (
     <div style={{ width:sideW, minWidth:sideW, height:"100vh", background:T.sidebar, borderRight:`1px solid ${T.border}`, display:"flex", flexDirection:"column", position:"fixed", left:0, top:0, zIndex:200, transition:"width .2s ease", overflow:"hidden" }}>
-      {/* Logo + collapse toggle */}
-      <div style={{ padding:"16px 0", display:"flex", flexDirection:"column", alignItems:"center", borderBottom:`1px solid ${T.border}` }}>
-        <div style={{ width:36, height:36, background:"linear-gradient(135deg,#7C5CFC,#3D5A80)", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, cursor:"pointer" }} onClick={()=>setExpanded(e=>!e)}>
+      {/* Logo */}
+      <div style={{ padding:"16px 0 12px", display:"flex", flexDirection:"column", alignItems:"center", borderBottom:`1px solid ${T.border}`, cursor:"pointer" }} onClick={()=>setExpanded(e=>!e)}>
+        <div style={{ width:36, height:36, background:"linear-gradient(135deg,#7C5CFC,#3D5A80)", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center" }}>
           <Icon d={I.sparkle} size={16} color="#fff" sw={2}/>
         </div>
-        {expanded && <span style={{ fontFamily:"'Fraunces',serif", fontSize:16, fontWeight:700, color:T.navText, letterSpacing:-.3, marginTop:8 }}>Classio</span>}
+        {expanded && <span style={{ fontFamily:"'Fraunces',serif", fontSize:16, fontWeight:700, color:T.navText, marginTop:8 }}>Classio</span>}
       </div>
 
-      {/* Search */}
+      {/* Search bar */}
       <div style={{ padding:"10px 8px 4px" }}>
         <button onClick={onOpenSearch} title="Search (⌘K)"
           style={{ width:"100%", display:"flex", alignItems:"center", gap:8, background:T.bg, border:`1px solid ${T.border}`, borderRadius:10,
             padding:expanded?"8px 12px":"10px", cursor:"pointer", justifyContent:expanded?"flex-start":"center" }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          {expanded && <>
-            <span style={{ fontSize:13, color:T.muted, flex:1 }}>Search…</span>
-            <span style={{ fontSize:10, color:T.muted, background:T.border, borderRadius:4, padding:"1px 5px" }}>⌘K</span>
-          </>}
+          {expanded && <><span style={{ fontSize:13, color:T.muted, flex:1 }}>Search…</span><span style={{ fontSize:10, color:T.muted, background:T.border, borderRadius:4, padding:"1px 5px" }}>⌘K</span></>}
         </button>
       </div>
 
@@ -1499,28 +1480,29 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
 
       {/* Bottom */}
       <div style={{ padding:"8px 8px 16px", borderTop:`1px solid ${T.border}`, display:"flex", flexDirection:"column", gap:4 }}>
-        <button onClick={onToggleTheme} title={T.isDark?"Light mode":"Dark mode"}
-          style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:expanded?"9px 14px":"12px", borderRadius:10, border:"none", cursor:"pointer",
-            background:"transparent", color:T.muted, fontSize:14, transition:"all .12s", justifyContent:expanded?"flex-start":"center" }}
+        {/* Theme toggle */}
+        <button onClick={onToggleTheme}
+          style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"9px 12px", borderRadius:10, border:"none", cursor:"pointer", background:"transparent", color:T.muted, fontSize:14, transition:"all .12s" }}
           onMouseEnter={e=>{e.currentTarget.style.background=T.sidebarActive; e.currentTarget.style.color=T.text;}}
           onMouseLeave={e=>{e.currentTarget.style.background="transparent"; e.currentTarget.style.color=T.muted;}}>
           {T.isDark
-            ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/></svg>
-            : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>}
-          {expanded && (T.isDark ? "Light mode" : "Dark mode")}
+            ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+            : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          }
+          {T.isDark ? "Light mode" : "Dark mode"}
         </button>
-        <button onClick={onOpenCharacter} title="Profile"
-          style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:expanded?"8px 14px":"10px", borderRadius:10, border:"none", cursor:"pointer",
-            background:"transparent", justifyContent:expanded?"flex-start":"center" }}
+        {/* User */}
+        <button onClick={onOpenCharacter}
+          style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"8px 12px", borderRadius:10, border:"none", cursor:"pointer", background:"transparent" }}
           onMouseEnter={e=>{e.currentTarget.style.background=T.sidebarActive;}}
           onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
-          <div style={{ width:30, height:30, borderRadius:"50%", overflow:"hidden", border:`2px solid ${T.border}`, flexShrink:0 }}>
-            <MiniAvatar character={character||{}} size={30} />
+          <div style={{ width:32, height:32, borderRadius:"50%", overflow:"hidden", border:`2px solid ${T.border}`, flexShrink:0 }}>
+            <MiniAvatar character={character||{}} size={32} />
           </div>
-          {expanded && <div style={{ textAlign:"left", minWidth:0 }}>
+          <div style={{ textAlign:"left", minWidth:0 }}>
             <p style={{ margin:0, fontSize:13, fontWeight:600, color:T.navText, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{character?.name || (user?.displayName?.split(" ")[0]) || (isGuest?"Guest":"You")}</p>
             <p style={{ margin:0, fontSize:11, color:T.muted }}>{isGuest?"Guest mode":"Student"}</p>
-          </div>}
+          </div>
         </button>
       </div>
     </div>
@@ -1901,7 +1883,6 @@ export default function App() {
                 style={{ display:"flex", alignItems:"center", gap:14, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, padding:"14px 16px", cursor:"pointer", transition:"all .15s", marginBottom:6, animation:`quickIn .18s ease ${idx*0.04}s both` }}
                 onMouseEnter={e=>{e.currentTarget.style.background=T.sidebarActive; e.currentTarget.style.borderColor=T.accentS;}}
                 onMouseLeave={e=>{e.currentTarget.style.background=T.surface; e.currentTarget.style.borderColor=T.border;}}>
-                {/* File type icon */}
                 <div style={{ width:44, height:44, background:folder.color+"22", borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                   <Icon d={I.folder} size={22} color={folder.color} />
                 </div>
@@ -1910,10 +1891,10 @@ export default function App() {
                   <p style={{ margin:0, fontSize:12, color:T.muted, marginTop:2 }}>{folder.files.length} file{folder.files.length!==1?"s":""} · Last opened recently</p>
                 </div>
                 <button onClick={e=>{e.stopPropagation(); if(window.confirm(`Delete "${folder.name}"?`)) deleteFolder(folder.id);}}
-                  style={{ background:"none", border:"none", cursor:"pointer", color:T.muted, padding:6, borderRadius:8, opacity:0, transition:"opacity .15s" }}
-                  onMouseEnter={e=>{e.currentTarget.style.opacity=1; e.currentTarget.style.color=T.red;}}
-                  onMouseLeave={e=>{e.currentTarget.style.opacity=0; e.currentTarget.style.color=T.muted;}}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+                  style={{ background:"none", border:"none", cursor:"pointer", color:T.red, padding:6, borderRadius:8, opacity:0, transition:"opacity .15s" }}
+                  onMouseEnter={e=>e.currentTarget.style.opacity=1}
+                  onMouseLeave={e=>e.currentTarget.style.opacity=0}>
+                  <Icon d={I.trash} size={15} color="currentColor"/>
                 </button>
               </div>
             ))}
