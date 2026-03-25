@@ -293,46 +293,6 @@ function buildFallbackOptions(card, cards) {
 // ─── MATH FORMATTER ──────────────────────────────────────────────────────────
 // Converts spoken/written math phrases into proper numeric/symbol notation.
 // Works on AI-generated notes and voice transcriptions.
-// Remove foreign script characters that don't belong in the target language
-// e.g. removes Chinese/Korean chars from Arabic notes, removes Arabic from English, etc.
-function fixLanguage(text, langCode) {
-  if (!text || !langCode) return text;
-  // Define which Unicode blocks are ALLOWED for each language
-  // Common allowed: Latin punctuation, digits, math symbols always allowed
-  const alwaysOk = /[\u0020-\u007E\u00A0-\u00FF\u2000-\u206F\u2200-\u22FF\u00B0-\u00BF]/;
-
-  const isArabic    = /[\u0600-\u06FF]/;
-  const isChinese   = /[\u4E00-\u9FFF\u3400-\u4DBF]/;
-  const isJapanese  = /[\u3040-\u309F\u30A0-\u30FF]/;
-  const isKorean    = /[\uAC00-\uD7AF\u1100-\u11FF]/;
-  const isCyrillic  = /[\u0400-\u04FF]/;
-  const isHindi     = /[\u0900-\u097F]/;
-
-  // For Arabic: remove Chinese, Japanese, Korean, Cyrillic, Hindi that slip in
-  if (langCode.startsWith("ar")) {
-    return text.split("").filter(c => {
-      if (isChinese.test(c) || isJapanese.test(c) || isKorean.test(c) || isCyrillic.test(c) || isHindi.test(c)) return false;
-      return true;
-    }).join("");
-  }
-  // For English: remove Arabic, Chinese, Japanese, Korean, Cyrillic, Hindi
-  if (langCode.startsWith("en")) {
-    return text.split("").filter(c => {
-      if (isArabic.test(c) || isChinese.test(c) || isJapanese.test(c) || isKorean.test(c) || isCyrillic.test(c) || isHindi.test(c)) return false;
-      return true;
-    }).join("");
-  }
-  // For Chinese: remove Arabic, Korean, Cyrillic, Hindi
-  if (langCode.startsWith("zh")) {
-    return text.split("").filter(c => {
-      if (isArabic.test(c) || isKorean.test(c) || isCyrillic.test(c) || isHindi.test(c)) return false;
-      return true;
-    }).join("");
-  }
-  // For other languages: just return as-is (their scripts are safe enough)
-  return text;
-}
-
 function fixMath(text) {
   if (!text) return text;
   let t = text;
@@ -608,48 +568,12 @@ function useResponsive() {
 }
 
 // ─── COLORS ───────────────────────────────────────────────────────────────────
-// ─── THEME SYSTEM ─────────────────────────────────────────────────────────────
-const THEMES = {
-  light: {
-    bg:"#F7F5F2", surface:"#FFFFFF", border:"#E8E4DF", text:"#1A1714",
-    muted:"#9B9590", accent:"#3D5A80", accentL:"#E8EFF5", accentS:"#C5D5E8",
-    warm:"#C17F5A", warmL:"#F5EDE5", green:"#4A7C59", greenL:"#E5F0E8",
-    purple:"#6B4E8A", purpleL:"#EDE5F5", red:"#C45C5C", redL:"#F5E5E5",
-    sidebar:"#FFFFFF", sidebarActive:"#F0EDE8", navText:"#1A1714",
-    shadow:"0 2px 12px rgba(0,0,0,.06)", cardShadow:"0 4px 20px rgba(0,0,0,.08)",
-    isDark:false,
-  },
-  dark: {
-    bg:"#1A1A15", surface:"#252520", border:"#35352E", text:"#F0EDE8",
-    muted:"#7A7870", accent:"#6B8CB8", accentL:"#1E2730", accentS:"#2A3D52",
-    warm:"#C17F5A", warmL:"#2A1F16", green:"#5A9C69", greenL:"#162218",
-    purple:"#9B7ECA", purpleL:"#261A35", red:"#D47070", redL:"#2A1616",
-    sidebar:"#141410", sidebarActive:"#252520", navText:"#F0EDE8",
-    shadow:"0 2px 12px rgba(0,0,0,.4)", cardShadow:"0 4px 20px rgba(0,0,0,.4)",
-    isDark:true,
-  },
+const C = {
+  bg: "#F7F5F2", surface: "#FFFFFF", border: "#E8E4DF", text: "#1A1714",
+  muted: "#9B9590", accent: "#3D5A80", accentL: "#E8EFF5", accentS: "#C5D5E8",
+  warm: "#C17F5A", warmL: "#F5EDE5", green: "#4A7C59", greenL: "#E5F0E8",
+  purple: "#6B4E8A", purpleL: "#EDE5F5", red: "#C45C5C", redL: "#F5E5E5",
 };
-let _isDark = false;
-try { _isDark = localStorage.getItem("classio_dark")==="true"; } catch {}
-let _themeCallbacks = [];
-function _getTheme() { return _isDark ? THEMES.dark : THEMES.light; }
-function _toggleTheme() {
-  _isDark = !_isDark;
-  try { localStorage.setItem("classio_dark", String(_isDark)); } catch {}
-  document.body.style.background = _getTheme().bg;
-  _themeCallbacks.forEach(fn => fn());
-}
-function useTheme() {
-  const [t, setT] = useState(() => _getTheme());
-  useEffect(() => {
-    const fn = () => setT(_getTheme());
-    _themeCallbacks.push(fn);
-    return () => { _themeCallbacks = _themeCallbacks.filter(f=>f!==fn); };
-  }, []);
-  return t;
-}
-// C = current theme (updated by re-renders via useTheme)
-let C = _getTheme();
 
 const FILE_COLORS = [
   { bg:"#E8EFF5", accent:"#3D5A80" }, { bg:"#F5EDE5", accent:"#C17F5A" },
@@ -939,6 +863,26 @@ button.folder-color-btn,button.color-swatch,button.no-min-h{aspect-ratio:1;flex-
 @keyframes ppbar{0%,100%{transform:scaleY(.4);opacity:.5}50%{transform:scaleY(1);opacity:1}}
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 @keyframes twcursor{0%,100%{opacity:1}50%{opacity:0}}
+
+/* ── INTERACTION ANIMATIONS ─────────────────────────────────── */
+@keyframes btn-press{0%{transform:scale(1)}50%{transform:scale(.94)}100%{transform:scale(1)}}
+@keyframes correct-pop{0%{transform:scale(1)}30%{transform:scale(1.08)}60%{transform:scale(.97)}100%{transform:scale(1)}}
+@keyframes wrong-shake{0%,100%{transform:translateX(0)}15%{transform:translateX(-7px)}30%{transform:translateX(7px)}45%{transform:translateX(-5px)}60%{transform:translateX(5px)}75%{transform:translateX(-3px)}90%{transform:translateX(3px)}}
+@keyframes fade-up{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes known-bounce{0%{transform:scale(1)}25%{transform:scale(1.12) rotate(2deg)}50%{transform:scale(.96)}75%{transform:scale(1.04)}100%{transform:scale(1)}}
+@keyframes float-up{0%{opacity:1;transform:translateY(0) scale(1)}100%{opacity:0;transform:translateY(-40px) scale(.6)}}
+
+.btn-anim{transition:transform .12s ease,box-shadow .12s ease,background .12s ease,opacity .12s ease}
+.btn-anim:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.15)!important}
+.btn-anim:active{animation:btn-press .18s ease forwards}
+.card-hov{transition:transform .2s ease,box-shadow .2s ease}
+.card-hov:hover{transform:translateY(-3px) scale(1.01);box-shadow:0 10px 28px rgba(0,0,0,.12)!important}
+.card-hov:active{transform:scale(.98)}
+.tab-anim{transition:color .15s ease,border-color .15s ease,background .15s ease}
+.answer-correct{animation:correct-pop .4s ease forwards}
+.answer-wrong{animation:wrong-shake .45s ease forwards}
+.page-fade{animation:fade-up .22s ease forwards}
+.known-anim{animation:known-bounce .4s ease forwards}
 `; 
 
 // Global file object store — survives navigation within the session
@@ -1358,182 +1302,6 @@ function OnboardingTutorial({ onDone }) {
   );
 }
 
-
-// ─── EXTRA GLOBAL CSS ─────────────────────────────────────────────────────────
-const DARK_CSS = `
-  body.classio-dark { background: #1A1A15 !important; color: #F0EDE8 !important; }
-  body.classio-dark ::-webkit-scrollbar-thumb { background: #35352E; }
-  @keyframes cmdIn { from { opacity:0; transform:translateY(-16px) scale(.97); } to { opacity:1; transform:translateY(0) scale(1); } }
-  @keyframes sidebarIn { from { opacity:0; transform:translateX(-12px); } to { opacity:1; transform:translateX(0); } }
-  @keyframes quickIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
-`;
-
-// ─── SIDEBAR ──────────────────────────────────────────────────────────────────
-function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacter, onToggleTheme, onOpenSearch, isMobile, user, isGuest, onSignOut }) {
-  const T = useTheme();
-  C = T; // keep C in sync
-
-  const NAV = [
-    { id:"home",     label:"Dashboard",   icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> },
-    { id:"guides",   label:"Study Guides",icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 0 3-3h7z"/></svg> },
-    { id:"settings", label:"Settings",    icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> },
-  ];
-
-  if (isMobile) {
-    // Mobile: bottom bar
-    return (
-      <div style={{ position:"fixed", bottom:0, left:0, right:0, height:56, background:T.sidebar, borderTop:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"space-around", zIndex:300 }}>
-        {NAV.slice(0,3).map(n => {
-          const active = (n.id==="home" && (screen==="home"||screen==="folder")) || (n.id==="guides" && homeTab==="about");
-          return (
-            <button key={n.id} onClick={()=>onNavigate(n.id)} style={{ background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:active?T.accent:T.muted, padding:"4px 8px" }}>
-              {n.icon}
-              <span style={{ fontSize:9, fontWeight:600 }}>{n.label}</span>
-            </button>
-          );
-        })}
-        <button onClick={onOpenSearch} style={{ background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:T.muted, padding:"4px 8px" }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          <span style={{ fontSize:9, fontWeight:600 }}>Search</span>
-        </button>
-        <button onClick={onOpenCharacter} style={{ background:"none", border:"none", cursor:"pointer", padding:"4px 8px" }}>
-          <div style={{ width:30, height:30, borderRadius:"50%", overflow:"hidden", border:`2px solid ${T.border}` }}>
-            <MiniAvatar character={character||{}} size={30} />
-          </div>
-        </button>
-      </div>
-    );
-  }
-
-  // Desktop: left sidebar (wider, labeled)
-  return (
-    <div style={{ width:220, minWidth:220, height:"100vh", background:T.sidebar, borderRight:`1px solid ${T.border}`, display:"flex", flexDirection:"column", position:"fixed", left:0, top:0, zIndex:200, animation:"sidebarIn .2s ease" }}>
-      {/* Logo */}
-      <div style={{ padding:"20px 16px 16px", display:"flex", alignItems:"center", gap:10, borderBottom:`1px solid ${T.border}` }}>
-        <div style={{ width:32, height:32, background:"linear-gradient(135deg,#6B4E8A,#3D5A80)", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-          <Icon d={I.sparkle} size={16} color="#fff" sw={2}/>
-        </div>
-        <span style={{ fontFamily:"'Fraunces',serif", fontSize:18, fontWeight:700, color:T.navText, letterSpacing:-.3 }}>Classio</span>
-      </div>
-
-      {/* Search bar */}
-      <div style={{ padding:"12px 12px 8px" }}>
-        <button onClick={onOpenSearch} style={{ width:"100%", display:"flex", alignItems:"center", gap:8, background:T.bg, border:`1px solid ${T.border}`, borderRadius:10, padding:"8px 12px", cursor:"pointer", textAlign:"left" }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          <span style={{ fontSize:13, color:T.muted, flex:1 }}>Search…</span>
-          <span style={{ fontSize:10, color:T.muted, background:T.border, borderRadius:4, padding:"1px 5px" }}>⌘K</span>
-        </button>
-      </div>
-
-      {/* Nav */}
-      <nav style={{ flex:1, padding:"4px 8px", display:"flex", flexDirection:"column", gap:2 }}>
-        {NAV.map(n => {
-          const active = (n.id==="home" && (screen==="home"||screen==="folder"||screen==="file")) || (n.id==="guides" && homeTab==="about");
-          return (
-            <button key={n.id} onClick={()=>onNavigate(n.id)}
-              style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"9px 12px", borderRadius:10, border:"none", cursor:"pointer", textAlign:"left", background:active?T.sidebarActive:"transparent", color:active?T.text:T.muted, fontWeight:active?600:400, fontSize:14, transition:"all .12s" }}
-              onMouseEnter={e=>{ if(!active){e.currentTarget.style.background=T.sidebarActive; e.currentTarget.style.color=T.text;}}}
-              onMouseLeave={e=>{ if(!active){e.currentTarget.style.background="transparent"; e.currentTarget.style.color=T.muted;}}}>
-              {n.icon}
-              {n.label}
-              {active && <div style={{ width:4, height:4, borderRadius:"50%", background:T.accent, marginLeft:"auto" }}/>}
-            </button>
-          );
-        })}
-      </nav>
-
-      {/* Bottom */}
-      <div style={{ padding:"8px 8px 16px", borderTop:`1px solid ${T.border}`, display:"flex", flexDirection:"column", gap:4 }}>
-        {/* Theme toggle */}
-        <button onClick={onToggleTheme}
-          style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"9px 12px", borderRadius:10, border:"none", cursor:"pointer", background:"transparent", color:T.muted, fontSize:14, transition:"all .12s" }}
-          onMouseEnter={e=>{e.currentTarget.style.background=T.sidebarActive; e.currentTarget.style.color=T.text;}}
-          onMouseLeave={e=>{e.currentTarget.style.background="transparent"; e.currentTarget.style.color=T.muted;}}>
-          {T.isDark
-            ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-            : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-          }
-          {T.isDark ? "Light mode" : "Dark mode"}
-        </button>
-        {/* User */}
-        <button onClick={onOpenCharacter}
-          style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"8px 12px", borderRadius:10, border:"none", cursor:"pointer", background:"transparent" }}
-          onMouseEnter={e=>{e.currentTarget.style.background=T.sidebarActive;}}
-          onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
-          <div style={{ width:32, height:32, borderRadius:"50%", overflow:"hidden", border:`2px solid ${T.border}`, flexShrink:0 }}>
-            <MiniAvatar character={character||{}} size={32} />
-          </div>
-          <div style={{ textAlign:"left", minWidth:0 }}>
-            <p style={{ margin:0, fontSize:13, fontWeight:600, color:T.navText, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{character?.name || (user?.displayName?.split(" ")[0]) || (isGuest?"Guest":"You")}</p>
-            <p style={{ margin:0, fontSize:11, color:T.muted }}>{isGuest?"Guest mode":"Student"}</p>
-          </div>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ─── COMMAND-K SEARCH ─────────────────────────────────────────────────────────
-function CommandSearch({ folders, onOpenFile, onClose }) {
-  const T = useTheme();
-  const [q, setQ] = useState("");
-  const inputRef = useRef(null);
-  useEffect(() => { setTimeout(()=>inputRef.current?.focus(),50); }, []);
-  useEffect(() => {
-    const h = (e) => { if(e.key==="Escape") onClose(); };
-    window.addEventListener("keydown", h);
-    return () => window.removeEventListener("keydown", h);
-  }, [onClose]);
-
-  const allFiles = folders.flatMap(f => (f.files||[]).map(fi=>({...fi, folderName:f.name, folderObj:f})));
-  const results = q.trim()
-    ? allFiles.filter(fi=>(fi.name||"").toLowerCase().includes(q.toLowerCase()) || fi.folderName.toLowerCase().includes(q.toLowerCase()))
-    : allFiles.slice(0,8);
-
-  const getIcon = (name="") => {
-    const e = name.split(".").pop().toLowerCase();
-    if (e==="pdf") return {bg:"#E8EFF5",c:"#3D5A80",t:"PDF"};
-    if (["doc","docx"].includes(e)) return {bg:"#DBEAFE",c:"#2563EB",t:"DOC"};
-    if (["ppt","pptx"].includes(e)) return {bg:"#FEE2E2",c:"#DC2626",t:"PPT"};
-    if (["jpg","png","gif","webp"].includes(e)) return {bg:"#F3E8FF",c:"#7C3AED",t:"IMG"};
-    return {bg:"#F3F4F6",c:"#6B7280",t:"FILE"};
-  };
-
-  return (
-    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:9000, background:"rgba(0,0,0,.55)", backdropFilter:"blur(12px)", display:"flex", alignItems:"flex-start", justifyContent:"center", paddingTop:"10vh" }}>
-      <div onClick={e=>e.stopPropagation()} style={{ width:"100%", maxWidth:600, background:T.surface, borderRadius:20, boxShadow:"0 32px 80px rgba(0,0,0,.35)", border:`1px solid ${T.border}`, overflow:"hidden", animation:"cmdIn .18s ease" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:12, padding:"16px 20px", borderBottom:`1px solid ${T.border}` }}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          <input ref={inputRef} value={q} onChange={e=>setQ(e.target.value)} placeholder="Search folders and files..."
-            style={{ flex:1, border:"none", outline:"none", background:"transparent", fontSize:16, color:T.text, fontFamily:"'DM Sans',sans-serif" }}/>
-          <span style={{ fontSize:11, color:T.muted, background:T.border, borderRadius:5, padding:"2px 7px", fontWeight:600 }}>ESC</span>
-        </div>
-        <div style={{ maxHeight:400, overflowY:"auto" }}>
-          {!q.trim() && <p style={{ fontSize:11, fontWeight:700, color:T.muted, letterSpacing:.8, padding:"12px 20px 4px", textTransform:"uppercase" }}>Recently opened</p>}
-          {results.length===0 && <div style={{ padding:"32px 20px", textAlign:"center", color:T.muted, fontSize:14 }}>No files found for "{q}"</div>}
-          {results.map((fi,i) => {
-            const ic = getIcon(fi.name);
-            return (
-              <div key={fi.id+i} onClick={()=>{onOpenFile(fi,fi.folderObj); onClose();}}
-                style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 20px", cursor:"pointer" }}
-                onMouseEnter={e=>e.currentTarget.style.background=T.accentL}
-                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                <div style={{ width:36, height:36, borderRadius:10, background:ic.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                  <span style={{ fontSize:8, fontWeight:800, color:ic.c }}>{ic.t}</span>
-                </div>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <p style={{ margin:0, fontSize:14, fontWeight:600, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{fi.name}</p>
-                  <p style={{ margin:0, fontSize:11, color:T.muted }}>{fi.folderName}</p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function App() {
   const { isMobile, isTablet } = useResponsive();
   const [showTutorial, setShowTutorial] = useState(() => {
@@ -1555,20 +1323,6 @@ export default function App() {
   const [showCharacter, setShowCharacter] = useState(false);
   const [activeStudyGroup, setActiveStudyGroup] = useState(null); // group doc id
   const [showStudyGroupLobby, setShowStudyGroupLobby] = useState(false);
-  const [showSearch, setShowSearch] = useState(false);
-  const T = useTheme(); // reactive theme
-
-  // Keep global C in sync with theme for all legacy code
-  C = T;
-
-  // Command-K shortcut
-  useEffect(() => {
-    const h = (e) => {
-      if ((e.metaKey||e.ctrlKey) && e.key==="k") { e.preventDefault(); setShowSearch(s=>!s); }
-    };
-    window.addEventListener("keydown", h);
-    return () => window.removeEventListener("keydown", h);
-  }, []);
   const DEFAULT_CHAR = { skin:"#FDDBB4", hair:"#3D2B1F", hairStyle:0, eyes:"#2980B9", top:"#2C3E50", bg:"#dce8ff", mouth:0, eyebrow:0, eyeShape:0, accessory:0, topStyle:0, blush:false, lips:false, freckles:false, lipColor:"#d06060", hat:0, hatColor:"#E74C3C", glasses:0, glassesColor:"#333333", facialHair:0, necklace:0, necklaceColor:"#f0c040", earring:0, earringColor:"#f0c040", name:"" };
   const [character, setCharacter] = useState(() => {
     try { return { ...DEFAULT_CHAR, ...(JSON.parse(localStorage.getItem("classio_char") || "null") || {}) }; }
@@ -1737,36 +1491,10 @@ export default function App() {
       onUpdate={updateFolder} />;
   }
 
-  const handleNavigate = (id) => {
-    if (id==="home") { setHomeTab("folders"); setScreen("home"); }
-    else if (id==="guides") { setHomeTab("about"); setScreen("home"); }
-  };
-
-  const handleOpenFileFromSearch = (fi, folder) => {
-    setActiveFolder(folder);
-    const restored = {...fi, _fileObj: fi._fileObj||FILE_STORE.get(fi.id)||null};
-    setActiveFile(restored);
-    setScreen("file");
-  };
-
   return (
-    <div style={{ minHeight:"100vh", background:T.bg, fontFamily:"'DM Sans',sans-serif", display:"flex", width:"100%", boxSizing:"border-box" }}>
+    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'DM Sans', sans-serif", paddingBottom: 50, overflowX: "hidden", width: "100%", boxSizing: "border-box" }}>
       <style>{GS}</style>
-      <style>{DARK_CSS}</style>
-      {/* Sidebar */}
-      <ClassioSidebar
-        screen={screen} homeTab={homeTab}
-        onNavigate={handleNavigate}
-        character={character}
-        onOpenCharacter={() => setShowCharacter(true)}
-        onToggleTheme={_toggleTheme}
-        onOpenSearch={() => setShowSearch(true)}
-        isMobile={isMobile}
-        user={user} isGuest={isGuest}
-        onSignOut={isGuest ? handleGuestSignOut : () => signOut(auth)}
-      />
-      {/* Command-K Search */}
-      {showSearch && <CommandSearch folders={folders} onOpenFile={handleOpenFileFromSearch} onClose={()=>setShowSearch(false)} />}
+      <Header user={isGuest ? { displayName: guestName, photoURL: null } : user} saveStatus={saveStatus} isGuest={isGuest} onSignOut={isGuest ? handleGuestSignOut : () => signOut(auth)} character={character} onOpenCharacter={() => setShowCharacter(true)} homeTab={homeTab} onSetHomeTab={setHomeTab} onOpenAI={() => setShowHomeAI(true)} />
       {showCharacter && <CharacterModal character={character} onChange={c => { setCharacter(c); localStorage.setItem("classio_char", JSON.stringify(c)); }} onClose={() => setShowCharacter(false)} />}
       {showStudyGroupLobby && <StudyGroupLobby
         user={isGuest ? { uid:"guest_"+guestName, displayName:guestName, photoURL:null } : user}
@@ -1774,52 +1502,31 @@ export default function App() {
         onJoin={(groupId) => { setActiveStudyGroup(groupId); setScreen("studyGroup"); setShowStudyGroupLobby(false); }}
         onClose={() => setShowStudyGroupLobby(false)}
       />}
-      {/* Main content area — offset by sidebar */}
-      <div style={{ flex:1, marginLeft:isMobile?0:220, marginBottom:isMobile?56:0, minHeight:"100vh", display:"flex", flexDirection:"column", background:T.bg }}>
       <AdBanner />
-      <div style={{ maxWidth:960, margin:"0 auto", padding:isMobile?"12px 14px":"32px 36px", width:"100%", boxSizing:"border-box" }}>
-
-        {/* ── Dashboard Header ── */}
-        {homeTab==="folders" && (
-          <div style={{ marginBottom:28 }}>
-            <h1 style={{ fontFamily:"'Fraunces',serif", fontSize:isMobile?24:34, fontWeight:700, color:T.text, margin:"0 0 4px", letterSpacing:-.5 }}>Dashboard</h1>
-            <p style={{ fontSize:14, color:T.muted, margin:0 }}>Create new notes</p>
-          </div>
-        )}
-
-        {/* ── Quick Action Cards (Turbo-style) ── */}
-        {homeTab==="folders" && (
-          <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)", gap:12, marginBottom:32 }}>
-            {[
-              { color:"#6B4E8A", bg:"#EDE5F5", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B4E8A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>, label:"New Folder", sub:"Start from scratch", action:()=>setShowNewFolder(true) },
-              { color:"#3D5A80", bg:"#E8EFF5", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3D5A80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>, label:"Record audio", sub:"Upload an audio file", action:()=>setShowNewFolder(true) },
-              { color:"#4A7C59", bg:"#E5F0E8", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4A7C59" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>, label:"Document upload", sub:"Any PDF, DOC, PPT, etc", action:()=>setShowNewFolder(true) },
-              { color:"#C45C5C", bg:"#F5E5E5", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C45C5C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.54C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg>, label:"Website link", sub:"YouTube or website link", action:()=>setShowNewFolder(true) },
-            ].map((a,i) => (
-              <button key={i} onClick={a.action} className="btn-anim"
-                style={{ display:"flex", alignItems:"center", gap:12, background:T.surface, border:`1.5px solid ${T.border}`, borderRadius:16, padding:"14px 16px", cursor:"pointer", textAlign:"left", boxShadow:T.shadow, animation:`quickIn .2s ease ${i*0.05}s both` }}>
-                <div style={{ width:40, height:40, borderRadius:12, background:T.isDark?a.color+"22":a.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{a.icon}</div>
-                <div style={{ minWidth:0 }}>
-                  <p style={{ margin:0, fontSize:13, fontWeight:700, color:T.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{a.label}</p>
-                  <p style={{ margin:0, fontSize:11, color:T.muted, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{a.sub}</p>
-                </div>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft:"auto", flexShrink:0 }}><path d="M9 18l6-6-6-6"/></svg>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* ── My Notes header + New Folder button ── */}
-        {homeTab==="folders" && (
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
-            <div style={{ display:"flex", gap:4 }}>
-              <button onClick={()=>setHomeTab("folders")} style={{ background:homeTab==="folders"?T.text:"transparent", color:homeTab==="folders"?"#fff":T.muted, border:`1.5px solid ${homeTab==="folders"?T.text:T.border}`, borderRadius:20, padding:"5px 16px", fontSize:13, fontWeight:600, cursor:"pointer" }}>My Notes</button>
-            </div>
-            <button onClick={()=>setShowNewFolder(true)} className="btn-anim"
-              style={{ display:"flex", alignItems:"center", gap:6, background:"transparent", border:`1.5px solid ${T.border}`, borderRadius:10, padding:"6px 14px", fontSize:13, fontWeight:600, cursor:"pointer", color:T.text }}>
-              <Icon d={I.plus} size={14} color={T.text} sw={2.5}/> New Folder
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "12px 10px" : "24px 14px" }}>
+        {/* ── Action buttons row ── */}
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:20, justifyContent:"flex-end" }}>
+          <button onClick={()=>setShowStudyGroupLobby(true)} className="hov btn-anim"
+            style={{ display:"flex", alignItems:"center", gap:7, background:"#7c3aed",
+              color:"#fff", border:"none", borderRadius:12, padding:"10px 18px",
+              fontSize:14, fontWeight:600, cursor:"pointer",
+              boxShadow:"0 4px 14px rgba(124,58,237,.35)" }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Study Group
+          </button>
+          {homeTab==="folders" && (
+            <button onClick={()=>setShowNewFolder(true)} className="hov btn-anim"
+              style={{ display:"flex", alignItems:"center", gap:8, background:C.accent,
+                color:"#fff", border:"none", borderRadius:12, padding:"10px 20px",
+                fontSize:14, fontWeight:600, cursor:"pointer" }}>
+              <Icon d={I.plus} size={16} color="#fff" sw={2.5}/> New Folder
             </button>
-          </div>
+          )}
+        </div>
+        {homeTab==="folders" && (
+          <p style={{ fontSize:14, color:C.muted, marginBottom:20 }}>
+            {folders.length===0?"Create your first folder to get started":`${folders.length} folder${folders.length!==1?"s":""}`}
+          </p>
         )}
 
         {homeTab==="about" && <AboutTab/>}
@@ -1831,44 +1538,42 @@ export default function App() {
             </div>
             <p style={{ fontSize:18, fontWeight:600, color:C.text, marginBottom:8 }}>No folders yet</p>
             <p style={{ fontSize:14, color:C.muted, maxWidth:280, margin:"0 auto 24px" }}>Create a folder for each subject to organise your files</p>
-            <button onClick={()=>setShowNewFolder(true)} className="hov"
+            <button onClick={()=>setShowNewFolder(true)} className="hov btn-anim"
               style={{ background:C.accent, color:"#fff", border:"none", borderRadius:10, padding:"10px 24px", fontSize:14, fontWeight:600, cursor:"pointer" }}>
               Create First Folder
             </button>
           </div>
         )}
 
-        {homeTab==="folders" && folders.length > 0 && (
-          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-            {folders.map((folder,idx) => (
-              <div key={folder.id}
-                onClick={() => { setActiveFolder(folder); setScreen("folder"); }}
-                style={{ display:"flex", alignItems:"center", gap:14, background:T.surface, border:`1px solid ${T.border}`, borderRadius:14, padding:"14px 16px", cursor:"pointer", boxShadow:T.shadow, transition:"all .15s", animation:`quickIn .18s ease ${idx*0.04}s both` }}
-                onMouseEnter={e=>{e.currentTarget.style.boxShadow=T.cardShadow; e.currentTarget.style.borderColor=T.accentS;}}
-                onMouseLeave={e=>{e.currentTarget.style.boxShadow=T.shadow; e.currentTarget.style.borderColor=T.border;}}>
-                <div style={{ width:40, height:40, background:folder.color+"22", borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                  <Icon d={I.folder} size={20} color={folder.color} />
-                </div>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <p style={{ margin:0, fontSize:14, fontWeight:600, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{folder.name}</p>
-                  <p style={{ margin:0, fontSize:12, color:T.muted }}>{folder.files.length} file{folder.files.length!==1?"s":""}</p>
-                </div>
-                <button onClick={e=>{e.stopPropagation(); if(window.confirm(`Delete "${folder.name}"?`)) deleteFolder(folder.id);}}
-                  style={{ background:"none", border:"none", cursor:"pointer", color:T.muted, padding:4, borderRadius:6, opacity:.5 }}
-                  onMouseEnter={e=>{e.currentTarget.style.opacity=1; e.currentTarget.style.color=T.red;}}
-                  onMouseLeave={e=>{e.currentTarget.style.opacity=.5; e.currentTarget.style.color=T.muted;}}>
-                  <Icon d={I.trash} size={15} color="currentColor"/>
-                </button>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+        {homeTab==="folders" && <div className="card-grid" style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))", gap:16 }}>
+          {folders.map(folder => (
+            <div key={folder.id} className="card-hov"
+              onClick={() => { setActiveFolder(folder); setScreen("folder"); }}
+              style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:16, padding:20, cursor:"pointer", boxShadow:"0 2px 8px rgba(0,0,0,.05)", position:"relative" }}>
+              {/* Delete folder button */}
+              <button
+                onClick={e => {
+                  e.stopPropagation();
+                  if (window.confirm(`Delete "${folder.name}" and all its files?`)) deleteFolder(folder.id);
+                }}
+                style={{ position:"absolute", top:10, right:10, width:26, height:26, borderRadius:"50%", background:"transparent", border:"none", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", opacity:0.4, fontSize:16, color:C.muted, lineHeight:1 }}
+                onMouseEnter={e => e.currentTarget.style.opacity=1}
+                onMouseLeave={e => e.currentTarget.style.opacity=0.4}
+                title="Delete folder">
+                ×
+              </button>
+              <div style={{ width:44, height:44, background:folder.color+"22", borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", marginBottom:14 }}>
+                <Icon d={I.folder} size={22} color={folder.color} />
               </div>
-            ))}
-          </div>
-        )}
+              <p style={{ fontSize:15, fontWeight:600, color:C.text, marginBottom:4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{folder.name}</p>
+              <p style={{ fontSize:13, color:C.muted }}>{folder.files.length} file{folder.files.length !== 1 ? "s" : ""}</p>
+            </div>
+          ))}
+        </div>}
 
       {showHomeAI && <StandaloneAI onClose={() => setShowHomeAI(false)} />}
 
       </div>
-      </div> {/* end main content */}
 
       {showTutorial && <OnboardingTutorial onDone={() => setShowTutorial(false)} />}
 
@@ -2036,7 +1741,7 @@ function Header({ user, saveStatus, isGuest, onSignOut, character, onOpenCharact
           <MiniAvatar character={character} size={isMobile?30:36} />
         </button>
         {!isMobile && <span style={{ fontSize:13, fontWeight:600, color:C.text }}>{isGuest ? user?.displayName : user?.displayName?.split(" ")[0]}</span>}
-        <button onClick={onSignOut} className="hov"
+        <button onClick={onSignOut} className="hov btn-anim"
           style={{ fontSize:isMobile?11:12, color:C.muted, background:"none", border:`1px solid ${C.border}`, borderRadius:7, padding:isMobile?"4px 7px":"4px 9px", cursor:"pointer", whiteSpace:"nowrap" }}>{isGuest ? "Exit" : isMobile ? "Out" : "Sign out"}</button>
       </div>
     </div>
@@ -3702,7 +3407,7 @@ function LinkBtn({ file, allFiles, onSave }) {
 
   return (
     <>
-      <button onClick={() => setOpen(true)} className="hov"
+      <button onClick={() => setOpen(true)} className="hov btn-anim"
         style={{ display:"flex", alignItems:"center", gap:5, background:linked.length>0?C.accentL:"none", color:C.accent, border:`1px solid ${C.border}`, borderRadius:8, padding:"5px 10px", fontSize:12, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap" }}>
         {linked.length > 0 ? `${linked.length} linked` : "Link files"}
       </button>
@@ -3790,7 +3495,7 @@ function SignIn({ onSignIn, onGuest }) {
         </div>
         <h1 style={{ fontFamily:"'Fraunces',serif", fontSize:34, fontWeight:700, color:C.text, letterSpacing:-0.5, marginBottom:10 }}>Classio</h1>
         <p style={{ fontSize:15, color:C.muted, marginBottom:40, lineHeight:1.6 }}>Your AI-powered study space.<br/>Sign in to save across devices.</p>
-        <button onClick={onSignIn} className="hov"
+        <button onClick={onSignIn} className="hov btn-anim"
           style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:12, background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"14px 20px", fontSize:15, fontWeight:600, cursor:"pointer", color:C.text, boxShadow:"0 2px 8px rgba(0,0,0,.06)", marginBottom:14 }}>
           <svg width="20" height="20" viewBox="0 0 48 48">
             <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
@@ -3805,7 +3510,7 @@ function SignIn({ onSignIn, onGuest }) {
           <span style={{ fontSize:13, color:C.muted }}>or</span>
           <div style={{ flex:1, height:1, background:C.border }} />
         </div>
-        <button onClick={() => setShowGuest(true)} className="hov"
+        <button onClick={() => setShowGuest(true)} className="hov btn-anim"
           style={{ width:"100%", background:"transparent", border:`1.5px solid ${C.border}`, borderRadius:14, padding:"13px 20px", fontSize:15, fontWeight:600, cursor:"pointer", color:C.muted }}>
           Continue as Guest
         </button>
@@ -3890,19 +3595,13 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
 
   const TABS = [{ id:"files", label:"Files", icon:I.file },{ id:"youtube", label:"YouTube", icon:I.link },{ id:"ai", label:"AI Assistant", icon:I.ai }];
 
-  const TFV = useTheme(); C = TFV;
-  const { isMobile: isMobFolderV } = useResponsive();
-
   return (
-    <div style={{ minHeight:"100vh", background:TFV.bg, fontFamily:"'DM Sans',sans-serif", display:"flex" }}>
-      <style>{GS}</style><style>{DARK_CSS}</style>
-      {/* Sidebar placeholder — same width so content aligns */}
-      {!isMobFolderV && <div style={{ width:220, minWidth:220, flexShrink:0 }}/>}
-      <div style={{ flex:1, display:"flex", flexDirection:"column", minWidth:0 }}>
+    <div className="page-with-ad" style={{ minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif" }}>
+      <style>{GS}</style>
       {/* Top bar */}
-      <div style={{ background:TFV.surface, borderBottom:`1px solid ${TFV.border}`, padding:"0 20px", height:56, display:"flex", alignItems:"center", gap:14, flexShrink:0 }}>
-        <button onClick={onBack} style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:TFV.muted, fontSize:13, fontWeight:500 }}>
-          <Icon d={I.back} size={16} color={TFV.muted} /> Back
+      <div className="app-header" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", height:64, display:"flex", alignItems:"center", gap:16 }}>
+        <button onClick={onBack} className="hov btn-anim" style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14 }}>
+          <Icon d={I.back} size={18} color={C.muted} /> Back
         </button>
         <div style={{ width:1, height:20, background:C.border }} />
         <div style={{ display:"flex", alignItems:"center", gap:10, flex:1 }}>
@@ -3994,11 +3693,11 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
                             onPick={(patch) => onUpdate({...folder,files:folder.files.map(f=>f.id===file.id?{...f,...patch}:f)})}/>
                           <LinkBtn file={file} allFiles={folder.files}
                             onSave={ids => onUpdate({...folder,files:folder.files.map(f=>f.id===file.id?{...f,linkedFileIds:ids}:f)})} />
-                          <button onClick={() => onOpenFile(file)} className="hov"
+                          <button onClick={() => onOpenFile(file)} className="hov btn-anim"
                             style={{ display:"flex", alignItems:"center", gap:6, background:C.accentL, color:C.accent, border:"none", borderRadius:8, padding:"7px 14px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
                             <Icon d={I.edit} size={13} color={C.accent} /> Open
                           </button>
-                          <button onClick={() => { idbDelete(file.id); FILE_STORE.delete(file.id); onUpdate({...folder,files:folder.files.filter(f=>f.id!==file.id)}); }} className="hov"
+                          <button onClick={() => { idbDelete(file.id); FILE_STORE.delete(file.id); onUpdate({...folder,files:folder.files.filter(f=>f.id!==file.id)}); }} className="hov btn-anim"
                             style={{ background:"none", border:"none", cursor:"pointer", padding:4 }}>
                             <Icon d={I.trash} size={16} color={C.muted} />
                           </button>
@@ -4051,92 +3750,38 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
   // Stop audio when component unmounts (user navigates away entirely)
   useEffect(() => { return () => stopAllAudio(); }, []);
 
-  const TF = useTheme(); C = TF;
-  const [showAIPanel, setShowAIPanel] = useState(true);
-  const { isMobile: isMobFV } = useResponsive();
-
   return (
-    <div style={{ minHeight:"100vh", background:TF.bg, fontFamily:"'DM Sans',sans-serif", display:"flex", flexDirection:"column" }}>
+    <div className="page-with-ad" style={{ minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif" }}>
       <style>{GS}</style>
-      <style>{DARK_CSS}</style>
-      {/* Top header bar */}
-      <div style={{ background:TF.surface, borderBottom:`1px solid ${TF.border}`, padding:"0 20px", height:56, display:"flex", alignItems:"center", gap:12, flexShrink:0 }}>
-        <button onClick={handleBack} style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:TF.muted, fontSize:13, fontWeight:500 }}>
-          <Icon d={I.back} size={16} color={TF.muted} />
-          <span>{folder.name}</span>
+      <div className="app-header" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", height:64, display:"flex", alignItems:"center", gap:14 }}>
+        <button onClick={handleBack} className="hov btn-anim" style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14 }}>
+          <Icon d={I.back} size={18} color={C.muted} /> {folder.name}
         </button>
-        <Icon d={I.chevron} size={12} color={TF.border} />
-        <div style={{ width:24, height:24, background:fc.bg, borderRadius:7, display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <Icon d={I.file} size={12} color={fc.accent} />
+        <Icon d={I.chevron} size={14} color={C.border} />
+        <div style={{ width:28, height:28, background:fc.bg, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <Icon d={I.file} size={14} color={fc.accent} />
         </div>
-        <span style={{ fontSize:14, fontWeight:600, color:TF.text, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{file.name}</span>
-        {/* AI panel toggle */}
-        {!isMobFV && (
-          <button onClick={()=>setShowAIPanel(p=>!p)}
-            style={{ display:"flex", alignItems:"center", gap:6, background:showAIPanel?"linear-gradient(135deg,#6366f1,#8b5cf6)":TF.surface, color:showAIPanel?"#fff":TF.muted, border:`1px solid ${showAIPanel?"transparent":TF.border}`, borderRadius:8, padding:"6px 12px", cursor:"pointer", fontSize:12, fontWeight:600 }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/></svg>
-            {showAIPanel ? "Hide AI" : "Show AI"}
-          </button>
-        )}
+        <span style={{ fontSize:15, fontWeight:600, color:C.text, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{file.name}</span>
       </div>
-      {/* Tab bar */}
-      <div className="nav-tabs" style={{ background:TF.surface, borderBottom:`1px solid ${TF.border}`, padding:"0 20px", display:"flex", gap:2, flexShrink:0 }}>
+      <div className="nav-tabs" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", display:"flex", gap:4 }}>
         {TABS.map(t => (
           <button key={t.id} className="nav-tab-btn" onClick={() => handleTabChange(t.id)}
-            style={{ display:"flex", alignItems:"center", gap:6, padding:"12px 14px", border:"none", borderBottom:tab===t.id?`2px solid ${TF.accent}`:"2px solid transparent", background:"none", cursor:"pointer", fontSize:13, fontWeight:tab===t.id?700:500, color:tab===t.id?TF.accent:TF.muted, marginBottom:-1, whiteSpace:"nowrap" }}>
-            <Icon d={t.icon} size={14} color={tab===t.id?TF.accent:TF.muted} />
-            <span className="tab-label">{t.label}</span>
+            style={{ display:"flex", alignItems:"center", gap:7, padding:"14px 18px", border:"none", borderBottom:tab===t.id?`2px solid ${C.accent}`:"2px solid transparent", background:"none", cursor:"pointer", fontSize:14, fontWeight:tab===t.id?700:500, color:tab===t.id?C.accent:C.muted, marginBottom:-1 }}>
+            <Icon d={t.icon} size={15} color={tab===t.id?C.accent:C.muted} />{t.label}
           </button>
         ))}
       </div>
-      {/* Split pane body */}
-      <div style={{ flex:1, display:"flex", overflow:"hidden", minHeight:0 }}>
-        {/* Left: content */}
-        <div style={{ flex:1, overflowY:"auto", minWidth:0 }}>
-          {tab==="view"
-            ? <ViewTab file={file} onUpdate={onUpdate} />
-            : <div className="page-inner page-with-ad" style={{ maxWidth: (showAIPanel && !isMobFV) ? "100%" : 900, margin:"0 auto", padding:isMobFV?"16px 14px":"28px 32px" }}>
-                {tab==="notes" && <div key="notes" className="page-fade"><NotesTab key={file.id} file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} /></div>}
-                {tab==="voice" && <div key="voice" className="page-fade"><VoicePodcastTab file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} /></div>}
-                {tab==="cards" && <div key="cards" className="page-fade"><CardsTab file={file} onUpdate={onUpdate} /></div>}
-                {tab==="ai"    && <div key="ai" className="page-fade"><AITab file={file} allFiles={allFiles} folder={folder} onUpdate={onUpdate} /></div>}
-                {tab==="game"  && <div key="game" className="page-fade"><GameTab file={file} /></div>}
-                {tab==="youtube" && <div key="yt" className="page-fade"><YouTubeTab file={file} onUpdate={onUpdate} /></div>}
-              </div>
-          }
-        </div>
-        {/* Right: persistent AI chat panel (Turbo-style) */}
-        {showAIPanel && !isMobFV && (
-          <div style={{ width:360, minWidth:320, maxWidth:400, borderLeft:`1px solid ${TF.border}`, background:TF.surface, display:"flex", flexDirection:"column", flexShrink:0, height:"100%" }}>
-            {/* Panel header */}
-            <div style={{ padding:"16px 20px 12px", borderBottom:`1px solid ${TF.border}`, flexShrink:0 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
-                <div style={{ width:32, height:32, background:"linear-gradient(135deg,#6366f1,#8b5cf6)", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/></svg>
-                </div>
-                <div>
-                  <p style={{ margin:0, fontSize:14, fontWeight:700, color:TF.text }}>AI Assistant</p>
-                  <p style={{ margin:0, fontSize:11, color:TF.muted }}>Ask anything about this file</p>
-                </div>
-              </div>
-              {/* Quick prompts */}
-              <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-                {["Summarise this document", "What are the key concepts?", "Create a quiz from this"].map((q,i) => (
-                  <div key={i} style={{ fontSize:12, color:TF.muted, background:TF.bg, border:`1px solid ${TF.border}`, borderRadius:8, padding:"6px 10px", cursor:"pointer" }}
-                    onMouseEnter={e=>{e.currentTarget.style.background=TF.accentL; e.currentTarget.style.color=TF.accent;}}
-                    onMouseLeave={e=>{e.currentTarget.style.background=TF.bg; e.currentTarget.style.color=TF.muted;}}>
-                    {q}
-                  </div>
-                ))}
-              </div>
-            </div>
-            {/* Embed AITab in the panel */}
-            <div style={{ flex:1, overflowY:"auto", minHeight:0 }}>
-              <AITab file={file} allFiles={allFiles} folder={folder} onUpdate={onUpdate} compact={true} />
-            </div>
+      {tab==="view"
+        ? <ViewTab file={file} onUpdate={onUpdate} />
+        : <div className="page-inner" style={{ maxWidth:900, margin:"0 auto", padding:"32px 24px" }}>
+            {tab==="notes" && <div key="notes" className="page-fade"><NotesTab key={file.id} file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} /></div>}
+            {tab==="voice" && <div key="voice" className="page-fade"><VoicePodcastTab file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} /></div>}
+            {tab==="cards" && <div key="cards" className="page-fade"><CardsTab file={file} onUpdate={onUpdate} /></div>}
+            {tab==="ai" && <div key="ai" className="page-fade"><AITab file={file} allFiles={allFiles} folder={folder} onUpdate={onUpdate} /></div>}
+            {tab==="game" && <div key="game" className="page-fade"><GameTab file={file} /></div>}
+            {tab==="youtube" && <div key="youtube" className="page-fade"><YouTubeTab file={file} onUpdate={onUpdate} /></div>}
           </div>
-        )}
-      </div>
+      }
     </div>
   );
 }
@@ -4983,32 +4628,6 @@ function LangPicker({ value, onChange }) {
 // ─── LANGUAGE OPTIONS ─────────────────────────────────────────────────────────
 const LANG_OPTIONS = [["en-US","English (US)"],["en-GB","English (UK)"],["ar-SA","Arabic"],["ar-EG","Arabic (Egypt)"],["es-ES","Spanish"],["es-MX","Spanish (Mexico)"],["fr-FR","French"],["de-DE","German"],["it-IT","Italian"],["pt-BR","Portuguese"],["zh-CN","Chinese"],["ja-JP","Japanese"],["ko-KR","Korean"],["hi-IN","Hindi"],["ru-RU","Russian"],["tr-TR","Turkish"]];
 
-// Maps language code to a native example phrase — forces the model to use correct script
-const LANG_EXAMPLES = {
-  "en-US": "Example: The atom has a nucleus.",
-  "en-GB": "Example: The atom has a nucleus.",
-  "ar-SA": "مثال: الذرة لها نواة. اكتب كل شيء باللغة العربية فقط.",
-  "ar-EG": "مثال: الذرة لها نواة. اكتب كل شيء باللغة العربية فقط.",
-  "es-ES": "Ejemplo: El átomo tiene un núcleo.",
-  "es-MX": "Ejemplo: El átomo tiene un núcleo.",
-  "fr-FR": "Exemple: L'atome a un noyau.",
-  "de-DE": "Beispiel: Das Atom hat einen Kern.",
-  "it-IT": "Esempio: L'atomo ha un nucleo.",
-  "pt-BR": "Exemplo: O átomo tem um núcleo.",
-  "zh-CN": "例子：原子有一个核。请用中文写所有内容。",
-  "ja-JP": "例：原子には核がある。すべて日本語で書いてください。",
-  "ko-KR": "예시: 원자에는 핵이 있습니다. 모든 내용을 한국어로 작성하세요.",
-  "hi-IN": "उदाहरण: परमाणु में एक नाभिक होता है। सब कुछ हिंदी में लिखें।",
-  "ru-RU": "Пример: Атом имеет ядро. Пишите всё на русском языке.",
-  "tr-TR": "Örnek: Atomun bir çekirdeği var. Her şeyi Türkçe yazın.",
-};
-
-function getLangInstruction(langCode) {
-  const label = LANG_OPTIONS.find(l => l[0] === langCode)?.[1] || langCode;
-  const example = LANG_EXAMPLES[langCode] || "";
-  return `LANGUAGE: ${label} ONLY. Every single word — headings, bullets, explanations — must be written in ${label}. Do NOT use any other language or script. ${example}`;
-}
-
 // ─── VOICE & PODCAST TAB ─────────────────────────────────────────────────────
 // All audio features: Voice Notes recording + Podcast player
 function VoicePodcastTab({ file, user, isGuest, onUpdate }) {
@@ -5105,7 +4724,7 @@ function VoicePodcastTab({ file, user, isGuest, onUpdate }) {
     setProcessing(true);
     setVoiceStatus("Organising your notes…");
     try {
-      const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1] || lang;
+      const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[^\x00-\x7F\s]+\s*/g,'') || lang;
       const context = `File: "${file.name}". Topic context (for fixing speech recognition errors): ${(file.notes || "").slice(0, 300) || "none"}.`;
       const result = await callClaude(
         `You are an expert note-taker. A student has just spoken aloud — your job is to turn their speech into clean, well-organised study notes.
@@ -5138,7 +4757,7 @@ Output: Hi, we will study English.
 Context (for fixing mis-heard words only — do NOT add this as content): ${context}`,
         `Turn this spoken recording into clean study notes:\n\n"${raw}"`
       );
-      const fixedResult = fixLanguage(fixMath(result), "en-US"); // YouTube always English
+      const fixedResult = fixMath(result);
       const newNotes = notes ? notes + "\n\n---\n\n" + fixedResult : fixedResult;
       setNotes(newNotes);
       onUpdate({ ...file, notes: newNotes });
@@ -5201,11 +4820,11 @@ Context (for fixing mis-heard words only — do NOT add this as content): ${cont
     setShowPodcast(true);
     setPodcastScript("");
     _setPodcastBlob(null);
-    const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1] || lang;
+    const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[^\x00-\x7F\s]+\s*/g,'') || lang;
     try {
       const script = await callClaude(
         `You are an expert teacher creating a spoken audio lesson. Your ONLY job is to EXPLAIN and SIMPLIFY — never read or copy from the notes.
-${getLangInstruction(lang)}
+Language: ${langLabel}. Write ENTIRELY in ${langLabel}.
 
 STRICT RULES — follow every single one:
 1. SIMPLIFY everything as if the student has never seen this topic before.
@@ -5454,7 +5073,7 @@ function NotesTab({ file, onUpdate, user, isGuest }) {
       const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
       const fileText = fileObj ? await extractFileText(fileObj) : null;
       const safeText = fileText ? fileText.slice(0, 16000) : null;
-      const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1] || lang;
+      const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[\u{1F1E0}-\u{1F1FF}]{2}\s*/gu, '') || lang;
 
       const userMsg = safeText
         ? `Here is the COMPLETE content from the file "${file.name}":\n\n${safeText}\n\nCRITICAL: You MUST cover EVERY SINGLE section, concept, definition, formula, and fact in the above content. Do not skip anything. Write notes section by section, following the document structure. Include ALL details.`
@@ -5472,7 +5091,7 @@ function NotesTab({ file, onUpdate, user, isGuest }) {
 
       const txt = await callClaude(
         `${effectiveStyle}
-${getLangInstruction(lang)}
+Language: ${langLabel}. Write ALL notes entirely in ${langLabel} — never mix languages.
 
 STRICT FORMATTING RULES — follow exactly:
 1. NEVER use asterisks (*) or double asterisks (**) anywhere
@@ -5492,7 +5111,7 @@ STRICT FORMATTING RULES — follow exactly:
         userMsg,
         4000
       );
-      const fixedTxt = fixLanguage(fixMath(txt), lang);
+      const fixedTxt = fixMath(txt);
       setNotes(fixedTxt);
       setUnsaved(true);
       // Don't auto-save to file — user must click Save
@@ -5506,17 +5125,17 @@ STRICT FORMATTING RULES — follow exactly:
       const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
       const fileText = fileObj ? await extractFileText(fileObj) : null;
       const safeText2 = fileText ? fileText.slice(0, 16000) : null;
-      const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1] || lang;
+      const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[\u{1F1E0}-\u{1F1FF}]{2}\s*/gu, '') || lang;
       const userMsg = safeText2
         ? `File "${file.name}":\n\n${safeText2}\n\nCreate detailed study notes specifically about "${topic}" from this document.`
         : `Create comprehensive study notes about: "${topic}". Make them detailed and useful for exam revision.`;
       const txt = await callClaude(
-        `You are an expert study notes writer. ${getLangInstruction(lang)}
+        `You are an expert study notes writer. Language: ${langLabel}. Write ONLY in ${langLabel}.
 RULES: No asterisks, no #, ALL CAPS headings, dashes for bullets, plain text.
 Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "metres", π not "pi", etc.`,
         userMsg
       );
-      const fixedTxt2 = fixLanguage(fixMath(txt), lang);
+      const fixedTxt2 = fixMath(txt);
       setNotes(fixedTxt2); setUnsaved(true);
     } catch(e) { setNotes(`Error: ${e.message}`); }
     setGen(false);
@@ -5537,13 +5156,13 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
           <LangPicker value={lang} onChange={setLang} />
 
           {/* AI Generate */}
-          <button onClick={generate} disabled={gen} className="hov"
+          <button onClick={generate} disabled={gen} className="hov btn-anim"
             style={{ display:"flex", alignItems:"center", gap:6, background:C.accentL, color:C.accent, border:"none", borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:600, cursor:gen?"not-allowed":"pointer" }}>
             <Icon d={gen?I.refresh:I.sparkle} size={14} color={C.accent}/>{gen?"Generating…":"AI Generate"}
           </button>
 
           {/* Custom Topic */}
-          <button onClick={() => setShowTopicInput(t => !t)} disabled={gen} className="hov"
+          <button onClick={() => setShowTopicInput(t => !t)} disabled={gen} className="hov btn-anim"
             style={{ display:"flex", alignItems:"center", gap:6, background:C.surface, color:C.text, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
             <Icon d={I.edit} size={13} color={C.text}/> Topic
           </button>
@@ -5551,7 +5170,7 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
           {/* Saved notes dropdown */}
           {savedNotes.length > 0 && (
             <div style={{ position:"relative" }}>
-              <button onClick={() => setShowDropdown(d => !d)} className="hov"
+              <button onClick={() => setShowDropdown(d => !d)} className="hov btn-anim"
                 style={{ display:"flex", alignItems:"center", gap:5, background:C.greenL, color:C.green, border:`1px solid ${C.green}44`, borderRadius:10, padding:"8px 13px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
                 Saved ({savedNotes.length}) ▾
               </button>
@@ -5583,7 +5202,7 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
           )}
 
           {/* Save — always rightmost */}
-          <button onClick={() => { if(notes.trim()) { setNewNoteName(""); setShowSaveModal(true); } }} disabled={!notes.trim()} className="hov"
+          <button onClick={() => { if(notes.trim()) { setNewNoteName(""); setShowSaveModal(true); } }} disabled={!notes.trim()} className="hov btn-anim"
             style={{ display:"flex", alignItems:"center", gap:6, background:notes.trim()?C.accent:"#ccc", color:"#fff", border:"none", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:notes.trim()?"pointer":"not-allowed", opacity:notes.trim()?1:0.6 }}>
             <Icon d={I.check} size={13} color="#fff"/> Save
           </button>
@@ -5700,7 +5319,7 @@ function NotesSimplifyBtn({ notes, onResult, lang }) {
   const simplify = async () => {
     setLoading(true);
     try {
-      const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1] || lang;
+      const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[^\x00-\x7F\s]+\s*/g,'') || lang;
       const result = await callClaude(
         `You are a note simplifier. Rewrite the given study notes in very simple, easy-to-understand language.
 Rules:
@@ -5709,7 +5328,7 @@ Rules:
 - Keep all the facts and information — don't remove content
 - Keep ALL CAPS headings and dash bullets
 - Never use asterisks or pound signs
-- ${getLangInstruction(lang)}`,
+- Write entirely in ${langLabel}`,
         `Simplify these notes into easy language:\n\n${notes.slice(0, 8000)}`,
         3000
       );
@@ -5781,11 +5400,11 @@ function NotesQASidebar({ file, notes, lang }) {
     setMessages(m => [...m, {role:"user", text:q}]);
     setLoading(true);
     try {
-      const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1] || lang;
+      const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[^\x00-\x7F\s]+\s*/g,'') || lang;
       const ans = await callClaudeChat(
         `You are a helpful study assistant. Answer questions about these notes clearly and concisely.
 Notes context: ${notes.slice(0, 5000)}
-${getLangInstruction(lang)}
+Language: ${langLabel}. Always reply in ${langLabel}.
 Formatting: plain text only — no LaTeX, no dollar signs, no markdown asterisks, no pound signs.`,
         [...messages.slice(-6), {role:"user", content:q}].map(m => ({role:m.role==="user"?"user":"assistant", content:m.text||m.content}))
       );
@@ -6019,11 +5638,11 @@ function CardsTab({ file, onUpdate }) {
               Shuffle
             </button>
           )}
-          <button onClick={() => setShowAdd(true)} className="hov"
+          <button onClick={() => setShowAdd(true)} className="hov btn-anim"
             style={{ display:"flex", alignItems:"center", gap:7, background:C.surface, color:C.text, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"9px 14px", fontSize:14, fontWeight:600, cursor:"pointer" }}>
             <Icon d={I.plus} size={14} color={C.text} sw={2.5} /> Add Card
           </button>
-          <button onClick={() => setShowCountPicker(p => !p)} disabled={gen} className="hov"
+          <button onClick={() => setShowCountPicker(p => !p)} disabled={gen} className="hov btn-anim"
             style={{ display:"flex", alignItems:"center", gap:7, background:C.accentL, color:C.accent, border:"none", borderRadius:10, padding:"9px 16px", fontSize:14, fontWeight:600, cursor:gen?"not-allowed":"pointer" }}>
             <Icon d={gen?I.refresh:I.sparkle} size={15} color={C.accent} />{gen?"Generating…":"AI Generate"}
           </button>
@@ -6165,11 +5784,11 @@ function CardsTab({ file, onUpdate }) {
             </div>
 
             {/* Card */}
-            <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", padding:"24px 32px", minHeight:0, perspective:1400 }}>
+            <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", padding:"32px 48px", minHeight:0 }}>
               <div
                 className={`ql-wrap${isFlipped ? " flipped" : ""}`}
                 onClick={() => setFlipped(f => ({...f, [card.id]: !f[card.id]}))}
-                style={{ width:"100%", maxWidth:760, height:"min(360px, calc(100vh - 240px))", cursor:"pointer", userSelect:"none" }}>
+                style={{ width:"100%", maxWidth:800, height:360, perspective:1400, cursor:"pointer", userSelect:"none" }}>
 
                 {/* Front */}
                 <div className="ql-side" style={{
@@ -6367,40 +5986,27 @@ function YouTubeTab({ file, onUpdate }) {
     return m ? m[1] : null;
   };
 
-  // Fetch transcript using multiple free methods
+  // Fetch transcript via our Hugging Face TTS server (no CORS issues, no API key)
   const fetchTranscript = async (vid) => {
     const serverUrl = (typeof window !== "undefined" && window.__CLASSIO_TTS_URL__)
       ? window.__CLASSIO_TTS_URL__ : "";
 
-    // Method 1: Our HF Space server (most reliable — add /transcript endpoint to app.py)
+    // Try our HF Space server first (most reliable)
     if (serverUrl) {
       try {
-        const resp = await fetch(`${serverUrl}/transcript/${vid}`, { signal: AbortSignal.timeout(12000) });
+        const resp = await fetch(`${serverUrl}/transcript/${vid}`);
         if (resp.ok) {
           const data = await resp.json();
           if (data.success && data.transcript) {
-            return { transcript: data.transcript, title: data.title || "" };
+            return { transcript: data.transcript, title: "" };
           }
         }
-      } catch { /* fall through */ }
+      } catch { /* fall through to corsproxy */ }
     }
 
-    // Method 2: youtubetranscript.com free API (no key needed)
+    // Fallback: corsproxy.io to scrape YouTube directly
     try {
-      const r = await fetch(`https://youtubetranscript.com/?server_vid2=${vid}`, { signal: AbortSignal.timeout(10000) });
-      if (r.ok) {
-        const xml = await r.text();
-        const lines = [...xml.matchAll(/<text[^>]*>([\s\S]*?)<\/text>/g)]
-          .map(m => m[1].replace(/<[^>]+>/g,"").replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&#39;/g,"'").trim())
-          .filter(Boolean);
-        if (lines.length > 10) return { transcript: lines.join(" "), title: "" };
-      }
-    } catch { /* fall through */ }
-
-    // Method 3: corsproxy scrape of YouTube page for captions
-    try {
-      const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(`https://www.youtube.com/watch?v=${vid}`)}`;
-      const pageResp = await fetch(proxyUrl, { signal: AbortSignal.timeout(12000) });
+      const pageResp = await fetch(`https://corsproxy.io/?${encodeURIComponent(`https://www.youtube.com/watch?v=${vid}`)}`);
       if (!pageResp.ok) throw new Error("page fetch failed");
       const html = await pageResp.text();
 
@@ -6416,12 +6022,19 @@ function YouTubeTab({ file, onUpdate }) {
                     tracks[0];
       if (!track?.baseUrl) return { transcript: null, title };
 
-      const capResp = await fetch(`https://corsproxy.io/?${encodeURIComponent(track.baseUrl)}`, { signal: AbortSignal.timeout(10000) });
+      const capResp = await fetch(`https://corsproxy.io/?${encodeURIComponent(track.baseUrl)}`);
       if (!capResp.ok) return { transcript: null, title };
       const xml = await capResp.text();
+
       const lines = [...xml.matchAll(/<text[^>]*>([\s\S]*?)<\/text>/g)]
-        .map(m => m[1].replace(/<[^>]+>/g,"").replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/\n/g," ").trim())
+        .map(m => m[1]
+          .replace(/<[^>]+>/g, "")
+          .replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">")
+          .replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/\n/g," ")
+          .trim()
+        )
         .filter(Boolean);
+
       const transcript = lines.join(" ");
       return { transcript: transcript.length > 100 ? transcript : null, title };
     } catch {
@@ -6800,11 +6413,11 @@ function AIPodcastPanel({ file, lang }) {
     let p = 0;
     const iv = setInterval(() => { p = Math.min(88, p + 3); setGenPct(p); }, 250);
 
-    const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1] || "English";
+    const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1]?.replace(/[^\x00-\x7F\s]+\s*/g,'') || "English";
     const explanation = await callClaude(
       `You are an expert teacher creating a spoken AI podcast lesson.
 EXPLAIN — do not read or copy the notes. Teach the student from scratch.
-${getLangInstruction(lang)}
+Language: ${langLabel}. Write ENTIRELY in ${langLabel}.
 - For every concept: what it IS, why it matters, how it works, a real analogy
 - Conversational: "Think of it like this…", "What this means is…", "Here's why…"
 - Build step by step. Connect each idea to the previous one.
@@ -7670,6 +7283,7 @@ function MCQ({ cards, onBack }) {
   // Learn More state
   const [learnMore,    setLearnMore]    = useState(null); // null | "loading" | string
   const [showLearnMore, setShowLearnMore] = useState(false);
+  const [answerAnim,   setAnswerAnim]   = useState(null); // null | {idx, type:"correct"|"wrong"}
 
   useEffect(() => {
     buildAIOptions(deck).then(map => { setOptsMap(map); setLoading(false); });
@@ -7679,7 +7293,12 @@ function MCQ({ cards, onBack }) {
     if (sel) return;
     setSel(o);
     setLearnMore(null); setShowLearnMore(false);
-    if (o === deck[curr].answer) setScore(s => s + 1);
+    const isCorrect = o === deck[curr].answer;
+    if (isCorrect) setScore(s => s + 1);
+    // Trigger animation
+    const idx = ((optsMap && optsMap.get(deck[curr].id)) || buildFallbackOptions(deck[curr], deck)).indexOf(o);
+    setAnswerAnim({ idx, type: isCorrect ? "correct" : "wrong" });
+    setTimeout(() => setAnswerAnim(null), 500);
   };
 
   const next = () => {
@@ -7738,7 +7357,9 @@ Keep it under 150 words. Be encouraging.`,
             else if (is) { bg = C.redL;   bd = C.red;   col = C.red;   }
           }
           return (
-            <button key={i} onClick={() => pick(o)} style={{ background:bg, border:`1.5px solid ${bd}`, borderRadius:12, padding:"14px 18px", textAlign:"left", fontSize:15, color:col, cursor:sel?"default":"pointer", fontWeight:is||(sel&&ok)?600:400, transition:"all .2s", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+            <button key={i} onClick={() => pick(o)}
+              className={answerAnim && answerAnim.idx === i ? (answerAnim.type === "correct" ? "answer-correct" : "answer-wrong") : "btn-anim"}
+              style={{ background:bg, border:`1.5px solid ${bd}`, borderRadius:12, padding:"14px 18px", textAlign:"left", fontSize:15, color:col, cursor:sel?"default":"pointer", fontWeight:is||(sel&&ok)?600:400, transition:"all .2s", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
               <span><span style={{ fontWeight:700, marginRight:10, color:C.muted }}>{"ABCD"[i]}.</span>{o}</span>
               {sel && ok  && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>}
               {sel && is && !ok && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.red} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>}
@@ -8707,11 +8328,8 @@ function VoiceAnswer({ cards, onBack }) {
           if (countdown <= 0) {
             clearInterval(timer);
             countdownRef.current = null;
-            // Show 0 briefly before submitting
-            setTimeout(() => {
-              setVoiceCountdown(null);
-              checkAnswer(lastFinal.trim());
-            }, 400);
+            setVoiceCountdown(null);
+            checkAnswer(lastFinal.trim());
           }
         }, 400);
         countdownRef.current = timer;
@@ -12539,142 +12157,6 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
   );
 }
 
-
-// ── Monster Chase ─────────────────────────────────────────────────────────────
-function SGMonsterChaseGame({ gameState, isHost, user, db, groupId, members }) {
-  const [localAnswer, setLocalAnswer] = useState(null);
-  const q = gameState?.currentQuestion;
-  const monsterDistance = gameState?.monsterDistance ?? 5;
-  const MAX_DIST = 5;
-  const answers = gameState?.answers || {};
-  const memberUids = Object.keys(members || {});
-  const answerCount = Object.keys(answers).length;
-  const memberCount = memberUids.length;
-
-  useEffect(() => { setLocalAnswer(null); }, [gameState?.questionIndex]);
-
-  useEffect(() => {
-    if (!isHost || !q) return;
-    if (answerCount < memberCount || memberCount === 0) return;
-    if (gameState?.phase !== "question") return;
-    const evalRound = async () => {
-      const wrongCount = Object.values(answers).filter(a => a !== q.answer).length;
-      const majorityWrong = wrongCount >= Math.ceil(memberCount / 2);
-      const newDist = majorityWrong ? monsterDistance - 1 : Math.min(MAX_DIST, monsterDistance + 1);
-      const eaten = newDist <= 0;
-      const questions = gameState.questions || [];
-      const next = (gameState.questionIndex || 0) + 1;
-      const isLast = next >= questions.length;
-      if (eaten) {
-        await updateDoc(doc(db,"studyGroups",groupId), { "gameState.monsterDistance":0, "gameState.phase":"results", "gameState.survived":false });
-      } else if (isLast) {
-        await updateDoc(doc(db,"studyGroups",groupId), { "gameState.monsterDistance":newDist, "gameState.phase":"results", "gameState.survived":true });
-      } else {
-        await updateDoc(doc(db,"studyGroups",groupId), { "gameState.monsterDistance":newDist, "gameState.questionIndex":next, "gameState.currentQuestion":questions[next], "gameState.answers":{}, "gameState.phase":"question" });
-      }
-    };
-    evalRound();
-  }, [answerCount, memberCount]);
-
-  const submitAnswer = async (choice) => {
-    if (localAnswer !== null || !q) return;
-    setLocalAnswer(choice);
-    await updateDoc(doc(db,"studyGroups",groupId), { [`gameState.answers.${user.uid}`]: choice });
-  };
-
-  const endGame = async () => { await updateDoc(doc(db,"studyGroups",groupId), { gameState:null }); };
-
-  const dangerPct = ((MAX_DIST - monsterDistance) / MAX_DIST) * 100;
-  const barColor = dangerPct >= 80 ? "#dc2626" : dangerPct >= 50 ? "#f97316" : "#22c55e";
-  const monsterEmojis = ["😴","🚶","🏃","😤","😡","👹"];
-  const monsterFace = monsterEmojis[Math.min(MAX_DIST - monsterDistance, 5)];
-
-  if (gameState?.phase === "results") {
-    const survived = gameState?.survived ?? false;
-    return (
-      <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
-        <div style={{ background:C.surface, borderRadius:20, padding:28, maxWidth:400, width:"100%",
-          border:`2px solid ${survived?"#22c55e":"#dc2626"}`, textAlign:"center" }}>
-          <div style={{ fontSize:64, marginBottom:12 }}>{survived?"🎉":"💀"}</div>
-          <h2 style={{ margin:"0 0 8px", fontSize:22, color:survived?"#16a34a":"#dc2626", fontFamily:"'Fraunces',serif" }}>
-            {survived ? "You Survived!" : "The Monster Got You!"}
-          </h2>
-          <p style={{ color:C.muted, fontSize:13, margin:"0 0 20px" }}>
-            {survived ? "Amazing teamwork! You outran the monster." : "Work together next time — majority wrong answers move it closer!"}
-          </p>
-          {isHost && <button onClick={endGame} style={{ background:"#dc2626", color:"#fff", border:"none", borderRadius:10, padding:"10px 24px", fontSize:13, fontWeight:700, cursor:"pointer" }}>End Game</button>}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ flex:1, display:"flex", flexDirection:"column", overflowY:"auto", padding:16, gap:12, background:C.bg }}>
-      <div style={{ background:C.surface, borderRadius:14, padding:"12px 16px", border:`1px solid ${C.border}` }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-          <span style={{ fontSize:11, fontWeight:700, color:C.muted, letterSpacing:.8, textTransform:"uppercase" }}>Monster distance</span>
-          <span style={{ fontSize:20 }}>{monsterFace}</span>
-        </div>
-        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <span style={{ fontSize:16 }}>🏃</span>
-          <div style={{ flex:1, height:10, borderRadius:99, background:C.border, overflow:"hidden" }}>
-            <div style={{ height:"100%", borderRadius:99, width:`${dangerPct}%`, background:barColor, transition:"width 0.6s ease" }} />
-          </div>
-          <span style={{ fontSize:16 }}>👹</span>
-        </div>
-        <p style={{ margin:"6px 0 0", fontSize:11, color:C.muted, textAlign:"center" }}>
-          Majority wrong = monster gets closer · Majority right = monster falls back
-        </p>
-      </div>
-
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-        <span style={{ color:C.muted, fontSize:12 }}>Q {(gameState?.questionIndex||0)+1} / {gameState?.questions?.length||"?"}</span>
-        <span style={{ color:C.muted, fontSize:12 }}>⏳ {answerCount}/{memberCount} answered</span>
-      </div>
-
-      {q && (
-        <div style={{ background:C.surface, borderRadius:16, padding:20, border:`1px solid ${C.border}` }}>
-          <p style={{ margin:"0 0 16px", fontSize:15, fontWeight:700, color:C.text, lineHeight:1.5 }}>{q.question}</p>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-            {(q.options||[]).map((opt,i) => {
-              const chosen = localAnswer === opt;
-              const revealed = localAnswer !== null;
-              const isCorrect = opt === q.answer;
-              let bg=C.bg, border=C.border, txtColor=C.text;
-              if (revealed) { if (isCorrect) { bg="#dcfce7"; border="#22c55e"; txtColor="#16a34a"; } else if (chosen) { bg="#fee2e2"; border="#dc2626"; txtColor="#dc2626"; } }
-              else if (chosen) { bg=C.accentL; border=C.accent; txtColor=C.accent; }
-              return (
-                <button key={i} onClick={() => submitAnswer(opt)} disabled={localAnswer!==null}
-                  style={{ background:bg, border:`2px solid ${border}`, borderRadius:12, padding:"10px 12px",
-                    cursor:localAnswer?"default":"pointer", textAlign:"left", color:txtColor, fontSize:13, fontWeight:600, lineHeight:1.4 }}>
-                  <span style={{ fontSize:11, fontWeight:800, marginRight:6, color:C.muted }}>{["A","B","C","D"][i]}</span>{opt}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {localAnswer && answerCount < memberCount && (
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8, color:C.muted, fontSize:13 }}>
-          <SGSpinner /> Waiting for teammates…
-        </div>
-      )}
-
-      <div style={{ background:C.surface, borderRadius:12, padding:"10px 14px", border:`1px solid ${C.border}` }}>
-        <p style={{ margin:"0 0 8px", fontSize:10, fontWeight:700, color:C.muted, letterSpacing:.8, textTransform:"uppercase" }}>Team</p>
-        {memberUids.map(uid => (
-          <div key={uid} style={{ display:"flex", alignItems:"center", gap:8, padding:"4px 0" }}>
-            <span style={{ fontSize:16 }}>{members[uid]?.character||"🐱"}</span>
-            <span style={{ flex:1, color:C.text, fontSize:12 }}>{members[uid]?.displayName?.split(" ")[0]||"Player"}{uid===user.uid?" (you)":""}</span>
-            <span style={{ fontSize:12 }}>{answers[uid]?"✅":"⏳"}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 // ── Quiz sub-components ───────────────────────────────────────────────────────
 function ProgressBar({ gameState, myScore, hideScore }) {
   return (
@@ -12747,7 +12229,6 @@ function SGGameLauncher({ group, db, groupId, user, groupFile, onClose }) {
     { id:"speedround", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.warm} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>, title:"Speed Round",       desc:"10 questions, 10 seconds each",         bg:"#fff7ed",  accent:C.warm    },
     { id:"elimination", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.red} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>, title:"Elimination",       desc:"Wrong answer? You're out!",             bg:"#fef2f2",  accent:C.red     },
     { id:"teamquiz",   icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>, title:"Team Quiz",         desc:"Split into teams, highest score wins",  bg:C.accentL,  accent:C.accent  },
-    { id:"monsterchase", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>, title:"Monster Chase", desc:"Survive together — wrong answers feed the monster!", bg:"#fef2f2", accent:"#dc2626" },
   ];
 
   const effectiveTopic = groupFile?.name || topic.trim();
@@ -12819,8 +12300,6 @@ function SGGameLauncher({ group, db, groupId, user, groupFile, onClose }) {
           teamScores: gameId === "teamquiz" ? { team0:0, team1:0 } : {},
           topic: effectiveTopic || "Flashcards",
           fromCards: hasFlashcards && sharedCards.length >= 4,
-          monsterDistance: gameId === "monsterchase" ? 5 : null,
-          monsterEaten: false,
         },
         lastActivity: Date.now(),
       });
@@ -13464,13 +12943,8 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
         {/* Main workspace */}
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {gameActive ? (
-            group.gameState?.mode === "monsterchase" ? (
-              <SGMonsterChaseGame gameState={group.gameState} isHost={isHost}
-                user={user} db={db} groupId={groupId} members={members} />
-            ) : (
             <SGQuizGame gameState={group.gameState} isHost={isHost}
               user={user} db={db} groupId={groupId} members={members} />
-            )
           ) : contentActive ? (
             <SGSharedContent content={group.sharedContent}
               presenterName={presenter?.displayName?.split(" ")[0]}
