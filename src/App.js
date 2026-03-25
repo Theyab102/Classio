@@ -608,12 +608,48 @@ function useResponsive() {
 }
 
 // ─── COLORS ───────────────────────────────────────────────────────────────────
-const C = {
-  bg: "#F7F5F2", surface: "#FFFFFF", border: "#E8E4DF", text: "#1A1714",
-  muted: "#9B9590", accent: "#3D5A80", accentL: "#E8EFF5", accentS: "#C5D5E8",
-  warm: "#C17F5A", warmL: "#F5EDE5", green: "#4A7C59", greenL: "#E5F0E8",
-  purple: "#6B4E8A", purpleL: "#EDE5F5", red: "#C45C5C", redL: "#F5E5E5",
+// ─── THEME SYSTEM ─────────────────────────────────────────────────────────────
+const THEMES = {
+  light: {
+    bg:"#F7F5F2", surface:"#FFFFFF", border:"#E8E4DF", text:"#1A1714",
+    muted:"#9B9590", accent:"#3D5A80", accentL:"#E8EFF5", accentS:"#C5D5E8",
+    warm:"#C17F5A", warmL:"#F5EDE5", green:"#4A7C59", greenL:"#E5F0E8",
+    purple:"#6B4E8A", purpleL:"#EDE5F5", red:"#C45C5C", redL:"#F5E5E5",
+    sidebar:"#FFFFFF", sidebarActive:"#F0EDE8", navText:"#1A1714",
+    shadow:"0 2px 12px rgba(0,0,0,.06)", cardShadow:"0 4px 20px rgba(0,0,0,.08)",
+    isDark:false,
+  },
+  dark: {
+    bg:"#1A1A15", surface:"#252520", border:"#35352E", text:"#F0EDE8",
+    muted:"#7A7870", accent:"#6B8CB8", accentL:"#1E2730", accentS:"#2A3D52",
+    warm:"#C17F5A", warmL:"#2A1F16", green:"#5A9C69", greenL:"#162218",
+    purple:"#9B7ECA", purpleL:"#261A35", red:"#D47070", redL:"#2A1616",
+    sidebar:"#141410", sidebarActive:"#252520", navText:"#F0EDE8",
+    shadow:"0 2px 12px rgba(0,0,0,.4)", cardShadow:"0 4px 20px rgba(0,0,0,.4)",
+    isDark:true,
+  },
 };
+let _isDark = false;
+try { _isDark = localStorage.getItem("classio_dark")==="true"; } catch {}
+let _themeCallbacks = [];
+function _getTheme() { return _isDark ? THEMES.dark : THEMES.light; }
+function _toggleTheme() {
+  _isDark = !_isDark;
+  try { localStorage.setItem("classio_dark", String(_isDark)); } catch {}
+  document.body.style.background = _getTheme().bg;
+  _themeCallbacks.forEach(fn => fn());
+}
+function useTheme() {
+  const [t, setT] = useState(() => _getTheme());
+  useEffect(() => {
+    const fn = () => setT(_getTheme());
+    _themeCallbacks.push(fn);
+    return () => { _themeCallbacks = _themeCallbacks.filter(f=>f!==fn); };
+  }, []);
+  return t;
+}
+// C = current theme (updated by re-renders via useTheme)
+let C = _getTheme();
 
 const FILE_COLORS = [
   { bg:"#E8EFF5", accent:"#3D5A80" }, { bg:"#F5EDE5", accent:"#C17F5A" },
@@ -1322,6 +1358,182 @@ function OnboardingTutorial({ onDone }) {
   );
 }
 
+
+// ─── EXTRA GLOBAL CSS ─────────────────────────────────────────────────────────
+const DARK_CSS = `
+  body.classio-dark { background: #1A1A15 !important; color: #F0EDE8 !important; }
+  body.classio-dark ::-webkit-scrollbar-thumb { background: #35352E; }
+  @keyframes cmdIn { from { opacity:0; transform:translateY(-16px) scale(.97); } to { opacity:1; transform:translateY(0) scale(1); } }
+  @keyframes sidebarIn { from { opacity:0; transform:translateX(-12px); } to { opacity:1; transform:translateX(0); } }
+  @keyframes quickIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+`;
+
+// ─── SIDEBAR ──────────────────────────────────────────────────────────────────
+function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacter, onToggleTheme, onOpenSearch, isMobile, user, isGuest, onSignOut }) {
+  const T = useTheme();
+  C = T; // keep C in sync
+
+  const NAV = [
+    { id:"home",     label:"Dashboard",   icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> },
+    { id:"guides",   label:"Study Guides",icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 0 3-3h7z"/></svg> },
+    { id:"settings", label:"Settings",    icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> },
+  ];
+
+  if (isMobile) {
+    // Mobile: bottom bar
+    return (
+      <div style={{ position:"fixed", bottom:0, left:0, right:0, height:56, background:T.sidebar, borderTop:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"space-around", zIndex:300 }}>
+        {NAV.slice(0,3).map(n => {
+          const active = (n.id==="home" && (screen==="home"||screen==="folder")) || (n.id==="guides" && homeTab==="about");
+          return (
+            <button key={n.id} onClick={()=>onNavigate(n.id)} style={{ background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:active?T.accent:T.muted, padding:"4px 8px" }}>
+              {n.icon}
+              <span style={{ fontSize:9, fontWeight:600 }}>{n.label}</span>
+            </button>
+          );
+        })}
+        <button onClick={onOpenSearch} style={{ background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:T.muted, padding:"4px 8px" }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <span style={{ fontSize:9, fontWeight:600 }}>Search</span>
+        </button>
+        <button onClick={onOpenCharacter} style={{ background:"none", border:"none", cursor:"pointer", padding:"4px 8px" }}>
+          <div style={{ width:30, height:30, borderRadius:"50%", overflow:"hidden", border:`2px solid ${T.border}` }}>
+            <MiniAvatar character={character||{}} size={30} />
+          </div>
+        </button>
+      </div>
+    );
+  }
+
+  // Desktop: left sidebar (wider, labeled)
+  return (
+    <div style={{ width:220, minWidth:220, height:"100vh", background:T.sidebar, borderRight:`1px solid ${T.border}`, display:"flex", flexDirection:"column", position:"fixed", left:0, top:0, zIndex:200, animation:"sidebarIn .2s ease" }}>
+      {/* Logo */}
+      <div style={{ padding:"20px 16px 16px", display:"flex", alignItems:"center", gap:10, borderBottom:`1px solid ${T.border}` }}>
+        <div style={{ width:32, height:32, background:"linear-gradient(135deg,#6B4E8A,#3D5A80)", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+          <Icon d={I.sparkle} size={16} color="#fff" sw={2}/>
+        </div>
+        <span style={{ fontFamily:"'Fraunces',serif", fontSize:18, fontWeight:700, color:T.navText, letterSpacing:-.3 }}>Classio</span>
+      </div>
+
+      {/* Search bar */}
+      <div style={{ padding:"12px 12px 8px" }}>
+        <button onClick={onOpenSearch} style={{ width:"100%", display:"flex", alignItems:"center", gap:8, background:T.bg, border:`1px solid ${T.border}`, borderRadius:10, padding:"8px 12px", cursor:"pointer", textAlign:"left" }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <span style={{ fontSize:13, color:T.muted, flex:1 }}>Search…</span>
+          <span style={{ fontSize:10, color:T.muted, background:T.border, borderRadius:4, padding:"1px 5px" }}>⌘K</span>
+        </button>
+      </div>
+
+      {/* Nav */}
+      <nav style={{ flex:1, padding:"4px 8px", display:"flex", flexDirection:"column", gap:2 }}>
+        {NAV.map(n => {
+          const active = (n.id==="home" && (screen==="home"||screen==="folder"||screen==="file")) || (n.id==="guides" && homeTab==="about");
+          return (
+            <button key={n.id} onClick={()=>onNavigate(n.id)}
+              style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"9px 12px", borderRadius:10, border:"none", cursor:"pointer", textAlign:"left", background:active?T.sidebarActive:"transparent", color:active?T.text:T.muted, fontWeight:active?600:400, fontSize:14, transition:"all .12s" }}
+              onMouseEnter={e=>{ if(!active){e.currentTarget.style.background=T.sidebarActive; e.currentTarget.style.color=T.text;}}}
+              onMouseLeave={e=>{ if(!active){e.currentTarget.style.background="transparent"; e.currentTarget.style.color=T.muted;}}}>
+              {n.icon}
+              {n.label}
+              {active && <div style={{ width:4, height:4, borderRadius:"50%", background:T.accent, marginLeft:"auto" }}/>}
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Bottom */}
+      <div style={{ padding:"8px 8px 16px", borderTop:`1px solid ${T.border}`, display:"flex", flexDirection:"column", gap:4 }}>
+        {/* Theme toggle */}
+        <button onClick={onToggleTheme}
+          style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"9px 12px", borderRadius:10, border:"none", cursor:"pointer", background:"transparent", color:T.muted, fontSize:14, transition:"all .12s" }}
+          onMouseEnter={e=>{e.currentTarget.style.background=T.sidebarActive; e.currentTarget.style.color=T.text;}}
+          onMouseLeave={e=>{e.currentTarget.style.background="transparent"; e.currentTarget.style.color=T.muted;}}>
+          {T.isDark
+            ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+            : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          }
+          {T.isDark ? "Light mode" : "Dark mode"}
+        </button>
+        {/* User */}
+        <button onClick={onOpenCharacter}
+          style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"8px 12px", borderRadius:10, border:"none", cursor:"pointer", background:"transparent" }}
+          onMouseEnter={e=>{e.currentTarget.style.background=T.sidebarActive;}}
+          onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
+          <div style={{ width:32, height:32, borderRadius:"50%", overflow:"hidden", border:`2px solid ${T.border}`, flexShrink:0 }}>
+            <MiniAvatar character={character||{}} size={32} />
+          </div>
+          <div style={{ textAlign:"left", minWidth:0 }}>
+            <p style={{ margin:0, fontSize:13, fontWeight:600, color:T.navText, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{character?.name || (user?.displayName?.split(" ")[0]) || (isGuest?"Guest":"You")}</p>
+            <p style={{ margin:0, fontSize:11, color:T.muted }}>{isGuest?"Guest mode":"Student"}</p>
+          </div>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── COMMAND-K SEARCH ─────────────────────────────────────────────────────────
+function CommandSearch({ folders, onOpenFile, onClose }) {
+  const T = useTheme();
+  const [q, setQ] = useState("");
+  const inputRef = useRef(null);
+  useEffect(() => { setTimeout(()=>inputRef.current?.focus(),50); }, []);
+  useEffect(() => {
+    const h = (e) => { if(e.key==="Escape") onClose(); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [onClose]);
+
+  const allFiles = folders.flatMap(f => (f.files||[]).map(fi=>({...fi, folderName:f.name, folderObj:f})));
+  const results = q.trim()
+    ? allFiles.filter(fi=>(fi.name||"").toLowerCase().includes(q.toLowerCase()) || fi.folderName.toLowerCase().includes(q.toLowerCase()))
+    : allFiles.slice(0,8);
+
+  const getIcon = (name="") => {
+    const e = name.split(".").pop().toLowerCase();
+    if (e==="pdf") return {bg:"#E8EFF5",c:"#3D5A80",t:"PDF"};
+    if (["doc","docx"].includes(e)) return {bg:"#DBEAFE",c:"#2563EB",t:"DOC"};
+    if (["ppt","pptx"].includes(e)) return {bg:"#FEE2E2",c:"#DC2626",t:"PPT"};
+    if (["jpg","png","gif","webp"].includes(e)) return {bg:"#F3E8FF",c:"#7C3AED",t:"IMG"};
+    return {bg:"#F3F4F6",c:"#6B7280",t:"FILE"};
+  };
+
+  return (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:9000, background:"rgba(0,0,0,.55)", backdropFilter:"blur(12px)", display:"flex", alignItems:"flex-start", justifyContent:"center", paddingTop:"10vh" }}>
+      <div onClick={e=>e.stopPropagation()} style={{ width:"100%", maxWidth:600, background:T.surface, borderRadius:20, boxShadow:"0 32px 80px rgba(0,0,0,.35)", border:`1px solid ${T.border}`, overflow:"hidden", animation:"cmdIn .18s ease" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:12, padding:"16px 20px", borderBottom:`1px solid ${T.border}` }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <input ref={inputRef} value={q} onChange={e=>setQ(e.target.value)} placeholder="Search folders and files..."
+            style={{ flex:1, border:"none", outline:"none", background:"transparent", fontSize:16, color:T.text, fontFamily:"'DM Sans',sans-serif" }}/>
+          <span style={{ fontSize:11, color:T.muted, background:T.border, borderRadius:5, padding:"2px 7px", fontWeight:600 }}>ESC</span>
+        </div>
+        <div style={{ maxHeight:400, overflowY:"auto" }}>
+          {!q.trim() && <p style={{ fontSize:11, fontWeight:700, color:T.muted, letterSpacing:.8, padding:"12px 20px 4px", textTransform:"uppercase" }}>Recently opened</p>}
+          {results.length===0 && <div style={{ padding:"32px 20px", textAlign:"center", color:T.muted, fontSize:14 }}>No files found for "{q}"</div>}
+          {results.map((fi,i) => {
+            const ic = getIcon(fi.name);
+            return (
+              <div key={fi.id+i} onClick={()=>{onOpenFile(fi,fi.folderObj); onClose();}}
+                style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 20px", cursor:"pointer" }}
+                onMouseEnter={e=>e.currentTarget.style.background=T.accentL}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <div style={{ width:36, height:36, borderRadius:10, background:ic.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                  <span style={{ fontSize:8, fontWeight:800, color:ic.c }}>{ic.t}</span>
+                </div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <p style={{ margin:0, fontSize:14, fontWeight:600, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{fi.name}</p>
+                  <p style={{ margin:0, fontSize:11, color:T.muted }}>{fi.folderName}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const { isMobile, isTablet } = useResponsive();
   const [showTutorial, setShowTutorial] = useState(() => {
@@ -1343,6 +1555,20 @@ export default function App() {
   const [showCharacter, setShowCharacter] = useState(false);
   const [activeStudyGroup, setActiveStudyGroup] = useState(null); // group doc id
   const [showStudyGroupLobby, setShowStudyGroupLobby] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const T = useTheme(); // reactive theme
+
+  // Keep global C in sync with theme for all legacy code
+  C = T;
+
+  // Command-K shortcut
+  useEffect(() => {
+    const h = (e) => {
+      if ((e.metaKey||e.ctrlKey) && e.key==="k") { e.preventDefault(); setShowSearch(s=>!s); }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
   const DEFAULT_CHAR = { skin:"#FDDBB4", hair:"#3D2B1F", hairStyle:0, eyes:"#2980B9", top:"#2C3E50", bg:"#dce8ff", mouth:0, eyebrow:0, eyeShape:0, accessory:0, topStyle:0, blush:false, lips:false, freckles:false, lipColor:"#d06060", hat:0, hatColor:"#E74C3C", glasses:0, glassesColor:"#333333", facialHair:0, necklace:0, necklaceColor:"#f0c040", earring:0, earringColor:"#f0c040", name:"" };
   const [character, setCharacter] = useState(() => {
     try { return { ...DEFAULT_CHAR, ...(JSON.parse(localStorage.getItem("classio_char") || "null") || {}) }; }
@@ -1511,10 +1737,36 @@ export default function App() {
       onUpdate={updateFolder} />;
   }
 
+  const handleNavigate = (id) => {
+    if (id==="home") { setHomeTab("folders"); setScreen("home"); }
+    else if (id==="guides") { setHomeTab("about"); setScreen("home"); }
+  };
+
+  const handleOpenFileFromSearch = (fi, folder) => {
+    setActiveFolder(folder);
+    const restored = {...fi, _fileObj: fi._fileObj||FILE_STORE.get(fi.id)||null};
+    setActiveFile(restored);
+    setScreen("file");
+  };
+
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'DM Sans', sans-serif", paddingBottom: 50, overflowX: "hidden", width: "100%", boxSizing: "border-box" }}>
+    <div style={{ minHeight:"100vh", background:T.bg, fontFamily:"'DM Sans',sans-serif", display:"flex", width:"100%", boxSizing:"border-box" }}>
       <style>{GS}</style>
-      <Header user={isGuest ? { displayName: guestName, photoURL: null } : user} saveStatus={saveStatus} isGuest={isGuest} onSignOut={isGuest ? handleGuestSignOut : () => signOut(auth)} character={character} onOpenCharacter={() => setShowCharacter(true)} homeTab={homeTab} onSetHomeTab={setHomeTab} onOpenAI={() => setShowHomeAI(true)} />
+      <style>{DARK_CSS}</style>
+      {/* Sidebar */}
+      <ClassioSidebar
+        screen={screen} homeTab={homeTab}
+        onNavigate={handleNavigate}
+        character={character}
+        onOpenCharacter={() => setShowCharacter(true)}
+        onToggleTheme={_toggleTheme}
+        onOpenSearch={() => setShowSearch(true)}
+        isMobile={isMobile}
+        user={user} isGuest={isGuest}
+        onSignOut={isGuest ? handleGuestSignOut : () => signOut(auth)}
+      />
+      {/* Command-K Search */}
+      {showSearch && <CommandSearch folders={folders} onOpenFile={handleOpenFileFromSearch} onClose={()=>setShowSearch(false)} />}
       {showCharacter && <CharacterModal character={character} onChange={c => { setCharacter(c); localStorage.setItem("classio_char", JSON.stringify(c)); }} onClose={() => setShowCharacter(false)} />}
       {showStudyGroupLobby && <StudyGroupLobby
         user={isGuest ? { uid:"guest_"+guestName, displayName:guestName, photoURL:null } : user}
@@ -1522,31 +1774,52 @@ export default function App() {
         onJoin={(groupId) => { setActiveStudyGroup(groupId); setScreen("studyGroup"); setShowStudyGroupLobby(false); }}
         onClose={() => setShowStudyGroupLobby(false)}
       />}
+      {/* Main content area — offset by sidebar */}
+      <div style={{ flex:1, marginLeft:isMobile?0:220, marginBottom:isMobile?56:0, minHeight:"100vh", display:"flex", flexDirection:"column", background:T.bg }}>
       <AdBanner />
-      <div style={{ maxWidth: 900, margin: "0 auto", padding: isMobile ? "12px 10px" : "24px 14px" }}>
-        {/* ── Action buttons row ── */}
-        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:20, justifyContent:"flex-end" }}>
-          <button onClick={()=>setShowStudyGroupLobby(true)} className="hov"
-            style={{ display:"flex", alignItems:"center", gap:7, background:"#7c3aed",
-              color:"#fff", border:"none", borderRadius:12, padding:"10px 18px",
-              fontSize:14, fontWeight:600, cursor:"pointer",
-              boxShadow:"0 4px 14px rgba(124,58,237,.35)" }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            Study Group
-          </button>
-          {homeTab==="folders" && (
-            <button onClick={()=>setShowNewFolder(true)} className="hov"
-              style={{ display:"flex", alignItems:"center", gap:8, background:C.accent,
-                color:"#fff", border:"none", borderRadius:12, padding:"10px 20px",
-                fontSize:14, fontWeight:600, cursor:"pointer" }}>
-              <Icon d={I.plus} size={16} color="#fff" sw={2.5}/> New Folder
-            </button>
-          )}
-        </div>
+      <div style={{ maxWidth:960, margin:"0 auto", padding:isMobile?"12px 14px":"32px 36px", width:"100%", boxSizing:"border-box" }}>
+
+        {/* ── Dashboard Header ── */}
         {homeTab==="folders" && (
-          <p style={{ fontSize:14, color:C.muted, marginBottom:20 }}>
-            {folders.length===0?"Create your first folder to get started":`${folders.length} folder${folders.length!==1?"s":""}`}
-          </p>
+          <div style={{ marginBottom:28 }}>
+            <h1 style={{ fontFamily:"'Fraunces',serif", fontSize:isMobile?24:34, fontWeight:700, color:T.text, margin:"0 0 4px", letterSpacing:-.5 }}>Dashboard</h1>
+            <p style={{ fontSize:14, color:T.muted, margin:0 }}>Create new notes</p>
+          </div>
+        )}
+
+        {/* ── Quick Action Cards (Turbo-style) ── */}
+        {homeTab==="folders" && (
+          <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)", gap:12, marginBottom:32 }}>
+            {[
+              { color:"#6B4E8A", bg:"#EDE5F5", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B4E8A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>, label:"New Folder", sub:"Start from scratch", action:()=>setShowNewFolder(true) },
+              { color:"#3D5A80", bg:"#E8EFF5", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3D5A80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>, label:"Record audio", sub:"Upload an audio file", action:()=>setShowNewFolder(true) },
+              { color:"#4A7C59", bg:"#E5F0E8", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4A7C59" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>, label:"Document upload", sub:"Any PDF, DOC, PPT, etc", action:()=>setShowNewFolder(true) },
+              { color:"#C45C5C", bg:"#F5E5E5", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C45C5C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.54C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg>, label:"Website link", sub:"YouTube or website link", action:()=>setShowNewFolder(true) },
+            ].map((a,i) => (
+              <button key={i} onClick={a.action} className="btn-anim"
+                style={{ display:"flex", alignItems:"center", gap:12, background:T.surface, border:`1.5px solid ${T.border}`, borderRadius:16, padding:"14px 16px", cursor:"pointer", textAlign:"left", boxShadow:T.shadow, animation:`quickIn .2s ease ${i*0.05}s both` }}>
+                <div style={{ width:40, height:40, borderRadius:12, background:T.isDark?a.color+"22":a.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{a.icon}</div>
+                <div style={{ minWidth:0 }}>
+                  <p style={{ margin:0, fontSize:13, fontWeight:700, color:T.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{a.label}</p>
+                  <p style={{ margin:0, fontSize:11, color:T.muted, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{a.sub}</p>
+                </div>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft:"auto", flexShrink:0 }}><path d="M9 18l6-6-6-6"/></svg>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* ── My Notes header + New Folder button ── */}
+        {homeTab==="folders" && (
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
+            <div style={{ display:"flex", gap:4 }}>
+              <button onClick={()=>setHomeTab("folders")} style={{ background:homeTab==="folders"?T.text:"transparent", color:homeTab==="folders"?"#fff":T.muted, border:`1.5px solid ${homeTab==="folders"?T.text:T.border}`, borderRadius:20, padding:"5px 16px", fontSize:13, fontWeight:600, cursor:"pointer" }}>My Notes</button>
+            </div>
+            <button onClick={()=>setShowNewFolder(true)} className="btn-anim"
+              style={{ display:"flex", alignItems:"center", gap:6, background:"transparent", border:`1.5px solid ${T.border}`, borderRadius:10, padding:"6px 14px", fontSize:13, fontWeight:600, cursor:"pointer", color:T.text }}>
+              <Icon d={I.plus} size={14} color={T.text} sw={2.5}/> New Folder
+            </button>
+          </div>
         )}
 
         {homeTab==="about" && <AboutTab/>}
@@ -1565,35 +1838,37 @@ export default function App() {
           </div>
         )}
 
-        {homeTab==="folders" && <div className="card-grid" style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))", gap:16 }}>
-          {folders.map(folder => (
-            <div key={folder.id} className="card-hov"
-              onClick={() => { setActiveFolder(folder); setScreen("folder"); }}
-              style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:16, padding:20, cursor:"pointer", boxShadow:"0 2px 8px rgba(0,0,0,.05)", position:"relative" }}>
-              {/* Delete folder button */}
-              <button
-                onClick={e => {
-                  e.stopPropagation();
-                  if (window.confirm(`Delete "${folder.name}" and all its files?`)) deleteFolder(folder.id);
-                }}
-                style={{ position:"absolute", top:10, right:10, width:26, height:26, borderRadius:"50%", background:"transparent", border:"none", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", opacity:0.4, fontSize:16, color:C.muted, lineHeight:1 }}
-                onMouseEnter={e => e.currentTarget.style.opacity=1}
-                onMouseLeave={e => e.currentTarget.style.opacity=0.4}
-                title="Delete folder">
-                ×
-              </button>
-              <div style={{ width:44, height:44, background:folder.color+"22", borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", marginBottom:14 }}>
-                <Icon d={I.folder} size={22} color={folder.color} />
+        {homeTab==="folders" && folders.length > 0 && (
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {folders.map((folder,idx) => (
+              <div key={folder.id}
+                onClick={() => { setActiveFolder(folder); setScreen("folder"); }}
+                style={{ display:"flex", alignItems:"center", gap:14, background:T.surface, border:`1px solid ${T.border}`, borderRadius:14, padding:"14px 16px", cursor:"pointer", boxShadow:T.shadow, transition:"all .15s", animation:`quickIn .18s ease ${idx*0.04}s both` }}
+                onMouseEnter={e=>{e.currentTarget.style.boxShadow=T.cardShadow; e.currentTarget.style.borderColor=T.accentS;}}
+                onMouseLeave={e=>{e.currentTarget.style.boxShadow=T.shadow; e.currentTarget.style.borderColor=T.border;}}>
+                <div style={{ width:40, height:40, background:folder.color+"22", borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                  <Icon d={I.folder} size={20} color={folder.color} />
+                </div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <p style={{ margin:0, fontSize:14, fontWeight:600, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{folder.name}</p>
+                  <p style={{ margin:0, fontSize:12, color:T.muted }}>{folder.files.length} file{folder.files.length!==1?"s":""}</p>
+                </div>
+                <button onClick={e=>{e.stopPropagation(); if(window.confirm(`Delete "${folder.name}"?`)) deleteFolder(folder.id);}}
+                  style={{ background:"none", border:"none", cursor:"pointer", color:T.muted, padding:4, borderRadius:6, opacity:.5 }}
+                  onMouseEnter={e=>{e.currentTarget.style.opacity=1; e.currentTarget.style.color=T.red;}}
+                  onMouseLeave={e=>{e.currentTarget.style.opacity=.5; e.currentTarget.style.color=T.muted;}}>
+                  <Icon d={I.trash} size={15} color="currentColor"/>
+                </button>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
               </div>
-              <p style={{ fontSize:15, fontWeight:600, color:C.text, marginBottom:4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{folder.name}</p>
-              <p style={{ fontSize:13, color:C.muted }}>{folder.files.length} file{folder.files.length !== 1 ? "s" : ""}</p>
-            </div>
-          ))}
-        </div>}
+            ))}
+          </div>
+        )}
 
       {showHomeAI && <StandaloneAI onClose={() => setShowHomeAI(false)} />}
 
       </div>
+      </div> {/* end main content */}
 
       {showTutorial && <OnboardingTutorial onDone={() => setShowTutorial(false)} />}
 
@@ -3616,12 +3891,19 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
   const TABS = [{ id:"files", label:"Files", icon:I.file },{ id:"youtube", label:"YouTube", icon:I.link },{ id:"ai", label:"AI Assistant", icon:I.ai }];
 
   return (
-    <div className="page-with-ad" style={{ minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif" }}>
-      <style>{GS}</style>
+  const TFV = useTheme(); C = TFV;
+  const { isMobile: isMobFolderV } = useResponsive();
+
+  return (
+    <div style={{ minHeight:"100vh", background:TFV.bg, fontFamily:"'DM Sans',sans-serif", display:"flex" }}>
+      <style>{GS}</style><style>{DARK_CSS}</style>
+      {/* Sidebar placeholder — same width so content aligns */}
+      {!isMobFolderV && <div style={{ width:220, minWidth:220, flexShrink:0 }}/>}
+      <div style={{ flex:1, display:"flex", flexDirection:"column", minWidth:0 }}>
       {/* Top bar */}
-      <div className="app-header" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", height:64, display:"flex", alignItems:"center", gap:16 }}>
-        <button onClick={onBack} className="hov" style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14 }}>
-          <Icon d={I.back} size={18} color={C.muted} /> Back
+      <div style={{ background:TFV.surface, borderBottom:`1px solid ${TFV.border}`, padding:"0 20px", height:56, display:"flex", alignItems:"center", gap:14, flexShrink:0 }}>
+        <button onClick={onBack} style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:TFV.muted, fontSize:13, fontWeight:500 }}>
+          <Icon d={I.back} size={16} color={TFV.muted} /> Back
         </button>
         <div style={{ width:1, height:20, background:C.border }} />
         <div style={{ display:"flex", alignItems:"center", gap:10, flex:1 }}>
@@ -3770,38 +4052,92 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
   // Stop audio when component unmounts (user navigates away entirely)
   useEffect(() => { return () => stopAllAudio(); }, []);
 
+  const TF = useTheme(); C = TF;
+  const [showAIPanel, setShowAIPanel] = useState(true);
+  const { isMobile: isMobFV } = useResponsive();
+
   return (
-    <div className="page-with-ad" style={{ minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif" }}>
+    <div style={{ minHeight:"100vh", background:TF.bg, fontFamily:"'DM Sans',sans-serif", display:"flex", flexDirection:"column" }}>
       <style>{GS}</style>
-      <div className="app-header" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", height:64, display:"flex", alignItems:"center", gap:14 }}>
-        <button onClick={handleBack} className="hov" style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14 }}>
-          <Icon d={I.back} size={18} color={C.muted} /> {folder.name}
+      <style>{DARK_CSS}</style>
+      {/* Top header bar */}
+      <div style={{ background:TF.surface, borderBottom:`1px solid ${TF.border}`, padding:"0 20px", height:56, display:"flex", alignItems:"center", gap:12, flexShrink:0 }}>
+        <button onClick={handleBack} style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:TF.muted, fontSize:13, fontWeight:500 }}>
+          <Icon d={I.back} size={16} color={TF.muted} />
+          <span>{folder.name}</span>
         </button>
-        <Icon d={I.chevron} size={14} color={C.border} />
-        <div style={{ width:28, height:28, background:fc.bg, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <Icon d={I.file} size={14} color={fc.accent} />
+        <Icon d={I.chevron} size={12} color={TF.border} />
+        <div style={{ width:24, height:24, background:fc.bg, borderRadius:7, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <Icon d={I.file} size={12} color={fc.accent} />
         </div>
-        <span style={{ fontSize:15, fontWeight:600, color:C.text, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{file.name}</span>
+        <span style={{ fontSize:14, fontWeight:600, color:TF.text, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{file.name}</span>
+        {/* AI panel toggle */}
+        {!isMobFV && (
+          <button onClick={()=>setShowAIPanel(p=>!p)}
+            style={{ display:"flex", alignItems:"center", gap:6, background:showAIPanel?"linear-gradient(135deg,#6366f1,#8b5cf6)":TF.surface, color:showAIPanel?"#fff":TF.muted, border:`1px solid ${showAIPanel?"transparent":TF.border}`, borderRadius:8, padding:"6px 12px", cursor:"pointer", fontSize:12, fontWeight:600 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/></svg>
+            {showAIPanel ? "Hide AI" : "Show AI"}
+          </button>
+        )}
       </div>
-      <div className="nav-tabs" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", display:"flex", gap:4 }}>
+      {/* Tab bar */}
+      <div className="nav-tabs" style={{ background:TF.surface, borderBottom:`1px solid ${TF.border}`, padding:"0 20px", display:"flex", gap:2, flexShrink:0 }}>
         {TABS.map(t => (
           <button key={t.id} className="nav-tab-btn" onClick={() => handleTabChange(t.id)}
-            style={{ display:"flex", alignItems:"center", gap:7, padding:"14px 18px", border:"none", borderBottom:tab===t.id?`2px solid ${C.accent}`:"2px solid transparent", background:"none", cursor:"pointer", fontSize:14, fontWeight:tab===t.id?700:500, color:tab===t.id?C.accent:C.muted, marginBottom:-1 }}>
-            <Icon d={t.icon} size={15} color={tab===t.id?C.accent:C.muted} />{t.label}
+            style={{ display:"flex", alignItems:"center", gap:6, padding:"12px 14px", border:"none", borderBottom:tab===t.id?`2px solid ${TF.accent}`:"2px solid transparent", background:"none", cursor:"pointer", fontSize:13, fontWeight:tab===t.id?700:500, color:tab===t.id?TF.accent:TF.muted, marginBottom:-1, whiteSpace:"nowrap" }}>
+            <Icon d={t.icon} size={14} color={tab===t.id?TF.accent:TF.muted} />
+            <span className="tab-label">{t.label}</span>
           </button>
         ))}
       </div>
-      {tab==="view"
-        ? <ViewTab file={file} onUpdate={onUpdate} />
-        : <div className="page-inner" style={{ maxWidth:900, margin:"0 auto", padding:"32px 24px" }}>
-            {tab==="notes" && <NotesTab key={file.id} file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} />}
-            {tab==="voice" && <VoicePodcastTab file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} />}
-            {tab==="cards" && <CardsTab file={file} onUpdate={onUpdate} />}
-            {tab==="ai" && <AITab file={file} allFiles={allFiles} folder={folder} onUpdate={onUpdate} />}
-            {tab==="game" && <GameTab file={file} />}
-            {tab==="youtube" && <YouTubeTab file={file} onUpdate={onUpdate} />}
+      {/* Split pane body */}
+      <div style={{ flex:1, display:"flex", overflow:"hidden", minHeight:0 }}>
+        {/* Left: content */}
+        <div style={{ flex:1, overflowY:"auto", minWidth:0 }}>
+          {tab==="view"
+            ? <ViewTab file={file} onUpdate={onUpdate} />
+            : <div className="page-inner page-with-ad" style={{ maxWidth: (showAIPanel && !isMobFV) ? "100%" : 900, margin:"0 auto", padding:isMobFV?"16px 14px":"28px 32px" }}>
+                {tab==="notes" && <div key="notes" className="page-fade"><NotesTab key={file.id} file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} /></div>}
+                {tab==="voice" && <div key="voice" className="page-fade"><VoicePodcastTab file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} /></div>}
+                {tab==="cards" && <div key="cards" className="page-fade"><CardsTab file={file} onUpdate={onUpdate} /></div>}
+                {tab==="ai"    && <div key="ai" className="page-fade"><AITab file={file} allFiles={allFiles} folder={folder} onUpdate={onUpdate} /></div>}
+                {tab==="game"  && <div key="game" className="page-fade"><GameTab file={file} /></div>}
+                {tab==="youtube" && <div key="yt" className="page-fade"><YouTubeTab file={file} onUpdate={onUpdate} /></div>}
+              </div>
+          }
+        </div>
+        {/* Right: persistent AI chat panel (Turbo-style) */}
+        {showAIPanel && !isMobFV && (
+          <div style={{ width:360, minWidth:320, maxWidth:400, borderLeft:`1px solid ${TF.border}`, background:TF.surface, display:"flex", flexDirection:"column", flexShrink:0, height:"100%" }}>
+            {/* Panel header */}
+            <div style={{ padding:"16px 20px 12px", borderBottom:`1px solid ${TF.border}`, flexShrink:0 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+                <div style={{ width:32, height:32, background:"linear-gradient(135deg,#6366f1,#8b5cf6)", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/></svg>
+                </div>
+                <div>
+                  <p style={{ margin:0, fontSize:14, fontWeight:700, color:TF.text }}>AI Assistant</p>
+                  <p style={{ margin:0, fontSize:11, color:TF.muted }}>Ask anything about this file</p>
+                </div>
+              </div>
+              {/* Quick prompts */}
+              <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                {["Summarise this document", "What are the key concepts?", "Create a quiz from this"].map((q,i) => (
+                  <div key={i} style={{ fontSize:12, color:TF.muted, background:TF.bg, border:`1px solid ${TF.border}`, borderRadius:8, padding:"6px 10px", cursor:"pointer" }}
+                    onMouseEnter={e=>{e.currentTarget.style.background=TF.accentL; e.currentTarget.style.color=TF.accent;}}
+                    onMouseLeave={e=>{e.currentTarget.style.background=TF.bg; e.currentTarget.style.color=TF.muted;}}>
+                    {q}
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Embed AITab in the panel */}
+            <div style={{ flex:1, overflowY:"auto", minHeight:0 }}>
+              <AITab file={file} allFiles={allFiles} folder={folder} onUpdate={onUpdate} compact={true} />
+            </div>
           </div>
-      }
+        )}
+      </div>
     </div>
   );
 }
