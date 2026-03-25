@@ -28,7 +28,39 @@ const googleProvider = new GoogleAuthProvider();
 const GROQ_KEY = process.env.REACT_APP_GROQ_KEY || "";
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
+// ── Gemini primary → Groq (Llama) fallback ────────────────────────────────────
+const GEMINI_KEYS = [
+  process.env.REACT_APP_GEMINI_KEY_1 || "",
+  process.env.REACT_APP_GEMINI_KEY_2 || "",
+  process.env.REACT_APP_GEMINI_KEY_3 || "",
+].filter(Boolean);
+
+async function _callGemini(prompt, maxTok=3000) {
+  for (const key of GEMINI_KEYS) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,
+        { method:"POST", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ contents:[{ parts:[{ text:prompt }] }], generationConfig:{ maxOutputTokens:maxTok, temperature:0.7 } }) }
+      );
+      if (res.status === 429) continue;
+      if (!res.ok) throw new Error("Gemini " + res.status);
+      const d = await res.json();
+      const txt = d.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      if (txt) return txt;
+    } catch(e) { if (String(e).includes("429")) continue; throw e; }
+  }
+  throw new Error("Gemini keys exhausted");
+}
+
 async function callClaude(system, userMessage, maxTok = 3000) {
+  // Try Gemini first
+  if (GEMINI_KEYS.length > 0) {
+    try {
+      return await _callGemini((system ? system + "\n\n" : "") + userMessage, maxTok);
+    } catch(e) { console.warn("Gemini→Groq fallback:", e.message); }
+  }
+  // Groq fallback
   const res = await fetch(GROQ_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_KEY}` },
@@ -44,12 +76,20 @@ async function callClaude(system, userMessage, maxTok = 3000) {
 }
 
 async function callClaudeChat(system, messages) {
+  const sysPrompt = system + "\n\nIMPORTANT: Always reply in the SAME language the user wrote in. If Arabic → Arabic. If French → French. Match exactly.";
+  // Try Gemini first
+  if (GEMINI_KEYS.length > 0) {
+    try {
+      const history = messages.map(m => `${m.role === "user" ? "User" : "Assistant"}: ${typeof m.content === "string" ? m.content : ""}`).join("\n");
+      return await _callGemini(sysPrompt + "\n\n" + history, 1200);
+    } catch(e) { console.warn("Gemini chat fallback:", e.message); }
+  }
   const res = await fetch(GROQ_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_KEY}` },
     body: JSON.stringify({
       model: "llama-3.3-70b-versatile",
-      messages: [{ role: "system", content: system + "\n\nIMPORTANT: Always reply in the SAME language the user wrote in. If Arabic → Arabic. If French → French. Match exactly." }, ...messages],
+      messages: [{ role: "system", content: sysPrompt }, ...messages],
       max_tokens: 1200,
     }),
   });
@@ -620,12 +660,12 @@ const THEMES = {
     isDark:false,
   },
   dark: {
-    bg:"#1A1A15", surface:"#252520", border:"#35352E", text:"#F0EDE8",
-    muted:"#7A7870", accent:"#6B8CB8", accentL:"#1E2730", accentS:"#2A3D52",
+    bg:"#0F0F0E", surface:"#1C1C1A", border:"#2A2A26", text:"#EEECEA",
+    muted:"#6A6A62", accent:"#7C5CFC", accentL:"#1E1830", accentS:"#2D2050",
     warm:"#C17F5A", warmL:"#2A1F16", green:"#5A9C69", greenL:"#162218",
     purple:"#9B7ECA", purpleL:"#261A35", red:"#D47070", redL:"#2A1616",
-    sidebar:"#141410", sidebarActive:"#252520", navText:"#F0EDE8",
-    shadow:"0 2px 12px rgba(0,0,0,.4)", cardShadow:"0 4px 20px rgba(0,0,0,.4)",
+    sidebar:"#0A0A09", sidebarActive:"#1C1C1A", navText:"#EEECEA",
+    shadow:"0 2px 12px rgba(0,0,0,.6)", cardShadow:"0 4px 20px rgba(0,0,0,.6)",
     isDark:true,
   },
 };
@@ -1405,68 +1445,82 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
     );
   }
 
-  // Desktop: left sidebar (wider, labeled)
+  // Desktop: slim icon sidebar (Turbo-style)
+  const [expanded, setExpanded] = React.useState(false);
+  const sideW = expanded ? 220 : 60;
+
+  const NavBtn = ({ n }) => {
+    const active = (n.id==="home" && (screen==="home"||screen==="folder"||screen==="file")) || (n.id==="guides" && homeTab==="about");
+    return (
+      <div style={{ position:"relative" }}>
+        <button onClick={()=>onNavigate(n.id)}
+          title={n.label}
+          style={{ width:"100%", display:"flex", alignItems:"center", gap:12, padding:expanded?"9px 14px":"12px", borderRadius:10, border:"none", cursor:"pointer",
+            background:active?T.sidebarActive:"transparent",
+            color:active?T.text:T.muted, fontWeight:active?600:400, fontSize:14, transition:"all .12s",
+            justifyContent:expanded?"flex-start":"center" }}
+          onMouseEnter={e=>{ if(!active){ e.currentTarget.style.background=T.sidebarActive; e.currentTarget.style.color=T.text; }}}
+          onMouseLeave={e=>{ if(!active){ e.currentTarget.style.background="transparent"; e.currentTarget.style.color=T.muted; }}}>
+          <span style={{ flexShrink:0, display:"flex" }}>{n.icon}</span>
+          {expanded && <span style={{ whiteSpace:"nowrap", overflow:"hidden" }}>{n.label}</span>}
+          {active && expanded && <div style={{ width:5, height:5, borderRadius:"50%", background:T.accent, marginLeft:"auto", flexShrink:0 }}/>}
+        </button>
+      </div>
+    );
+  };
+
   return (
-    <div style={{ width:220, minWidth:220, height:"100vh", background:T.sidebar, borderRight:`1px solid ${T.border}`, display:"flex", flexDirection:"column", position:"fixed", left:0, top:0, zIndex:200, animation:"sidebarIn .2s ease" }}>
-      {/* Logo */}
-      <div style={{ padding:"20px 16px 16px", display:"flex", alignItems:"center", gap:10, borderBottom:`1px solid ${T.border}` }}>
-        <div style={{ width:32, height:32, background:"linear-gradient(135deg,#6B4E8A,#3D5A80)", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+    <div style={{ width:sideW, minWidth:sideW, height:"100vh", background:T.sidebar, borderRight:`1px solid ${T.border}`, display:"flex", flexDirection:"column", position:"fixed", left:0, top:0, zIndex:200, transition:"width .2s ease", overflow:"hidden" }}>
+      {/* Logo + collapse toggle */}
+      <div style={{ padding:"16px 0", display:"flex", flexDirection:"column", alignItems:"center", borderBottom:`1px solid ${T.border}` }}>
+        <div style={{ width:36, height:36, background:"linear-gradient(135deg,#7C5CFC,#3D5A80)", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, cursor:"pointer" }} onClick={()=>setExpanded(e=>!e)}>
           <Icon d={I.sparkle} size={16} color="#fff" sw={2}/>
         </div>
-        <span style={{ fontFamily:"'Fraunces',serif", fontSize:18, fontWeight:700, color:T.navText, letterSpacing:-.3 }}>Classio</span>
+        {expanded && <span style={{ fontFamily:"'Fraunces',serif", fontSize:16, fontWeight:700, color:T.navText, letterSpacing:-.3, marginTop:8 }}>Classio</span>}
       </div>
 
-      {/* Search bar */}
-      <div style={{ padding:"12px 12px 8px" }}>
-        <button onClick={onOpenSearch} style={{ width:"100%", display:"flex", alignItems:"center", gap:8, background:T.bg, border:`1px solid ${T.border}`, borderRadius:10, padding:"8px 12px", cursor:"pointer", textAlign:"left" }}>
+      {/* Search */}
+      <div style={{ padding:"10px 8px 4px" }}>
+        <button onClick={onOpenSearch} title="Search (⌘K)"
+          style={{ width:"100%", display:"flex", alignItems:"center", gap:8, background:T.bg, border:`1px solid ${T.border}`, borderRadius:10,
+            padding:expanded?"8px 12px":"10px", cursor:"pointer", justifyContent:expanded?"flex-start":"center" }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          <span style={{ fontSize:13, color:T.muted, flex:1 }}>Search…</span>
-          <span style={{ fontSize:10, color:T.muted, background:T.border, borderRadius:4, padding:"1px 5px" }}>⌘K</span>
+          {expanded && <>
+            <span style={{ fontSize:13, color:T.muted, flex:1 }}>Search…</span>
+            <span style={{ fontSize:10, color:T.muted, background:T.border, borderRadius:4, padding:"1px 5px" }}>⌘K</span>
+          </>}
         </button>
       </div>
 
       {/* Nav */}
       <nav style={{ flex:1, padding:"4px 8px", display:"flex", flexDirection:"column", gap:2 }}>
-        {NAV.map(n => {
-          const active = (n.id==="home" && (screen==="home"||screen==="folder"||screen==="file")) || (n.id==="guides" && homeTab==="about");
-          return (
-            <button key={n.id} onClick={()=>onNavigate(n.id)}
-              style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"9px 12px", borderRadius:10, border:"none", cursor:"pointer", textAlign:"left", background:active?T.sidebarActive:"transparent", color:active?T.text:T.muted, fontWeight:active?600:400, fontSize:14, transition:"all .12s" }}
-              onMouseEnter={e=>{ if(!active){e.currentTarget.style.background=T.sidebarActive; e.currentTarget.style.color=T.text;}}}
-              onMouseLeave={e=>{ if(!active){e.currentTarget.style.background="transparent"; e.currentTarget.style.color=T.muted;}}}>
-              {n.icon}
-              {n.label}
-              {active && <div style={{ width:4, height:4, borderRadius:"50%", background:T.accent, marginLeft:"auto" }}/>}
-            </button>
-          );
-        })}
+        {NAV.map(n => <NavBtn key={n.id} n={n} />)}
       </nav>
 
       {/* Bottom */}
       <div style={{ padding:"8px 8px 16px", borderTop:`1px solid ${T.border}`, display:"flex", flexDirection:"column", gap:4 }}>
-        {/* Theme toggle */}
-        <button onClick={onToggleTheme}
-          style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"9px 12px", borderRadius:10, border:"none", cursor:"pointer", background:"transparent", color:T.muted, fontSize:14, transition:"all .12s" }}
+        <button onClick={onToggleTheme} title={T.isDark?"Light mode":"Dark mode"}
+          style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:expanded?"9px 14px":"12px", borderRadius:10, border:"none", cursor:"pointer",
+            background:"transparent", color:T.muted, fontSize:14, transition:"all .12s", justifyContent:expanded?"flex-start":"center" }}
           onMouseEnter={e=>{e.currentTarget.style.background=T.sidebarActive; e.currentTarget.style.color=T.text;}}
           onMouseLeave={e=>{e.currentTarget.style.background="transparent"; e.currentTarget.style.color=T.muted;}}>
           {T.isDark
-            ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-            : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-          }
-          {T.isDark ? "Light mode" : "Dark mode"}
+            ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/></svg>
+            : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>}
+          {expanded && (T.isDark ? "Light mode" : "Dark mode")}
         </button>
-        {/* User */}
-        <button onClick={onOpenCharacter}
-          style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"8px 12px", borderRadius:10, border:"none", cursor:"pointer", background:"transparent" }}
+        <button onClick={onOpenCharacter} title="Profile"
+          style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:expanded?"8px 14px":"10px", borderRadius:10, border:"none", cursor:"pointer",
+            background:"transparent", justifyContent:expanded?"flex-start":"center" }}
           onMouseEnter={e=>{e.currentTarget.style.background=T.sidebarActive;}}
           onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
-          <div style={{ width:32, height:32, borderRadius:"50%", overflow:"hidden", border:`2px solid ${T.border}`, flexShrink:0 }}>
-            <MiniAvatar character={character||{}} size={32} />
+          <div style={{ width:30, height:30, borderRadius:"50%", overflow:"hidden", border:`2px solid ${T.border}`, flexShrink:0 }}>
+            <MiniAvatar character={character||{}} size={30} />
           </div>
-          <div style={{ textAlign:"left", minWidth:0 }}>
+          {expanded && <div style={{ textAlign:"left", minWidth:0 }}>
             <p style={{ margin:0, fontSize:13, fontWeight:600, color:T.navText, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{character?.name || (user?.displayName?.split(" ")[0]) || (isGuest?"Guest":"You")}</p>
             <p style={{ margin:0, fontSize:11, color:T.muted }}>{isGuest?"Guest mode":"Student"}</p>
-          </div>
+          </div>}
         </button>
       </div>
     </div>
@@ -1775,7 +1829,7 @@ export default function App() {
         onClose={() => setShowStudyGroupLobby(false)}
       />}
       {/* Main content area — offset by sidebar */}
-      <div style={{ flex:1, marginLeft:isMobile?0:220, marginBottom:isMobile?56:0, minHeight:"100vh", display:"flex", flexDirection:"column", background:T.bg }}>
+      <div style={{ flex:1, marginLeft:isMobile?0:60, marginBottom:isMobile?56:0, minHeight:"100vh", display:"flex", flexDirection:"column", background:T.bg }}>
       <AdBanner />
       <div style={{ maxWidth:960, margin:"0 auto", padding:isMobile?"12px 14px":"32px 36px", width:"100%", boxSizing:"border-box" }}>
 
@@ -1839,27 +1893,28 @@ export default function App() {
         )}
 
         {homeTab==="folders" && folders.length > 0 && (
-          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          <div style={{ display:"flex", flexDirection:"column", gap:0 }}>
+            <p style={{ fontSize:12, fontWeight:600, color:T.muted, margin:"0 0 8px", letterSpacing:.3 }}>Today</p>
             {folders.map((folder,idx) => (
               <div key={folder.id}
                 onClick={() => { setActiveFolder(folder); setScreen("folder"); }}
-                style={{ display:"flex", alignItems:"center", gap:14, background:T.surface, border:`1px solid ${T.border}`, borderRadius:14, padding:"14px 16px", cursor:"pointer", boxShadow:T.shadow, transition:"all .15s", animation:`quickIn .18s ease ${idx*0.04}s both` }}
-                onMouseEnter={e=>{e.currentTarget.style.boxShadow=T.cardShadow; e.currentTarget.style.borderColor=T.accentS;}}
-                onMouseLeave={e=>{e.currentTarget.style.boxShadow=T.shadow; e.currentTarget.style.borderColor=T.border;}}>
-                <div style={{ width:40, height:40, background:folder.color+"22", borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                  <Icon d={I.folder} size={20} color={folder.color} />
+                style={{ display:"flex", alignItems:"center", gap:14, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, padding:"14px 16px", cursor:"pointer", transition:"all .15s", marginBottom:6, animation:`quickIn .18s ease ${idx*0.04}s both` }}
+                onMouseEnter={e=>{e.currentTarget.style.background=T.sidebarActive; e.currentTarget.style.borderColor=T.accentS;}}
+                onMouseLeave={e=>{e.currentTarget.style.background=T.surface; e.currentTarget.style.borderColor=T.border;}}>
+                {/* File type icon */}
+                <div style={{ width:44, height:44, background:folder.color+"22", borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                  <Icon d={I.folder} size={22} color={folder.color} />
                 </div>
                 <div style={{ flex:1, minWidth:0 }}>
                   <p style={{ margin:0, fontSize:14, fontWeight:600, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{folder.name}</p>
-                  <p style={{ margin:0, fontSize:12, color:T.muted }}>{folder.files.length} file{folder.files.length!==1?"s":""}</p>
+                  <p style={{ margin:0, fontSize:12, color:T.muted, marginTop:2 }}>{folder.files.length} file{folder.files.length!==1?"s":""} · Last opened recently</p>
                 </div>
                 <button onClick={e=>{e.stopPropagation(); if(window.confirm(`Delete "${folder.name}"?`)) deleteFolder(folder.id);}}
-                  style={{ background:"none", border:"none", cursor:"pointer", color:T.muted, padding:4, borderRadius:6, opacity:.5 }}
+                  style={{ background:"none", border:"none", cursor:"pointer", color:T.muted, padding:6, borderRadius:8, opacity:0, transition:"opacity .15s" }}
                   onMouseEnter={e=>{e.currentTarget.style.opacity=1; e.currentTarget.style.color=T.red;}}
-                  onMouseLeave={e=>{e.currentTarget.style.opacity=.5; e.currentTarget.style.color=T.muted;}}>
-                  <Icon d={I.trash} size={15} color="currentColor"/>
+                  onMouseLeave={e=>{e.currentTarget.style.opacity=0; e.currentTarget.style.color=T.muted;}}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
                 </button>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
               </div>
             ))}
           </div>
@@ -3897,7 +3952,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
     <div style={{ minHeight:"100vh", background:TFV.bg, fontFamily:"'DM Sans',sans-serif", display:"flex" }}>
       <style>{GS}</style><style>{DARK_CSS}</style>
       {/* Sidebar placeholder — same width so content aligns */}
-      {!isMobFolderV && <div style={{ width:220, minWidth:220, flexShrink:0 }}/>}
+      {!isMobFolderV && <div style={{ width:60, minWidth:60, flexShrink:0 }}/>}
       <div style={{ flex:1, display:"flex", flexDirection:"column", minWidth:0 }}>
       {/* Top bar */}
       <div style={{ background:TFV.surface, borderBottom:`1px solid ${TFV.border}`, padding:"0 20px", height:56, display:"flex", alignItems:"center", gap:14, flexShrink:0 }}>
@@ -4021,14 +4076,13 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
 function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
   const [tab, setTab] = useState("view");
   const TABS = [
-    {id:"view",      label:"View File",       icon:I.file},
-    {id:"notes",     label:"Notes",           icon:I.notes},
-    {id:"voice",     label:"Voice & Podcast", icon:I.cards},
-    {id:"cards",     label:"Study Cards",     icon:I.cards},
-    {id:"analytics", label:"Analytics",       icon:I.notes},
-    {id:"ai",        label:"AI Assistant",    icon:I.ai},
-    {id:"game",      label:"Game Mode",       icon:I.game},
-    {id:"youtube",   label:"YouTube",         icon:I.link},
+    {id:"view",    label:"View File",       icon:I.file},
+    {id:"notes",   label:"Notes",           icon:I.notes},
+    {id:"voice",   label:"Voice & Podcast", icon:I.cards},
+    {id:"cards",   label:"Study Cards",     icon:I.cards},
+    {id:"ai",      label:"AI Assistant",    icon:I.ai},
+    {id:"game",    label:"Game Mode",       icon:I.game},
+    {id:"youtube", label:"YouTube",         icon:I.link},
   ];
   const fc = getFileColor(file);
 
@@ -4099,9 +4153,8 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
             : <div className="page-inner page-with-ad" style={{ maxWidth: (showAIPanel && !isMobFV) ? "100%" : 900, margin:"0 auto", padding:isMobFV?"16px 14px":"28px 32px" }}>
                 {tab==="notes" && <div key="notes" className="page-fade"><NotesTab key={file.id} file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} /></div>}
                 {tab==="voice" && <div key="voice" className="page-fade"><VoicePodcastTab file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} /></div>}
-                {tab==="cards"     && <div key="cards" className="page-fade"><CardsTab file={file} onUpdate={onUpdate} /></div>}
-                {tab==="analytics" && <div key="analytics" className="page-fade"><StudyAnalyticsTab file={file} /></div>}
-                {tab==="ai"        && <div key="ai" className="page-fade"><AITab file={file} allFiles={allFiles} folder={folder} onUpdate={onUpdate} /></div>}
+                {tab==="cards" && <div key="cards" className="page-fade"><CardsTab file={file} onUpdate={onUpdate} /></div>}
+                {tab==="ai"    && <div key="ai" className="page-fade"><AITab file={file} allFiles={allFiles} folder={folder} onUpdate={onUpdate} /></div>}
                 {tab==="game"  && <div key="game" className="page-fade"><GameTab file={file} /></div>}
                 {tab==="youtube" && <div key="yt" className="page-fade"><YouTubeTab file={file} onUpdate={onUpdate} /></div>}
               </div>
@@ -5882,189 +5935,6 @@ function clamp(len) {
 }
 
 // ─── STUDY CARDS TAB ──────────────────────────────────────────────────────────
-
-
-// ── Study Analytics Tab ───────────────────────────────────────────────────────
-function StudyAnalyticsTab({ file }) {
-  const cards = file.studyCards || [];
-  const storageKey = `classio_analytics_${file.id}`;
-
-  const [sessions, setSessions] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(storageKey) || "[]"); } catch { return []; }
-  });
-
-  // Track a new study session when this tab is opened
-  useEffect(() => {
-    const today = new Date().toISOString().split("T")[0];
-    const updated = [...sessions];
-    const todayIdx = updated.findIndex(s => s.date === today);
-    if (todayIdx >= 0) { updated[todayIdx].visits += 1; }
-    else { updated.push({ date: today, visits: 1, cardsStudied: cards.length }); }
-    const trimmed = updated.slice(-30); // keep last 30 days
-    setSessions(trimmed);
-    try { localStorage.setItem(storageKey, JSON.stringify(trimmed)); } catch {}
-  }, []);
-
-  // Compute streak
-  const streak = (() => {
-    if (!sessions.length) return 0;
-    const sorted = [...sessions].sort((a,b)=>b.date.localeCompare(a.date));
-    let count = 0;
-    let prev = new Date();
-    prev.setHours(0,0,0,0);
-    for (const s of sorted) {
-      const d = new Date(s.date);
-      const diff = Math.round((prev - d) / 86400000);
-      if (diff <= 1) { count++; prev = d; }
-      else break;
-    }
-    return count;
-  })();
-
-  const totalSessions = sessions.reduce((a,s) => a + s.visits, 0);
-  const daysStudied   = sessions.length;
-
-  // Heatmap: last 7 weeks (49 days)
-  const heatmap = (() => {
-    const map = {};
-    sessions.forEach(s => { map[s.date] = (map[s.date]||0) + s.visits; });
-    const days = [];
-    for (let i = 48; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const key = d.toISOString().split("T")[0];
-      days.push({ date: key, count: map[key] || 0, label: d.toLocaleDateString("en", {month:"short",day:"numeric"}) });
-    }
-    return days;
-  })();
-
-  const maxCount = Math.max(...heatmap.map(d=>d.count), 1);
-
-  const statCard = (label, value, sub, color="#6366f1") => (
-    <div style={{ background:C.surface, borderRadius:14, padding:"16px 20px", border:`1px solid ${C.border}`, flex:1, minWidth:120 }}>
-      <p style={{ margin:"0 0 4px", fontSize:12, color:C.muted, fontWeight:600 }}>{label}</p>
-      <p style={{ margin:"0 0 2px", fontSize:28, fontWeight:800, color }}>{value}</p>
-      {sub && <p style={{ margin:0, fontSize:11, color:C.muted }}>{sub}</p>}
-    </div>
-  );
-
-  return (
-    <div style={{ padding:"24px 0", display:"flex", flexDirection:"column", gap:24 }}>
-
-      {/* Stat cards */}
-      <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
-        {statCard("🔥 Streak", `${streak}d`, streak===1?"day in a row":`days in a row`, "#f97316")}
-        {statCard("📅 Days Studied", daysStudied, "in last 30 days", C.accent)}
-        {statCard("📖 Total Sessions", totalSessions, "study sessions opened", C.purple)}
-        {statCard("🃏 Cards", cards.length, "flashcards in this file", C.green)}
-      </div>
-
-      {/* Activity heatmap */}
-      <div style={{ background:C.surface, borderRadius:16, padding:"20px 24px", border:`1px solid ${C.border}` }}>
-        <p style={{ margin:"0 0 16px", fontSize:14, fontWeight:700, color:C.text }}>Activity — last 7 weeks</p>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(7, 1fr)", gap:4 }}>
-          {["S","M","T","W","T","F","S"].map((d,i)=>(
-            <p key={i} style={{ margin:"0 0 4px", fontSize:9, fontWeight:700, color:C.muted, textAlign:"center" }}>{d}</p>
-          ))}
-          {heatmap.map((day, i) => {
-            const intensity = day.count / maxCount;
-            const bg = day.count === 0 ? C.border
-              : intensity < 0.35 ? "#c7d2fe"
-              : intensity < 0.65 ? "#818cf8"
-              : "#4f46e5";
-            return (
-              <div key={i} title={`${day.label}: ${day.count} session${day.count!==1?"s":""}`}
-                style={{ aspectRatio:"1", borderRadius:4, background:bg, cursor:"default", transition:"opacity .1s" }}
-                onMouseEnter={e=>e.currentTarget.style.opacity=".7"}
-                onMouseLeave={e=>e.currentTarget.style.opacity="1"} />
-            );
-          })}
-        </div>
-        <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:12, justifyContent:"flex-end" }}>
-          <span style={{ fontSize:10, color:C.muted }}>Less</span>
-          {[C.border,"#c7d2fe","#818cf8","#4f46e5"].map((c,i)=>(
-            <div key={i} style={{ width:10, height:10, borderRadius:2, background:c }} />
-          ))}
-          <span style={{ fontSize:10, color:C.muted }}>More</span>
-        </div>
-      </div>
-
-      {/* Mastery breakdown — uses localStorage cards state if available */}
-      {cards.length > 0 && (
-        <div style={{ background:C.surface, borderRadius:16, padding:"20px 24px", border:`1px solid ${C.border}` }}>
-          <p style={{ margin:"0 0 16px", fontSize:14, fontWeight:700, color:C.text }}>Card Status</p>
-          <p style={{ margin:"0 0 4px", fontSize:12, color:C.muted }}>
-            Study your flashcards to track New → Learning → Mastered progress here.
-          </p>
-          <div style={{ display:"flex", gap:8, marginTop:12, flexWrap:"wrap" }}>
-            {[
-              {label:"🆕 New",      color:"#6b7280", bg:"#f3f4f6"},
-              {label:"🔁 Learning", color:"#92400e", bg:"#fef3c7"},
-              {label:"✅ Mastered", color:"#166534", bg:"#dcfce7"},
-            ].map(s=>(
-              <div key={s.label} style={{ flex:1, minWidth:100, padding:"10px 14px", borderRadius:12, background:s.bg }}>
-                <p style={{ margin:0, fontSize:13, fontWeight:700, color:s.color }}>{s.label}</p>
-                <p style={{ margin:"2px 0 0", fontSize:11, color:s.color, opacity:.7 }}>Open Study Cards to update</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {sessions.length === 0 && (
-        <div style={{ textAlign:"center", padding:"40px 0", color:C.muted }}>
-          <p style={{ fontSize:32, margin:"0 0 12px" }}>📊</p>
-          <p style={{ fontSize:15 }}>No study sessions recorded yet.</p>
-          <p style={{ fontSize:13 }}>Come back after studying some cards!</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── ELI5 Button — "Explain Like I'm 5" ───────────────────────────────────────
-function ELI5Button({ card }) {
-  const [loading, setLoading] = useState(false);
-  const [explanation, setExplanation] = useState(null);
-  const [open, setOpen] = useState(false);
-
-  const explain = async (e) => {
-    e.stopPropagation();
-    if (explanation) { setOpen(o=>!o); return; }
-    setLoading(true);
-    try {
-      const txt = await callClaude(
-        "You explain complex things simply, like talking to a curious 10-year-old. Use an analogy or fun example. Keep it under 3 sentences.",
-        `Explain this in super simple terms:\nQ: ${card.question}\nA: ${card.answer}`
-      );
-      setExplanation(txt);
-      setOpen(true);
-    } catch(e) { console.error(e); }
-    setLoading(false);
-  };
-
-  return (
-    <div onClick={e=>e.stopPropagation()}>
-      <button onClick={explain}
-        style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 16px",
-          borderRadius:20, border:`1.5px solid ${C.purple}44`,
-          background:open?C.purpleL:"transparent", color:C.purple,
-          fontSize:12, fontWeight:700, cursor:"pointer", transition:"all .15s" }}>
-        {loading ? "Thinking…" : "🧒 ELI5"}
-      </button>
-      {open && explanation && (
-        <div onClick={e=>e.stopPropagation()} style={{ marginTop:10, padding:"12px 16px",
-          background:C.purpleL, borderRadius:14, border:`1.5px solid ${C.purple}33`,
-          maxWidth:560, textAlign:"left" }}>
-          <p style={{ margin:0, fontSize:13, color:C.text, lineHeight:1.7 }}>{explanation}</p>
-          <button onClick={()=>setOpen(false)} style={{ marginTop:8, fontSize:11, color:C.muted,
-            background:"none", border:"none", cursor:"pointer", textDecoration:"underline" }}>Close</button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function CardsTab({ file, onUpdate }) {
   const { isMobile } = useResponsive();
   const [cards, setCards] = useState(file.studyCards||[]);
@@ -6106,10 +5976,9 @@ function CardsTab({ file, onUpdate }) {
   useEffect(() => {
     let base = [...cards];
     if (shuffled) base = base.sort(() => Math.random() - .5);
-    if (filter === "starred") base = base.filter(c => starred[c.id] && !known[c.id]);
+    if (filter === "starred") base = base.filter(c => starred[c.id]);
     else if (filter === "known") base = base.filter(c => known[c.id]);
     else if (filter === "unknown") base = base.filter(c => !known[c.id]);
-    else if (filter === "new") base = base.filter(c => !known[c.id] && !starred[c.id]);
     setDisplayCards(base);
   }, [cards, shuffled, filter, starred, known]);
 
@@ -6144,15 +6013,11 @@ function CardsTab({ file, onUpdate }) {
   const toggleKnown = (id, e) => { e.stopPropagation(); setKnown(k=>({...k,[id]:!k[id]})); };
   const resetProgress = () => { setKnown({}); setStarred({}); setFlipped({}); };
 
-  const newCount      = cards.filter(c => !known[c.id] && !starred[c.id]).length;
-  const learningCount = cards.filter(c => !known[c.id] && starred[c.id]).length;
-
   const FILTER_OPTS = [
-    {id:"all",      label:`All (${cards.length})`},
-    {id:"new",      label:`🆕 New (${newCount})`},
-    {id:"starred",  label:`🔁 Learning (${learningCount})`},
-    {id:"unknown",  label:`📚 To Review (${cards.length - knownCount})`},
-    {id:"known",    label:`✅ Mastered (${knownCount})`},
+    {id:"all",     label:`All (${cards.length})`},
+    {id:"unknown", label:`To Learn (${cards.length - knownCount})`},
+    {id:"starred", label:`⭐ Starred (${starredCount})`},
+    {id:"known",   label:`✓ Known (${knownCount})`},
   ];
 
   return (
@@ -6367,11 +6232,6 @@ function CardsTab({ file, onUpdate }) {
                   border: `2px solid ${isKnown ? C.green : isStarred ? "#f59e0b" : C.border}`,
                   boxShadow: "0 4px 32px rgba(0,0,0,.08)",
                 }}>
-                  <div style={{ display:"flex", gap:6, marginBottom:16, justifyContent:"center" }}>
-                    {isKnown ? <span style={{ fontSize:11, fontWeight:700, padding:"3px 12px", borderRadius:99, background:C.greenL, color:C.green }}>✓ Mastered</span>
-                      : isStarred ? <span style={{ fontSize:11, fontWeight:700, padding:"3px 12px", borderRadius:99, background:"#fef3c7", color:"#92400e" }}>🔁 Learning</span>
-                      : <span style={{ fontSize:11, fontWeight:700, padding:"3px 12px", borderRadius:99, background:C.border, color:C.muted }}>New</span>}
-                  </div>
                   <p style={{ fontSize:11, fontWeight:800, letterSpacing:2, textTransform:"uppercase", color:C.muted, marginBottom:24 }}>QUESTION</p>
                   <p style={{ fontSize:clamp(card.question?.length), color:C.text, lineHeight:1.65, fontWeight:500, maxWidth:640 }}>{card.question}</p>
                   <p style={{ fontSize:12, color:C.muted, marginTop:28 }}>Click to flip</p>
@@ -6385,10 +6245,7 @@ function CardsTab({ file, onUpdate }) {
                 }}>
                   <p style={{ fontSize:11, fontWeight:800, letterSpacing:2, textTransform:"uppercase", color:C.accent, marginBottom:24 }}>ANSWER</p>
                   <p style={{ fontSize:clamp(card.answer?.length), color:C.text, lineHeight:1.65, fontWeight:500, maxWidth:640 }}>{card.answer}</p>
-                  <div style={{ display:"flex", gap:8, marginTop:20, flexWrap:"wrap", justifyContent:"center" }}>
-                    <ELI5Button card={card} />
-                  </div>
-                  <p style={{ fontSize:12, color:C.accent, marginTop:12 }}>Click to flip back</p>
+                  <p style={{ fontSize:12, color:C.accent, marginTop:28 }}>Click to flip back</p>
                 </div>
               </div>
             </div>
@@ -6401,20 +6258,13 @@ function CardsTab({ file, onUpdate }) {
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.text} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
               </button>
 
-              {/* Mastery buttons */}
-              <div style={{ display:"flex", gap:8 }}>
-                <button onClick={e => { e.stopPropagation(); setKnown(k=>({...k,[card.id]:false})); setStarred(s=>({...s,[card.id]:true})); setStudyIdx(i=>Math.min(displayCards.length-1,i+1)); setFlipped({}); }} className="no-min-h"
-                  style={{ padding:"10px 18px", borderRadius:24, border:`2px solid ${isStarred&&!isKnown?"#f59e0b":C.border}`, cursor:"pointer", fontSize:13, fontWeight:700, transition:"all .2s",
-                    background:isStarred&&!isKnown?"#fef3c7":"transparent", color:isStarred&&!isKnown?"#92400e":C.muted }}>
-                  🔁 Learning
-                </button>
-                <button onClick={e => { e.stopPropagation(); toggleKnown(card.id, e); setStudyIdx(i=>Math.min(displayCards.length-1,i+1)); setFlipped({}); }} className="no-min-h"
-                  style={{ padding:"10px 24px", borderRadius:24, border:"none", cursor:"pointer", fontSize:13, fontWeight:700, transition:"all .2s",
-                    background:isKnown?C.green:C.accent, color:"#fff",
-                    boxShadow:`0 4px 16px ${isKnown?C.green:C.accent}44` }}>
-                  {isKnown ? "✓ Mastered!" : "Got it ✓"}
-                </button>
-              </div>
+              <button onClick={e => toggleKnown(card.id, e)} className="no-min-h"
+                style={{ padding:"11px 32px", borderRadius:24, border:"none", cursor:"pointer", fontSize:14, fontWeight:700, transition:"all .2s",
+                  background: isKnown ? C.green : C.accent,
+                  color: "#fff",
+                  boxShadow: `0 4px 16px ${isKnown ? C.green : C.accent}44` }}>
+                {isKnown ? "✓ Got it!" : "Got it"}
+              </button>
 
               <button onClick={() => { setStudyIdx(i => Math.min(displayCards.length-1, i+1)); setFlipped({}); }}
                 disabled={studyIdx === displayCards.length - 1} className="no-min-h"
