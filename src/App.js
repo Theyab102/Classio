@@ -12539,26 +12539,24 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
   );
 }
 
-// ── Monster Chase — cooperative survival quiz ─────────────────────────────────
+
+// ── Monster Chase ─────────────────────────────────────────────────────────────
 function SGMonsterChaseGame({ gameState, isHost, user, db, groupId, members }) {
   const [localAnswer, setLocalAnswer] = useState(null);
   const q = gameState?.currentQuestion;
   const monsterDistance = gameState?.monsterDistance ?? 5;
-  const monsterEaten = gameState?.monsterEaten ?? false;
+  const MAX_DIST = 5;
   const answers = gameState?.answers || {};
   const memberUids = Object.keys(members || {});
   const answerCount = Object.keys(answers).length;
   const memberCount = memberUids.length;
-  const MAX_DIST = 5;
 
   useEffect(() => { setLocalAnswer(null); }, [gameState?.questionIndex]);
 
-  // After everyone answered, host evaluates and advances
   useEffect(() => {
     if (!isHost || !q) return;
     if (answerCount < memberCount || memberCount === 0) return;
     if (gameState?.phase !== "question") return;
-
     const evalRound = async () => {
       const wrongCount = Object.values(answers).filter(a => a !== q.answer).length;
       const majorityWrong = wrongCount >= Math.ceil(memberCount / 2);
@@ -12567,28 +12565,12 @@ function SGMonsterChaseGame({ gameState, isHost, user, db, groupId, members }) {
       const questions = gameState.questions || [];
       const next = (gameState.questionIndex || 0) + 1;
       const isLast = next >= questions.length;
-
       if (eaten) {
-        await updateDoc(doc(db, "studyGroups", groupId), {
-          "gameState.monsterDistance": 0,
-          "gameState.monsterEaten": true,
-          "gameState.phase": "results",
-          "gameState.survived": false,
-        });
+        await updateDoc(doc(db,"studyGroups",groupId), { "gameState.monsterDistance":0, "gameState.phase":"results", "gameState.survived":false });
       } else if (isLast) {
-        await updateDoc(doc(db, "studyGroups", groupId), {
-          "gameState.monsterDistance": newDist,
-          "gameState.phase": "results",
-          "gameState.survived": true,
-        });
+        await updateDoc(doc(db,"studyGroups",groupId), { "gameState.monsterDistance":newDist, "gameState.phase":"results", "gameState.survived":true });
       } else {
-        await updateDoc(doc(db, "studyGroups", groupId), {
-          "gameState.monsterDistance": newDist,
-          "gameState.questionIndex": next,
-          "gameState.currentQuestion": questions[next],
-          "gameState.answers": {},
-          "gameState.phase": "question",
-        });
+        await updateDoc(doc(db,"studyGroups",groupId), { "gameState.monsterDistance":newDist, "gameState.questionIndex":next, "gameState.currentQuestion":questions[next], "gameState.answers":{}, "gameState.phase":"question" });
       }
     };
     evalRound();
@@ -12597,159 +12579,75 @@ function SGMonsterChaseGame({ gameState, isHost, user, db, groupId, members }) {
   const submitAnswer = async (choice) => {
     if (localAnswer !== null || !q) return;
     setLocalAnswer(choice);
-    await updateDoc(doc(db, "studyGroups", groupId), {
-      [`gameState.answers.${user.uid}`]: choice,
-    });
+    await updateDoc(doc(db,"studyGroups",groupId), { [`gameState.answers.${user.uid}`]: choice });
   };
 
-  const endGame = async () => {
-    await updateDoc(doc(db, "studyGroups", groupId), { gameState: null });
-  };
+  const endGame = async () => { await updateDoc(doc(db,"studyGroups",groupId), { gameState:null }); };
 
-  // ── Monster proximity bar ──────────────────────────────────────────────────
   const dangerPct = ((MAX_DIST - monsterDistance) / MAX_DIST) * 100;
   const barColor = dangerPct >= 80 ? "#dc2626" : dangerPct >= 50 ? "#f97316" : "#22c55e";
   const monsterEmojis = ["😴","🚶","🏃","😤","😡","👹"];
-  const monsterEmoji = monsterEmojis[Math.min(MAX_DIST - monsterDistance, 5)];
+  const monsterFace = monsterEmojis[Math.min(MAX_DIST - monsterDistance, 5)];
 
-  // ── RESULTS ───────────────────────────────────────────────────────────────
   if (gameState?.phase === "results") {
-    const survived = gameState?.survived ?? !monsterEaten;
+    const survived = gameState?.survived ?? false;
     return (
-      <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center",
-        padding:20, background: survived ? "#f0fdf4" : "#fef2f2" }}>
-        <div style={{ background:C.surface, borderRadius:20, padding:28, maxWidth:400,
-          width:"100%", border:`2px solid ${survived ? "#22c55e" : "#dc2626"}`,
-          textAlign:"center", boxShadow:`0 0 40px ${survived?"#22c55e":"#dc2626"}22` }}>
-          <div style={{ fontSize:64, marginBottom:12 }}>{survived ? "🎉" : "💀"}</div>
-          <h2 style={{ margin:"0 0 8px", fontSize:22, color: survived ? "#16a34a" : "#dc2626",
-            fontFamily:"'Fraunces',serif" }}>
+      <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+        <div style={{ background:C.surface, borderRadius:20, padding:28, maxWidth:400, width:"100%",
+          border:`2px solid ${survived?"#22c55e":"#dc2626"}`, textAlign:"center" }}>
+          <div style={{ fontSize:64, marginBottom:12 }}>{survived?"🎉":"💀"}</div>
+          <h2 style={{ margin:"0 0 8px", fontSize:22, color:survived?"#16a34a":"#dc2626", fontFamily:"'Fraunces',serif" }}>
             {survived ? "You Survived!" : "The Monster Got You!"}
           </h2>
           <p style={{ color:C.muted, fontSize:13, margin:"0 0 20px" }}>
-            {survived
-              ? `Amazing teamwork! You answered all ${gameState.questions?.length} questions and outran the monster.`
-              : "The monster caught up! Work together and try again — majority wrong answers move it closer."}
+            {survived ? "Amazing teamwork! You outran the monster." : "Work together next time — majority wrong answers move it closer!"}
           </p>
-          <div style={{ background: survived ? "#dcfce7" : "#fee2e2", borderRadius:12,
-            padding:"12px 16px", marginBottom:20 }}>
-            <p style={{ margin:"0 0 4px", fontSize:11, fontWeight:700,
-              color: survived?"#16a34a":"#dc2626", letterSpacing:.8, textTransform:"uppercase" }}>
-              Final distance
-            </p>
-            <p style={{ margin:0, fontSize:28, fontWeight:800,
-              color: survived?"#16a34a":"#dc2626" }}>
-              {monsterDistance} {survived?"steps ahead":"steps — too close!"}
-            </p>
-          </div>
-          <div style={{ marginBottom:20 }}>
-            <p style={{ margin:"0 0 8px", fontSize:11, fontWeight:700, color:C.muted,
-              letterSpacing:.8, textTransform:"uppercase" }}>Team</p>
-            {memberUids.map(uid => (
-              <div key={uid} style={{ display:"flex", alignItems:"center", gap:8,
-                padding:"6px 0", borderBottom:`1px solid ${C.border}` }}>
-                <span style={{ fontSize:18 }}>{members[uid]?.character || "🐱"}</span>
-                <span style={{ flex:1, color:C.text, fontSize:13, textAlign:"left" }}>
-                  {members[uid]?.displayName?.split(" ")[0] || "Player"}
-                </span>
-                <span style={{ fontSize:13,
-                  color: answers[uid] === q?.answer ? "#16a34a" : "#dc2626" }}>
-                  {answers[uid] === q?.answer ? "✓ Correct" : "✗ Wrong"}
-                </span>
-              </div>
-            ))}
-          </div>
-          {isHost && (
-            <button onClick={endGame} style={{ background:"#dc2626", color:"#fff",
-              border:"none", borderRadius:10, padding:"10px 24px",
-              fontSize:13, fontWeight:700, cursor:"pointer" }}>
-              End Game
-            </button>
-          )}
+          {isHost && <button onClick={endGame} style={{ background:"#dc2626", color:"#fff", border:"none", borderRadius:10, padding:"10px 24px", fontSize:13, fontWeight:700, cursor:"pointer" }}>End Game</button>}
         </div>
       </div>
     );
   }
 
-  // ── QUESTION SCREEN ───────────────────────────────────────────────────────
   return (
-    <div style={{ flex:1, display:"flex", flexDirection:"column", overflowY:"auto",
-      padding:16, gap:12, background:C.bg }}>
-
-      {/* Monster proximity bar */}
-      <div style={{ background:C.surface, borderRadius:14, padding:"12px 16px",
-        border:`1px solid ${C.border}` }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
-          marginBottom:8 }}>
-          <span style={{ fontSize:11, fontWeight:700, color:C.muted,
-            letterSpacing:.8, textTransform:"uppercase" }}>Monster distance</span>
-          <span style={{ fontSize:20 }}>{monsterEmoji}</span>
+    <div style={{ flex:1, display:"flex", flexDirection:"column", overflowY:"auto", padding:16, gap:12, background:C.bg }}>
+      <div style={{ background:C.surface, borderRadius:14, padding:"12px 16px", border:`1px solid ${C.border}` }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+          <span style={{ fontSize:11, fontWeight:700, color:C.muted, letterSpacing:.8, textTransform:"uppercase" }}>Monster distance</span>
+          <span style={{ fontSize:20 }}>{monsterFace}</span>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          {/* Players side */}
           <span style={{ fontSize:16 }}>🏃</span>
-          {/* Track */}
-          <div style={{ flex:1, height:10, borderRadius:99,
-            background:C.border, overflow:"hidden", position:"relative" }}>
-            <div style={{ position:"absolute", right:0, top:0, height:"100%",
-              width:`${dangerPct}%`, background:barColor,
-              borderRadius:99, transition:"width 0.6s ease" }} />
+          <div style={{ flex:1, height:10, borderRadius:99, background:C.border, overflow:"hidden" }}>
+            <div style={{ height:"100%", borderRadius:99, width:`${dangerPct}%`, background:barColor, transition:"width 0.6s ease" }} />
           </div>
-          {/* Monster side */}
           <span style={{ fontSize:16 }}>👹</span>
-        </div>
-        <div style={{ display:"flex", justifyContent:"space-between", marginTop:4 }}>
-          <span style={{ fontSize:10, color:"#22c55e", fontWeight:600 }}>Safe</span>
-          <span style={{ fontSize:10, color:C.muted }}>
-            {monsterDistance} step{monsterDistance!==1?"s":""} away
-          </span>
-          <span style={{ fontSize:10, color:"#dc2626", fontWeight:600 }}>Danger</span>
         </div>
         <p style={{ margin:"6px 0 0", fontSize:11, color:C.muted, textAlign:"center" }}>
           Majority wrong = monster gets closer · Majority right = monster falls back
         </p>
       </div>
 
-      {/* Progress */}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-        <span style={{ color:C.muted, fontSize:12 }}>
-          Q {(gameState?.questionIndex||0)+1} / {gameState?.questions?.length||"?"}
-        </span>
-        <span style={{ color:C.muted, fontSize:12 }}>
-          ⏳ {answerCount}/{memberCount} answered
-        </span>
+        <span style={{ color:C.muted, fontSize:12 }}>Q {(gameState?.questionIndex||0)+1} / {gameState?.questions?.length||"?"}</span>
+        <span style={{ color:C.muted, fontSize:12 }}>⏳ {answerCount}/{memberCount} answered</span>
       </div>
 
-      {/* Question */}
       {q && (
-        <div style={{ background:C.surface, borderRadius:16, padding:20,
-          border:`1px solid ${C.border}` }}>
-          <p style={{ margin:"0 0 16px", fontSize:15, fontWeight:700,
-            color:C.text, lineHeight:1.5 }}>{q.question}</p>
+        <div style={{ background:C.surface, borderRadius:16, padding:20, border:`1px solid ${C.border}` }}>
+          <p style={{ margin:"0 0 16px", fontSize:15, fontWeight:700, color:C.text, lineHeight:1.5 }}>{q.question}</p>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
             {(q.options||[]).map((opt,i) => {
               const chosen = localAnswer === opt;
               const revealed = localAnswer !== null;
               const isCorrect = opt === q.answer;
-              let bg = C.bg; let border = C.border; let txtColor = C.text;
-              if (revealed) {
-                if (isCorrect) { bg="#dcfce7"; border="#22c55e"; txtColor="#16a34a"; }
-                else if (chosen) { bg="#fee2e2"; border="#dc2626"; txtColor="#dc2626"; }
-              } else if (chosen) {
-                bg=C.accentL; border=C.accent; txtColor=C.accent;
-              }
+              let bg=C.bg, border=C.border, txtColor=C.text;
+              if (revealed) { if (isCorrect) { bg="#dcfce7"; border="#22c55e"; txtColor="#16a34a"; } else if (chosen) { bg="#fee2e2"; border="#dc2626"; txtColor="#dc2626"; } }
+              else if (chosen) { bg=C.accentL; border=C.accent; txtColor=C.accent; }
               return (
-                <button key={i} onClick={() => submitAnswer(opt)}
-                  disabled={localAnswer !== null}
-                  style={{ background:bg, border:`2px solid ${border}`,
-                    borderRadius:12, padding:"10px 12px", cursor: localAnswer?'default':'pointer',
-                    textAlign:"left", color:txtColor, fontSize:13, fontWeight:600,
-                    transition:"all .15s", lineHeight:1.4 }}>
-                  <span style={{ fontSize:11, fontWeight:800, marginRight:6,
-                    color: revealed?(isCorrect?"#16a34a":chosen?"#dc2626":C.muted):C.muted }}>
-                    {["A","B","C","D"][i]}
-                  </span>
-                  {opt}
+                <button key={i} onClick={() => submitAnswer(opt)} disabled={localAnswer!==null}
+                  style={{ background:bg, border:`2px solid ${border}`, borderRadius:12, padding:"10px 12px",
+                    cursor:localAnswer?"default":"pointer", textAlign:"left", color:txtColor, fontSize:13, fontWeight:600, lineHeight:1.4 }}>
+                  <span style={{ fontSize:11, fontWeight:800, marginRight:6, color:C.muted }}>{["A","B","C","D"][i]}</span>{opt}
                 </button>
               );
             })}
@@ -12757,37 +12655,25 @@ function SGMonsterChaseGame({ gameState, isHost, user, db, groupId, members }) {
         </div>
       )}
 
-      {/* Waiting indicator */}
       {localAnswer && answerCount < memberCount && (
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"center",
-          gap:8, color:C.muted, fontSize:13, padding:"8px 0" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8, color:C.muted, fontSize:13 }}>
           <SGSpinner /> Waiting for teammates…
         </div>
       )}
 
-      {/* Live team answers */}
-      <div style={{ background:C.surface, borderRadius:12, padding:"10px 14px",
-        border:`1px solid ${C.border}` }}>
-        <p style={{ margin:"0 0 8px", fontSize:10, fontWeight:700, color:C.muted,
-          letterSpacing:.8, textTransform:"uppercase" }}>Team status</p>
+      <div style={{ background:C.surface, borderRadius:12, padding:"10px 14px", border:`1px solid ${C.border}` }}>
+        <p style={{ margin:"0 0 8px", fontSize:10, fontWeight:700, color:C.muted, letterSpacing:.8, textTransform:"uppercase" }}>Team</p>
         {memberUids.map(uid => (
-          <div key={uid} style={{ display:"flex", alignItems:"center", gap:8,
-            padding:"4px 0" }}>
-            <span style={{ fontSize:16 }}>{members[uid]?.character || "🐱"}</span>
-            <span style={{ flex:1, color:C.text, fontSize:12 }}>
-              {members[uid]?.displayName?.split(" ")[0] || "Player"}
-              {uid === user.uid ? " (you)" : ""}
-            </span>
-            <span style={{ fontSize:12 }}>
-              {answers[uid] ? "✅" : "⏳"}
-            </span>
+          <div key={uid} style={{ display:"flex", alignItems:"center", gap:8, padding:"4px 0" }}>
+            <span style={{ fontSize:16 }}>{members[uid]?.character||"🐱"}</span>
+            <span style={{ flex:1, color:C.text, fontSize:12 }}>{members[uid]?.displayName?.split(" ")[0]||"Player"}{uid===user.uid?" (you)":""}</span>
+            <span style={{ fontSize:12 }}>{answers[uid]?"✅":"⏳"}</span>
           </div>
         ))}
       </div>
     </div>
   );
 }
-
 
 // ── Quiz sub-components ───────────────────────────────────────────────────────
 function ProgressBar({ gameState, myScore, hideScore }) {
@@ -12861,7 +12747,7 @@ function SGGameLauncher({ group, db, groupId, user, groupFile, onClose }) {
     { id:"speedround", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.warm} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>, title:"Speed Round",       desc:"10 questions, 10 seconds each",         bg:"#fff7ed",  accent:C.warm    },
     { id:"elimination", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.red} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>, title:"Elimination",       desc:"Wrong answer? You're out!",             bg:"#fef2f2",  accent:C.red     },
     { id:"teamquiz",   icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>, title:"Team Quiz",         desc:"Split into teams, highest score wins",  bg:C.accentL,  accent:C.accent  },
-    { id:"monsterchase", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/><path d="M8 5C6 3 3 3 2 5"/><path d="M16 5c2-2 5-2 6 0"/></svg>, title:"Monster Chase", desc:"Survive together — wrong answers feed the monster!", bg:"#fef2f2", accent:"#dc2626" },
+    { id:"monsterchase", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>, title:"Monster Chase", desc:"Survive together — wrong answers feed the monster!", bg:"#fef2f2", accent:"#dc2626" },
   ];
 
   const effectiveTopic = groupFile?.name || topic.trim();
@@ -12934,7 +12820,7 @@ function SGGameLauncher({ group, db, groupId, user, groupFile, onClose }) {
           topic: effectiveTopic || "Flashcards",
           fromCards: hasFlashcards && sharedCards.length >= 4,
           monsterDistance: gameId === "monsterchase" ? 5 : null,
-          monsterEaten: gameId === "monsterchase" ? false : null,
+          monsterEaten: false,
         },
         lastActivity: Date.now(),
       });
