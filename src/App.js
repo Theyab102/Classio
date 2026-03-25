@@ -3926,19 +3926,13 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
 
   const TABS = [{ id:"files", label:"Files", icon:I.file },{ id:"youtube", label:"YouTube", icon:I.link },{ id:"ai", label:"AI Assistant", icon:I.ai }];
 
-  const TFV = useTheme(); C = TFV;
-  const { isMobile: isMobFolderV } = useResponsive();
-
   return (
-    <div style={{ minHeight:"100vh", background:TFV.bg, fontFamily:"'DM Sans',sans-serif", display:"flex" }}>
-      <style>{GS}</style><style>{DARK_CSS}</style>
-      {/* Sidebar placeholder — same width so content aligns */}
-      {!isMobFolderV && <div style={{ width:60, minWidth:60, flexShrink:0 }}/>}
-      <div style={{ flex:1, display:"flex", flexDirection:"column", minWidth:0 }}>
+    <div className="page-with-ad" style={{ minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif" }}>
+      <style>{GS}</style>
       {/* Top bar */}
-      <div style={{ background:TFV.surface, borderBottom:`1px solid ${TFV.border}`, padding:"0 20px", height:56, display:"flex", alignItems:"center", gap:14, flexShrink:0 }}>
-        <button onClick={onBack} style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:TFV.muted, fontSize:13, fontWeight:500 }}>
-          <Icon d={I.back} size={16} color={TFV.muted} /> Back
+      <div className="app-header" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", height:64, display:"flex", alignItems:"center", gap:16 }}>
+        <button onClick={onBack} className="hov" style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14 }}>
+          <Icon d={I.back} size={18} color={C.muted} /> Back
         </button>
         <div style={{ width:1, height:20, background:C.border }} />
         <div style={{ display:"flex", alignItems:"center", gap:10, flex:1 }}>
@@ -4087,96 +4081,41 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
   // Stop audio when component unmounts (user navigates away entirely)
   useEffect(() => { return () => stopAllAudio(); }, []);
 
-  const TF = useTheme(); C = TF;
-  const [showAIPanel, setShowAIPanel] = useState(true);
-  const { isMobile: isMobFV } = useResponsive();
-
   return (
-    <div style={{ minHeight:"100vh", background:TF.bg, fontFamily:"'DM Sans',sans-serif", display:"flex", flexDirection:"column" }}>
+    <div className="page-with-ad" style={{ minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif" }}>
       <style>{GS}</style>
-      <style>{DARK_CSS}</style>
-      {/* Top header bar */}
-      <div style={{ background:TF.surface, borderBottom:`1px solid ${TF.border}`, padding:"0 20px", height:56, display:"flex", alignItems:"center", gap:12, flexShrink:0 }}>
-        <button onClick={handleBack} style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:TF.muted, fontSize:13, fontWeight:500 }}>
-          <Icon d={I.back} size={16} color={TF.muted} />
-          <span>{folder.name}</span>
+      <div className="app-header" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", height:64, display:"flex", alignItems:"center", gap:14 }}>
+        <button onClick={handleBack} className="hov" style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14 }}>
+          <Icon d={I.back} size={18} color={C.muted} /> {folder.name}
         </button>
-        <Icon d={I.chevron} size={12} color={TF.border} />
-        <div style={{ width:24, height:24, background:fc.bg, borderRadius:7, display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <Icon d={I.file} size={12} color={fc.accent} />
+        <Icon d={I.chevron} size={14} color={C.border} />
+        <div style={{ width:28, height:28, background:fc.bg, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <Icon d={I.file} size={14} color={fc.accent} />
         </div>
-        <span style={{ fontSize:14, fontWeight:600, color:TF.text, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{file.name}</span>
-        {/* AI panel toggle */}
-        {!isMobFV && (
-          <button onClick={()=>setShowAIPanel(p=>!p)}
-            style={{ display:"flex", alignItems:"center", gap:6, background:showAIPanel?"linear-gradient(135deg,#6366f1,#8b5cf6)":TF.surface, color:showAIPanel?"#fff":TF.muted, border:`1px solid ${showAIPanel?"transparent":TF.border}`, borderRadius:8, padding:"6px 12px", cursor:"pointer", fontSize:12, fontWeight:600 }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/></svg>
-            {showAIPanel ? "Hide AI" : "Show AI"}
-          </button>
-        )}
+        <span style={{ fontSize:15, fontWeight:600, color:C.text, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{file.name}</span>
       </div>
-      {/* Tab bar */}
-      <div className="nav-tabs" style={{ background:TF.surface, borderBottom:`1px solid ${TF.border}`, padding:"0 20px", display:"flex", gap:2, flexShrink:0 }}>
+      <div className="nav-tabs" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", display:"flex", gap:4 }}>
         {TABS.map(t => (
           <button key={t.id} className="nav-tab-btn" onClick={() => handleTabChange(t.id)}
-            style={{ display:"flex", alignItems:"center", gap:6, padding:"12px 14px", border:"none", borderBottom:tab===t.id?`2px solid ${TF.accent}`:"2px solid transparent", background:"none", cursor:"pointer", fontSize:13, fontWeight:tab===t.id?700:500, color:tab===t.id?TF.accent:TF.muted, marginBottom:-1, whiteSpace:"nowrap" }}>
-            <Icon d={t.icon} size={14} color={tab===t.id?TF.accent:TF.muted} />
-            <span className="tab-label">{t.label}</span>
+            style={{ display:"flex", alignItems:"center", gap:7, padding:"14px 18px", border:"none", borderBottom:tab===t.id?`2px solid ${C.accent}`:"2px solid transparent", background:"none", cursor:"pointer", fontSize:14, fontWeight:tab===t.id?700:500, color:tab===t.id?C.accent:C.muted, marginBottom:-1 }}>
+            <Icon d={t.icon} size={15} color={tab===t.id?C.accent:C.muted} />{t.label}
           </button>
         ))}
       </div>
-      {/* Split pane body */}
-      <div style={{ flex:1, display:"flex", overflow:"hidden", minHeight:0 }}>
-        {/* Left: content */}
-        <div style={{ flex:1, overflowY:"auto", minWidth:0 }}>
-          {tab==="view"
-            ? <ViewTab file={file} onUpdate={onUpdate} />
-            : <div className="page-inner page-with-ad" style={{ maxWidth: (showAIPanel && !isMobFV) ? "100%" : 900, margin:"0 auto", padding:isMobFV?"16px 14px":"28px 32px" }}>
-                {tab==="notes" && <div key="notes" className="page-fade"><NotesTab key={file.id} file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} /></div>}
-                {tab==="voice" && <div key="voice" className="page-fade"><VoicePodcastTab file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} /></div>}
-                {tab==="cards" && <div key="cards" className="page-fade"><CardsTab file={file} onUpdate={onUpdate} /></div>}
-                {tab==="ai"    && <div key="ai" className="page-fade"><AITab file={file} allFiles={allFiles} folder={folder} onUpdate={onUpdate} /></div>}
-                {tab==="game"  && <div key="game" className="page-fade"><GameTab file={file} /></div>}
-                {tab==="youtube" && <div key="yt" className="page-fade"><YouTubeTab file={file} onUpdate={onUpdate} /></div>}
-              </div>
-          }
-        </div>
-        {/* Right: persistent AI chat panel (Turbo-style) */}
-        {showAIPanel && !isMobFV && (
-          <div style={{ width:360, minWidth:320, maxWidth:400, borderLeft:`1px solid ${TF.border}`, background:TF.surface, display:"flex", flexDirection:"column", flexShrink:0, height:"100%" }}>
-            {/* Panel header */}
-            <div style={{ padding:"16px 20px 12px", borderBottom:`1px solid ${TF.border}`, flexShrink:0 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
-                <div style={{ width:32, height:32, background:"linear-gradient(135deg,#6366f1,#8b5cf6)", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/></svg>
-                </div>
-                <div>
-                  <p style={{ margin:0, fontSize:14, fontWeight:700, color:TF.text }}>AI Assistant</p>
-                  <p style={{ margin:0, fontSize:11, color:TF.muted }}>Ask anything about this file</p>
-                </div>
-              </div>
-              {/* Quick prompts */}
-              <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-                {["Summarise this document", "What are the key concepts?", "Create a quiz from this"].map((q,i) => (
-                  <div key={i} style={{ fontSize:12, color:TF.muted, background:TF.bg, border:`1px solid ${TF.border}`, borderRadius:8, padding:"6px 10px", cursor:"pointer" }}
-                    onMouseEnter={e=>{e.currentTarget.style.background=TF.accentL; e.currentTarget.style.color=TF.accent;}}
-                    onMouseLeave={e=>{e.currentTarget.style.background=TF.bg; e.currentTarget.style.color=TF.muted;}}>
-                    {q}
-                  </div>
-                ))}
-              </div>
-            </div>
-            {/* Embed AITab in the panel */}
-            <div style={{ flex:1, overflowY:"auto", minHeight:0 }}>
-              <AITab file={file} allFiles={allFiles} folder={folder} onUpdate={onUpdate} compact={true} />
-            </div>
+      {tab==="view"
+        ? <ViewTab file={file} onUpdate={onUpdate} />
+        : <div className="page-inner" style={{ maxWidth:900, margin:"0 auto", padding:"32px 24px" }}>
+            {tab==="notes" && <div key="notes" className="page-fade"><NotesTab key={file.id} file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} /></div>}
+            {tab==="voice" && <div key="voice" className="page-fade"><VoicePodcastTab file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} /></div>}
+            {tab==="cards" && <div key="cards" className="page-fade"><CardsTab file={file} onUpdate={onUpdate} /></div>}
+            {tab==="ai"    && <div key="ai" className="page-fade"><AITab file={file} allFiles={allFiles} folder={folder} onUpdate={onUpdate} /></div>}
+            {tab==="game"  && <div key="game" className="page-fade"><GameTab file={file} /></div>}
+            {tab==="youtube" && <div key="yt" className="page-fade"><YouTubeTab file={file} onUpdate={onUpdate} /></div>}
           </div>
-        )}
-      </div>
+      }
     </div>
   );
 }
-
 function ViewTab({ file, onUpdate }) {
   const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
   const fileName = fileObj?.name || file.name || "";
