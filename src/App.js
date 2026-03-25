@@ -3890,7 +3890,6 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
 
   const TABS = [{ id:"files", label:"Files", icon:I.file },{ id:"youtube", label:"YouTube", icon:I.link },{ id:"ai", label:"AI Assistant", icon:I.ai }];
 
-  return (
   const TFV = useTheme(); C = TFV;
   const { isMobile: isMobFolderV } = useResponsive();
 
