@@ -1473,10 +1473,10 @@ const DARK_CSS = `
 `;
 
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
-function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacter, onToggleTheme, onOpenSearch, isMobile, user, isGuest, onSignOut }) {
+function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacter, onToggleTheme, onOpenSearch, isMobile, user, isGuest, onSignOut, sidebarExpanded, onToggleSidebar }) {
   const T = useTheme();
   C = T; // keep C in sync
-  // expanded state lifted to App via sidebarExpanded prop
+  const [expanded, setExpanded] = useState(false);
 
   const NAV = [
     { id:"home",     label:"Dashboard",   icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> },
@@ -1514,8 +1514,6 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
   }
 
   // Desktop: slim icon sidebar
-  const expanded = sidebarExpanded;
-  const setExpanded = onToggleSidebar;
   const sideW = expanded ? 220 : 60;
 
   const NavBtn = ({ n }) => {
@@ -1722,6 +1720,7 @@ export default function App() {
   const [activeStudyGroup, setActiveStudyGroup] = useState(null); // group doc id
   const [showStudyGroupLobby, setShowStudyGroupLobby] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [showRecordModal, setShowRecordModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showWebLinkModal, setShowWebLinkModal] = useState(false);
@@ -1934,6 +1933,8 @@ export default function App() {
         isMobile={isMobile}
         user={user} isGuest={isGuest}
         onSignOut={isGuest ? handleGuestSignOut : () => signOut(auth)}
+        sidebarExpanded={sidebarExpanded}
+        onToggleSidebar={() => setSidebarExpanded(e => !e)}
       />
       {/* Command-K Search */}
       {showSearch && <CommandSearch folders={folders} onOpenFile={handleOpenFileFromSearch} onClose={()=>setShowSearch(false)} />}
@@ -1945,7 +1946,7 @@ export default function App() {
         onClose={() => setShowStudyGroupLobby(false)}
       />}
       {/* Main content area — offset by sidebar */}
-      <div style={{ flex:1, marginLeft:isMobile?0:60, marginBottom:isMobile?56:0, minHeight:"100vh", display:"flex", flexDirection:"column", background:T.bg }}>
+      <div style={{ flex:1, marginLeft:isMobile?0:(sidebarExpanded?220:60), marginBottom:isMobile?56:0, minHeight:"100vh", display:"flex", flexDirection:"column", background:T.bg }}>
       <AdBanner />
       <div style={{ maxWidth:960, margin:"0 auto", padding:isMobile?"12px 14px":"32px 36px", width:"100%", boxSizing:"border-box" }}>
 
