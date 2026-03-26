@@ -1218,6 +1218,82 @@ function StandaloneAI({ onClose }) {
   );
 }
 
+// ─── SETTINGS TAB ─────────────────────────────────────────────────────────────
+function SettingsTab({ onToggleTheme }) {
+  const T = useTheme();
+  C = T;
+  return (
+    <div style={{ paddingBottom:40 }}>
+      <h1 style={{ fontFamily:"'Fraunces',serif", fontSize:28, fontWeight:700, color:T.text, margin:"0 0 6px", letterSpacing:-.5 }}>Settings</h1>
+      <p style={{ fontSize:14, color:T.muted, margin:"0 0 28px" }}>Manage your Classio preferences</p>
+
+      {/* Appearance section */}
+      <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:16, overflow:"hidden", marginBottom:20 }}>
+        <div style={{ padding:"14px 20px", borderBottom:`1px solid ${T.border}` }}>
+          <p style={{ margin:0, fontSize:12, fontWeight:700, color:T.muted, letterSpacing:.8, textTransform:"uppercase" }}>Appearance</p>
+        </div>
+        <div style={{ padding:"6px 0" }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 20px" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+              <div style={{ width:36, height:36, borderRadius:10, background: T.isDark ? "#2a2a26" : T.accentL, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                {T.isDark
+                  ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.isDark?"#e0c060":T.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                  : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                }
+              </div>
+              <div>
+                <p style={{ margin:0, fontSize:14, fontWeight:600, color:T.text }}>{T.isDark ? "Dark Mode" : "Light Mode"}</p>
+                <p style={{ margin:0, fontSize:12, color:T.muted }}>Currently using {T.isDark ? "dark" : "light"} theme</p>
+              </div>
+            </div>
+            <button onClick={onToggleTheme} style={{
+              width:52, height:28, borderRadius:14, border:"none", cursor:"pointer", position:"relative",
+              background: T.isDark ? T.accent : T.border, transition:"background .2s",
+            }}>
+              <div style={{ width:22, height:22, borderRadius:"50%", background:"#fff",
+                position:"absolute", top:3, left: T.isDark ? 27 : 3, transition:"left .2s",
+                boxShadow:"0 1px 4px rgba(0,0,0,.3)" }} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* About section */}
+      <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:16, overflow:"hidden", marginBottom:20 }}>
+        <div style={{ padding:"14px 20px", borderBottom:`1px solid ${T.border}` }}>
+          <p style={{ margin:0, fontSize:12, fontWeight:700, color:T.muted, letterSpacing:.8, textTransform:"uppercase" }}>About</p>
+        </div>
+        <div style={{ padding:"16px 20px", display:"flex", flexDirection:"column", gap:12 }}>
+          {[
+            ["App", "Classio"],
+            ["Version", "2.0"],
+            ["Built with", "React + Firebase + Groq AI"],
+          ].map(([k,v])=>(
+            <div key={k} style={{ display:"flex", justifyContent:"space-between" }}>
+              <span style={{ fontSize:14, color:T.muted }}>{k}</span>
+              <span style={{ fontSize:14, fontWeight:600, color:T.text }}>{v}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Data section */}
+      <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:16, overflow:"hidden" }}>
+        <div style={{ padding:"14px 20px", borderBottom:`1px solid ${T.border}` }}>
+          <p style={{ margin:0, fontSize:12, fontWeight:700, color:T.muted, letterSpacing:.8, textTransform:"uppercase" }}>Data & Storage</p>
+        </div>
+        <div style={{ padding:"16px 20px" }}>
+          <p style={{ margin:"0 0 12px", fontSize:14, color:T.muted, lineHeight:1.6 }}>Your data is saved locally and synced to your Google account. Clearing local data will not delete your cloud backup.</p>
+          <button onClick={()=>{ if(window.confirm("Clear local cache? Your cloud data is safe.")) { localStorage.removeItem("classio_v2"); window.location.reload(); }}}
+            style={{ background:T.redL, color:T.red, border:`1px solid ${T.red}44`, borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+            Clear Local Cache
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── ABOUT / GUIDE TAB ────────────────────────────────────────────────────────
 function AboutTab() {
   const features = [
@@ -1413,7 +1489,10 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
     return (
       <div style={{ position:"fixed", bottom:0, left:0, right:0, height:56, background:T.sidebar, borderTop:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"space-around", zIndex:300 }}>
         {NAV.slice(0,3).map(n => {
-          const active = (n.id==="home" && (screen==="home"||screen==="folder")) || (n.id==="guides" && homeTab==="about");
+          const active =
+            (n.id==="home" && (screen==="home"||screen==="folder") && homeTab!=="about" && homeTab!=="settings") ||
+            (n.id==="guides" && homeTab==="about") ||
+            (n.id==="settings" && homeTab==="settings");
           return (
             <button key={n.id} onClick={()=>onNavigate(n.id)} style={{ background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:active?T.accent:T.muted, padding:"4px 8px" }}>
               {n.icon}
@@ -1438,7 +1517,10 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
   const sideW = expanded ? 220 : 60;
 
   const NavBtn = ({ n }) => {
-    const active = (n.id==="home" && (screen==="home"||screen==="folder"||screen==="file")) || (n.id==="guides" && homeTab==="about");
+    const active =
+      (n.id==="home" && (screen==="home"||screen==="folder"||screen==="file") && homeTab!=="about" && homeTab!=="settings") ||
+      (n.id==="guides" && homeTab==="about" && screen==="home") ||
+      (n.id==="settings" && homeTab==="settings" && screen==="home");
     return (
       <button onClick={()=>onNavigate(n.id)} title={n.label}
         style={{ width:"100%", display:"flex", alignItems:"center", gap:12, padding:expanded?"9px 14px":"12px", borderRadius:10, border:"none", cursor:"pointer",
@@ -1482,14 +1564,18 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
       <div style={{ padding:"8px 8px 16px", borderTop:`1px solid ${T.border}`, display:"flex", flexDirection:"column", gap:4 }}>
         {/* Theme toggle */}
         <button onClick={onToggleTheme}
-          style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"9px 12px", borderRadius:10, border:"none", cursor:"pointer", background:"transparent", color:T.muted, fontSize:14, transition:"all .12s" }}
-          onMouseEnter={e=>{e.currentTarget.style.background=T.sidebarActive; e.currentTarget.style.color=T.text;}}
-          onMouseLeave={e=>{e.currentTarget.style.background="transparent"; e.currentTarget.style.color=T.muted;}}>
+          style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"9px 12px", borderRadius:10, border:`1px solid ${T.border}`, cursor:"pointer",
+            background: T.isDark ? "#2a2a26" : T.accentL,
+            color: T.isDark ? "#e0c060" : T.accent,
+            fontSize:14, transition:"all .12s", justifyContent: expanded ? "flex-start" : "center" }}
+          title={T.isDark ? "Switch to light mode" : "Switch to dark mode"}
+          onMouseEnter={e=>{e.currentTarget.style.opacity=".85";}}
+          onMouseLeave={e=>{e.currentTarget.style.opacity="1";}}>
           {T.isDark
-            ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-            : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+            : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
           }
-          {T.isDark ? "Light mode" : "Dark mode"}
+          {expanded && <span style={{ fontSize:13, fontWeight:600 }}>{T.isDark ? "Light mode" : "Dark mode"}</span>}
         </button>
         {/* User */}
         <button onClick={onOpenCharacter}
@@ -1536,13 +1622,18 @@ function CommandSearch({ folders, onOpenFile, onClose }) {
   };
 
   return (
-    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:9000, background:"rgba(0,0,0,.55)", backdropFilter:"blur(12px)", display:"flex", alignItems:"flex-start", justifyContent:"center", paddingTop:"10vh" }}>
-      <div onClick={e=>e.stopPropagation()} style={{ width:"100%", maxWidth:600, background:T.surface, borderRadius:20, boxShadow:"0 32px 80px rgba(0,0,0,.35)", border:`1px solid ${T.border}`, overflow:"hidden", animation:"cmdIn .18s ease" }}>
+    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:9000, background:"rgba(0,0,0,.45)", backdropFilter:"blur(14px)", WebkitBackdropFilter:"blur(14px)", display:"flex", alignItems:"flex-start", justifyContent:"center", paddingTop:"10vh" }}>
+      <div onClick={e=>e.stopPropagation()} style={{ width:"100%", maxWidth:600, background: T.isDark ? "rgba(28,28,26,0.92)" : "rgba(255,255,255,0.92)", backdropFilter:"blur(20px)", WebkitBackdropFilter:"blur(20px)", borderRadius:20, boxShadow:"0 32px 80px rgba(0,0,0,.35)", border:`1px solid ${T.border}`, overflow:"hidden", animation:"cmdIn .18s cubic-bezier(.22,1,.36,1)" }}>
         <div style={{ display:"flex", alignItems:"center", gap:12, padding:"16px 20px", borderBottom:`1px solid ${T.border}` }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
           <input ref={inputRef} value={q} onChange={e=>setQ(e.target.value)} placeholder="Search folders and files..."
             style={{ flex:1, border:"none", outline:"none", background:"transparent", fontSize:16, color:T.text, fontFamily:"'DM Sans',sans-serif" }}/>
-          <span style={{ fontSize:11, color:T.muted, background:T.border, borderRadius:5, padding:"2px 7px", fontWeight:600 }}>ESC</span>
+          <div style={{ display:"flex", gap:4, alignItems:"center" }}>
+            <span style={{ fontSize:11, color:T.muted, background:T.border, borderRadius:5, padding:"2px 6px", fontWeight:600 }}>⌘K</span>
+            <span style={{ fontSize:11, color:T.muted }}>·</span>
+            <span style={{ fontSize:11, color:T.muted, background:T.border, borderRadius:5, padding:"2px 6px", fontWeight:600 }}>Ctrl+K</span>
+            <span style={{ fontSize:11, color:T.muted, background:T.border, borderRadius:5, padding:"2px 6px", fontWeight:600, marginLeft:4 }}>ESC</span>
+          </div>
         </div>
         <div style={{ maxHeight:400, overflowY:"auto" }}>
           {!q.trim() && <p style={{ fontSize:11, fontWeight:700, color:T.muted, letterSpacing:.8, padding:"12px 20px 4px", textTransform:"uppercase" }}>Recently opened</p>}
@@ -1570,6 +1661,43 @@ function CommandSearch({ folders, onOpenFile, onClose }) {
   );
 }
 
+function WebLinkModal({ folders, onClose, onGo, onNewFolder }) {
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkFolder, setLinkFolder] = useState("");
+  return (
+    <Modal onClose={onClose}>
+      <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:22, fontWeight:700, color:C.text, marginBottom:8 }}>Add a Website or YouTube Link</h2>
+      <p style={{ fontSize:13, color:C.muted, marginBottom:20 }}>Paste a YouTube URL or website link, then choose a folder to open it in.</p>
+      <label style={{ fontSize:13, fontWeight:600, color:C.muted, display:"block", marginBottom:6 }}>URL</label>
+      <input autoFocus value={linkUrl} onChange={e=>setLinkUrl(e.target.value)} placeholder="https://youtube.com/watch?v=…"
+        style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 14px", fontSize:14, outline:"none", marginBottom:16, color:C.text, background:C.bg }} />
+      <label style={{ fontSize:13, fontWeight:600, color:C.muted, display:"block", marginBottom:6 }}>SAVE TO FOLDER</label>
+      {folders.length === 0
+        ? <p style={{ fontSize:13, color:C.muted, marginBottom:16 }}>No folders yet — create one first.</p>
+        : <select value={linkFolder} onChange={e=>setLinkFolder(e.target.value)}
+            style={{ width:"100%", padding:"10px 14px", borderRadius:10, border:`1.5px solid ${C.border}`, background:C.bg, color:C.text, fontSize:14, marginBottom:20, outline:"none" }}>
+            <option value="">Select a folder…</option>
+            {folders.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
+          </select>
+      }
+      <div style={{ display:"flex", gap:10 }}>
+        <button onClick={onClose}
+          style={{ flex:1, padding:"10px", border:`1.5px solid ${C.border}`, borderRadius:10, background:"transparent", fontSize:14, fontWeight:600, cursor:"pointer", color:C.text }}>Cancel</button>
+        <button disabled={!linkUrl.trim()||!linkFolder} onClick={()=>onGo(linkFolder)}
+          style={{ flex:2, padding:"10px", background:(linkUrl.trim()&&linkFolder)?C.accent:C.border, color:(linkUrl.trim()&&linkFolder)?"#fff":C.muted, border:"none", borderRadius:10, fontSize:14, fontWeight:600, cursor:(linkUrl.trim()&&linkFolder)?"pointer":"not-allowed" }}>
+          Open Folder →
+        </button>
+      </div>
+      {folders.length === 0 && (
+        <button onClick={onNewFolder}
+          style={{ width:"100%", marginTop:10, padding:"10px", border:`1.5px solid ${C.border}`, borderRadius:10, background:"transparent", fontSize:14, fontWeight:600, cursor:"pointer", color:C.text }}>
+          + Create New Folder
+        </button>
+      )}
+    </Modal>
+  );
+}
+
 export default function App() {
   const { isMobile, isTablet } = useResponsive();
   const [showTutorial, setShowTutorial] = useState(() => {
@@ -1592,6 +1720,9 @@ export default function App() {
   const [activeStudyGroup, setActiveStudyGroup] = useState(null); // group doc id
   const [showStudyGroupLobby, setShowStudyGroupLobby] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [showRecordModal, setShowRecordModal] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showWebLinkModal, setShowWebLinkModal] = useState(false);
   const T = useTheme(); // reactive theme
 
   // Keep global C in sync with theme for all legacy code
@@ -1776,6 +1907,7 @@ export default function App() {
   const handleNavigate = (id) => {
     if (id==="home") { setHomeTab("folders"); setScreen("home"); }
     else if (id==="guides") { setHomeTab("about"); setScreen("home"); }
+    else if (id==="settings") { setHomeTab("settings"); setScreen("home"); }
   };
 
   const handleOpenFileFromSearch = (fi, folder) => {
@@ -1828,9 +1960,9 @@ export default function App() {
           <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)", gap:12, marginBottom:32 }}>
             {[
               { color:"#6B4E8A", bg:"#EDE5F5", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B4E8A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>, label:"New Folder", sub:"Start from scratch", action:()=>setShowNewFolder(true) },
-              { color:"#3D5A80", bg:"#E8EFF5", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3D5A80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>, label:"Record audio", sub:"Upload an audio file", action:()=>setShowNewFolder(true) },
-              { color:"#4A7C59", bg:"#E5F0E8", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4A7C59" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>, label:"Document upload", sub:"Any PDF, DOC, PPT, etc", action:()=>setShowNewFolder(true) },
-              { color:"#C45C5C", bg:"#F5E5E5", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C45C5C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.54C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg>, label:"Website link", sub:"YouTube or website link", action:()=>setShowNewFolder(true) },
+              { color:"#3D5A80", bg:"#E8EFF5", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3D5A80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>, label:"Record audio", sub:"Upload an audio file", action:()=>setShowRecordModal(true) },
+              { color:"#4A7C59", bg:"#E5F0E8", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4A7C59" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>, label:"Document upload", sub:"Any PDF, DOC, PPT, etc", action:()=>setShowUploadModal(true) },
+              { color:"#C45C5C", bg:"#F5E5E5", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C45C5C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.54C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg>, label:"Website link", sub:"YouTube or website link", action:()=>setShowWebLinkModal(true) },
             ].map((a,i) => (
               <button key={i} onClick={a.action} className="btn-anim"
                 style={{ display:"flex", alignItems:"center", gap:12, background:T.surface, border:`1.5px solid ${T.border}`, borderRadius:16, padding:"14px 16px", cursor:"pointer", textAlign:"left", boxShadow:T.shadow, animation:`quickIn .2s ease ${i*0.05}s both` }}>
@@ -1859,6 +1991,7 @@ export default function App() {
         )}
 
         {homeTab==="about" && <AboutTab/>}
+        {homeTab==="settings" && <SettingsTab onToggleTheme={_toggleTheme}/>}
 
         {homeTab==="folders" && folders.length===0 && (
           <div style={{ textAlign:"center", padding:"80px 0" }}>
@@ -1902,6 +2035,66 @@ export default function App() {
         )}
 
       {showHomeAI && <StandaloneAI onClose={() => setShowHomeAI(false)} />}
+
+      {/* ── Record Audio Modal ── */}
+      {showRecordModal && (
+        <Modal onClose={() => setShowRecordModal(false)}>
+          <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:22, fontWeight:700, color:C.text, marginBottom:8 }}>Record or Upload Audio</h2>
+          <p style={{ fontSize:13, color:C.muted, marginBottom:20 }}>Choose a folder to save your audio note into, then upload your file.</p>
+          <label style={{ fontSize:13, fontWeight:600, color:C.muted, display:"block", marginBottom:6 }}>SAVE TO FOLDER</label>
+          {folders.length === 0
+            ? <p style={{ fontSize:13, color:C.muted, marginBottom:16 }}>No folders yet — create one first.</p>
+            : <select defaultValue="" onChange={e => {
+                const folderId = e.target.value;
+                if (!folderId) return;
+                setShowRecordModal(false);
+                const found = folders.find(f=>f.id===folderId);
+                if (found) { setActiveFolder(found); setScreen("folder"); }
+              }} style={{ width:"100%", padding:"10px 14px", borderRadius:10, border:`1.5px solid ${C.border}`, background:C.bg, color:C.text, fontSize:14, marginBottom:16, outline:"none" }}>
+                <option value="">Select a folder…</option>
+                {folders.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+          }
+          <button onClick={() => { setShowRecordModal(false); setShowNewFolder(true); }}
+            style={{ width:"100%", padding:"10px", border:`1.5px solid ${C.border}`, borderRadius:10, background:"transparent", fontSize:14, fontWeight:600, cursor:"pointer", color:C.text }}>
+            + Create New Folder First
+          </button>
+        </Modal>
+      )}
+
+      {/* ── Document Upload Modal ── */}
+      {showUploadModal && (
+        <Modal onClose={() => setShowUploadModal(false)}>
+          <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:22, fontWeight:700, color:C.text, marginBottom:8 }}>Upload a Document</h2>
+          <p style={{ fontSize:13, color:C.muted, marginBottom:20 }}>Select a folder to upload your PDF, Word doc, or PowerPoint into.</p>
+          <label style={{ fontSize:13, fontWeight:600, color:C.muted, display:"block", marginBottom:6 }}>SAVE TO FOLDER</label>
+          {folders.length === 0
+            ? <p style={{ fontSize:13, color:C.muted, marginBottom:16 }}>No folders yet — create one first.</p>
+            : <select defaultValue="" onChange={e => {
+                const folderId = e.target.value;
+                if (!folderId) return;
+                setShowUploadModal(false);
+                const found = folders.find(f=>f.id===folderId);
+                if (found) { setActiveFolder(found); setScreen("folder"); }
+              }} style={{ width:"100%", padding:"10px 14px", borderRadius:10, border:`1.5px solid ${C.border}`, background:C.bg, color:C.text, fontSize:14, marginBottom:16, outline:"none" }}>
+                <option value="">Select a folder…</option>
+                {folders.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+          }
+          <button onClick={() => { setShowUploadModal(false); setShowNewFolder(true); }}
+            style={{ width:"100%", padding:"10px", border:`1.5px solid ${C.border}`, borderRadius:10, background:"transparent", fontSize:14, fontWeight:600, cursor:"pointer", color:C.text }}>
+            + Create New Folder First
+          </button>
+        </Modal>
+      )}
+
+      {/* ── Website / YouTube Link Modal ── */}
+      {showWebLinkModal && (
+        <WebLinkModal folders={folders} onClose={() => setShowWebLinkModal(false)}
+          onGo={(folderId) => { setShowWebLinkModal(false); const found = folders.find(f=>f.id===folderId); if (found) { setActiveFolder(found); setScreen("folder"); }}}
+          onNewFolder={() => { setShowWebLinkModal(false); setShowNewFolder(true); }}
+        />
+      )}
 
       </div>
       </div> {/* end main content */}
@@ -1997,7 +2190,7 @@ function AdBanner() {
   // Only show ad banner on mobile phones — desktop has more screen space
   return (
     <div className="ad-banner-wrap" style={{
-      position:"fixed", bottom:0, left:0, right:0, zIndex:999,
+      position:"fixed", bottom:0, left: window.innerWidth > 600 ? 60 : 0, right:0, zIndex:999,
       height:isMobileAd ? 44 : 50, maxHeight:isMobileAd ? 44 : 50, overflow:"hidden",
       background:C.surface, borderTop:`1px solid ${C.border}`,
       display:"flex", alignItems:"center", justifyContent:"center",
@@ -3931,8 +4124,8 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
       <style>{GS}</style>
       {/* Top bar */}
       <div className="app-header" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", height:64, display:"flex", alignItems:"center", gap:16 }}>
-        <button onClick={onBack} className="hov" style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14 }}>
-          <Icon d={I.back} size={18} color={C.muted} /> Back
+        <button onClick={onBack} className="hov" style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14, fontWeight:500, padding:"6px 10px", borderRadius:8 }}>
+          <Icon d={I.back} size={16} color={C.muted} /> Back
         </button>
         <div style={{ width:1, height:20, background:C.border }} />
         <div style={{ display:"flex", alignItems:"center", gap:10, flex:1 }}>
@@ -4002,36 +4195,44 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
 
             {folder.files.length === 0
               ? <div style={{ textAlign:"center", padding:"40px 0", color:C.muted }}><Icon d={I.file} size={40} color={C.border} /><p style={{ marginTop:12, fontSize:15 }}>No files yet</p></div>
-              : <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+              : <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
                   {folder.files.map(file => {
                     const fc = getFileColor(file);
-                    const linked = file.linkedFiles || [];
+                    const ext = (file.name||"").split(".").pop().toUpperCase();
                     return (
-                      <div key={file.id} className="row"
-                        style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:"12px 16px" }}>
+                      <div key={file.id}
+                        style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:14, padding:"14px 18px", transition:"all .15s" }}
+                        onMouseEnter={e=>{e.currentTarget.style.borderColor=C.accentS; e.currentTarget.style.boxShadow=C.shadow;}}
+                        onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border; e.currentTarget.style.boxShadow="none";}}>
                         <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-                          <div style={{ width:38, height:38, background:fc.bg, borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                          {/* File type icon */}
+                          <div style={{ width:44, height:44, background:fc.bg, borderRadius:12, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                             <Icon d={I.file} size={18} color={fc.accent} />
+                            <span style={{ fontSize:8, fontWeight:800, color:fc.accent, marginTop:2, letterSpacing:.5 }}>{ext.slice(0,4)}</span>
                           </div>
+                          {/* File info */}
                           <div style={{ flex:1, minWidth:0 }}>
-                            <p style={{ fontSize:14, fontWeight:600, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{file.name}</p>
-                            <p style={{ fontSize:12, color:C.muted }}>
+                            <p style={{ fontSize:14, fontWeight:600, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", margin:0 }}>{file.name}</p>
+                            <p style={{ fontSize:12, color:C.muted, margin:"3px 0 0" }}>
                               {(file.size/1024).toFixed(1)} KB · {file.uploadedAt}
-                              {(file.linkedFileIds||[]).length > 0 && <span style={{ marginLeft:8, color:C.accent }}>{(file.linkedFileIds||[]).length} linked</span>}
+                              {(file.linkedFileIds||[]).length > 0 && <span style={{ marginLeft:8, color:C.accent, fontWeight:600 }}>{(file.linkedFileIds||[]).length} linked</span>}
                             </p>
                           </div>
-                          <FileColorPicker file={file}
-                            onPick={(patch) => onUpdate({...folder,files:folder.files.map(f=>f.id===file.id?{...f,...patch}:f)})}/>
-                          <LinkBtn file={file} allFiles={folder.files}
-                            onSave={ids => onUpdate({...folder,files:folder.files.map(f=>f.id===file.id?{...f,linkedFileIds:ids}:f)})} />
-                          <button onClick={() => onOpenFile(file)} className="hov"
-                            style={{ display:"flex", alignItems:"center", gap:6, background:C.accentL, color:C.accent, border:"none", borderRadius:8, padding:"7px 14px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
-                            <Icon d={I.edit} size={13} color={C.accent} /> Open
-                          </button>
-                          <button onClick={() => { idbDelete(file.id); FILE_STORE.delete(file.id); onUpdate({...folder,files:folder.files.filter(f=>f.id!==file.id)}); }} className="hov"
-                            style={{ background:"none", border:"none", cursor:"pointer", padding:4 }}>
-                            <Icon d={I.trash} size={16} color={C.muted} />
-                          </button>
+                          {/* Actions */}
+                          <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
+                            <FileColorPicker file={file}
+                              onPick={(patch) => onUpdate({...folder,files:folder.files.map(f=>f.id===file.id?{...f,...patch}:f)})}/>
+                            <LinkBtn file={file} allFiles={folder.files}
+                              onSave={ids => onUpdate({...folder,files:folder.files.map(f=>f.id===file.id?{...f,linkedFileIds:ids}:f)})} />
+                            <button onClick={() => onOpenFile(file)} className="hov"
+                              style={{ display:"flex", alignItems:"center", gap:6, background:C.accentL, color:C.accent, border:`1px solid ${C.accentS}`, borderRadius:10, padding:"7px 16px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+                              <Icon d={I.edit} size={13} color={C.accent} /> Open
+                            </button>
+                            <button onClick={e=>{ e.stopPropagation(); idbDelete(file.id); FILE_STORE.delete(file.id); onUpdate({...folder,files:folder.files.filter(f=>f.id!==file.id)}); }} className="hov"
+                              style={{ background:"none", border:`1px solid ${C.border}`, cursor:"pointer", padding:"7px 9px", borderRadius:10, display:"flex", alignItems:"center" }}>
+                              <Icon d={I.trash} size={15} color={C.muted} />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -4084,15 +4285,17 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
   return (
     <div className="page-with-ad" style={{ minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif" }}>
       <style>{GS}</style>
-      <div className="app-header" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", height:64, display:"flex", alignItems:"center", gap:14 }}>
-        <button onClick={handleBack} className="hov" style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14 }}>
-          <Icon d={I.back} size={18} color={C.muted} /> {folder.name}
+      <div className="app-header" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", height:64, display:"flex", alignItems:"center", gap:10 }}>
+        <button onClick={handleBack} className="hov" style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14, fontWeight:500, padding:"6px 10px", borderRadius:8 }}>
+          <Icon d={I.back} size={16} color={C.muted} /> {folder.name}
         </button>
-        <Icon d={I.chevron} size={14} color={C.border} />
-        <div style={{ width:28, height:28, background:fc.bg, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <Icon d={I.file} size={14} color={fc.accent} />
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.border} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <div style={{ width:26, height:26, background:fc.bg, borderRadius:7, display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <Icon d={I.file} size={13} color={fc.accent} />
+          </div>
+          <span style={{ fontSize:15, fontWeight:600, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:360 }}>{file.name}</span>
         </div>
-        <span style={{ fontSize:15, fontWeight:600, color:C.text, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{file.name}</span>
       </div>
       <div className="nav-tabs" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", display:"flex", gap:4 }}>
         {TABS.map(t => (
