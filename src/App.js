@@ -666,8 +666,8 @@ function _toggleTheme() {
   _isDark = !_isDark;
   try { localStorage.setItem("classio_dark", String(_isDark)); } catch {}
   document.body.style.background = _getTheme().bg;
-  if (_isDark) { document.body.classList.add("classio-dark"); }
-  else { document.body.classList.remove("classio-dark"); }
+  if (_isDark) document.body.classList.add("classio-dark");
+  else document.body.classList.remove("classio-dark");
   _themeCallbacks.forEach(fn => fn());
 }
 function useTheme() {
@@ -1476,10 +1476,11 @@ const DARK_CSS = `
 `;
 
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
-function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacter, onToggleTheme, onOpenSearch, isMobile, user, isGuest, onSignOut }) {
+function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacter, onToggleTheme, onOpenSearch, isMobile, user, isGuest, onSignOut, sidebarExpanded, onToggleSidebar }) {
   const T = useTheme();
   C = T; // keep C in sync
-  const [expanded, setExpanded] = useState(false);
+  const expanded = sidebarExpanded;
+  const setExpanded = onToggleSidebar;
 
   const NAV = [
     { id:"home",     label:"Dashboard",   icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> },
@@ -1586,7 +1587,7 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
             background:"transparent", justifyContent:expanded?"flex-start":"center" }}
           onMouseEnter={e=>{e.currentTarget.style.background=T.sidebarActive;}}
           onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
-          <div style={{ width:30, height:30, borderRadius:"50%", overflow:"hidden", border:`2px solid ${T.border}`, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div style={{ width:30, height:30, borderRadius:"50%", overflow:"hidden", border:`2px solid ${T.border}`, flexShrink:0, margin:expanded?"0":"auto" }}>
             <MiniAvatar character={character||{}} size={30} />
           </div>
           {expanded && <div style={{ textAlign:"left", minWidth:0 }}>
@@ -1595,6 +1596,70 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
           </div>}
         </button>
       </div>
+    </div>
+  );
+}
+
+
+// ── Dashboard Drop Zone ───────────────────────────────────────────────────────
+function DashboardDropZone({ onFilesAdded }) {
+  const [dragging, setDragging] = useState(false);
+  const inputRef = useRef(null);
+  const T = useTheme();
+  const handleDrop = (e) => { e.preventDefault(); setDragging(false); if (e.dataTransfer.files.length) onFilesAdded(e.dataTransfer.files); };
+  return (
+    <div onDragOver={e=>{e.preventDefault();setDragging(true);}} onDragLeave={()=>setDragging(false)} onDrop={handleDrop}
+      onClick={()=>inputRef.current?.click()}
+      style={{ border:`2px dashed ${dragging?T.accent:T.border}`, borderRadius:14, padding:"16px 20px",
+        background:dragging?T.accentL:"transparent", cursor:"pointer", transition:"all .15s",
+        display:"flex", alignItems:"center", gap:12, marginBottom:8 }}>
+      <input ref={inputRef} type="file" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.mp3,.mp4,.wav"
+        style={{ display:"none" }} onChange={e=>{ if(e.target.files.length) onFilesAdded(e.target.files); e.target.value=""; }} />
+      <div style={{ width:36, height:36, borderRadius:10, background:dragging?T.accent:T.surface, border:`1px solid ${T.border}`,
+        display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, transition:"all .15s" }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={dragging?"#fff":T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+      </div>
+      <div>
+        <p style={{ margin:0, fontSize:13, fontWeight:600, color:dragging?T.accent:T.text }}>{dragging?"Drop to upload":"Drop files here or click to upload"}</p>
+        <p style={{ margin:0, fontSize:11, color:T.muted }}>PDF, DOC, PPT, images, audio — no folder needed</p>
+      </div>
+    </div>
+  );
+}
+
+// ── Move File Button ──────────────────────────────────────────────────────────
+function MoveFileBtn({ file, fromFolderId, folders, onMove }) {
+  const [open, setOpen] = useState(false);
+  const T = useTheme();
+  const targets = (folders||[]).filter(f => f.id !== fromFolderId && f.id !== "inbox");
+  return (
+    <div style={{ position:"relative" }} onClick={e=>e.stopPropagation()}>
+      <button onClick={e=>{e.stopPropagation();setOpen(o=>!o);}} title="Move to folder"
+        style={{ background:"none", border:`1px solid ${T.border}`, borderRadius:8, padding:"5px 10px",
+          cursor:"pointer", fontSize:11, color:T.muted, display:"flex", alignItems:"center", gap:4, whiteSpace:"nowrap" }}>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+        Move
+      </button>
+      {open && (
+        <div style={{ position:"absolute", right:0, top:"100%", marginTop:4, background:T.surface,
+          border:`1px solid ${T.border}`, borderRadius:12, boxShadow:"0 8px 24px rgba(0,0,0,.12)",
+          zIndex:500, minWidth:160, overflow:"hidden" }}>
+          {targets.length===0
+            ? <p style={{ padding:"10px 14px", fontSize:13, color:T.muted, margin:0 }}>No folders yet</p>
+            : targets.map(f=>(
+              <button key={f.id} onClick={()=>{ onMove(f.id); setOpen(false); }}
+                style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"10px 14px",
+                  background:"none", border:"none", cursor:"pointer", textAlign:"left", fontSize:13, color:T.text }}
+                onMouseEnter={e=>e.currentTarget.style.background=T.sidebarActive}
+                onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                <div style={{ width:10, height:10, borderRadius:3, background:f.color, flexShrink:0 }}/>{f.name}
+              </button>
+            ))
+          }
+        </div>
+      )}
     </div>
   );
 }
@@ -1724,6 +1789,7 @@ export default function App() {
   const [activeStudyGroup, setActiveStudyGroup] = useState(null); // group doc id
   const [showStudyGroupLobby, setShowStudyGroupLobby] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [showRecordModal, setShowRecordModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showWebLinkModal, setShowWebLinkModal] = useState(false);
@@ -1910,8 +1976,7 @@ export default function App() {
       onMoveFile={(file, toFolderId) => {
         const dest = folders.find(f=>f.id===toFolderId);
         if (!dest) return;
-        const updatedDest = {...dest, files:[...dest.files, {...file, _fileObj: FILE_STORE.get(file.id)||null}]};
-        setFoldersSave(folders.map(f=>f.id===toFolderId ? updatedDest : f));
+        setFoldersSave(folders.map(f=>f.id===toFolderId?{...dest,files:[...dest.files,{...file,_fileObj:FILE_STORE.get(file.id)||null}]}:f));
       }} />;
   }
 
@@ -1943,6 +2008,8 @@ export default function App() {
         isMobile={isMobile}
         user={user} isGuest={isGuest}
         onSignOut={isGuest ? handleGuestSignOut : () => signOut(auth)}
+        sidebarExpanded={sidebarExpanded}
+        onToggleSidebar={() => setSidebarExpanded(e => !e)}
       />
       {/* Command-K Search */}
       {showSearch && <CommandSearch folders={folders} onOpenFile={handleOpenFileFromSearch} onClose={()=>setShowSearch(false)} />}
@@ -1954,7 +2021,7 @@ export default function App() {
         onClose={() => setShowStudyGroupLobby(false)}
       />}
       {/* Main content area — offset by sidebar */}
-      <div style={{ flex:1, marginLeft:isMobile?0:60, marginBottom:isMobile?56:0, minHeight:"100vh", display:"flex", flexDirection:"column", background:T.bg }}>
+      <div style={{ flex:1, marginLeft:isMobile?0:(sidebarExpanded?220:60), marginBottom:isMobile?56:0, minHeight:"100vh", display:"flex", flexDirection:"column", background:T.bg }}>
       <AdBanner sideW={sidebarExpanded ? 220 : 60} />
       <div style={{ maxWidth:960, margin:"0 auto", padding:isMobile?"12px 14px":"32px 36px", width:"100%", boxSizing:"border-box" }}>
 
@@ -2047,54 +2114,44 @@ export default function App() {
 
       {showHomeAI && <StandaloneAI onClose={() => setShowHomeAI(false)} />}
 
-      {/* ── Record Audio Modal — direct to inbox ── */}
+      {/* ── Record Audio Modal ── */}
       {showRecordModal && (
         <Modal onClose={() => setShowRecordModal(false)}>
           <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:22, fontWeight:700, color:C.text, marginBottom:8 }}>Record or Upload Audio</h2>
-          <p style={{ fontSize:13, color:C.muted, marginBottom:20 }}>Upload your audio file — it goes straight to your dashboard. No folder needed.</p>
+          <p style={{ fontSize:13, color:C.muted, marginBottom:16 }}>Upload your audio file — it goes straight to your dashboard. No folder needed.</p>
           <DashboardDropZone onFilesAdded={(files) => {
             const inbox = folders.find(f=>f.id==="inbox") || {id:"inbox",name:"Inbox",color:"#6B4E8A",files:[]};
-            const added = Array.from(files).map(f => {
-              const id = `fi${Date.now()}-${Math.random()}`;
-              FILE_STORE.set(id, f); idbSave(id, f);
-              return { id, name:f.name, type:f.type, size:f.size, colorIndex:0, notes:"", studyCards:[], uploadedAt:new Date().toLocaleDateString(), linkedFileIds:[], _fileObj:f };
-            });
-            const updated = { ...inbox, files:[...inbox.files, ...added] };
-            setFoldersSave([updated, ...folders.filter(f=>f.id!=="inbox")]);
+            const added = Array.from(files).map(f => { const id=`fi${Date.now()}-${Math.random()}`; FILE_STORE.set(id,f); idbSave(id,f); return {id,name:f.name,type:f.type,size:f.size,colorIndex:0,notes:"",studyCards:[],uploadedAt:new Date().toLocaleDateString(),linkedFileIds:[],_fileObj:f}; });
+            setFoldersSave([{...inbox,files:[...inbox.files,...added]},...folders.filter(f=>f.id!=="inbox")]);
             setShowRecordModal(false);
           }} />
         </Modal>
       )}
 
-      {/* ── Document Upload Modal — direct to inbox ── */}
+      {/* ── Document Upload Modal ── */}
       {showUploadModal && (
         <Modal onClose={() => setShowUploadModal(false)}>
           <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:22, fontWeight:700, color:C.text, marginBottom:8 }}>Upload a Document</h2>
-          <p style={{ fontSize:13, color:C.muted, marginBottom:20 }}>Drop your file below — it will appear on your dashboard instantly. You can move it to a folder anytime.</p>
+          <p style={{ fontSize:13, color:C.muted, marginBottom:16 }}>Drop your file below — appears on your dashboard instantly. Move to a folder anytime.</p>
           <DashboardDropZone onFilesAdded={(files) => {
             const inbox = folders.find(f=>f.id==="inbox") || {id:"inbox",name:"Inbox",color:"#6B4E8A",files:[]};
-            const added = Array.from(files).map(f => {
-              const id = `fi${Date.now()}-${Math.random()}`;
-              FILE_STORE.set(id, f); idbSave(id, f);
-              return { id, name:f.name, type:f.type, size:f.size, colorIndex:0, notes:"", studyCards:[], uploadedAt:new Date().toLocaleDateString(), linkedFileIds:[], _fileObj:f };
-            });
-            const updated = { ...inbox, files:[...inbox.files, ...added] };
-            setFoldersSave([updated, ...folders.filter(f=>f.id!=="inbox")]);
+            const added = Array.from(files).map(f => { const id=`fi${Date.now()}-${Math.random()}`; FILE_STORE.set(id,f); idbSave(id,f); return {id,name:f.name,type:f.type,size:f.size,colorIndex:0,notes:"",studyCards:[],uploadedAt:new Date().toLocaleDateString(),linkedFileIds:[],_fileObj:f}; });
+            setFoldersSave([{...inbox,files:[...inbox.files,...added]},...folders.filter(f=>f.id!=="inbox")]);
             setShowUploadModal(false);
           }} />
-          <p style={{ fontSize:12, color:C.muted, marginTop:12, textAlign:"center" }}>Or save directly to a folder:</p>
-          <div style={{ display:"flex", flexDirection:"column", gap:6, marginTop:8, maxHeight:160, overflowY:"auto" }}>
-            {folders.filter(f=>f.id!=="inbox").map(f => (
-              <button key={f.id} onClick={() => { setShowUploadModal(false); setActiveFolder(f); setScreen("folder"); }}
-                style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 14px", borderRadius:10, border:`1px solid ${C.border}`, background:"transparent", cursor:"pointer", textAlign:"left" }}
-                onMouseEnter={e=>e.currentTarget.style.background=C.accentL}
-                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                <div style={{ width:10, height:10, borderRadius:3, background:f.color, flexShrink:0 }}/>
-                <span style={{ fontSize:13, fontWeight:600, color:C.text }}>{f.name}</span>
-                <span style={{ fontSize:11, color:C.muted, marginLeft:"auto" }}>{f.files.length} files</span>
-              </button>
-            ))}
-          </div>
+          {folders.filter(f=>f.id!=="inbox").length > 0 && <>
+            <p style={{ fontSize:12, color:C.muted, margin:"12px 0 6px", textAlign:"center" }}>Or save directly to a folder:</p>
+            <div style={{ display:"flex", flexDirection:"column", gap:4, maxHeight:140, overflowY:"auto" }}>
+              {folders.filter(f=>f.id!=="inbox").map(f => (
+                <button key={f.id} onClick={() => { setShowUploadModal(false); setActiveFolder(f); setScreen("folder"); }}
+                  style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px", borderRadius:10, border:`1px solid ${C.border}`, background:"transparent", cursor:"pointer" }}
+                  onMouseEnter={e=>e.currentTarget.style.background=C.accentL}
+                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <div style={{ width:10, height:10, borderRadius:3, background:f.color }}/><span style={{ fontSize:13, color:C.text }}>{f.name}</span>
+                </button>
+              ))}
+            </div>
+          </>}
         </Modal>
       )}
 
@@ -2103,14 +2160,6 @@ export default function App() {
         <WebLinkModal folders={folders} onClose={() => setShowWebLinkModal(false)}
           onGo={(folderId) => { setShowWebLinkModal(false); const found = folders.find(f=>f.id===folderId); if (found) { setActiveFolder(found); setScreen("folder"); }}}
           onNewFolder={() => { setShowWebLinkModal(false); setShowNewFolder(true); }}
-          onSaveDirect={(url, notes) => {
-            const inbox = folders.find(f=>f.id==="inbox") || {id:"inbox",name:"Inbox",color:"#6B4E8A",files:[]};
-            const newDoc = { id:`fi${Date.now()}`, name:url.slice(0,60)||"Web Notes", type:"text/youtube", size:0,
-              colorIndex:0, notes:notes||"", studyCards:[], uploadedAt:new Date().toLocaleDateString(), linkedFileIds:[], youtubeUrl:url };
-            const updated = { ...inbox, files:[...inbox.files, newDoc] };
-            setFoldersSave([updated, ...folders.filter(f=>f.id!=="inbox")]);
-            setShowWebLinkModal(false);
-          }}
         />
       )}
 
@@ -4247,8 +4296,6 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFi
                               <Icon d={I.edit} size={13} color={C.accent} /> Open
                             </button>
                             <MoveFileBtn file={file} fromFolderId={folder.id} folders={allFolders||[]} onMove={(toFolderId) => {
-                              const dest = (allFolders||[]).find(f=>f.id===toFolderId);
-                              if (!dest) return;
                               onUpdate({...folder,files:folder.files.filter(f=>f.id!==file.id)});
                               onMoveFile && onMoveFile(file, toFolderId);
                             }} />
