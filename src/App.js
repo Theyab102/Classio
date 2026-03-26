@@ -29,58 +29,100 @@ const GROQ_KEY = process.env.REACT_APP_GROQ_KEY || "";
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GEMINI_KEYS = [process.env.REACT_APP_GEMINI_KEY_1||"",process.env.REACT_APP_GEMINI_KEY_2||"",process.env.REACT_APP_GEMINI_KEY_3||""].filter(Boolean);
 
+// ─── AI BACKEND — MULTI-KEY ROTATOR + FAILOVER ───────────────────────────────
+const OPENROUTER_KEY = process.env.REACT_APP_OPENROUTER_KEY || "";
+
+// Language session — persists across tabs
+let _sessionLang = null;
+try { const s = localStorage.getItem("classio_lang"); _sessionLang = (s && s !== "auto") ? s : null; } catch {}
+
+function _detectLang(text) {
+  if (!text) return "English";
+  if (/[\u0600-\u06FF]/.test(text)) return "Arabic";
+  if (/[\u4E00-\u9FFF\u3040-\u30FF]/.test(text)) return "Chinese";
+  if (/\b(le|la|les|de|est|et|je|tu|nous)\b/i.test(text)) return "French";
+  if (/\b(el|la|los|es|en|que|por)\b/i.test(text)) return "Spanish";
+  if (/\b(der|die|das|und|ist|ich)\b/i.test(text)) return "German";
+  return "English";
+}
+
+async function _callOpenRouter(prompt, maxTok=3000) {
+  if (!OPENROUTER_KEY) throw new Error("No OpenRouter key");
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json", "Authorization":`Bearer ${OPENROUTER_KEY}`,
+      "HTTP-Referer":"https://classio.app", "X-Title":"Classio" },
+    body:JSON.stringify({ model:"mistralai/mistral-7b-instruct:free",
+      messages:[{role:"user",content:prompt}], max_tokens:maxTok })
+  });
+  if (!res.ok) throw new Error("OpenRouter "+res.status);
+  const d = await res.json();
+  return d.choices?.[0]?.message?.content || "";
+}
+
+async function _callGeminiKey(key, prompt, maxTok) {
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,
+    { method:"POST", headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({ contents:[{parts:[{text:prompt}]}],
+        generationConfig:{maxOutputTokens:maxTok,temperature:0.7} }) }
+  );
+  if (res.status===429) { const e=new Error("429"); e.status=429; throw e; }
+  if (!res.ok) throw new Error("Gemini "+res.status);
+  const d = await res.json();
+  return d.candidates?.[0]?.content?.parts?.[0]?.text || "";
+}
+
 async function _callGemini(prompt, maxTok=3000) {
   for (const key of GEMINI_KEYS) {
-    try {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,
-        { method:"POST", headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:maxTok,temperature:0.7}}) });
-      if (res.status===429) continue;
-      if (!res.ok) throw new Error("Gemini "+res.status);
-      const d = await res.json();
-      const txt = d.candidates?.[0]?.content?.parts?.[0]?.text||"";
-      if (txt) return txt;
-    } catch(e) { if (String(e).includes("429")) continue; throw e; }
+    try { const t = await _callGeminiKey(key, prompt, maxTok); if (t) return t; }
+    catch(e) { if (e.status===429) continue; throw e; }
   }
-  throw new Error("Gemini exhausted");
+  // Failover 1: OpenRouter
+  try { return await _callOpenRouter(prompt, maxTok); } catch {}
+  // Failover 2: Groq
+  const res = await fetch(GROQ_URL, { method:"POST",
+    headers:{"Content-Type":"application/json","Authorization":`Bearer ${GROQ_KEY}`},
+    body:JSON.stringify({ model:"llama-3.3-70b-versatile",
+      messages:[{role:"user",content:prompt}], max_tokens:maxTok }) });
+  const d = await res.json();
+  if (d.error) throw new Error(d.error.message);
+  return d.choices?.[0]?.message?.content || "";
 }
 
 async function callClaude(system, userMessage, maxTok = 3000) {
-  if (GEMINI_KEYS.length>0) {
-    try { return await _callGemini((system?system+"\n\n":"")+userMessage, maxTok); }
-    catch(e) { console.warn("Gemini→Groq:", e.message); }
+  const prompt = (system ? system+"\n\n" : "") + userMessage;
+  if (GEMINI_KEYS.length > 0) {
+    try { return await _callGemini(prompt, maxTok); }
+    catch(e) { console.warn("AI fallback:", e.message); }
   }
-  const res = await fetch(GROQ_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_KEY}` },
-    body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
-      messages: [{ role: "system", content: system }, { role: "user", content: userMessage }],
-      max_tokens: maxTok,
-    }),
-  });
+  const res = await fetch(GROQ_URL, { method:"POST",
+    headers:{"Content-Type":"application/json","Authorization":`Bearer ${GROQ_KEY}`},
+    body:JSON.stringify({ model:"llama-3.3-70b-versatile",
+      messages:[{role:"system",content:system},{role:"user",content:userMessage}], max_tokens:maxTok }) });
   const data = await res.json();
   if (data.error) throw new Error(data.error.message);
   return data.choices?.[0]?.message?.content || "";
 }
 
 async function callClaudeChat(system, messages) {
-  const sysP = system + "\n\nIMPORTANT: Always reply in the SAME language the user wrote in. If Arabic → Arabic. If French → French. Match exactly.";
-  if (GEMINI_KEYS.length>0) {
+  // Detect language from last user message; respect override
+  const lastUser = [...messages].reverse().find(m=>m.role==="user");
+  const raw = typeof lastUser?.content==="string" ? lastUser.content : "";
+  const lang = _sessionLang || _detectLang(raw);
+  const langEnforce = `\n\nCRITICAL: Respond ONLY in ${lang}. Do NOT mix languages. Do NOT translate unless explicitly asked.`;
+  const sysP = (system||"") + langEnforce;
+
+  if (GEMINI_KEYS.length > 0) {
     try {
       const hist = messages.map(m=>`${m.role==="user"?"User":"Assistant"}: ${typeof m.content==="string"?m.content:""}`).join("\n");
       return await _callGemini(sysP+"\n\n"+hist, 1200);
     } catch(e) { console.warn("Gemini chat fallback:", e.message); }
   }
-  const res = await fetch(GROQ_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_KEY}` },
-    body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
-      messages: [{ role: "system", content: sysP }, ...messages],
-      max_tokens: 1200,
-    }),
-  });
+  const res = await fetch(GROQ_URL, { method:"POST",
+    headers:{"Content-Type":"application/json","Authorization":`Bearer ${GROQ_KEY}`},
+    body:JSON.stringify({ model:"llama-3.3-70b-versatile",
+      messages:[{role:"system",content:sysP},...messages], max_tokens:1200 }) });
   const data = await res.json();
   if (data.error) throw new Error(data.error.message);
   return data.choices?.[0]?.message?.content || "";
@@ -637,23 +679,28 @@ function useResponsive() {
 
 // ─── COLORS ───────────────────────────────────────────────────────────────────
 // ─── THEME SYSTEM ─────────────────────────────────────────────────────────────
+// ── Gradient helper used on buttons/bars ─────────────────────────────────────
+const GRAD = "linear-gradient(135deg,#7C5CFC 0%,#3D8EF8 100%)";
+
 const THEMES = {
   light: {
-    bg:"#F7F5F2", surface:"#FFFFFF", border:"#E8E4DF", text:"#1A1714",
-    muted:"#9B9590", accent:"#3D5A80", accentL:"#E8EFF5", accentS:"#C5D5E8",
+    bg:"#F8F7F4", surface:"#FFFFFF", border:"#EAE6E1", text:"#1A1714",
+    muted:"#9B9590", accent:"#6C5CE7", accentL:"#F0EEFF", accentS:"#D4CCFF",
     warm:"#C17F5A", warmL:"#F5EDE5", green:"#4A7C59", greenL:"#E5F0E8",
-    purple:"#6B4E8A", purpleL:"#EDE5F5", red:"#C45C5C", redL:"#F5E5E5",
-    sidebar:"#FFFFFF", sidebarActive:"#F0EDE8", navText:"#1A1714",
-    shadow:"0 2px 12px rgba(0,0,0,.06)", cardShadow:"0 4px 20px rgba(0,0,0,.08)",
+    purple:"#7C5CFC", purpleL:"#EDE5F5", red:"#C45C5C", redL:"#F5E5E5",
+    sidebar:"#FFFFFF", sidebarActive:"#F3F1FF", navText:"#1A1714",
+    shadow:"0 2px 16px rgba(108,92,231,.07)", cardShadow:"0 4px 24px rgba(108,92,231,.10)",
+    grad: GRAD,
     isDark:false,
   },
   dark: {
-    bg:"#0F0F0E", surface:"#1C1C1A", border:"#2A2A26", text:"#EEECEA",
+    bg:"#1A1A15", surface:"#252520", border:"#2E2E28", text:"#EEECEA",
     muted:"#6A6A62", accent:"#7C5CFC", accentL:"#1E1830", accentS:"#2D2050",
     warm:"#C17F5A", warmL:"#2A1F16", green:"#5A9C69", greenL:"#162218",
     purple:"#9B7ECA", purpleL:"#261A35", red:"#D47070", redL:"#2A1616",
-    sidebar:"#0A0A09", sidebarActive:"#1C1C1A", navText:"#EEECEA",
-    shadow:"0 2px 12px rgba(0,0,0,.6)", cardShadow:"0 4px 20px rgba(0,0,0,.6)",
+    sidebar:"#131310", sidebarActive:"#252520", navText:"#EEECEA",
+    shadow:"0 2px 12px rgba(0,0,0,.6)", cardShadow:"0 4px 20px rgba(0,0,0,.55)",
+    grad: GRAD,
     isDark:true,
   },
 };
@@ -1224,74 +1271,128 @@ function StandaloneAI({ onClose }) {
 function SettingsTab({ onToggleTheme }) {
   const T = useTheme();
   C = T;
+  const [lang, setLang] = useState(() => { try { return localStorage.getItem("classio_lang") || "auto"; } catch { return "auto"; } });
+
+  const handleLang = (v) => {
+    setLang(v);
+    try { localStorage.setItem("classio_lang", v); } catch {}
+  };
+
+  const Section = ({ title, children }) => (
+    <div className="sq-card" style={{ marginBottom:16, overflow:"hidden" }}>
+      <div style={{ padding:"12px 20px", borderBottom:`1px solid ${T.border}` }}>
+        <p style={{ margin:0, fontSize:11, fontWeight:800, color:T.muted, letterSpacing:1, textTransform:"uppercase" }}>{title}</p>
+      </div>
+      <div style={{ padding:"16px 20px" }}>{children}</div>
+    </div>
+  );
+
+  const Row = ({ label, sub, children }) => (
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:16, padding:"6px 0" }}>
+      <div>
+        <p style={{ margin:0, fontSize:14, fontWeight:600, color:T.text }}>{label}</p>
+        {sub && <p style={{ margin:0, fontSize:12, color:T.muted, marginTop:2 }}>{sub}</p>}
+      </div>
+      {children}
+    </div>
+  );
+
   return (
     <div style={{ paddingBottom:40 }}>
-      <h1 style={{ fontFamily:"'Fraunces',serif", fontSize:28, fontWeight:700, color:T.text, margin:"0 0 6px", letterSpacing:-.5 }}>Settings</h1>
-      <p style={{ fontSize:14, color:T.muted, margin:"0 0 28px" }}>Manage your Classio preferences</p>
-
-      {/* Appearance section */}
-      <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:16, overflow:"hidden", marginBottom:20 }}>
-        <div style={{ padding:"14px 20px", borderBottom:`1px solid ${T.border}` }}>
-          <p style={{ margin:0, fontSize:12, fontWeight:700, color:T.muted, letterSpacing:.8, textTransform:"uppercase" }}>Appearance</p>
-        </div>
-        <div style={{ padding:"6px 0" }}>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 20px" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-              <div style={{ width:36, height:36, borderRadius:10, background: T.isDark ? "#2a2a26" : T.accentL, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                {T.isDark
-                  ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.isDark?"#e0c060":T.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-                  : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-                }
-              </div>
-              <div>
-                <p style={{ margin:0, fontSize:14, fontWeight:600, color:T.text }}>{T.isDark ? "Dark Mode" : "Light Mode"}</p>
-                <p style={{ margin:0, fontSize:12, color:T.muted }}>Currently using {T.isDark ? "dark" : "light"} theme</p>
-              </div>
-            </div>
-            <button onClick={onToggleTheme} style={{
-              width:52, height:28, borderRadius:14, border:"none", cursor:"pointer", position:"relative",
-              background: T.isDark ? T.accent : T.border, transition:"background .2s",
-            }}>
-              <div style={{ width:22, height:22, borderRadius:"50%", background:"#fff",
-                position:"absolute", top:3, left: T.isDark ? 27 : 3, transition:"left .2s",
-                boxShadow:"0 1px 4px rgba(0,0,0,.3)" }} />
-            </button>
-          </div>
-        </div>
+      <div style={{ marginBottom:28 }}>
+        <h1 style={{ fontFamily:"'Fraunces',serif", fontSize:28, fontWeight:700, color:T.text, margin:"0 0 4px", letterSpacing:-.5 }}>Settings</h1>
+        <p style={{ fontSize:14, color:T.muted, margin:0 }}>Manage your Classio preferences</p>
       </div>
 
-      {/* About section */}
-      <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:16, overflow:"hidden", marginBottom:20 }}>
-        <div style={{ padding:"14px 20px", borderBottom:`1px solid ${T.border}` }}>
-          <p style={{ margin:0, fontSize:12, fontWeight:700, color:T.muted, letterSpacing:.8, textTransform:"uppercase" }}>About</p>
-        </div>
-        <div style={{ padding:"16px 20px", display:"flex", flexDirection:"column", gap:12 }}>
+      {/* Appearance */}
+      <Section title="Appearance">
+        <Row label={T.isDark ? "Dark Mode" : "Light Mode"} sub={`Currently using ${T.isDark?"dark":"light"} theme`}>
+          <button onClick={onToggleTheme} style={{
+            width:52, height:28, borderRadius:14, border:"none", cursor:"pointer", position:"relative", flexShrink:0,
+            background: T.isDark ? GRAD : T.border, transition:"background .25s",
+          }}>
+            <div style={{ width:22, height:22, borderRadius:"50%", background:"#fff",
+              position:"absolute", top:3, left: T.isDark ? 27 : 3, transition:"left .2s",
+              boxShadow:"0 1px 4px rgba(0,0,0,.3)" }} />
+          </button>
+        </Row>
+      </Section>
+
+      {/* Language */}
+      <Section title="AI Response Language">
+        <p style={{ margin:"0 0 14px", fontSize:13, color:T.muted, lineHeight:1.6 }}>
+          Control which language the AI always responds in. "Auto" detects from your input.
+        </p>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
           {[
-            ["App", "Classio"],
-            ["Version", "2.0"],
-            ["Built with", "React + Firebase + Groq AI"],
-          ].map(([k,v])=>(
+            { v:"auto",    label:"🔍 Auto detect" },
+            { v:"English", label:"🇬🇧 English" },
+            { v:"Arabic",  label:"🇦🇪 العربية" },
+            { v:"French",  label:"🇫🇷 Français" },
+            { v:"Spanish", label:"🇪🇸 Español" },
+            { v:"German",  label:"🇩🇪 Deutsch" },
+            { v:"Chinese", label:"🇨🇳 中文" },
+          ].map(o=>(
+            <button key={o.v} onClick={()=>handleLang(o.v)}
+              style={{ padding:"8px 16px", borderRadius:20, fontSize:13, fontWeight:600, cursor:"pointer", transition:"all .12s",
+                background: lang===o.v ? GRAD : "transparent",
+                color: lang===o.v ? "#fff" : T.muted,
+                border: `1.5px solid ${lang===o.v ? "transparent" : T.border}`,
+                boxShadow: lang===o.v ? "0 3px 10px rgba(124,92,252,.3)" : "none" }}>
+              {o.label}
+            </button>
+          ))}
+        </div>
+        {lang !== "auto" && (
+          <p style={{ margin:"12px 0 0", fontSize:12, color:T.accent, fontWeight:600 }}>
+            ✓ AI will always respond in {lang} regardless of input language
+          </p>
+        )}
+      </Section>
+
+      {/* AI Backend */}
+      <Section title="AI Backend">
+        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+          {[
+            { label:"Primary", value:"Gemini 1.5 Flash", note:"Multi-key rotation", color:"#4285F4" },
+            { label:"Failover", value:"OpenRouter (Mistral 7B)", note:"Free tier", color:"#7C5CFC" },
+            { label:"Backup", value:"Groq (Llama 3.3 70B)", note:"Vision: Llama 4 Scout", color:"#16a34a" },
+          ].map(r=>(
+            <div key={r.label} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 14px", background:T.bg, borderRadius:12, border:`1px solid ${T.border}` }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <div style={{ width:8, height:8, borderRadius:"50%", background:r.color, flexShrink:0 }}/>
+                <div>
+                  <p style={{ margin:0, fontSize:13, fontWeight:600, color:T.text }}>{r.label}: {r.value}</p>
+                  <p style={{ margin:0, fontSize:11, color:T.muted }}>{r.note}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      {/* Data */}
+      <Section title="Data & Storage">
+        <p style={{ margin:"0 0 14px", fontSize:13, color:T.muted, lineHeight:1.6 }}>
+          Your data is saved locally and synced to your Google account. Clearing local data will not delete your cloud backup.
+        </p>
+        <button onClick={()=>{ if(window.confirm("Clear local cache? Your cloud data is safe.")) { localStorage.removeItem("classio_v2"); window.location.reload(); }}}
+          style={{ background:T.redL, color:T.red, border:`1px solid ${T.red}44`, borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+          Clear Local Cache
+        </button>
+      </Section>
+
+      {/* About */}
+      <Section title="About">
+        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+          {[["App","Classio"],["Version","2.0"],["Stack","React · Firebase · Gemini · Groq"]].map(([k,v])=>(
             <div key={k} style={{ display:"flex", justifyContent:"space-between" }}>
               <span style={{ fontSize:14, color:T.muted }}>{k}</span>
               <span style={{ fontSize:14, fontWeight:600, color:T.text }}>{v}</span>
             </div>
           ))}
         </div>
-      </div>
-
-      {/* Data section */}
-      <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:16, overflow:"hidden" }}>
-        <div style={{ padding:"14px 20px", borderBottom:`1px solid ${T.border}` }}>
-          <p style={{ margin:0, fontSize:12, fontWeight:700, color:T.muted, letterSpacing:.8, textTransform:"uppercase" }}>Data & Storage</p>
-        </div>
-        <div style={{ padding:"16px 20px" }}>
-          <p style={{ margin:"0 0 12px", fontSize:14, color:T.muted, lineHeight:1.6 }}>Your data is saved locally and synced to your Google account. Clearing local data will not delete your cloud backup.</p>
-          <button onClick={()=>{ if(window.confirm("Clear local cache? Your cloud data is safe.")) { localStorage.removeItem("classio_v2"); window.location.reload(); }}}
-            style={{ background:T.redL, color:T.red, border:`1px solid ${T.red}44`, borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
-            Clear Local Cache
-          </button>
-        </div>
-      </div>
+      </Section>
     </div>
   );
 }
@@ -1340,9 +1441,9 @@ function AboutTab() {
         {steps.map(s=>(
           <div key={s.n} style={{ display:"flex", alignItems:"flex-start", gap:14,
             background:C.surface, border:`1px solid ${C.border}`, borderRadius:14, padding:"14px 16px" }}>
-            <div style={{ width:32,height:32,borderRadius:10,background:C.accent,
+            <div style={{ width:32,height:32,borderRadius:10,background:GRAD,
               display:"flex",alignItems:"center",justifyContent:"center",
-              fontSize:14,fontWeight:800,color:"#fff",flexShrink:0 }}>{s.n}</div>
+              fontSize:14,fontWeight:800,color:"#fff",flexShrink:0,boxShadow:"0 3px 10px rgba(124,92,252,.3)" }}>{s.n}</div>
             <div>
               <p style={{ margin:"0 0 3px", fontSize:14, fontWeight:700, color:C.text }}>{s.title}</p>
               <p style={{ margin:0, fontSize:13, color:C.muted, lineHeight:1.5 }}>{s.desc}</p>
@@ -1467,20 +1568,51 @@ function OnboardingTutorial({ onDone }) {
 
 // ─── EXTRA GLOBAL CSS ─────────────────────────────────────────────────────────
 const DARK_CSS = `
-  body.classio-dark { background: #0F0F0E !important; color: #EEECEA !important; }
-  body.classio-dark ::-webkit-scrollbar-thumb { background: #2A2A26; }
+  body.classio-dark { background: #1A1A15 !important; color: #EEECEA !important; }
+  body.classio-dark ::-webkit-scrollbar-thumb { background: #2E2E28; }
   body.classio-dark button { color: inherit; }
-  body.classio-dark select { color: #EEECEA; background: #1C1C1A; }
+  body.classio-dark select { color: #EEECEA; background: #252520; }
   body.classio-dark input { color: #EEECEA; }
-  @keyframes cmdIn { from { opacity:0; transform:translateY(-16px) scale(.97); } to { opacity:1; transform:translateY(0) scale(1); } }
+
+  /* ── Gradient primary button ── */
+  .btn-primary {
+    background: linear-gradient(135deg,#7C5CFC 0%,#3D8EF8 100%) !important;
+    color:#fff !important; border:none !important;
+    box-shadow: 0 4px 14px rgba(124,92,252,.35) !important;
+    transition: opacity .15s, transform .15s !important;
+  }
+  .btn-primary:hover:not(:disabled) { opacity:.92; transform:translateY(-1px) scale(1.01); }
+  .btn-primary:disabled { background: #ccc !important; box-shadow:none !important; }
+
+  /* ── Squircle card ── */
+  .sq-card {
+    background:#fff; border-radius:20px;
+    box-shadow:0 4px 24px rgba(108,92,231,.10);
+    border:1px solid #EAE6E1;
+    transition:box-shadow .15s,transform .15s;
+  }
+  .sq-card:hover { box-shadow:0 8px 32px rgba(108,92,231,.16); transform:translateY(-1px); }
+  body.classio-dark .sq-card { background:#252520; border-color:#2E2E28; box-shadow:0 4px 20px rgba(0,0,0,.5); }
+
+  /* ── Animations ── */
+  @keyframes cmdIn { from { opacity:0; transform:translateY(-14px) scale(.97); } to { opacity:1; transform:translateY(0) scale(1); } }
   @keyframes sidebarIn { from { opacity:0; transform:translateX(-12px); } to { opacity:1; transform:translateX(0); } }
-  @keyframes quickIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
-@keyframes pageIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
-@keyframes slideInRight { from { opacity:0; transform:translateX(16px); } to { opacity:1; transform:translateX(0); } }
-@keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
-.page-enter { animation: pageIn .22s cubic-bezier(.22,1,.36,1) both; }
-.slide-enter { animation: slideInRight .2s cubic-bezier(.22,1,.36,1) both; }
-.fade-enter { animation: fadeIn .18s ease both; }
+  @keyframes quickIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes pageIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes slideInRight { from { opacity:0; transform:translateX(16px); } to { opacity:1; transform:translateX(0); } }
+  @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+  @keyframes gradShift { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+
+  .page-enter { animation: pageIn .22s cubic-bezier(.22,1,.36,1) both; }
+  .slide-enter { animation: slideInRight .2s cubic-bezier(.22,1,.36,1) both; }
+  .fade-enter { animation: fadeIn .18s ease both; }
+
+  /* ── Mastery pill badges ── */
+  .pill-new     { background:#EEF0FF; color:#6C5CE7; border:1.5px solid #D4CCFF; border-radius:20px; padding:5px 14px; font-size:12px; font-weight:700; }
+  .pill-learning{ background:#FFF8E6; color:#B45309; border:1.5px solid #FDE68A; border-radius:20px; padding:5px 14px; font-size:12px; font-weight:700; }
+  .pill-mastered{ background:#E6F4EA; color:#2E7D32; border:1.5px solid #A8D5B0; border-radius:20px; padding:5px 14px; font-size:12px; font-weight:700; }
 `;
 
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
@@ -1535,14 +1667,15 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
       (n.id==="settings" && homeTab==="settings" && screen==="home");
     return (
       <button onClick={()=>onNavigate(n.id)} title={n.label}
-        style={{ width:"100%", display:"flex", alignItems:"center", gap:12, padding:expanded?"9px 14px":"12px", borderRadius:10, border:"none", cursor:"pointer",
+        style={{ width:"100%", display:"flex", alignItems:"center", gap:12, padding:expanded?"9px 14px":"12px", borderRadius:10, border:"none", cursor:"pointer", position:"relative",
           background:active?T.sidebarActive:"transparent", color:active?T.text:T.muted,
           fontWeight:active?600:400, fontSize:14, transition:"all .12s", justifyContent:expanded?"flex-start":"center" }}
         onMouseEnter={e=>{ if(!active){e.currentTarget.style.background=T.sidebarActive; e.currentTarget.style.color=T.text;}}}
         onMouseLeave={e=>{ if(!active){e.currentTarget.style.background="transparent"; e.currentTarget.style.color=T.muted;}}}>
         <span style={{ flexShrink:0, display:"flex" }}>{n.icon}</span>
         {expanded && <span style={{ whiteSpace:"nowrap" }}>{n.label}</span>}
-        {active && expanded && <div style={{ width:5, height:5, borderRadius:"50%", background:T.accent, marginLeft:"auto" }}/>}
+      {active && expanded && <div style={{ width:6, height:6, borderRadius:"50%", background:GRAD, marginLeft:"auto", boxShadow:"0 0 6px #7C5CFC88" }}/>}
+      {active && !expanded && <div style={{ position:"absolute", left:0, top:"50%", transform:"translateY(-50%)", width:3, height:20, borderRadius:"0 3px 3px 0", background:GRAD }}/>}
       </button>
     );
   };
@@ -1822,54 +1955,98 @@ function CommandSearch({ folders, onOpenFile, onClose }) {
     return () => window.removeEventListener("keydown", h);
   }, [onClose]);
 
-  const allFiles = folders.flatMap(f => (f.files||[]).map(fi=>({...fi, folderName:f.name, folderObj:f})));
-  const results = q.trim()
-    ? allFiles.filter(fi=>(fi.name||"").toLowerCase().includes(q.toLowerCase()) || fi.folderName.toLowerCase().includes(q.toLowerCase()))
-    : allFiles.slice(0,8);
+  const allFiles = folders.flatMap(f => (f.files||[]).map(fi=>({...fi, folderName:f.name, folderObj:f, folderColor:f.color})));
 
-  const getIcon = (name="") => {
-    const e = name.split(".").pop().toLowerCase();
-    if (e==="pdf") return {bg:"#E8EFF5",c:"#3D5A80",t:"PDF"};
-    if (["doc","docx"].includes(e)) return {bg:"#DBEAFE",c:"#2563EB",t:"DOC"};
-    if (["ppt","pptx"].includes(e)) return {bg:"#FEE2E2",c:"#DC2626",t:"PPT"};
-    if (["jpg","png","gif","webp"].includes(e)) return {bg:"#F3E8FF",c:"#7C3AED",t:"IMG"};
-    return {bg:"#F3F4F6",c:"#6B7280",t:"FILE"};
+  const matchedFolders = q.trim() ? folders.filter(f=>f.name.toLowerCase().includes(q.toLowerCase())) : [];
+  const matchedFiles  = q.trim()
+    ? allFiles.filter(fi=>(fi.name||"").toLowerCase().includes(q.toLowerCase()) || fi.folderName.toLowerCase().includes(q.toLowerCase()))
+    : allFiles.slice(0,6);
+
+  const getIcon = (name="", type="") => {
+    const e = (name||"").split(".").pop().toLowerCase();
+    if (type==="text/youtube" || type?.includes("youtube")) return {bg:"#FEE2E2",c:"#DC2626",t:"YT",emoji:"🎬"};
+    if (e==="pdf")   return {bg:"#E8EFF5",c:"#3D5A80",t:"PDF",emoji:"📄"};
+    if (["doc","docx"].includes(e)) return {bg:"#DBEAFE",c:"#2563EB",t:"DOC",emoji:"📝"};
+    if (["ppt","pptx"].includes(e)) return {bg:"#FEE2E2",c:"#DC2626",t:"PPT",emoji:"📊"};
+    if (["jpg","jpeg","png","gif","webp"].includes(e)) return {bg:"#F3E8FF",c:"#7C3AED",t:"IMG",emoji:"🖼️"};
+    if (["mp3","wav","m4a","ogg"].includes(e)) return {bg:"#E0F7FA",c:"#0694a2",t:"AUD",emoji:"🎵"};
+    return {bg:"#F3F4F6",c:"#6B7280",t:"FILE",emoji:"📁"};
   };
 
+  const hasResults = matchedFolders.length > 0 || matchedFiles.length > 0;
+
   return (
-    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:9000, background:"rgba(0,0,0,.45)", backdropFilter:"blur(14px)", WebkitBackdropFilter:"blur(14px)", display:"flex", alignItems:"flex-start", justifyContent:"center", paddingTop:"10vh" }}>
-      <div onClick={e=>e.stopPropagation()} style={{ width:"100%", maxWidth:600, background: T.isDark ? "rgba(28,28,26,0.92)" : "rgba(255,255,255,0.92)", backdropFilter:"blur(20px)", WebkitBackdropFilter:"blur(20px)", borderRadius:20, boxShadow:"0 32px 80px rgba(0,0,0,.35)", border:`1px solid ${T.border}`, overflow:"hidden", animation:"cmdIn .18s cubic-bezier(.22,1,.36,1)" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:12, padding:"16px 20px", borderBottom:`1px solid ${T.border}` }}>
+    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:9000, background:"rgba(0,0,0,.4)", backdropFilter:"blur(16px)", WebkitBackdropFilter:"blur(16px)", display:"flex", alignItems:"flex-start", justifyContent:"center", paddingTop:"8vh" }}>
+      <div onClick={e=>e.stopPropagation()} style={{ width:"100%", maxWidth:620, background: T.isDark ? "rgba(37,37,32,0.96)" : "rgba(255,255,255,0.96)", backdropFilter:"blur(24px)", WebkitBackdropFilter:"blur(24px)", borderRadius:22, boxShadow:"0 32px 80px rgba(0,0,0,.28)", border:`1px solid ${T.border}`, overflow:"hidden", animation:"cmdIn .2s cubic-bezier(.22,1,.36,1)" }}>
+        {/* Search input */}
+        <div style={{ display:"flex", alignItems:"center", gap:12, padding:"18px 22px", borderBottom:`1px solid ${T.border}` }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          <input ref={inputRef} value={q} onChange={e=>setQ(e.target.value)} placeholder="Search folders and files..."
+          <input ref={inputRef} value={q} onChange={e=>setQ(e.target.value)} placeholder="Search folders and notes..."
             style={{ flex:1, border:"none", outline:"none", background:"transparent", fontSize:16, color:T.text, fontFamily:"'DM Sans',sans-serif" }}/>
-          <div style={{ display:"flex", gap:4, alignItems:"center" }}>
-            <span style={{ fontSize:11, color:T.muted, background:T.border, borderRadius:5, padding:"2px 6px", fontWeight:600 }}>⌘K</span>
-            <span style={{ fontSize:11, color:T.muted }}>·</span>
-            <span style={{ fontSize:11, color:T.muted, background:T.border, borderRadius:5, padding:"2px 6px", fontWeight:600 }}>Ctrl+K</span>
-            <span style={{ fontSize:11, color:T.muted, background:T.border, borderRadius:5, padding:"2px 6px", fontWeight:600, marginLeft:4 }}>ESC</span>
+          <div style={{ display:"flex", gap:4 }}>
+            <kbd style={{ fontSize:10, color:T.muted, background:T.bg, border:`1px solid ${T.border}`, borderRadius:5, padding:"2px 6px", fontWeight:700 }}>⌘K</kbd>
+            <kbd style={{ fontSize:10, color:T.muted, background:T.bg, border:`1px solid ${T.border}`, borderRadius:5, padding:"2px 6px", fontWeight:700 }}>ESC</kbd>
           </div>
         </div>
-        <div style={{ maxHeight:400, overflowY:"auto" }}>
-          {!q.trim() && <p style={{ fontSize:11, fontWeight:700, color:T.muted, letterSpacing:.8, padding:"12px 20px 4px", textTransform:"uppercase" }}>Recently opened</p>}
-          {results.length===0 && <div style={{ padding:"32px 20px", textAlign:"center", color:T.muted, fontSize:14 }}>No files found for "{q}"</div>}
-          {results.map((fi,i) => {
-            const ic = getIcon(fi.name);
+
+        <div style={{ maxHeight:420, overflowY:"auto" }}>
+          {/* Folder results */}
+          {matchedFolders.length > 0 && (
+            <>
+              <p style={{ fontSize:10, fontWeight:800, color:T.muted, letterSpacing:.9, padding:"10px 22px 4px", textTransform:"uppercase" }}>Folders</p>
+              {matchedFolders.map(f=>(
+                <div key={f.id} onClick={()=>{ onOpenFile({...f,_isFolder:true}, f); onClose(); }}
+                  style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 22px", cursor:"pointer", transition:"background .1s" }}
+                  onMouseEnter={e=>e.currentTarget.style.background=T.accentL}
+                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <div style={{ width:38, height:38, borderRadius:11, background:f.color+"22", border:`1.5px solid ${f.color}44`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    <Icon d={I.folder} size={18} color={f.color}/>
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <p style={{ margin:0, fontSize:14, fontWeight:600, color:T.text }}>{f.name}</p>
+                    <p style={{ margin:0, fontSize:11, color:T.muted }}>{f.files?.length||0} files</p>
+                  </div>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+                </div>
+              ))}
+            </>
+          )}
+
+          {/* File results */}
+          {!q.trim() && <p style={{ fontSize:10, fontWeight:800, color:T.muted, letterSpacing:.9, padding:"10px 22px 4px", textTransform:"uppercase" }}>Recent files</p>}
+          {q.trim() && matchedFiles.length > 0 && <p style={{ fontSize:10, fontWeight:800, color:T.muted, letterSpacing:.9, padding:"10px 22px 4px", textTransform:"uppercase" }}>Files</p>}
+          {!hasResults && q.trim() && <div style={{ padding:"36px 22px", textAlign:"center", color:T.muted, fontSize:14 }}>No results for "{q}"</div>}
+          {matchedFiles.map((fi,i) => {
+            const ic = getIcon(fi.name, fi.type);
             return (
               <div key={fi.id+i} onClick={()=>{onOpenFile(fi,fi.folderObj); onClose();}}
-                style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 20px", cursor:"pointer" }}
+                style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 22px", cursor:"pointer", transition:"background .1s" }}
                 onMouseEnter={e=>e.currentTarget.style.background=T.accentL}
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                <div style={{ width:36, height:36, borderRadius:10, background:ic.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                  <span style={{ fontSize:8, fontWeight:800, color:ic.c }}>{ic.t}</span>
+                <div style={{ width:38, height:38, borderRadius:11, background:ic.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, fontSize:16 }}>
+                  {ic.emoji}
                 </div>
                 <div style={{ flex:1, minWidth:0 }}>
                   <p style={{ margin:0, fontSize:14, fontWeight:600, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{fi.name}</p>
-                  <p style={{ margin:0, fontSize:11, color:T.muted }}>{fi.folderName}</p>
+                  <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:2 }}>
+                    <div style={{ width:6, height:6, borderRadius:"50%", background:fi.folderColor||T.muted, flexShrink:0 }}/>
+                    <p style={{ margin:0, fontSize:11, color:T.muted }}>{fi.folderName}</p>
+                  </div>
                 </div>
+                <span style={{ fontSize:9, fontWeight:800, color:ic.c, background:ic.bg, borderRadius:5, padding:"2px 6px", flexShrink:0 }}>{ic.t}</span>
               </div>
             );
           })}
+
+          {/* Empty state */}
+          {!hasResults && !q.trim() && allFiles.length === 0 && (
+            <div style={{ padding:"36px 22px", textAlign:"center", color:T.muted }}>
+              <p style={{ fontSize:32, margin:"0 0 10px" }}>📂</p>
+              <p style={{ fontSize:14, fontWeight:600, color:T.text, marginBottom:4 }}>No files yet</p>
+              <p style={{ fontSize:12 }}>Create a folder and upload files to get started</p>
+            </div>
+          )}
+          <div style={{ height:8 }}/>
         </div>
       </div>
     </div>
@@ -2175,9 +2352,19 @@ export default function App() {
 
         {/* ── Dashboard Header ── */}
         {homeTab==="folders" && (
-          <div style={{ marginBottom:28 }}>
-            <h1 style={{ fontFamily:"'Fraunces',serif", fontSize:isMobile?24:34, fontWeight:700, color:T.text, margin:"0 0 4px", letterSpacing:-.5 }}>Dashboard</h1>
-            <p style={{ fontSize:14, color:T.muted, margin:0 }}>Create new notes</p>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:28 }}>
+            <div>
+              <h1 style={{ fontFamily:"'Fraunces',serif", fontSize:isMobile?24:32, fontWeight:700, color:T.text, margin:"0 0 3px", letterSpacing:-.5 }}>Dashboard</h1>
+              <p style={{ fontSize:14, color:T.muted, margin:0 }}>Create new notes</p>
+            </div>
+            {!isMobile && (
+              <button onClick={()=>setShowSearch(true)}
+                style={{ display:"flex", alignItems:"center", gap:10, background:T.surface, border:`1.5px solid ${T.border}`, borderRadius:12, padding:"9px 18px", cursor:"pointer", boxShadow:T.shadow }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                <span style={{ fontSize:13, color:T.muted }}>Search...</span>
+                <span style={{ fontSize:10, background:T.bg, border:`1px solid ${T.border}`, borderRadius:5, padding:"2px 6px", color:T.muted, fontWeight:700 }}>⌘K</span>
+              </button>
+            )}
           </div>
         )}
 
@@ -2185,19 +2372,21 @@ export default function App() {
         {homeTab==="folders" && (
           <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)", gap:12, marginBottom:32 }}>
             {[
-              { color:"#6B4E8A", bg:"#EDE5F5", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B4E8A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>, label:"New Folder", sub:"Start from scratch", action:()=>setShowNewFolder(true) },
-              { color:"#3D5A80", bg:"#E8EFF5", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3D5A80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>, label:"Record audio", sub:"Upload an audio file", action:()=>setShowRecordModal(true) },
-              { color:"#4A7C59", bg:"#E5F0E8", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4A7C59" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>, label:"Document upload", sub:"Any PDF, DOC, PPT, etc", action:()=>setShowUploadModal(true) },
-              { color:"#C45C5C", bg:"#F5E5E5", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C45C5C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.54C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg>, label:"Website link", sub:"YouTube or website link", action:()=>setShowWebLinkModal(true) },
+              { grad:"linear-gradient(135deg,#7C5CFC22,#7C5CFC11)", ic:"#7C5CFC", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C5CFC" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>, label:"New Folder", sub:"Start from scratch", action:()=>setShowNewFolder(true) },
+              { grad:"linear-gradient(135deg,#3D8EF822,#3D8EF811)", ic:"#3D8EF8", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3D8EF8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>, label:"Record audio", sub:"Upload an audio file", action:()=>setShowRecordModal(true) },
+              { grad:"linear-gradient(135deg,#4A7C5922,#4A7C5911)", ic:"#4A7C59", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4A7C59" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>, label:"Document upload", sub:"Any PDF, DOC, PPT, etc", action:()=>setShowUploadModal(true) },
+              { grad:"linear-gradient(135deg,#C45C5C22,#C45C5C11)", ic:"#C45C5C", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C45C5C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.54C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg>, label:"Website link", sub:"YouTube or website link", action:()=>setShowWebLinkModal(true) },
             ].map((a,i) => (
-              <button key={i} onClick={a.action} className="btn-anim"
-                style={{ display:"flex", alignItems:"center", gap:12, background:T.surface, border:`1.5px solid ${T.border}`, borderRadius:16, padding:"14px 16px", cursor:"pointer", textAlign:"left", boxShadow:T.shadow, animation:`quickIn .2s ease ${i*0.05}s both` }}>
-                <div style={{ width:40, height:40, borderRadius:12, background:T.isDark?a.color+"22":a.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{a.icon}</div>
+              <button key={i} onClick={a.action}
+                style={{ display:"flex", alignItems:"center", gap:12, background:T.surface, border:`1.5px solid ${T.border}`, borderRadius:20, padding:"16px 18px", cursor:"pointer", textAlign:"left", boxShadow:T.cardShadow, transition:"box-shadow .15s,transform .15s", animation:`quickIn .2s ease ${i*0.06}s both` }}
+                onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px) scale(1.01)"; e.currentTarget.style.boxShadow="0 8px 28px rgba(124,92,252,.18)";}}
+                onMouseLeave={e=>{e.currentTarget.style.transform="none"; e.currentTarget.style.boxShadow=T.cardShadow;}}>
+                <div style={{ width:44, height:44, borderRadius:14, background:a.grad, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{a.icon}</div>
                 <div style={{ minWidth:0 }}>
                   <p style={{ margin:0, fontSize:13, fontWeight:700, color:T.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{a.label}</p>
                   <p style={{ margin:0, fontSize:11, color:T.muted, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{a.sub}</p>
                 </div>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft:"auto", flexShrink:0 }}><path d="M9 18l6-6-6-6"/></svg>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft:"auto", flexShrink:0 }}><path d="M9 18l6-6-6-6"/></svg>
               </button>
             ))}
           </div>
@@ -2234,29 +2423,62 @@ export default function App() {
         )}
 
         {homeTab==="folders" && folders.length > 0 && (
-          <div style={{ display:"flex", flexDirection:"column", gap:0 }}>
-            <p style={{ fontSize:12, fontWeight:600, color:T.muted, margin:"0 0 8px", letterSpacing:.3 }}>Today</p>
-            {folders.map((folder,idx) => (
-              <div key={folder.id}
-                onClick={() => { setActiveFolder(folder); setScreen("folder"); }}
-                style={{ display:"flex", alignItems:"center", gap:14, background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, padding:"14px 16px", cursor:"pointer", transition:"all .15s", marginBottom:6, animation:`quickIn .18s ease ${idx*0.04}s both` }}
-                onMouseEnter={e=>{e.currentTarget.style.background=T.sidebarActive; e.currentTarget.style.borderColor=T.accentS;}}
-                onMouseLeave={e=>{e.currentTarget.style.background=T.surface; e.currentTarget.style.borderColor=T.border;}}>
-                <div style={{ width:44, height:44, background:folder.color+"22", borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                  <Icon d={I.folder} size={22} color={folder.color} />
+          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+            <p style={{ fontSize:11, fontWeight:700, color:T.muted, margin:"0 0 10px", letterSpacing:.8, textTransform:"uppercase" }}>Today</p>
+            {folders.map((folder,idx) => {
+              const fileCount = folder.files?.length || 0;
+              return (
+                <div key={folder.id} className="sq-card"
+                  onClick={() => { setActiveFolder(folder); setScreen("folder"); }}
+                  style={{ display:"flex", alignItems:"center", gap:14, padding:"14px 18px", cursor:"pointer", animation:`quickIn .18s ease ${idx*0.04}s both`, position:"relative" }}
+                  onMouseEnter={e=>{e.currentTarget.style.background=T.sidebarActive; e.currentTarget.style.borderColor=T.accentS;}}
+                  onMouseLeave={e=>{e.currentTarget.style.background=T.surface; e.currentTarget.style.borderColor=T.border;}}>
+                  {/* Colour dot + folder icon */}
+                  <div style={{ width:46, height:46, borderRadius:14, background:folder.color+"18", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, border:`1.5px solid ${folder.color}33` }}>
+                    <Icon d={I.folder} size={22} color={folder.color} />
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <p style={{ margin:0, fontSize:14, fontWeight:600, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{folder.name}</p>
+                    <p style={{ margin:0, fontSize:12, color:T.muted, marginTop:2 }}>
+                      <span style={{ display:"inline-flex", alignItems:"center", gap:4 }}>
+                        <span style={{ width:7, height:7, borderRadius:"50%", background:folder.color, display:"inline-block" }}/>
+                        {fileCount} file{fileCount!==1?"s":""} · Last opened recently
+                      </span>
+                    </p>
+                  </div>
+                  {/* 3-dot menu */}
+                  <div style={{ position:"relative" }} onClick={e=>e.stopPropagation()}>
+                    <button
+                      style={{ background:"none", border:"none", cursor:"pointer", color:T.muted, padding:"6px 8px", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center" }}
+                      onMouseEnter={e=>{e.currentTarget.style.background=T.bg;}}
+                      onMouseLeave={e=>{e.currentTarget.style.background="none";}}
+                      onClick={e=>{
+                        e.stopPropagation();
+                        const menu = e.currentTarget.nextSibling;
+                        menu.style.display = menu.style.display==="block" ? "none" : "block";
+                        const hide = () => { menu.style.display="none"; document.removeEventListener("click",hide); };
+                        setTimeout(()=>document.addEventListener("click",hide),0);
+                      }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="5" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="19" r="1" fill="currentColor"/></svg>
+                    </button>
+                    <div style={{ display:"none", position:"absolute", right:0, top:32, zIndex:400, background:T.surface, border:`1.5px solid ${T.border}`, borderRadius:14, boxShadow:T.cardShadow, minWidth:140, padding:6, overflow:"hidden" }}>
+                      <button onClick={()=>{ const n=window.prompt("Rename folder:",folder.name); if(n&&n.trim()) updateFolder({...folder,name:n.trim()}); }}
+                        style={{ display:"flex", alignItems:"center", gap:8, width:"100%", padding:"8px 12px", borderRadius:8, border:"none", background:"transparent", cursor:"pointer", fontSize:13, color:T.text }}
+                        onMouseEnter={e=>e.currentTarget.style.background=T.bg}
+                        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                        <Icon d={I.edit} size={14} color={T.muted}/> Rename
+                      </button>
+                      <button onClick={()=>{ if(window.confirm(`Delete "${folder.name}"?`)) deleteFolder(folder.id); }}
+                        style={{ display:"flex", alignItems:"center", gap:8, width:"100%", padding:"8px 12px", borderRadius:8, border:"none", background:"transparent", cursor:"pointer", fontSize:13, color:T.red }}
+                        onMouseEnter={e=>e.currentTarget.style.background=T.redL}
+                        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                        <Icon d={I.trash} size={14} color={T.red}/> Delete
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <p style={{ margin:0, fontSize:14, fontWeight:600, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{folder.name}</p>
-                  <p style={{ margin:0, fontSize:12, color:T.muted, marginTop:2 }}>{folder.files.length} file{folder.files.length!==1?"s":""} · Last opened recently</p>
-                </div>
-                <button onClick={e=>{e.stopPropagation(); if(window.confirm(`Delete "${folder.name}"?`)) deleteFolder(folder.id);}}
-                  style={{ background:"none", border:"none", cursor:"pointer", color:T.red, padding:6, borderRadius:8, opacity:0, transition:"opacity .15s" }}
-                  onMouseEnter={e=>e.currentTarget.style.opacity=1}
-                  onMouseLeave={e=>e.currentTarget.style.opacity=0}>
-                  <Icon d={I.trash} size={15} color="currentColor"/>
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -4424,27 +4646,30 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFi
 
             {folder.files.length === 0
               ? <div style={{ textAlign:"center", padding:"40px 0", color:C.muted }}><Icon d={I.file} size={40} color={C.border} /><p style={{ marginTop:12, fontSize:15 }}>No files yet</p></div>
-              : <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                  {folder.files.map(file => {
+              : <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                  {folder.files.map((file,idx) => {
                     const fc = getFileColor(file);
                     const ext = (file.name||"").split(".").pop().toUpperCase();
                     return (
-                      <div key={file.id}
-                        style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:14, padding:"14px 18px", transition:"all .15s" }}
-                        onMouseEnter={e=>{e.currentTarget.style.borderColor=C.accentS; e.currentTarget.style.boxShadow=C.shadow;}}
-                        onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border; e.currentTarget.style.boxShadow="none";}}>
+                      <div key={file.id} className="sq-card"
+                        style={{ padding:"14px 18px", animation:`quickIn .18s ease ${idx*0.04}s both` }}>
                         <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-                          {/* File type icon */}
-                          <div style={{ width:44, height:44, background:fc.bg, borderRadius:12, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                          {/* File type icon with ext badge */}
+                          <div style={{ width:48, height:48, background:fc.bg, borderRadius:14, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", flexShrink:0, border:`1.5px solid ${fc.accent}22` }}>
                             <Icon d={I.file} size={18} color={fc.accent} />
-                            <span style={{ fontSize:8, fontWeight:800, color:fc.accent, marginTop:2, letterSpacing:.5 }}>{ext.slice(0,4)}</span>
+                            <span style={{ fontSize:7, fontWeight:800, color:fc.accent, marginTop:2, letterSpacing:.5 }}>{ext.slice(0,4)}</span>
                           </div>
                           {/* File info */}
                           <div style={{ flex:1, minWidth:0 }}>
                             <p style={{ fontSize:14, fontWeight:600, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", margin:0 }}>{file.name}</p>
-                            <p style={{ fontSize:12, color:C.muted, margin:"3px 0 0" }}>
-                              {(file.size/1024).toFixed(1)} KB · {file.uploadedAt}
-                              {(file.linkedFileIds||[]).length > 0 && <span style={{ marginLeft:8, color:C.accent, fontWeight:600 }}>{(file.linkedFileIds||[]).length} linked</span>}
+                            <p style={{ fontSize:12, color:C.muted, margin:"3px 0 0", display:"flex", alignItems:"center", gap:6 }}>
+                              <span>{(file.size/1024).toFixed(1)} KB</span>
+                              <span style={{ color:C.border }}>·</span>
+                              <span>{file.uploadedAt}</span>
+                              {(file.linkedFileIds||[]).length > 0 && <>
+                                <span style={{ color:C.border }}>·</span>
+                                <span style={{ color:C.accent, fontWeight:600 }}>{(file.linkedFileIds||[]).length} linked</span>
+                              </>}
                             </p>
                           </div>
                           {/* Actions */}
@@ -4453,9 +4678,9 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFi
                               onPick={(patch) => onUpdate({...folder,files:folder.files.map(f=>f.id===file.id?{...f,...patch}:f)})}/>
                             <LinkBtn file={file} allFiles={folder.files}
                               onSave={ids => onUpdate({...folder,files:folder.files.map(f=>f.id===file.id?{...f,linkedFileIds:ids}:f)})} />
-                            <button onClick={() => onOpenFile(file)} className="hov"
-                              style={{ display:"flex", alignItems:"center", gap:6, background:C.accentL, color:C.accent, border:`1px solid ${C.accentS}`, borderRadius:10, padding:"7px 16px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
-                              <Icon d={I.edit} size={13} color={C.accent} /> Open
+                            <button onClick={() => onOpenFile(file)}
+                              style={{ display:"flex", alignItems:"center", gap:6, background:"linear-gradient(135deg,#7C5CFC,#3D8EF8)", color:"#fff", border:"none", borderRadius:10, padding:"8px 18px", fontSize:13, fontWeight:600, cursor:"pointer", boxShadow:"0 3px 10px rgba(124,92,252,.3)" }}>
+                              Open →
                             </button>
                             <FileActionsMenu
                               file={file} folderId={folder.id} folders={allFolders||[]}
@@ -4527,11 +4752,19 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
           <span style={{ fontSize:15, fontWeight:600, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:360 }}>{file.name}</span>
         </div>
       </div>
-      <div className="nav-tabs" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", display:"flex", gap:4 }}>
+      <div className="nav-tabs" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 16px", display:"flex", gap:2, overflowX:"auto" }}>
         {TABS.map(t => (
           <button key={t.id} className="nav-tab-btn" onClick={() => handleTabChange(t.id)}
-            style={{ display:"flex", alignItems:"center", gap:7, padding:"14px 18px", border:"none", borderBottom:tab===t.id?`2px solid ${C.accent}`:"2px solid transparent", background:"none", cursor:"pointer", fontSize:14, fontWeight:tab===t.id?700:500, color:tab===t.id?C.accent:C.muted, marginBottom:-1 }}>
-            <Icon d={t.icon} size={15} color={tab===t.id?C.accent:C.muted} />{t.label}
+            style={{ display:"flex", alignItems:"center", gap:7, padding:"14px 16px", border:"none",
+              borderBottom: tab===t.id ? "2.5px solid transparent" : "2.5px solid transparent",
+              backgroundImage: tab===t.id ? "none" : "none",
+              borderBottomColor: tab===t.id ? "transparent" : "transparent",
+              background:"none", cursor:"pointer", fontSize:13, fontWeight:tab===t.id?700:500,
+              color:tab===t.id?C.accent:C.muted, marginBottom:-1, position:"relative",
+              whiteSpace:"nowrap", flexShrink:0 }}>
+            <Icon d={t.icon} size={14} color={tab===t.id?C.accent:C.muted} />
+            {t.label}
+            {tab===t.id && <div style={{ position:"absolute", bottom:0, left:0, right:0, height:2.5, background:GRAD, borderRadius:"2px 2px 0 0" }}/>}
           </button>
         ))}
       </div>
@@ -6287,6 +6520,41 @@ function clamp(len) {
   return 13;
 }
 
+// ─── ASK ABOUT CARD — inline mini-chat for study mode ────────────────────────
+function AskAboutCard({ card }) {
+  const [q, setQ] = useState("");
+  const [ans, setAns] = useState("");
+  const [busy, setBusy] = useState(false);
+  const ask = async () => {
+    if (!q.trim() || busy) return;
+    setBusy(true); setAns("");
+    try {
+      const r = await callClaude(
+        "You are a helpful study tutor. Answer the student's question about this flashcard concisely. Plain text only, no markdown.",
+        `Flashcard Q: ${card.question}\nFlashcard A: ${card.answer}\n\nStudent question: ${q}`
+      );
+      setAns(r);
+    } catch(e){ setAns("Error: "+e.message); }
+    setBusy(false);
+  };
+  return (
+    <div style={{ flex:1, display:"flex", flexDirection:"column", gap:4 }}>
+      {ans && <div style={{ fontSize:12, color:C.text, background:C.accentL, borderRadius:8, padding:"6px 10px", lineHeight:1.5 }}>{ans}</div>}
+      <div style={{ display:"flex", gap:6 }}>
+        <input value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")ask();}} placeholder="Ask about this flashcard…"
+          style={{ flex:1, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"7px 12px", fontSize:12, outline:"none", color:C.text, background:C.bg }}/>
+        <button onClick={ask} disabled={!q.trim()||busy} className="no-min-h"
+          style={{ width:34, height:34, borderRadius:10, border:"none", background:q.trim()&&!busy?"linear-gradient(135deg,#7C5CFC,#3D8EF8)":"#ccc",
+            color:"#fff", cursor:q.trim()&&!busy?"pointer":"not-allowed", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+          {busy
+            ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+            : <svg width="12" height="12" viewBox="0 0 24 24" fill="white"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── STUDY CARDS TAB ──────────────────────────────────────────────────────────
 function CardsTab({ file, onUpdate }) {
   const { isMobile } = useResponsive();
@@ -6376,17 +6644,23 @@ function CardsTab({ file, onUpdate }) {
   return (
     <div>
       {/* ── Header ── */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:10 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18, flexWrap:"wrap", gap:12 }}>
         <div>
-          <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:22, fontWeight:700, color:C.text, marginBottom:2 }}>
-            Study Cards <span style={{ fontSize:15, fontWeight:500, color:C.muted }}>({cards.length})</span>
+          <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:22, fontWeight:700, color:C.text, marginBottom:8 }}>
+            Study Cards
           </h2>
+          {/* Mastery pills — image 3 style */}
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            <span className="pill-new">{cards.length - knownCount - starredCount} New</span>
+            <span className="pill-learning">{starredCount} Learning</span>
+            <span className="pill-mastered">{knownCount} Mastered</span>
+          </div>
           {cards.length > 0 && (
-            <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:4 }}>
-              <div style={{ flex:1, height:6, background:C.border, borderRadius:3, width:140 }}>
-                <div style={{ height:"100%", width:`${progress}%`, background:C.green, borderRadius:3, transition:"width .4s" }}/>
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:10 }}>
+              <div style={{ height:5, background:C.border, borderRadius:3, width:160, overflow:"hidden" }}>
+                <div style={{ height:"100%", width:`${progress}%`, background:"linear-gradient(90deg,#7C5CFC,#3D8EF8)", borderRadius:3, transition:"width .4s" }}/>
               </div>
-              <span style={{ fontSize:12, color:C.green, fontWeight:700 }}>{progress}% mastered</span>
+              <span style={{ fontSize:12, color:C.accent, fontWeight:700 }}>{progress}% mastered</span>
               {(knownCount > 0 || starredCount > 0) && (
                 <button onClick={resetProgress} style={{ fontSize:11, color:C.muted, background:"none", border:"none", cursor:"pointer", textDecoration:"underline" }}>Reset</button>
               )}
@@ -6568,67 +6842,105 @@ function CardsTab({ file, onUpdate }) {
             </div>
 
             {/* Progress bar */}
-            <div style={{ flexShrink:0, height:4, background:C.border }}>
-              <div style={{ height:"100%", width:`${pct}%`, background:C.accent, transition:"width .35s ease" }}/>
+            <div style={{ flexShrink:0, height:5, background:C.border }}>
+              <div style={{ height:"100%", width:`${pct}%`, background:"linear-gradient(90deg,#7C5CFC,#3D8EF8)", transition:"width .35s ease" }}/>
+            </div>
+
+            {/* Mastery status bar */}
+            <div style={{ flexShrink:0, display:"flex", justifyContent:"center", gap:16, padding:"10px 28px 0", background:C.bg }}>
+              <span className="pill-new">{(displayCards.length - Object.values(known).filter(Boolean).length - Object.values(starred).filter(Boolean).length)} New</span>
+              <span className="pill-learning">{Object.values(starred).filter(Boolean).length} Learning</span>
+              <span className="pill-mastered">{Object.values(known).filter(Boolean).length} Mastered</span>
             </div>
 
             {/* Card */}
-            <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", padding:"24px 32px", minHeight:0, perspective:1400 }}>
+            <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", padding:"16px 32px", minHeight:0, perspective:1400 }}>
               <div
                 className={`ql-wrap${isFlipped ? " flipped" : ""}`}
                 onClick={() => setFlipped(f => ({...f, [card.id]: !f[card.id]}))}
-                style={{ width:"100%", maxWidth:760, height:"min(360px, calc(100vh - 240px))", cursor:"pointer", userSelect:"none" }}>
-
+                style={{ width:"100%", maxWidth:760, height:"min(340px, calc(100vh - 280px))", cursor:"pointer", userSelect:"none" }}>
                 {/* Front */}
                 <div className="ql-side" style={{
                   background: isKnown ? C.greenL : C.surface,
                   border: `2px solid ${isKnown ? C.green : isStarred ? "#f59e0b" : C.border}`,
-                  boxShadow: "0 4px 32px rgba(0,0,0,.08)",
+                  boxShadow: C.cardShadow,
                 }}>
-                  <p style={{ fontSize:11, fontWeight:800, letterSpacing:2, textTransform:"uppercase", color:C.muted, marginBottom:24 }}>QUESTION</p>
+                  {/* Edit icon top-left */}
+                  <div style={{ position:"absolute", top:16, left:16, cursor:"pointer", opacity:.4 }}
+                    onClick={e=>{e.stopPropagation(); const q=window.prompt("Edit question:",card.question); if(q&&q.trim()){const u=cards.map(c=>c.id===card.id?{...c,question:q.trim()}:c); setCards(u); onUpdate({...file,studyCards:u});}}}>
+                    <Icon d={I.edit} size={16} color={C.muted}/>
+                  </div>
+                  {/* Star top-right */}
+                  <button onClick={e=>toggleStar(card.id,e)} className="no-min-h"
+                    style={{ position:"absolute", top:14, right:14, background:"none", border:"none", cursor:"pointer", fontSize:18, opacity:isStarred?1:.3 }}>☆</button>
+                  <p style={{ fontSize:11, fontWeight:800, letterSpacing:2, textTransform:"uppercase", color:C.muted, marginBottom:20 }}>QUESTION</p>
                   <p style={{ fontSize:clamp(card.question?.length), color:C.text, lineHeight:1.65, fontWeight:500, maxWidth:640 }}>{card.question}</p>
-                  <p style={{ fontSize:12, color:C.muted, marginTop:28 }}>Click to flip</p>
+                  <p style={{ fontSize:12, color:C.muted, marginTop:24 }}>Click to flip</p>
                 </div>
-
                 {/* Back */}
                 <div className="ql-side ql-back" style={{
-                  background: C.accentL,
-                  border: `2px solid ${C.accentS}`,
-                  boxShadow: "0 4px 32px rgba(61,90,128,.12)",
+                  background: C.accentL, border: `2px solid ${C.accentS}`, boxShadow: C.cardShadow,
                 }}>
-                  <p style={{ fontSize:11, fontWeight:800, letterSpacing:2, textTransform:"uppercase", color:C.accent, marginBottom:24 }}>ANSWER</p>
+                  <p style={{ fontSize:11, fontWeight:800, letterSpacing:2, textTransform:"uppercase", color:C.accent, marginBottom:20 }}>ANSWER</p>
                   <p style={{ fontSize:clamp(card.answer?.length), color:C.text, lineHeight:1.65, fontWeight:500, maxWidth:640 }}>{card.answer}</p>
-                  <p style={{ fontSize:12, color:C.accent, marginTop:28 }}>Click to flip back</p>
+                  <p style={{ fontSize:12, color:C.accent, marginTop:24 }}>Click to flip back</p>
                 </div>
               </div>
             </div>
 
-            {/* Bottom nav */}
-            <div style={{ flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", gap:20, padding:"20px 28px", background:C.surface, borderTop:`1px solid ${C.border}` }}>
-              <button onClick={() => { setStudyIdx(i => Math.max(0, i-1)); setFlipped({}); }}
-                disabled={studyIdx === 0} className="no-min-h"
-                style={{ width:50, height:50, borderRadius:"50%", border:`1.5px solid ${C.border}`, background:C.bg, cursor:studyIdx===0?"not-allowed":"pointer", opacity:studyIdx===0?.35:1, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.text} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-              </button>
+            {/* Bottom — mastery controls */}
+            <div style={{ flexShrink:0, background:C.surface, borderTop:`1px solid ${C.border}` }}>
+              {/* Don't Know / Know row */}
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 28px 10px" }}>
+                <button onClick={() => { setStudyIdx(i => Math.max(0, i-1)); setFlipped({}); }}
+                  disabled={studyIdx===0} className="no-min-h"
+                  style={{ width:44, height:44, borderRadius:"50%", border:`1.5px solid ${C.border}`, background:C.bg, cursor:studyIdx===0?"not-allowed":"pointer", opacity:studyIdx===0?.35:1, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.text} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                </button>
 
-              <button onClick={e => toggleKnown(card.id, e)} className="no-min-h"
-                style={{ padding:"11px 32px", borderRadius:24, border:"none", cursor:"pointer", fontSize:14, fontWeight:700, transition:"all .2s",
-                  background: isKnown ? C.green : C.accent,
-                  color: "#fff",
-                  boxShadow: `0 4px 16px ${isKnown ? C.green : C.accent}44` }}>
-                {isKnown ? "✓ Got it!" : "Got it"}
-              </button>
+                <div style={{ display:"flex", gap:10 }}>
+                  {/* Don't Know */}
+                  <button onClick={() => { if(starred[card.id]) toggleStar(card.id,{stopPropagation:()=>{}}); setStudyIdx(i=>Math.min(displayCards.length-1,i+1)); setFlipped({}); }} className="no-min-h"
+                    style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 24px", borderRadius:12, border:`1.5px solid ${C.red}55`, background:C.redL, color:C.red, fontSize:14, fontWeight:700, cursor:"pointer" }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                    Don't Know
+                  </button>
+                  {/* Know */}
+                  <button onClick={e=>{toggleKnown(card.id,e); setStudyIdx(i=>Math.min(displayCards.length-1,i+1)); setFlipped({});}} className="no-min-h"
+                    style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 28px", borderRadius:12, border:"none",
+                      background: isKnown ? C.green : "linear-gradient(135deg,#7C5CFC,#3D8EF8)",
+                      color:"#fff", fontSize:14, fontWeight:700, cursor:"pointer",
+                      boxShadow: isKnown ? `0 3px 12px ${C.green}55` : "0 3px 12px rgba(124,92,252,.35)" }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                    {isKnown ? "Mastered!" : "Know"}
+                  </button>
+                </div>
 
-              <button onClick={() => { setStudyIdx(i => Math.min(displayCards.length-1, i+1)); setFlipped({}); }}
-                disabled={studyIdx === displayCards.length - 1} className="no-min-h"
-                style={{ width:50, height:50, borderRadius:"50%", border:`1.5px solid ${C.border}`, background:C.bg, cursor:studyIdx===displayCards.length-1?"not-allowed":"pointer", opacity:studyIdx===displayCards.length-1?.35:1, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.text} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-              </button>
+                <button onClick={() => { setStudyIdx(i => Math.min(displayCards.length-1, i+1)); setFlipped({}); }}
+                  disabled={studyIdx===displayCards.length-1} className="no-min-h"
+                  style={{ width:44, height:44, borderRadius:"50%", border:`1.5px solid ${C.border}`, background:C.bg, cursor:studyIdx===displayCards.length-1?"not-allowed":"pointer", opacity:studyIdx===displayCards.length-1?.35:1, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.text} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+                </button>
+              </div>
+
+              {/* Ask about this flashcard + ELI5 — image 4 style */}
+              <div style={{ display:"flex", alignItems:"center", gap:8, padding:"0 20px 14px" }}>
+                <button onClick={async()=>{
+                  const k=`eli5_${card.id}`; const cached=sessionStorage.getItem(k);
+                  if(cached){alert(cached);return;}
+                  try{
+                    const r=await callClaude("Explain like the student is 5 years old. Use a simple analogy. 2-3 sentences max. Plain text only.",`Concept: ${card.question}\nAnswer: ${card.answer}`);
+                    sessionStorage.setItem(k,r); alert(r);
+                  }catch(e){alert("Error: "+e.message);}
+                }} className="no-min-h"
+                  style={{ display:"flex", alignItems:"center", gap:6, background:C.accentL, border:`1.5px solid ${C.accentS}`, color:C.accent, borderRadius:10, padding:"8px 14px", fontSize:12, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap", flexShrink:0 }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+                  ELI5
+                </button>
+                <AskAboutCard card={card} />
+              </div>
+              <p style={{ textAlign:"center", fontSize:10, color:C.muted, padding:"0 0 8px" }}>← → navigate &nbsp;·&nbsp; Space to flip</p>
             </div>
-
-            <p style={{ textAlign:"center", fontSize:11, color:C.muted, padding:"8px 0 12px", background:C.surface, flexShrink:0 }}>
-              ← → navigate &nbsp;·&nbsp; Space to flip
-            </p>
           </div>
         );
       })()}
