@@ -666,8 +666,7 @@ function _toggleTheme() {
   _isDark = !_isDark;
   try { localStorage.setItem("classio_dark", String(_isDark)); } catch {}
   document.body.style.background = _getTheme().bg;
-  if (_isDark) document.body.classList.add("classio-dark");
-  else document.body.classList.remove("classio-dark");
+  if (_isDark) document.body.classList.add("classio-dark"); else document.body.classList.remove("classio-dark");
   _themeCallbacks.forEach(fn => fn());
 }
 function useTheme() {
@@ -1468,11 +1467,20 @@ function OnboardingTutorial({ onDone }) {
 
 // ─── EXTRA GLOBAL CSS ─────────────────────────────────────────────────────────
 const DARK_CSS = `
-  body.classio-dark { background: #1A1A15 !important; color: #F0EDE8 !important; }
-  body.classio-dark ::-webkit-scrollbar-thumb { background: #35352E; }
+  body.classio-dark { background: #0F0F0E !important; color: #EEECEA !important; }
+  body.classio-dark ::-webkit-scrollbar-thumb { background: #2A2A26; }
+  body.classio-dark button { color: inherit; }
+  body.classio-dark select { color: #EEECEA; background: #1C1C1A; }
+  body.classio-dark input { color: #EEECEA; }
   @keyframes cmdIn { from { opacity:0; transform:translateY(-16px) scale(.97); } to { opacity:1; transform:translateY(0) scale(1); } }
   @keyframes sidebarIn { from { opacity:0; transform:translateX(-12px); } to { opacity:1; transform:translateX(0); } }
   @keyframes quickIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+@keyframes pageIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+@keyframes slideInRight { from { opacity:0; transform:translateX(16px); } to { opacity:1; transform:translateX(0); } }
+@keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+.page-enter { animation: pageIn .22s cubic-bezier(.22,1,.36,1) both; }
+.slide-enter { animation: slideInRight .2s cubic-bezier(.22,1,.36,1) both; }
+.fade-enter { animation: fadeIn .18s ease both; }
 `;
 
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
@@ -1582,18 +1590,17 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
           {expanded && <span style={{ fontSize:13, fontWeight:600 }}>{T.isDark ? "Light mode" : "Dark mode"}</span>}
         </button>
         {/* User */}
-        <button onClick={onOpenCharacter} title="Profile"
-          style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:expanded?"8px 14px":"8px", borderRadius:10, border:"none", cursor:"pointer",
-            background:"transparent", justifyContent:expanded?"flex-start":"center" }}
+        <button onClick={onOpenCharacter}
+          style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"8px 12px", borderRadius:10, border:"none", cursor:"pointer", background:"transparent" }}
           onMouseEnter={e=>{e.currentTarget.style.background=T.sidebarActive;}}
           onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
-          <div style={{ width:30, height:30, borderRadius:"50%", overflow:"hidden", border:`2px solid ${T.border}`, flexShrink:0, margin:expanded?"0":"auto" }}>
-            <MiniAvatar character={character||{}} size={30} />
+          <div style={{ width:32, height:32, borderRadius:"50%", overflow:"hidden", border:`2px solid ${T.border}`, flexShrink:0 }}>
+            <MiniAvatar character={character||{}} size={32} />
           </div>
-          {expanded && <div style={{ textAlign:"left", minWidth:0 }}>
+          <div style={{ textAlign:"left", minWidth:0 }}>
             <p style={{ margin:0, fontSize:13, fontWeight:600, color:T.navText, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{character?.name || (user?.displayName?.split(" ")[0]) || (isGuest?"Guest":"You")}</p>
             <p style={{ margin:0, fontSize:11, color:T.muted }}>{isGuest?"Guest mode":"Student"}</p>
-          </div>}
+          </div>
         </button>
       </div>
     </div>
@@ -1601,67 +1608,206 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
 }
 
 
+
+// ── Audio Record Modal ────────────────────────────────────────────────────────
+function AudioRecordModal({ onClose, onSave }) {
+  const [recording, setRecording] = useState(false);
+  const [audioUrl, setAudioUrl] = useState(null);
+  const [audioBlob, setAudioBlob] = useState(null);
+  const [seconds, setSeconds] = useState(0);
+  const mediaRef = useRef(null);
+  const chunksRef = useRef([]);
+  const timerRef = useRef(null);
+  const inputRef = useRef(null);
+  const T = useTheme();
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      chunksRef.current = [];
+      mr.ondataavailable = e => chunksRef.current.push(e.data);
+      mr.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type:"audio/webm" });
+        setAudioBlob(blob);
+        setAudioUrl(URL.createObjectURL(blob));
+        stream.getTracks().forEach(t => t.stop());
+      };
+      mr.start();
+      mediaRef.current = mr;
+      setRecording(true);
+      setSeconds(0);
+      timerRef.current = setInterval(() => setSeconds(s => s+1), 1000);
+    } catch(e) { alert("Microphone access denied. Please allow microphone access."); }
+  };
+
+  const stopRecording = () => {
+    mediaRef.current?.stop();
+    setRecording(false);
+    clearInterval(timerRef.current);
+  };
+
+  useEffect(() => () => { clearInterval(timerRef.current); }, []);
+
+  const fmt = s => `${Math.floor(s/60).toString().padStart(2,"0")}:${(s%60).toString().padStart(2,"0")}`;
+
+  return (
+    <Modal onClose={onClose}>
+      <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:22, fontWeight:700, color:T.text, marginBottom:8 }}>Record or Upload Audio</h2>
+      <p style={{ fontSize:13, color:T.muted, marginBottom:20 }}>Record live or upload an audio file — saves directly to your dashboard.</p>
+      <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:16, padding:"20px 0" }}>
+        {!audioUrl ? (
+          <button onClick={recording ? stopRecording : startRecording}
+            style={{ width:72, height:72, borderRadius:"50%", border:"none", cursor:"pointer",
+              background:recording?"#dc2626":T.accent, color:"#fff",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              boxShadow:`0 4px 20px ${recording?"#dc262644":T.accent+"44"}`,
+              transition:"all .2s" }}>
+            {recording
+              ? <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+              : <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>}
+          </button>
+        ) : null}
+        {recording && <p style={{ fontSize:20, fontWeight:700, color:"#dc2626", fontFamily:"monospace" }}>{fmt(seconds)}</p>}
+        {recording && <p style={{ fontSize:12, color:T.muted }}>Tap stop when done</p>}
+        {audioUrl && (
+          <div style={{ width:"100%", display:"flex", flexDirection:"column", gap:12 }}>
+            <audio controls src={audioUrl} style={{ width:"100%" }} />
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={() => { setAudioUrl(null); setAudioBlob(null); setSeconds(0); }}
+                style={{ flex:1, padding:"9px", border:`1px solid ${T.border}`, borderRadius:10, background:"transparent", cursor:"pointer", fontSize:13, color:T.muted }}>
+                Re-record
+              </button>
+              <button onClick={() => { const f = new File([audioBlob], `Recording-${Date.now()}.webm`, {type:"audio/webm"}); onSave(f); }}
+                style={{ flex:2, padding:"9px", background:T.accent, color:"#fff", border:"none", borderRadius:10, cursor:"pointer", fontSize:13, fontWeight:700 }}>
+                Save to Dashboard
+              </button>
+            </div>
+          </div>
+        )}
+        {!recording && !audioUrl && (
+          <div style={{ width:"100%", textAlign:"center" }}>
+            <p style={{ fontSize:12, color:T.muted, margin:"0 0 12px" }}>or upload a file</p>
+            <input ref={inputRef} type="file" accept="audio/*" style={{ display:"none" }}
+              onChange={e => { const f=e.target.files[0]; if(f) onSave(f); e.target.value=""; }} />
+            <button onClick={() => inputRef.current?.click()}
+              style={{ padding:"9px 20px", border:`1.5px solid ${T.border}`, borderRadius:10, background:"transparent", cursor:"pointer", fontSize:13, color:T.text }}>
+              Upload audio file
+            </button>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 // ── Dashboard Drop Zone ───────────────────────────────────────────────────────
 function DashboardDropZone({ onFilesAdded }) {
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef(null);
   const T = useTheme();
-  const handleDrop = (e) => { e.preventDefault(); setDragging(false); if (e.dataTransfer.files.length) onFilesAdded(e.dataTransfer.files); };
   return (
-    <div onDragOver={e=>{e.preventDefault();setDragging(true);}} onDragLeave={()=>setDragging(false)} onDrop={handleDrop}
+    <div onDragOver={e=>{e.preventDefault();setDragging(true);}} onDragLeave={()=>setDragging(false)}
+      onDrop={e=>{e.preventDefault();setDragging(false);if(e.dataTransfer.files.length)onFilesAdded(e.dataTransfer.files);}}
       onClick={()=>inputRef.current?.click()}
       style={{ border:`2px dashed ${dragging?T.accent:T.border}`, borderRadius:14, padding:"16px 20px",
         background:dragging?T.accentL:"transparent", cursor:"pointer", transition:"all .15s",
         display:"flex", alignItems:"center", gap:12, marginBottom:8 }}>
       <input ref={inputRef} type="file" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.mp3,.mp4,.wav"
-        style={{ display:"none" }} onChange={e=>{ if(e.target.files.length) onFilesAdded(e.target.files); e.target.value=""; }} />
-      <div style={{ width:36, height:36, borderRadius:10, background:dragging?T.accent:T.surface, border:`1px solid ${T.border}`,
-        display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, transition:"all .15s" }}>
+        style={{ display:"none" }} onChange={e=>{if(e.target.files.length)onFilesAdded(e.target.files);e.target.value="";}} />
+      <div style={{ width:36,height:36,borderRadius:10,background:dragging?T.accent:T.surface,border:`1px solid ${T.border}`,
+        display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .15s" }}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={dragging?"#fff":T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
         </svg>
       </div>
       <div>
-        <p style={{ margin:0, fontSize:13, fontWeight:600, color:dragging?T.accent:T.text }}>{dragging?"Drop to upload":"Drop files here or click to upload"}</p>
-        <p style={{ margin:0, fontSize:11, color:T.muted }}>PDF, DOC, PPT, images, audio — no folder needed</p>
+        <p style={{margin:0,fontSize:13,fontWeight:600,color:dragging?T.accent:T.text}}>{dragging?"Drop to upload":"Drop files here or click to upload"}</p>
+        <p style={{margin:0,fontSize:11,color:T.muted}}>PDF, DOC, PPT, images, audio — no folder needed</p>
       </div>
     </div>
   );
 }
 
-// ── Move File Button ──────────────────────────────────────────────────────────
-function MoveFileBtn({ file, fromFolderId, folders, onMove }) {
+// ── Move File Button (three-dot dropdown with Move + Delete) ──────────────────
+function FileActionsMenu({ file, folderId, folders, onMove, onDelete, onOpen }) {
   const [open, setOpen] = useState(false);
+  const [showMoveList, setShowMoveList] = useState(false);
   const T = useTheme();
-  const targets = (folders||[]).filter(f => f.id !== fromFolderId && f.id !== "inbox");
+  const targets = (folders||[]).filter(f => f.id !== folderId);
+
   return (
     <div style={{ position:"relative" }} onClick={e=>e.stopPropagation()}>
-      <button onClick={e=>{e.stopPropagation();setOpen(o=>!o);}} title="Move to folder"
-        style={{ background:"none", border:`1px solid ${T.border}`, borderRadius:8, padding:"5px 10px",
-          cursor:"pointer", fontSize:11, color:T.muted, display:"flex", alignItems:"center", gap:4, whiteSpace:"nowrap" }}>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
-        Move
+      <button onClick={e=>{e.stopPropagation();setOpen(o=>!o);setShowMoveList(false);}}
+        style={{ background:"none", border:`1px solid ${T.border}`, borderRadius:8, width:32, height:32,
+          cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:T.muted }}
+        onMouseEnter={e=>e.currentTarget.style.background=T.sidebarActive}
+        onMouseLeave={e=>e.currentTarget.style.background="none"}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
+        </svg>
       </button>
       {open && (
         <div style={{ position:"absolute", right:0, top:"100%", marginTop:4, background:T.surface,
-          border:`1px solid ${T.border}`, borderRadius:12, boxShadow:"0 8px 24px rgba(0,0,0,.12)",
-          zIndex:500, minWidth:160, overflow:"hidden" }}>
-          {targets.length===0
-            ? <p style={{ padding:"10px 14px", fontSize:13, color:T.muted, margin:0 }}>No folders yet</p>
-            : targets.map(f=>(
-              <button key={f.id} onClick={()=>{ onMove(f.id); setOpen(false); }}
-                style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"10px 14px",
-                  background:"none", border:"none", cursor:"pointer", textAlign:"left", fontSize:13, color:T.text }}
+          border:`1px solid ${T.border}`, borderRadius:12, boxShadow:"0 8px 24px rgba(0,0,0,.15)",
+          zIndex:600, minWidth:160, overflow:"hidden", animation:"quickIn .12s ease" }}>
+          {onOpen && <button onClick={()=>{onOpen();setOpen(false);}}
+            style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"10px 14px", background:"none",
+              border:"none", cursor:"pointer", textAlign:"left", fontSize:13, color:T.text, borderBottom:`1px solid ${T.border}` }}
+            onMouseEnter={e=>e.currentTarget.style.background=T.sidebarActive}
+            onMouseLeave={e=>e.currentTarget.style.background="none"}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            Open
+          </button>}
+          {!showMoveList ? (
+            <button onClick={()=>setShowMoveList(true)}
+              style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"10px 14px", background:"none",
+                border:"none", cursor:"pointer", textAlign:"left", fontSize:13, color:T.text, borderBottom:`1px solid ${T.border}` }}
+              onMouseEnter={e=>e.currentTarget.style.background=T.sidebarActive}
+              onMouseLeave={e=>e.currentTarget.style.background="none"}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+              Move to folder
+            </button>
+          ) : (
+            <div>
+              <button onClick={()=>setShowMoveList(false)}
+                style={{ width:"100%", display:"flex", alignItems:"center", gap:6, padding:"8px 14px", background:"none",
+                  border:"none", cursor:"pointer", fontSize:12, color:T.muted, borderBottom:`1px solid ${T.border}` }}
                 onMouseEnter={e=>e.currentTarget.style.background=T.sidebarActive}
                 onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                <div style={{ width:10, height:10, borderRadius:3, background:f.color, flexShrink:0 }}/>{f.name}
+                ← Back
               </button>
-            ))
-          }
+              {targets.length===0
+                ? <p style={{padding:"10px 14px",fontSize:12,color:T.muted,margin:0}}>No other folders</p>
+                : targets.map(f=>(
+                  <button key={f.id} onClick={()=>{onMove(f.id);setOpen(false);setShowMoveList(false);}}
+                    style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"10px 14px",
+                      background:"none", border:"none", cursor:"pointer", textAlign:"left", fontSize:13, color:T.text }}
+                    onMouseEnter={e=>e.currentTarget.style.background=T.sidebarActive}
+                    onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                    <div style={{width:10,height:10,borderRadius:3,background:f.color,flexShrink:0}}/>{f.name}
+                  </button>
+                ))
+              }
+            </div>
+          )}
+          <button onClick={()=>{onDelete();setOpen(false);}}
+            style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"10px 14px", background:"none",
+              border:"none", cursor:"pointer", textAlign:"left", fontSize:13, color:"#dc2626" }}
+            onMouseEnter={e=>e.currentTarget.style.background="#fef2f2"}
+            onMouseLeave={e=>e.currentTarget.style.background="none"}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+            Delete
+          </button>
         </div>
       )}
     </div>
   );
+}
+
+// ── MoveFileBtn (kept for backward compat) ────────────────────────────────────
+function MoveFileBtn({ file, fromFolderId, folders, onMove }) {
+  return <FileActionsMenu file={file} folderId={fromFolderId} folders={folders} onMove={onMove} onDelete={()=>{}} />;
 }
 
 // ─── COMMAND-K SEARCH ─────────────────────────────────────────────────────────
@@ -1730,39 +1876,38 @@ function CommandSearch({ folders, onOpenFile, onClose }) {
   );
 }
 
-function WebLinkModal({ folders, onClose, onGo, onNewFolder }) {
+function WebLinkModal({ folders, onClose, onGo, onNewFolder, onSaveDirect }) {
   const [linkUrl, setLinkUrl] = useState("");
-  const [linkFolder, setLinkFolder] = useState("");
+  const [linkFolder, setLinkFolder] = useState("__inbox__");
+  const realFolders = (folders||[]).filter(f=>f.id!=="inbox");
   return (
     <Modal onClose={onClose}>
-      <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:22, fontWeight:700, color:C.text, marginBottom:8 }}>Add a Website or YouTube Link</h2>
-      <p style={{ fontSize:13, color:C.muted, marginBottom:20 }}>Paste a YouTube URL or website link, then choose a folder to open it in.</p>
+      <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:22, fontWeight:700, color:C.text, marginBottom:8 }}>Add a YouTube or Website Link</h2>
+      <p style={{ fontSize:13, color:C.muted, marginBottom:16 }}>Paste a URL — AI will generate notes. Saves to your dashboard automatically.</p>
       <label style={{ fontSize:13, fontWeight:600, color:C.muted, display:"block", marginBottom:6 }}>URL</label>
       <input autoFocus value={linkUrl} onChange={e=>setLinkUrl(e.target.value)} placeholder="https://youtube.com/watch?v=…"
-        style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 14px", fontSize:14, outline:"none", marginBottom:16, color:C.text, background:C.bg }} />
-      <label style={{ fontSize:13, fontWeight:600, color:C.muted, display:"block", marginBottom:6 }}>SAVE TO FOLDER</label>
-      {folders.length === 0
-        ? <p style={{ fontSize:13, color:C.muted, marginBottom:16 }}>No folders yet — create one first.</p>
-        : <select value={linkFolder} onChange={e=>setLinkFolder(e.target.value)}
-            style={{ width:"100%", padding:"10px 14px", borderRadius:10, border:`1.5px solid ${C.border}`, background:C.bg, color:C.text, fontSize:14, marginBottom:20, outline:"none" }}>
-            <option value="">Select a folder…</option>
-            {folders.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
-          </select>
-      }
+        style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 14px", fontSize:14, outline:"none", marginBottom:16, color:C.text, background:C.bg, boxSizing:"border-box" }} />
+      <label style={{ fontSize:13, fontWeight:600, color:C.muted, display:"block", marginBottom:6 }}>SAVE TO</label>
+      <select value={linkFolder} onChange={e=>setLinkFolder(e.target.value)}
+        style={{ width:"100%", padding:"10px 14px", borderRadius:10, border:`1.5px solid ${C.border}`, background:C.bg, color:C.text, fontSize:14, marginBottom:20, outline:"none", boxSizing:"border-box" }}>
+        <option value="__inbox__">📋 My Dashboard (no folder)</option>
+        {realFolders.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
+      </select>
       <div style={{ display:"flex", gap:10 }}>
         <button onClick={onClose}
           style={{ flex:1, padding:"10px", border:`1.5px solid ${C.border}`, borderRadius:10, background:"transparent", fontSize:14, fontWeight:600, cursor:"pointer", color:C.text }}>Cancel</button>
-        <button disabled={!linkUrl.trim()||!linkFolder} onClick={()=>onGo(linkFolder)}
-          style={{ flex:2, padding:"10px", background:(linkUrl.trim()&&linkFolder)?C.accent:C.border, color:(linkUrl.trim()&&linkFolder)?"#fff":C.muted, border:"none", borderRadius:10, fontSize:14, fontWeight:600, cursor:(linkUrl.trim()&&linkFolder)?"pointer":"not-allowed" }}>
-          Open Folder →
+        <button disabled={!linkUrl.trim()} onClick={()=>{
+            if (!linkUrl.trim()) return;
+            if (linkFolder==="__inbox__") {
+              onSaveDirect && onSaveDirect(linkUrl.trim(), "");
+            } else {
+              onGo(linkFolder);
+            }
+          }}
+          style={{ flex:2, padding:"10px", background:linkUrl.trim()?C.accent:C.border, color:linkUrl.trim()?"#fff":C.muted, border:"none", borderRadius:10, fontSize:14, fontWeight:600, cursor:linkUrl.trim()?"pointer":"not-allowed" }}>
+          {linkFolder==="__inbox__" ? "Save to Dashboard →" : "Open Folder →"}
         </button>
       </div>
-      {folders.length === 0 && (
-        <button onClick={onNewFolder}
-          style={{ width:"100%", marginTop:10, padding:"10px", border:`1.5px solid ${C.border}`, borderRadius:10, background:"transparent", fontSize:14, fontWeight:600, cursor:"pointer", color:C.text }}>
-          + Create New Folder
-        </button>
-      )}
     </Modal>
   );
 }
@@ -1953,7 +2098,7 @@ export default function App() {
   if (screen === "file" && activeFile && activeFolder) {
     return <FileView file={activeFile} folder={activeFolder} allFiles={activeFolder.files}
       user={user} isGuest={isGuest}
-      onBack={() => { setScreen("folder"); setActiveFile(null); }}
+      onBack={() => { if (activeFolder?.id === "inbox") { setScreen("home"); setActiveFile(null); } else { setScreen("folder"); setActiveFile(null); } }}
       onUpdate={(u) => updateFile(activeFolder.id, u)} />;
   }
 
@@ -1974,9 +2119,14 @@ export default function App() {
       onUpdate={updateFolder}
       allFolders={folders}
       onMoveFile={(file, toFolderId) => {
-        const dest = folders.find(f=>f.id===toFolderId);
-        if (!dest) return;
-        setFoldersSave(folders.map(f=>f.id===toFolderId?{...dest,files:[...dest.files,{...file,_fileObj:FILE_STORE.get(file.id)||null}]}:f));
+        const src = folders.find(f => f.id === folder.id);
+        const dest = folders.find(f => f.id === toFolderId);
+        if (!src || !dest) return;
+        const fileWithBlob = {...file, _fileObj: FILE_STORE.get(file.id)||null};
+        const updatedSrc = {...src, files: src.files.filter(f => f.id !== file.id)};
+        const updatedDest = {...dest, files: [...dest.files, fileWithBlob]};
+        setFoldersSave(folders.map(f => f.id===src.id ? updatedSrc : f.id===dest.id ? updatedDest : f));
+        setActiveFolder(updatedSrc);
       }} />;
   }
 
@@ -2008,8 +2158,6 @@ export default function App() {
         isMobile={isMobile}
         user={user} isGuest={isGuest}
         onSignOut={isGuest ? handleGuestSignOut : () => signOut(auth)}
-        sidebarExpanded={sidebarExpanded}
-        onToggleSidebar={() => setSidebarExpanded(e => !e)}
       />
       {/* Command-K Search */}
       {showSearch && <CommandSearch folders={folders} onOpenFile={handleOpenFileFromSearch} onClose={()=>setShowSearch(false)} />}
@@ -2116,38 +2264,40 @@ export default function App() {
 
       {/* ── Record Audio Modal ── */}
       {showRecordModal && (
-        <Modal onClose={() => setShowRecordModal(false)}>
-          <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:22, fontWeight:700, color:C.text, marginBottom:8 }}>Record or Upload Audio</h2>
-          <p style={{ fontSize:13, color:C.muted, marginBottom:16 }}>Upload your audio file — it goes straight to your dashboard. No folder needed.</p>
-          <DashboardDropZone onFilesAdded={(files) => {
+        <AudioRecordModal
+          onClose={() => setShowRecordModal(false)}
+          onSave={(file) => {
             const inbox = folders.find(f=>f.id==="inbox") || {id:"inbox",name:"Inbox",color:"#6B4E8A",files:[]};
-            const added = Array.from(files).map(f => { const id=`fi${Date.now()}-${Math.random()}`; FILE_STORE.set(id,f); idbSave(id,f); return {id,name:f.name,type:f.type,size:f.size,colorIndex:0,notes:"",studyCards:[],uploadedAt:new Date().toLocaleDateString(),linkedFileIds:[],_fileObj:f}; });
-            setFoldersSave([{...inbox,files:[...inbox.files,...added]},...folders.filter(f=>f.id!=="inbox")]);
+            const id = `fi${Date.now()}-${Math.random()}`;
+            FILE_STORE.set(id, file); idbSave(id, file);
+            const newFile = { id, name:file.name||"Recording.wav", type:file.type, size:file.size,
+              colorIndex:0, notes:"", studyCards:[], uploadedAt:new Date().toLocaleDateString(), linkedFileIds:[], _fileObj:file };
+            setFoldersSave([{...inbox,files:[...inbox.files,newFile]}, ...folders.filter(f=>f.id!=="inbox")]);
             setShowRecordModal(false);
-          }} />
-        </Modal>
+          }}
+        />
       )}
 
       {/* ── Document Upload Modal ── */}
       {showUploadModal && (
         <Modal onClose={() => setShowUploadModal(false)}>
           <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:22, fontWeight:700, color:C.text, marginBottom:8 }}>Upload a Document</h2>
-          <p style={{ fontSize:13, color:C.muted, marginBottom:16 }}>Drop your file below — appears on your dashboard instantly. Move to a folder anytime.</p>
+          <p style={{ fontSize:13, color:C.muted, marginBottom:16 }}>Drop your file — it appears on your dashboard instantly. Move to a folder anytime.</p>
           <DashboardDropZone onFilesAdded={(files) => {
             const inbox = folders.find(f=>f.id==="inbox") || {id:"inbox",name:"Inbox",color:"#6B4E8A",files:[]};
             const added = Array.from(files).map(f => { const id=`fi${Date.now()}-${Math.random()}`; FILE_STORE.set(id,f); idbSave(id,f); return {id,name:f.name,type:f.type,size:f.size,colorIndex:0,notes:"",studyCards:[],uploadedAt:new Date().toLocaleDateString(),linkedFileIds:[],_fileObj:f}; });
-            setFoldersSave([{...inbox,files:[...inbox.files,...added]},...folders.filter(f=>f.id!=="inbox")]);
+            setFoldersSave([{...inbox,files:[...inbox.files,...added]}, ...folders.filter(f=>f.id!=="inbox")]);
             setShowUploadModal(false);
           }} />
-          {folders.filter(f=>f.id!=="inbox").length > 0 && <>
-            <p style={{ fontSize:12, color:C.muted, margin:"12px 0 6px", textAlign:"center" }}>Or save directly to a folder:</p>
-            <div style={{ display:"flex", flexDirection:"column", gap:4, maxHeight:140, overflowY:"auto" }}>
-              {folders.filter(f=>f.id!=="inbox").map(f => (
-                <button key={f.id} onClick={() => { setShowUploadModal(false); setActiveFolder(f); setScreen("folder"); }}
-                  style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px", borderRadius:10, border:`1px solid ${C.border}`, background:"transparent", cursor:"pointer" }}
+          {folders.filter(f=>f.id!=="inbox").length>0 && <>
+            <p style={{ fontSize:12, color:C.muted, margin:"10px 0 6px", textAlign:"center" }}>Or save directly into a folder:</p>
+            <div style={{ display:"flex", flexDirection:"column", gap:4, maxHeight:130, overflowY:"auto" }}>
+              {folders.filter(f=>f.id!=="inbox").map(f=>(
+                <button key={f.id} onClick={()=>{ setShowUploadModal(false); setActiveFolder(f); setScreen("folder"); }}
+                  style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px", borderRadius:10, border:`1px solid ${C.border}`, background:"transparent", cursor:"pointer", color:C.text }}
                   onMouseEnter={e=>e.currentTarget.style.background=C.accentL}
                   onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                  <div style={{ width:10, height:10, borderRadius:3, background:f.color }}/><span style={{ fontSize:13, color:C.text }}>{f.name}</span>
+                  <div style={{ width:10,height:10,borderRadius:3,background:f.color }}/>{f.name}
                 </button>
               ))}
             </div>
@@ -2160,6 +2310,18 @@ export default function App() {
         <WebLinkModal folders={folders} onClose={() => setShowWebLinkModal(false)}
           onGo={(folderId) => { setShowWebLinkModal(false); const found = folders.find(f=>f.id===folderId); if (found) { setActiveFolder(found); setScreen("folder"); }}}
           onNewFolder={() => { setShowWebLinkModal(false); setShowNewFolder(true); }}
+          onSaveDirect={(url) => {
+            const inbox = folders.find(f=>f.id==="inbox") || {id:"inbox",name:"Inbox",color:"#6B4E8A",files:[]};
+            const newDoc = { id:`fi${Date.now()}`, name:url.slice(0,60)||"Web / YouTube Notes",
+              type:"text/youtube", size:0, colorIndex:0, notes:"", studyCards:[],
+              uploadedAt:new Date().toLocaleDateString(), linkedFileIds:[], youtubeUrl:url };
+            setFoldersSave([{...inbox,files:[...inbox.files,newDoc]}, ...folders.filter(f=>f.id!=="inbox")]);
+            setShowWebLinkModal(false);
+            const restored = {...newDoc, _fileObj:null};
+            setActiveFile(restored);
+            setActiveFolder({...inbox,files:[...inbox.files,newDoc]});
+            setScreen("file");
+          }}
         />
       )}
 
@@ -4187,7 +4349,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFi
   const TABS = [{ id:"files", label:"Files", icon:I.file },{ id:"youtube", label:"YouTube", icon:I.link },{ id:"ai", label:"AI Assistant", icon:I.ai }];
 
   return (
-    <div className="page-with-ad" style={{ minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif" }}>
+    <div className="page-with-ad page-enter" style={{ minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif" }}>
       <style>{GS}</style>
       {/* Top bar */}
       <div className="app-header" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", height:64, display:"flex", alignItems:"center", gap:16 }}>
@@ -4295,14 +4457,11 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFi
                               style={{ display:"flex", alignItems:"center", gap:6, background:C.accentL, color:C.accent, border:`1px solid ${C.accentS}`, borderRadius:10, padding:"7px 16px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
                               <Icon d={I.edit} size={13} color={C.accent} /> Open
                             </button>
-                            <MoveFileBtn file={file} fromFolderId={folder.id} folders={allFolders||[]} onMove={(toFolderId) => {
-                              onUpdate({...folder,files:folder.files.filter(f=>f.id!==file.id)});
-                              onMoveFile && onMoveFile(file, toFolderId);
-                            }} />
-                            <button onClick={e=>{ e.stopPropagation(); idbDelete(file.id); FILE_STORE.delete(file.id); onUpdate({...folder,files:folder.files.filter(f=>f.id!==file.id)}); }} className="hov"
-                              style={{ background:"none", border:`1px solid ${C.border}`, cursor:"pointer", padding:"7px 9px", borderRadius:10, display:"flex", alignItems:"center" }}>
-                              <Icon d={I.trash} size={15} color={C.muted} />
-                            </button>
+                            <FileActionsMenu
+                              file={file} folderId={folder.id} folders={allFolders||[]}
+                              onMove={(toFolderId) => { onUpdate({...folder,files:folder.files.filter(f=>f.id!==file.id)}); onMoveFile&&onMoveFile(file,toFolderId); }}
+                              onDelete={() => { idbDelete(file.id); FILE_STORE.delete(file.id); onUpdate({...folder,files:folder.files.filter(f=>f.id!==file.id)}); }}
+                            />
                           </div>
                         </div>
                       </div>
