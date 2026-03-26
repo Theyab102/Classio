@@ -659,12 +659,15 @@ const THEMES = {
 };
 let _isDark = false;
 try { _isDark = localStorage.getItem("classio_dark")==="true"; } catch {}
+if (_isDark && typeof document !== "undefined") { document.body.classList.add("classio-dark"); }
 let _themeCallbacks = [];
 function _getTheme() { return _isDark ? THEMES.dark : THEMES.light; }
 function _toggleTheme() {
   _isDark = !_isDark;
   try { localStorage.setItem("classio_dark", String(_isDark)); } catch {}
   document.body.style.background = _getTheme().bg;
+  if (_isDark) { document.body.classList.add("classio-dark"); }
+  else { document.body.classList.remove("classio-dark"); }
   _themeCallbacks.forEach(fn => fn());
 }
 function useTheme() {
@@ -1473,7 +1476,7 @@ const DARK_CSS = `
 `;
 
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
-function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacter, onToggleTheme, onOpenSearch, isMobile, user, isGuest, onSignOut, sidebarExpanded, onToggleSidebar }) {
+function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacter, onToggleTheme, onOpenSearch, isMobile, user, isGuest, onSignOut }) {
   const T = useTheme();
   C = T; // keep C in sync
   const [expanded, setExpanded] = useState(false);
@@ -1578,17 +1581,18 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
           {expanded && <span style={{ fontSize:13, fontWeight:600 }}>{T.isDark ? "Light mode" : "Dark mode"}</span>}
         </button>
         {/* User */}
-        <button onClick={onOpenCharacter}
-          style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"8px 12px", borderRadius:10, border:"none", cursor:"pointer", background:"transparent" }}
+        <button onClick={onOpenCharacter} title="Profile"
+          style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:expanded?"8px 14px":"8px", borderRadius:10, border:"none", cursor:"pointer",
+            background:"transparent", justifyContent:expanded?"flex-start":"center" }}
           onMouseEnter={e=>{e.currentTarget.style.background=T.sidebarActive;}}
           onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
-          <div style={{ width:32, height:32, borderRadius:"50%", overflow:"hidden", border:`2px solid ${T.border}`, flexShrink:0 }}>
-            <MiniAvatar character={character||{}} size={32} />
+          <div style={{ width:30, height:30, borderRadius:"50%", overflow:"hidden", border:`2px solid ${T.border}`, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <MiniAvatar character={character||{}} size={30} />
           </div>
-          <div style={{ textAlign:"left", minWidth:0 }}>
+          {expanded && <div style={{ textAlign:"left", minWidth:0 }}>
             <p style={{ margin:0, fontSize:13, fontWeight:600, color:T.navText, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{character?.name || (user?.displayName?.split(" ")[0]) || (isGuest?"Guest":"You")}</p>
             <p style={{ margin:0, fontSize:11, color:T.muted }}>{isGuest?"Guest mode":"Student"}</p>
-          </div>
+          </div>}
         </button>
       </div>
     </div>
@@ -1720,7 +1724,6 @@ export default function App() {
   const [activeStudyGroup, setActiveStudyGroup] = useState(null); // group doc id
   const [showStudyGroupLobby, setShowStudyGroupLobby] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
-  const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [showRecordModal, setShowRecordModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showWebLinkModal, setShowWebLinkModal] = useState(false);
@@ -1902,7 +1905,14 @@ export default function App() {
     const folder = folders.find(f => f.id === activeFolder.id) || activeFolder;
     return <FolderView folder={folder} onBack={() => { setScreen("home"); setActiveFolder(null); }}
       onOpenFile={(f) => { const restored = {...f, _fileObj: f._fileObj || FILE_STORE.get(f.id) || null}; setActiveFile(restored); setScreen("file"); }}
-      onUpdate={updateFolder} />;
+      onUpdate={updateFolder}
+      allFolders={folders}
+      onMoveFile={(file, toFolderId) => {
+        const dest = folders.find(f=>f.id===toFolderId);
+        if (!dest) return;
+        const updatedDest = {...dest, files:[...dest.files, {...file, _fileObj: FILE_STORE.get(file.id)||null}]};
+        setFoldersSave(folders.map(f=>f.id===toFolderId ? updatedDest : f));
+      }} />;
   }
 
   const handleNavigate = (id) => {
@@ -1933,8 +1943,6 @@ export default function App() {
         isMobile={isMobile}
         user={user} isGuest={isGuest}
         onSignOut={isGuest ? handleGuestSignOut : () => signOut(auth)}
-        sidebarExpanded={sidebarExpanded}
-        onToggleSidebar={() => setSidebarExpanded(e => !e)}
       />
       {/* Command-K Search */}
       {showSearch && <CommandSearch folders={folders} onOpenFile={handleOpenFileFromSearch} onClose={()=>setShowSearch(false)} />}
@@ -1946,8 +1954,8 @@ export default function App() {
         onClose={() => setShowStudyGroupLobby(false)}
       />}
       {/* Main content area — offset by sidebar */}
-      <div style={{ flex:1, marginLeft:isMobile?0:(sidebarExpanded?220:60), marginBottom:isMobile?56:0, minHeight:"100vh", display:"flex", flexDirection:"column", background:T.bg }}>
-      <AdBanner />
+      <div style={{ flex:1, marginLeft:isMobile?0:60, marginBottom:isMobile?56:0, minHeight:"100vh", display:"flex", flexDirection:"column", background:T.bg }}>
+      <AdBanner sideW={sidebarExpanded ? 220 : 60} />
       <div style={{ maxWidth:960, margin:"0 auto", padding:isMobile?"12px 14px":"32px 36px", width:"100%", boxSizing:"border-box" }}>
 
         {/* ── Dashboard Header ── */}
@@ -2039,55 +2047,54 @@ export default function App() {
 
       {showHomeAI && <StandaloneAI onClose={() => setShowHomeAI(false)} />}
 
-      {/* ── Record Audio Modal ── */}
+      {/* ── Record Audio Modal — direct to inbox ── */}
       {showRecordModal && (
         <Modal onClose={() => setShowRecordModal(false)}>
           <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:22, fontWeight:700, color:C.text, marginBottom:8 }}>Record or Upload Audio</h2>
-          <p style={{ fontSize:13, color:C.muted, marginBottom:20 }}>Choose a folder to save your audio note into, then upload your file.</p>
-          <label style={{ fontSize:13, fontWeight:600, color:C.muted, display:"block", marginBottom:6 }}>SAVE TO FOLDER</label>
-          {folders.length === 0
-            ? <p style={{ fontSize:13, color:C.muted, marginBottom:16 }}>No folders yet — create one first.</p>
-            : <select defaultValue="" onChange={e => {
-                const folderId = e.target.value;
-                if (!folderId) return;
-                setShowRecordModal(false);
-                const found = folders.find(f=>f.id===folderId);
-                if (found) { setActiveFolder(found); setScreen("folder"); }
-              }} style={{ width:"100%", padding:"10px 14px", borderRadius:10, border:`1.5px solid ${C.border}`, background:C.bg, color:C.text, fontSize:14, marginBottom:16, outline:"none" }}>
-                <option value="">Select a folder…</option>
-                {folders.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
-              </select>
-          }
-          <button onClick={() => { setShowRecordModal(false); setShowNewFolder(true); }}
-            style={{ width:"100%", padding:"10px", border:`1.5px solid ${C.border}`, borderRadius:10, background:"transparent", fontSize:14, fontWeight:600, cursor:"pointer", color:C.text }}>
-            + Create New Folder First
-          </button>
+          <p style={{ fontSize:13, color:C.muted, marginBottom:20 }}>Upload your audio file — it goes straight to your dashboard. No folder needed.</p>
+          <DashboardDropZone onFilesAdded={(files) => {
+            const inbox = folders.find(f=>f.id==="inbox") || {id:"inbox",name:"Inbox",color:"#6B4E8A",files:[]};
+            const added = Array.from(files).map(f => {
+              const id = `fi${Date.now()}-${Math.random()}`;
+              FILE_STORE.set(id, f); idbSave(id, f);
+              return { id, name:f.name, type:f.type, size:f.size, colorIndex:0, notes:"", studyCards:[], uploadedAt:new Date().toLocaleDateString(), linkedFileIds:[], _fileObj:f };
+            });
+            const updated = { ...inbox, files:[...inbox.files, ...added] };
+            setFoldersSave([updated, ...folders.filter(f=>f.id!=="inbox")]);
+            setShowRecordModal(false);
+          }} />
         </Modal>
       )}
 
-      {/* ── Document Upload Modal ── */}
+      {/* ── Document Upload Modal — direct to inbox ── */}
       {showUploadModal && (
         <Modal onClose={() => setShowUploadModal(false)}>
           <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:22, fontWeight:700, color:C.text, marginBottom:8 }}>Upload a Document</h2>
-          <p style={{ fontSize:13, color:C.muted, marginBottom:20 }}>Select a folder to upload your PDF, Word doc, or PowerPoint into.</p>
-          <label style={{ fontSize:13, fontWeight:600, color:C.muted, display:"block", marginBottom:6 }}>SAVE TO FOLDER</label>
-          {folders.length === 0
-            ? <p style={{ fontSize:13, color:C.muted, marginBottom:16 }}>No folders yet — create one first.</p>
-            : <select defaultValue="" onChange={e => {
-                const folderId = e.target.value;
-                if (!folderId) return;
-                setShowUploadModal(false);
-                const found = folders.find(f=>f.id===folderId);
-                if (found) { setActiveFolder(found); setScreen("folder"); }
-              }} style={{ width:"100%", padding:"10px 14px", borderRadius:10, border:`1.5px solid ${C.border}`, background:C.bg, color:C.text, fontSize:14, marginBottom:16, outline:"none" }}>
-                <option value="">Select a folder…</option>
-                {folders.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
-              </select>
-          }
-          <button onClick={() => { setShowUploadModal(false); setShowNewFolder(true); }}
-            style={{ width:"100%", padding:"10px", border:`1.5px solid ${C.border}`, borderRadius:10, background:"transparent", fontSize:14, fontWeight:600, cursor:"pointer", color:C.text }}>
-            + Create New Folder First
-          </button>
+          <p style={{ fontSize:13, color:C.muted, marginBottom:20 }}>Drop your file below — it will appear on your dashboard instantly. You can move it to a folder anytime.</p>
+          <DashboardDropZone onFilesAdded={(files) => {
+            const inbox = folders.find(f=>f.id==="inbox") || {id:"inbox",name:"Inbox",color:"#6B4E8A",files:[]};
+            const added = Array.from(files).map(f => {
+              const id = `fi${Date.now()}-${Math.random()}`;
+              FILE_STORE.set(id, f); idbSave(id, f);
+              return { id, name:f.name, type:f.type, size:f.size, colorIndex:0, notes:"", studyCards:[], uploadedAt:new Date().toLocaleDateString(), linkedFileIds:[], _fileObj:f };
+            });
+            const updated = { ...inbox, files:[...inbox.files, ...added] };
+            setFoldersSave([updated, ...folders.filter(f=>f.id!=="inbox")]);
+            setShowUploadModal(false);
+          }} />
+          <p style={{ fontSize:12, color:C.muted, marginTop:12, textAlign:"center" }}>Or save directly to a folder:</p>
+          <div style={{ display:"flex", flexDirection:"column", gap:6, marginTop:8, maxHeight:160, overflowY:"auto" }}>
+            {folders.filter(f=>f.id!=="inbox").map(f => (
+              <button key={f.id} onClick={() => { setShowUploadModal(false); setActiveFolder(f); setScreen("folder"); }}
+                style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 14px", borderRadius:10, border:`1px solid ${C.border}`, background:"transparent", cursor:"pointer", textAlign:"left" }}
+                onMouseEnter={e=>e.currentTarget.style.background=C.accentL}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <div style={{ width:10, height:10, borderRadius:3, background:f.color, flexShrink:0 }}/>
+                <span style={{ fontSize:13, fontWeight:600, color:C.text }}>{f.name}</span>
+                <span style={{ fontSize:11, color:C.muted, marginLeft:"auto" }}>{f.files.length} files</span>
+              </button>
+            ))}
+          </div>
         </Modal>
       )}
 
@@ -2096,6 +2103,14 @@ export default function App() {
         <WebLinkModal folders={folders} onClose={() => setShowWebLinkModal(false)}
           onGo={(folderId) => { setShowWebLinkModal(false); const found = folders.find(f=>f.id===folderId); if (found) { setActiveFolder(found); setScreen("folder"); }}}
           onNewFolder={() => { setShowWebLinkModal(false); setShowNewFolder(true); }}
+          onSaveDirect={(url, notes) => {
+            const inbox = folders.find(f=>f.id==="inbox") || {id:"inbox",name:"Inbox",color:"#6B4E8A",files:[]};
+            const newDoc = { id:`fi${Date.now()}`, name:url.slice(0,60)||"Web Notes", type:"text/youtube", size:0,
+              colorIndex:0, notes:notes||"", studyCards:[], uploadedAt:new Date().toLocaleDateString(), linkedFileIds:[], youtubeUrl:url };
+            const updated = { ...inbox, files:[...inbox.files, newDoc] };
+            setFoldersSave([updated, ...folders.filter(f=>f.id!=="inbox")]);
+            setShowWebLinkModal(false);
+          }}
         />
       )}
 
@@ -2177,7 +2192,7 @@ export default function App() {
 }
 
 // ─── AD BANNER ───────────────────────────────────────────────────────────────
-function AdBanner() {
+function AdBanner({ sideW = 60 }) {
   useEffect(() => {
     if (!document.querySelector('script[src*="adsbygoogle"]')) {
       const script = document.createElement("script");
@@ -2193,7 +2208,7 @@ function AdBanner() {
   // Only show ad banner on mobile phones — desktop has more screen space
   return (
     <div className="ad-banner-wrap" style={{
-      position:"fixed", bottom:0, left: window.innerWidth > 600 ? 60 : 0, right:0, zIndex:999,
+      position:"fixed", bottom:0, left: window.innerWidth > 600 ? sideW : 0, right:0, zIndex:999, transition:"left .2s ease",
       height:isMobileAd ? 44 : 50, maxHeight:isMobileAd ? 44 : 50, overflow:"hidden",
       background:C.surface, borderTop:`1px solid ${C.border}`,
       display:"flex", alignItems:"center", justifyContent:"center",
@@ -4098,7 +4113,7 @@ function FileColorPicker({ file, onPick }) {
   );
 }
 
-function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
+function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFile }) {
   const [dragging, setDragging] = useState(false);
   const [tab, setTab] = useState("files");
   const [editingName, setEditingName] = useState(false);
@@ -4231,6 +4246,12 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate }) {
                               style={{ display:"flex", alignItems:"center", gap:6, background:C.accentL, color:C.accent, border:`1px solid ${C.accentS}`, borderRadius:10, padding:"7px 16px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
                               <Icon d={I.edit} size={13} color={C.accent} /> Open
                             </button>
+                            <MoveFileBtn file={file} fromFolderId={folder.id} folders={allFolders||[]} onMove={(toFolderId) => {
+                              const dest = (allFolders||[]).find(f=>f.id===toFolderId);
+                              if (!dest) return;
+                              onUpdate({...folder,files:folder.files.filter(f=>f.id!==file.id)});
+                              onMoveFile && onMoveFile(file, toFolderId);
+                            }} />
                             <button onClick={e=>{ e.stopPropagation(); idbDelete(file.id); FILE_STORE.delete(file.id); onUpdate({...folder,files:folder.files.filter(f=>f.id!==file.id)}); }} className="hov"
                               style={{ background:"none", border:`1px solid ${C.border}`, cursor:"pointer", padding:"7px 9px", borderRadius:10, display:"flex", alignItems:"center" }}>
                               <Icon d={I.trash} size={15} color={C.muted} />
