@@ -6291,12 +6291,13 @@ function VoiceNotesTab({ file, user, isGuest, notes, onNotesUpdate,
 // ─── CLASSIO STRUCTURED TABLE SYSTEM ─────────────────────────────────────────
 // AI returns JSON, frontend renders interactive table + optional chart
 function ClassioTable({ data, onClose }) {
-  if (!data?.table?.columns) return null;
-  const { columns, rows } = data.table;
-  const chart = data.chart;
   const [showChart, setShowChart] = useState(false);
   const chartRef = useRef(null);
   const chartInstance = useRef(null);
+
+  const columns = data?.table?.columns || [];
+  const rows = data?.table?.rows || [];
+  const chart = data?.chart || null;
 
   useEffect(() => {
     if (!showChart || !chart || !chartRef.current) return;
