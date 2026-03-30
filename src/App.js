@@ -1744,45 +1744,17 @@ const DARK_CSS = `
 `;
 
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
-function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacter, onToggleTheme, onOpenSearch, isMobile, user, isGuest, onSignOut, sidebarExpanded, onToggleSidebar,
-  // Context-aware props
-  folderTab, onFolderTab, fileTab, onFileTab, folder, file }) {
+function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacter, onToggleTheme, onOpenSearch, isMobile, user, isGuest, onSignOut, sidebarExpanded, onToggleSidebar }) {
   const T = useTheme();
   C = T; // keep C in sync
   const expanded = sidebarExpanded;
   const setExpanded = onToggleSidebar;
 
-  // Determine context
-  const context = screen === "file" ? "document" : screen === "folder" ? "folder" : "dashboard";
-
-  const DASH_NAV = [
+  const NAV = [
     { id:"home",     label:"Dashboard",   icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> },
     { id:"guides",   label:"Study Guides",icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 0 3-3h7z"/></svg> },
     { id:"settings", label:"Settings",    icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> },
   ];
-
-  const FOLDER_NAV = [
-    { id:"files",   label:"Files",        icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> },
-    { id:"youtube", label:"YouTube",      icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.54C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg> },
-    { id:"ai",      label:"AI Assistant", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a10 10 0 0 1 10 10c0 5.52-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg> },
-  ];
-
-  const DOC_NAV = [
-    { id:"view",    label:"View File",    icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> },
-    { id:"notes",   label:"Notes",        icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="17" y1="18" x2="3" y2="18"/></svg> },
-    { id:"cards",   label:"Flashcards",   icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/></svg> },
-    { id:"game",    label:"Quiz",         icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> },
-    { id:"ai",      label:"AI Chat",      icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> },
-    { id:"voice",   label:"Voice",        icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg> },
-    { id:"youtube", label:"YouTube",      icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.54C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg> },
-  ];
-
-  const NAV = context === "document" ? DOC_NAV : context === "folder" ? FOLDER_NAV : DASH_NAV;
-  const activeTab = context === "document" ? fileTab : context === "folder" ? folderTab : null;
-  const setActiveTab = context === "document" ? onFileTab : context === "folder" ? onFolderTab : null;
-
-  // Context label shown when collapsed  
-  const contextLabel = context === "document" ? "Document" : context === "folder" ? "Folder" : "Classio";
 
   if (isMobile) {
     // Mobile: bottom bar
@@ -1817,20 +1789,12 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
   const sideW = expanded ? 220 : 60;
 
   const NavBtn = ({ n }) => {
-    let active = false;
-    if (context === "dashboard") {
-      active = (n.id==="home" && homeTab!=="about" && homeTab!=="settings") ||
-               (n.id==="guides" && homeTab==="about") ||
-               (n.id==="settings" && homeTab==="settings");
-    } else {
-      active = activeTab === n.id;
-    }
-    const handleClick = () => {
-      if (context === "dashboard") { onNavigate(n.id); }
-      else if (setActiveTab) { setActiveTab(n.id); }
-    };
+    const active =
+      (n.id==="home" && (screen==="home"||screen==="folder"||screen==="file") && homeTab!=="about" && homeTab!=="settings") ||
+      (n.id==="guides" && homeTab==="about" && screen==="home") ||
+      (n.id==="settings" && homeTab==="settings" && screen==="home");
     return (
-      <button onClick={handleClick} title={n.label}
+      <button onClick={()=>onNavigate(n.id)} title={n.label}
         style={{ width:"100%", display:"flex", alignItems:"center", gap:12, padding:expanded?"9px 14px":"12px", borderRadius:10, border:"none", cursor:"pointer", position:"relative",
           background:active?T.sidebarActive:"transparent", color:active?T.text:T.muted,
           fontWeight:active?600:400, fontSize:14, transition:"all .12s", justifyContent:expanded?"flex-start":"center" }}
@@ -1838,44 +1802,20 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
         onMouseLeave={e=>{ if(!active){e.currentTarget.style.background="transparent"; e.currentTarget.style.color=T.muted;}}}>
         <span style={{ flexShrink:0, display:"flex" }}>{n.icon}</span>
         {expanded && <span style={{ whiteSpace:"nowrap" }}>{n.label}</span>}
-        {active && expanded && <div style={{ width:6, height:6, borderRadius:"50%", background:GRAD, marginLeft:"auto", boxShadow:"0 0 6px #7C5CFC88" }}/>}
-        {active && !expanded && <div style={{ position:"absolute", left:0, top:"50%", transform:"translateY(-50%)", width:3, height:20, borderRadius:"0 3px 3px 0", background:GRAD }}/>}
+      {active && expanded && <div style={{ width:6, height:6, borderRadius:"50%", background:GRAD, marginLeft:"auto", boxShadow:"0 0 6px #7C5CFC88" }}/>}
+      {active && !expanded && <div style={{ position:"absolute", left:0, top:"50%", transform:"translateY(-50%)", width:3, height:20, borderRadius:"0 3px 3px 0", background:GRAD }}/>}
       </button>
     );
   };
 
   return (
     <div style={{ width:sideW, minWidth:sideW, height:"100vh", background:T.sidebar, borderRight:`1px solid ${T.border}`, display:"flex", flexDirection:"column", position:"fixed", left:0, top:0, zIndex:200, transition:"width .2s ease", overflow:"hidden" }}>
-      {/* Logo / Context header */}
-      <div style={{ padding:"12px 0 10px", display:"flex", flexDirection:"column", alignItems:"center", borderBottom:`1px solid ${T.border}` }}>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"center", width:"100%", gap:8, padding:"0 8px" }}>
-          <div style={{ width:34, height:34, background:"linear-gradient(135deg,#7C5CFC,#3D5A80)", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", flexShrink:0 }}
-            onClick={()=>setExpanded(e=>!e)}>
-            <Icon d={I.sparkle} size={15} color="#fff" sw={2}/>
-          </div>
-          {expanded && context !== "dashboard" && (
-            <button onClick={()=>onNavigate("home")} title="Back to dashboard"
-              style={{ marginLeft:"auto", background:"none", border:"none", cursor:"pointer", color:T.muted, display:"flex", alignItems:"center", gap:4, fontSize:11, fontWeight:600, padding:"4px 6px", borderRadius:6 }}
-              onMouseEnter={e=>e.currentTarget.style.color=T.text}
-              onMouseLeave={e=>e.currentTarget.style.color=T.muted}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-              Home
-            </button>
-          )}
+      {/* Logo */}
+      <div style={{ padding:"16px 0 12px", display:"flex", flexDirection:"column", alignItems:"center", borderBottom:`1px solid ${T.border}`, cursor:"pointer" }} onClick={()=>setExpanded(e=>!e)}>
+        <div style={{ width:36, height:36, background:"linear-gradient(135deg,#7C5CFC,#3D5A80)", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <Icon d={I.sparkle} size={16} color="#fff" sw={2}/>
         </div>
-        {expanded && (
-          <div style={{ marginTop:8, textAlign:"center", padding:"0 8px" }}>
-            <span style={{ fontFamily:"'Fraunces',serif", fontSize:15, fontWeight:700, color:T.navText }}>
-              {context === "document" ? (file?.name?.split(".")[0]?.slice(0,18) || "Document") :
-               context === "folder"   ? (folder?.name?.slice(0,18) || "Folder") : "Classio"}
-            </span>
-            {context !== "dashboard" && (
-              <p style={{ margin:"1px 0 0", fontSize:10, color:T.muted, textTransform:"uppercase", letterSpacing:.8 }}>
-                {context === "document" ? "Document" : "Folder"}
-              </p>
-            )}
-          </div>
-        )}
+        {expanded && <span style={{ fontFamily:"'Fraunces',serif", fontSize:16, fontWeight:700, color:T.navText, marginTop:8 }}>Classio</span>}
       </div>
 
       {/* Search bar */}
@@ -2300,8 +2240,6 @@ export default function App() {
   const [showStudyGroupLobby, setShowStudyGroupLobby] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
-  const [folderTab, setFolderTab] = useState("files");
-  const [fileTab, setFileTab] = useState("view");
 
   // ── Session Memory & Study Analytics ──────────────────────────────────────
   const [studyStreak, setStudyStreak] = useState(() => {
@@ -2509,9 +2447,6 @@ export default function App() {
         onSignOut={isGuest ? handleGuestSignOut : () => signOut(auth)}
         sidebarExpanded={sidebarExpanded}
         onToggleSidebar={setSidebarExpanded}
-        folderTab={folderTab} onFolderTab={setFolderTab}
-        fileTab={fileTab} onFileTab={setFileTab}
-        folder={activeFolder} file={activeFile}
       />
       {showSearch && <CommandSearch folders={folders} onOpenFile={handleOpenFileFromSearch2} onClose={()=>setShowSearch(false)} />}
       {showCharacter && <CharacterModal character={character} onChange={c => { setCharacter(c); localStorage.setItem("classio_char", JSON.stringify(c)); }} onClose={() => setShowCharacter(false)} />}
@@ -2526,8 +2461,7 @@ export default function App() {
       <SidebarWrapper>
         <FileView file={activeFile} folder={activeFolder} allFiles={activeFolder.files}
           user={user} isGuest={isGuest}
-          activeTab={fileTab} onTabChange={setFileTab}
-          onBack={() => { if (activeFolder?.id === "inbox") { setScreen("home"); setActiveFile(null); } else { setScreen("folder"); setActiveFile(null); setFileTab("view"); } }}
+          onBack={() => { if (activeFolder?.id === "inbox") { setScreen("home"); setActiveFile(null); } else { setScreen("folder"); setActiveFile(null); } }}
           onUpdate={(u) => updateFile(activeFolder.id, u)} />
       </SidebarWrapper>
     );
@@ -2547,10 +2481,9 @@ export default function App() {
     const folder = folders.find(f => f.id === activeFolder.id) || activeFolder;
     return (
       <SidebarWrapper>
-        <FolderView folder={folder} onBack={() => { setScreen("home"); setActiveFolder(null); setFolderTab("files"); }}
-          onOpenFile={(f) => { const restored = {...f, _fileObj: f._fileObj || FILE_STORE.get(f.id) || null}; setActiveFile(restored); setScreen("file"); setFileTab("view"); }}
+        <FolderView folder={folder} onBack={() => { setScreen("home"); setActiveFolder(null); }}
+          onOpenFile={(f) => { const restored = {...f, _fileObj: f._fileObj || FILE_STORE.get(f.id) || null}; setActiveFile(restored); setScreen("file"); }}
           onUpdate={updateFolder}
-          activeTab={folderTab}
           allFolders={folders}
           onMoveFile={(file, toFolderId) => {
             const src = folders.find(f => f.id === folder.id);
@@ -2596,9 +2529,6 @@ export default function App() {
         onSignOut={isGuest ? handleGuestSignOut : () => signOut(auth)}
         sidebarExpanded={sidebarExpanded}
         onToggleSidebar={setSidebarExpanded}
-        folderTab={folderTab} onFolderTab={setFolderTab}
-        fileTab={fileTab} onFileTab={setFileTab}
-        folder={activeFolder} file={activeFile}
       />
       {/* Command-K Search */}
       {showSearch && <CommandSearch folders={folders} onOpenFile={handleOpenFileFromSearch} onClose={()=>setShowSearch(false)} />}
@@ -4850,9 +4780,9 @@ function FileColorPicker({ file, onPick }) {
   );
 }
 
-function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFile, activeTab }) {
+function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFile }) {
   const [dragging, setDragging] = useState(false);
-  const tab = activeTab || "files";
+  const [tab, setTab] = useState("files");
   const [editingName, setEditingName] = useState(false);
   const [folderName, setFolderName] = useState(folder.name);
   const [showFolderColorPicker, setShowFolderColorPicker] = useState(false);
@@ -4924,7 +4854,16 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFi
           />
         </div>
       )}
-      {/* Tabs now in sidebar */}
+      {/* Tabs */}
+      <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 12px", display:"flex", gap:2, overflowX:"auto" }}>
+        {TABS.map(t => (
+          <button key={t.id} className="tab" onClick={() => setTab(t.id)}
+            style={{ display:"flex", alignItems:"center", gap:6, padding:"12px 14px", border:"none", borderBottom:tab===t.id?`2px solid ${C.accent}`:"2px solid transparent", background:"none", cursor:"pointer", fontSize:13, fontWeight:tab===t.id?700:500, color:tab===t.id?C.accent:C.muted, marginBottom:-1, whiteSpace:"nowrap", flexShrink:0 }}>
+            <Icon d={t.icon} size={14} color={tab===t.id?C.accent:C.muted} />
+            <span className="tab-label">{t.label}</span>
+          </button>
+        ))}
+      </div>
 
       <div className="page-inner" style={{ maxWidth:860, margin:"0 auto", padding:"32px 24px" }}>
         {tab === "files" && (
@@ -5005,9 +4944,8 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFi
 }
 
 // ─── FILE VIEW ────────────────────────────────────────────────────────────────
-function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate, activeTab, onTabChange }) {
-  const tab = activeTab || "view";
-  const setTab = onTabChange || (() => {});
+function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
+  const [tab, setTab] = useState("view");
   const TABS = [
     {id:"view",    label:"View File",       icon:I.file},
     {id:"notes",   label:"Notes",           icon:I.notes},
@@ -5054,7 +4992,22 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate, act
           <span style={{ fontSize:15, fontWeight:600, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:360 }}>{file.name}</span>
         </div>
       </div>
-      {/* Tabs now controlled by context sidebar */}
+      <div className="nav-tabs" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 16px", display:"flex", gap:2, overflowX:"auto" }}>
+        {TABS.map(t => (
+          <button key={t.id} className="nav-tab-btn" onClick={() => handleTabChange(t.id)}
+            style={{ display:"flex", alignItems:"center", gap:7, padding:"14px 16px", border:"none",
+              borderBottom: tab===t.id ? "2.5px solid transparent" : "2.5px solid transparent",
+              backgroundImage: tab===t.id ? "none" : "none",
+              borderBottomColor: tab===t.id ? "transparent" : "transparent",
+              background:"none", cursor:"pointer", fontSize:13, fontWeight:tab===t.id?700:500,
+              color:tab===t.id?C.accent:C.muted, marginBottom:-1, position:"relative",
+              whiteSpace:"nowrap", flexShrink:0 }}>
+            <Icon d={t.icon} size={14} color={tab===t.id?C.accent:C.muted} />
+            {t.label}
+            {tab===t.id && <div style={{ position:"absolute", bottom:0, left:0, right:0, height:2.5, background:GRAD, borderRadius:"2px 2px 0 0" }}/>}
+          </button>
+        ))}
+      </div>
       {tab==="view"
         ? <ViewTab file={file} onUpdate={onUpdate} />
         : <div className="page-inner" style={{ maxWidth:900, margin:"0 auto", padding:"32px 24px" }}>
@@ -6338,12 +6291,13 @@ function VoiceNotesTab({ file, user, isGuest, notes, onNotesUpdate,
 // ─── CLASSIO STRUCTURED TABLE SYSTEM ─────────────────────────────────────────
 // AI returns JSON, frontend renders interactive table + optional chart
 function ClassioTable({ data, onClose }) {
-  if (!data?.table?.columns) return null;
-  const { columns, rows } = data.table;
-  const chart = data.chart;
   const [showChart, setShowChart] = useState(false);
   const chartRef = useRef(null);
   const chartInstance = useRef(null);
+
+  const columns = data?.table?.columns || [];
+  const rows = data?.table?.rows || [];
+  const chart = data?.chart || null;
 
   useEffect(() => {
     if (!showChart || !chart || !chartRef.current) return;
