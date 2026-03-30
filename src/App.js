@@ -2240,6 +2240,8 @@ export default function App() {
   const [showStudyGroupLobby, setShowStudyGroupLobby] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
+  const [folderTab, setFolderTab] = useState("files");
+  const [fileTab, setFileTab] = useState("view");
 
   // ── Session Memory & Study Analytics ──────────────────────────────────────
   const [studyStreak, setStudyStreak] = useState(() => {
@@ -2447,6 +2449,9 @@ export default function App() {
         onSignOut={isGuest ? handleGuestSignOut : () => signOut(auth)}
         sidebarExpanded={sidebarExpanded}
         onToggleSidebar={setSidebarExpanded}
+        folderTab={folderTab} onFolderTab={setFolderTab}
+        fileTab={fileTab} onFileTab={setFileTab}
+        folder={activeFolder} file={activeFile}
       />
       {showSearch && <CommandSearch folders={folders} onOpenFile={handleOpenFileFromSearch2} onClose={()=>setShowSearch(false)} />}
       {showCharacter && <CharacterModal character={character} onChange={c => { setCharacter(c); localStorage.setItem("classio_char", JSON.stringify(c)); }} onClose={() => setShowCharacter(false)} />}
@@ -2461,7 +2466,8 @@ export default function App() {
       <SidebarWrapper>
         <FileView file={activeFile} folder={activeFolder} allFiles={activeFolder.files}
           user={user} isGuest={isGuest}
-          onBack={() => { if (activeFolder?.id === "inbox") { setScreen("home"); setActiveFile(null); } else { setScreen("folder"); setActiveFile(null); } }}
+          activeTab={fileTab} onTabChange={setFileTab}
+          onBack={() => { if (activeFolder?.id === "inbox") { setScreen("home"); setActiveFile(null); } else { setScreen("folder"); setActiveFile(null); setFileTab("view"); } }}
           onUpdate={(u) => updateFile(activeFolder.id, u)} />
       </SidebarWrapper>
     );
@@ -2482,8 +2488,9 @@ export default function App() {
     return (
       <SidebarWrapper>
         <FolderView folder={folder} onBack={() => { setScreen("home"); setActiveFolder(null); }}
-          onOpenFile={(f) => { const restored = {...f, _fileObj: f._fileObj || FILE_STORE.get(f.id) || null}; setActiveFile(restored); setScreen("file"); }}
+          onOpenFile={(f) => { const restored = {...f, _fileObj: f._fileObj || FILE_STORE.get(f.id) || null}; setActiveFile(restored); setScreen("file"); setFileTab("view"); }}
           onUpdate={updateFolder}
+          activeTab={folderTab}
           allFolders={folders}
           onMoveFile={(file, toFolderId) => {
             const src = folders.find(f => f.id === folder.id);
@@ -2529,6 +2536,9 @@ export default function App() {
         onSignOut={isGuest ? handleGuestSignOut : () => signOut(auth)}
         sidebarExpanded={sidebarExpanded}
         onToggleSidebar={setSidebarExpanded}
+        folderTab={folderTab} onFolderTab={setFolderTab}
+        fileTab={fileTab} onFileTab={setFileTab}
+        folder={activeFolder} file={activeFile}
       />
       {/* Command-K Search */}
       {showSearch && <CommandSearch folders={folders} onOpenFile={handleOpenFileFromSearch} onClose={()=>setShowSearch(false)} />}
@@ -4780,9 +4790,9 @@ function FileColorPicker({ file, onPick }) {
   );
 }
 
-function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFile }) {
+function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFile, activeTab }) {
   const [dragging, setDragging] = useState(false);
-  const [tab, setTab] = useState("files");
+  const tab = activeTab || "files";
   const [editingName, setEditingName] = useState(false);
   const [folderName, setFolderName] = useState(folder.name);
   const [showFolderColorPicker, setShowFolderColorPicker] = useState(false);
@@ -4855,15 +4865,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFi
         </div>
       )}
       {/* Tabs */}
-      <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 12px", display:"flex", gap:2, overflowX:"auto" }}>
-        {TABS.map(t => (
-          <button key={t.id} className="tab" onClick={() => setTab(t.id)}
-            style={{ display:"flex", alignItems:"center", gap:6, padding:"12px 14px", border:"none", borderBottom:tab===t.id?`2px solid ${C.accent}`:"2px solid transparent", background:"none", cursor:"pointer", fontSize:13, fontWeight:tab===t.id?700:500, color:tab===t.id?C.accent:C.muted, marginBottom:-1, whiteSpace:"nowrap", flexShrink:0 }}>
-            <Icon d={t.icon} size={14} color={tab===t.id?C.accent:C.muted} />
-            <span className="tab-label">{t.label}</span>
-          </button>
-        ))}
-      </div>
+      {/* Tabs in sidebar */}
 
       <div className="page-inner" style={{ maxWidth:860, margin:"0 auto", padding:"32px 24px" }}>
         {tab === "files" && (
@@ -4944,8 +4946,9 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFi
 }
 
 // ─── FILE VIEW ────────────────────────────────────────────────────────────────
-function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
-  const [tab, setTab] = useState("view");
+function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate, activeTab, onTabChange }) {
+  const tab = activeTab || "view";
+  const setTab = onTabChange || (() => {});
   const TABS = [
     {id:"view",    label:"View File",       icon:I.file},
     {id:"notes",   label:"Notes",           icon:I.notes},
@@ -4992,22 +4995,7 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate }) {
           <span style={{ fontSize:15, fontWeight:600, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:360 }}>{file.name}</span>
         </div>
       </div>
-      <div className="nav-tabs" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 16px", display:"flex", gap:2, overflowX:"auto" }}>
-        {TABS.map(t => (
-          <button key={t.id} className="nav-tab-btn" onClick={() => handleTabChange(t.id)}
-            style={{ display:"flex", alignItems:"center", gap:7, padding:"14px 16px", border:"none",
-              borderBottom: tab===t.id ? "2.5px solid transparent" : "2.5px solid transparent",
-              backgroundImage: tab===t.id ? "none" : "none",
-              borderBottomColor: tab===t.id ? "transparent" : "transparent",
-              background:"none", cursor:"pointer", fontSize:13, fontWeight:tab===t.id?700:500,
-              color:tab===t.id?C.accent:C.muted, marginBottom:-1, position:"relative",
-              whiteSpace:"nowrap", flexShrink:0 }}>
-            <Icon d={t.icon} size={14} color={tab===t.id?C.accent:C.muted} />
-            {t.label}
-            {tab===t.id && <div style={{ position:"absolute", bottom:0, left:0, right:0, height:2.5, background:GRAD, borderRadius:"2px 2px 0 0" }}/>}
-          </button>
-        ))}
-      </div>
+      {/* Tabs in sidebar */}
       {tab==="view"
         ? <ViewTab file={file} onUpdate={onUpdate} />
         : <div className="page-inner" style={{ maxWidth:900, margin:"0 auto", padding:"32px 24px" }}>
@@ -6291,13 +6279,12 @@ function VoiceNotesTab({ file, user, isGuest, notes, onNotesUpdate,
 // ─── CLASSIO STRUCTURED TABLE SYSTEM ─────────────────────────────────────────
 // AI returns JSON, frontend renders interactive table + optional chart
 function ClassioTable({ data, onClose }) {
+  if (!data?.table?.columns) return null;
+  const { columns, rows } = data.table;
+  const chart = data.chart;
   const [showChart, setShowChart] = useState(false);
   const chartRef = useRef(null);
   const chartInstance = useRef(null);
-
-  const columns = data?.table?.columns || [];
-  const rows = data?.table?.rows || [];
-  const chart = data?.chart || null;
 
   useEffect(() => {
     if (!showChart || !chart || !chartRef.current) return;
