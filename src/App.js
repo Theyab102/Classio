@@ -891,21 +891,100 @@ function MathText({ text, style }) {
   );
 }
 
-const Fmt = ({ text }) => (
-  <div>{(text||"").split('\n').map((line, i) => {
+// ─── MERMAID DIAGRAM RENDERER ────────────────────────────────────────────────
+function MermaidBlock({ code }) {
+  const ref = useRef(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    if (!code || !ref.current) return;
+    const render = async () => {
+      try {
+        if (!window.mermaid) {
+          await new Promise((res, rej) => {
+            const s = document.createElement("script");
+            s.src = "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js";
+            s.onload = res; s.onerror = rej;
+            document.head.appendChild(s);
+          });
+          window.mermaid.initialize({ startOnLoad:false, theme:"default", securityLevel:"loose" });
+        }
+        const id = "mermaid-" + Math.random().toString(36).slice(2);
+        const { svg } = await window.mermaid.render(id, code.trim());
+        if (ref.current) ref.current.innerHTML = svg;
+      } catch(e) {
+        setError(true);
+      }
+    };
+    render();
+  }, [code]);
+
+  if (error) return (
+    <div style={{ background:C.warmL, border:`1px solid ${C.warm}33`, borderRadius:10, padding:"10px 14px", fontSize:12, color:C.muted }}>
+      <p style={{ margin:0, fontWeight:600 }}>Diagram syntax error — raw code:</p>
+      <pre style={{ margin:"6px 0 0", fontSize:11, overflow:"auto" }}>{code}</pre>
+    </div>
+  );
+
+  return (
+    <div style={{ background:C.surface, border:`1.5px solid ${C.accentS}`, borderRadius:14, padding:"16px", margin:"8px 0", overflow:"auto" }}>
+      <p style={{ fontSize:10, fontWeight:700, color:C.accent, letterSpacing:.8, marginBottom:8 }}>📊 DIAGRAM</p>
+      <div ref={ref} style={{ minHeight:60 }}/>
+    </div>
+  );
+}
+
+// Upgraded Fmt — handles mermaid blocks, tables, headings, bullets
+const Fmt = ({ text }) => {
+  if (!text) return null;
+  const lines = text.split('\n');
+  const elements = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    // Mermaid code block
+    if (line.trim().startsWith("```mermaid")) {
+      const mermaidLines = [];
+      i++;
+      while (i < lines.length && !lines[i].trim().startsWith("```")) {
+        mermaidLines.push(lines[i]);
+        i++;
+      }
+      elements.push(<MermaidBlock key={`m${i}`} code={mermaidLines.join('\n')} />);
+      i++;
+      continue;
+    }
+    // Generic code block
+    if (line.trim().startsWith("```")) {
+      const codeLines = [];
+      i++;
+      while (i < lines.length && !lines[i].trim().startsWith("```")) {
+        codeLines.push(lines[i]);
+        i++;
+      }
+      elements.push(
+        <pre key={`c${i}`} style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 14px", fontSize:12, overflowX:"auto", margin:"6px 0", color:C.text }}>
+          {codeLines.join('\n')}
+        </pre>
+      );
+      i++;
+      continue;
+    }
     const clean = line.replace(/^#+\s*/, "").replace(/\*\*/g, "").replace(/\*/g, "").trim();
-    if (!line.trim()) return <br key={i} />;
+    if (!line.trim()) { elements.push(<br key={i} />); i++; continue; }
     if (/^[A-Z][A-Z\s]{3,}$/.test(clean) || line.startsWith('# ') || line.startsWith('## '))
-      return <p key={i} style={{ fontWeight:700, fontSize:14, marginBottom:4, marginTop:12, color:"#1a202c", letterSpacing:.3 }}><MathText text={clean} /></p>;
+      { elements.push(<p key={i} style={{ fontWeight:700, fontSize:14, marginBottom:4, marginTop:12, color:"#1a202c", letterSpacing:.3 }}><MathText text={clean} /></p>); i++; continue; }
     if (/^\*\*[^*]+\*\*$/.test(line.trim()))
-      return <p key={i} style={{ fontWeight:700, fontSize:14, marginBottom:4, marginTop:10, color:"#2d3748" }}><MathText text={clean} /></p>;
+      { elements.push(<p key={i} style={{ fontWeight:700, fontSize:14, marginBottom:4, marginTop:10, color:"#2d3748" }}><MathText text={clean} /></p>); i++; continue; }
     if (line.startsWith('• ') || line.startsWith('- ') || line.startsWith('* ') || line.startsWith('· '))
-      return <p key={i} style={{ paddingLeft:14, marginBottom:3, display:"flex", gap:6, lineHeight:1.6 }}><span style={{flexShrink:0, color:"#666"}}>•</span><span><MathText text={clean.replace(/^[•\-\*·]\s*/,"")} /></span></p>;
+      { elements.push(<p key={i} style={{ paddingLeft:14, marginBottom:3, display:"flex", gap:6, lineHeight:1.6 }}><span style={{flexShrink:0, color:"#666"}}>•</span><span><MathText text={clean.replace(/^[•\-\*·]\s*/,"")} /></span></p>); i++; continue; }
     if (/^\d+\.\s/.test(line))
-      return <p key={i} style={{ paddingLeft:14, marginBottom:3, lineHeight:1.6 }}><MathText text={clean} /></p>;
-    return <p key={i} style={{ marginBottom:3, lineHeight:1.6 }}><MathText text={clean} /></p>;
-  })}</div>
-);
+      { elements.push(<p key={i} style={{ paddingLeft:14, marginBottom:3, lineHeight:1.6 }}><MathText text={clean} /></p>); i++; continue; }
+    elements.push(<p key={i} style={{ marginBottom:3, lineHeight:1.6 }}><MathText text={clean} /></p>);
+    i++;
+  }
+  return <div>{elements}</div>;
+};
 
 // ─── GLOBAL STYLES ────────────────────────────────────────────────────────────
 const GS = `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Fraunces:wght@400;600;700&display=swap');
@@ -1371,6 +1450,55 @@ function SettingsTab({ onToggleTheme }) {
         </div>
       </Section>
 
+      {/* Study Analytics */}
+      <Section title="📊 Study Analytics">
+        {(() => {
+          // Read streak + card mastery stats
+          const streak = (() => { try { return JSON.parse(localStorage.getItem("classio_streak")||"{}").streak||1; } catch { return 1; } })();
+          const totalMastered = (() => {
+            let count = 0;
+            try {
+              for (const key of Object.keys(localStorage)) {
+                if (!key.startsWith("saved_notes_")) continue; // skip
+              }
+              // Count known cards from all saved note entries
+              for (const key of Object.keys(localStorage)) {
+                if (key.startsWith("classio_known_")) {
+                  const obj = JSON.parse(localStorage.getItem(key)||"{}");
+                  count += Object.values(obj).filter(Boolean).length;
+                }
+              }
+            } catch {}
+            return count;
+          })();
+          const daysActive = (() => { try { return parseInt(localStorage.getItem("classio_days_active")||"1"); } catch { return 1; } })();
+
+          const stats = [
+            { label:"🔥 Current Streak", value:`${streak} day${streak!==1?"s":""}`, color:"#FF6B35" },
+            { label:"🎯 Cards Mastered", value:`${totalMastered} cards`, color:"#4A7C59" },
+            { label:"📅 Days Active", value:`${daysActive} days`, color:"#7C5CFC" },
+          ];
+          return (
+            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+              {stats.map(s=>(
+                <div key={s.label} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 14px", background:T.bg, borderRadius:12, border:`1px solid ${T.border}` }}>
+                  <span style={{ fontSize:13, color:T.text, fontWeight:500 }}>{s.label}</span>
+                  <span style={{ fontSize:14, fontWeight:700, color:s.color }}>{s.value}</span>
+                </div>
+              ))}
+              {streak >= 3 && (
+                <div style={{ background:"linear-gradient(135deg,#FF6B3522,#FF450011)", border:"1.5px solid #FF6B3533", borderRadius:12, padding:"10px 14px", display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ fontSize:20 }}>🏆</span>
+                  <p style={{ margin:0, fontSize:13, fontWeight:600, color:"#FF6B35" }}>
+                    {streak >= 30 ? "Legendary 30-day streak!" : streak >= 14 ? "Two weeks strong!" : streak >= 7 ? "One week streak!" : `${streak} day streak — keep going!`}
+                  </p>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </Section>
+
       {/* Data */}
       <Section title="Data & Storage">
         <p style={{ margin:"0 0 14px", fontSize:13, color:T.muted, lineHeight:1.6 }}>
@@ -1553,8 +1681,8 @@ function OnboardingTutorial({ onDone }) {
             border:"none", background:"none", cursor:"pointer",
             fontSize:13, fontWeight:600, color:C.muted }}>Skip</button>
           <button onClick={next} style={{ flex:1, padding:"11px", borderRadius:10,
-            border:"none", background:C.accent, color:"#fff", cursor:"pointer",
-            fontSize:14, fontWeight:700, boxShadow:`0 4px 14px ${C.accentS}` }}>
+            border:"none", background:GRAD, color:"#fff", cursor:"pointer",
+            fontSize:14, fontWeight:700, boxShadow:"0 4px 14px rgba(124,92,252,.3)" }}>
             {isLast ? "Get Started 🚀" : "Next →"}
           </button>
         </div>
@@ -2112,6 +2240,23 @@ export default function App() {
   const [showStudyGroupLobby, setShowStudyGroupLobby] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
+
+  // ── Session Memory & Study Analytics ──────────────────────────────────────
+  const [studyStreak, setStudyStreak] = useState(() => {
+    try {
+      const d = JSON.parse(localStorage.getItem("classio_streak")||"{}");
+      const today = new Date().toDateString();
+      const yesterday = new Date(Date.now()-86400000).toDateString();
+      if (d.lastDay === today) return d.streak || 1;
+      if (d.lastDay === yesterday) {
+        const newStreak = (d.streak||1) + 1;
+        localStorage.setItem("classio_streak", JSON.stringify({streak:newStreak,lastDay:today}));
+        return newStreak;
+      }
+      localStorage.setItem("classio_streak", JSON.stringify({streak:1,lastDay:today}));
+      return 1;
+    } catch { return 1; }
+  });
   const [showRecordModal, setShowRecordModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showWebLinkModal, setShowWebLinkModal] = useState(false);
@@ -2272,11 +2417,54 @@ export default function App() {
     onSignIn={() => signInWithPopup(auth, googleProvider).catch(console.error)}
     onGuest={handleGuest} />;
 
+  const handleNavigate2 = (id) => {
+    if (id==="home") { setHomeTab("folders"); setScreen("home"); setActiveFolder(null); setActiveFile(null); }
+    else if (id==="guides") { setHomeTab("about"); setScreen("home"); setActiveFolder(null); setActiveFile(null); }
+    else if (id==="settings") { setHomeTab("settings"); setScreen("home"); setActiveFolder(null); setActiveFile(null); }
+  };
+
+  const handleOpenFileFromSearch2 = (fi, folder) => {
+    setActiveFolder(folder);
+    const restored = {...fi, _fileObj: fi._fileObj||FILE_STORE.get(fi.id)||null};
+    setActiveFile(restored);
+    setScreen("file");
+  };
+
+  // ── Persistent sidebar wrapper for sub-screens ──────────────────────────
+  const SidebarWrapper = ({ children }) => (
+    <div style={{ minHeight:"100vh", background:T.bg, fontFamily:"'DM Sans',sans-serif", display:"flex", width:"100%" }}>
+      <style>{GS}</style>
+      <style>{DARK_CSS}</style>
+      <ClassioSidebar
+        screen={screen} homeTab={homeTab}
+        onNavigate={handleNavigate2}
+        character={character}
+        onOpenCharacter={() => setShowCharacter(true)}
+        onToggleTheme={_toggleTheme}
+        onOpenSearch={() => setShowSearch(true)}
+        isMobile={isMobile}
+        user={user} isGuest={isGuest}
+        onSignOut={isGuest ? handleGuestSignOut : () => signOut(auth)}
+        sidebarExpanded={sidebarExpanded}
+        onToggleSidebar={setSidebarExpanded}
+      />
+      {showSearch && <CommandSearch folders={folders} onOpenFile={handleOpenFileFromSearch2} onClose={()=>setShowSearch(false)} />}
+      {showCharacter && <CharacterModal character={character} onChange={c => { setCharacter(c); localStorage.setItem("classio_char", JSON.stringify(c)); }} onClose={() => setShowCharacter(false)} />}
+      <div style={{ flex:1, marginLeft:isMobile?0:(sidebarExpanded?220:60), marginBottom:isMobile?56:0 }}>
+        {children}
+      </div>
+    </div>
+  );
+
   if (screen === "file" && activeFile && activeFolder) {
-    return <FileView file={activeFile} folder={activeFolder} allFiles={activeFolder.files}
-      user={user} isGuest={isGuest}
-      onBack={() => { if (activeFolder?.id === "inbox") { setScreen("home"); setActiveFile(null); } else { setScreen("folder"); setActiveFile(null); } }}
-      onUpdate={(u) => updateFile(activeFolder.id, u)} />;
+    return (
+      <SidebarWrapper>
+        <FileView file={activeFile} folder={activeFolder} allFiles={activeFolder.files}
+          user={user} isGuest={isGuest}
+          onBack={() => { if (activeFolder?.id === "inbox") { setScreen("home"); setActiveFile(null); } else { setScreen("folder"); setActiveFile(null); } }}
+          onUpdate={(u) => updateFile(activeFolder.id, u)} />
+      </SidebarWrapper>
+    );
   }
 
   if (screen === "studyGroup" && activeStudyGroup) {
@@ -2291,20 +2479,24 @@ export default function App() {
 
   if (screen === "folder" && activeFolder) {
     const folder = folders.find(f => f.id === activeFolder.id) || activeFolder;
-    return <FolderView folder={folder} onBack={() => { setScreen("home"); setActiveFolder(null); }}
-      onOpenFile={(f) => { const restored = {...f, _fileObj: f._fileObj || FILE_STORE.get(f.id) || null}; setActiveFile(restored); setScreen("file"); }}
-      onUpdate={updateFolder}
-      allFolders={folders}
-      onMoveFile={(file, toFolderId) => {
-        const src = folders.find(f => f.id === folder.id);
-        const dest = folders.find(f => f.id === toFolderId);
-        if (!src || !dest) return;
-        const fileWithBlob = {...file, _fileObj: FILE_STORE.get(file.id)||null};
-        const updatedSrc = {...src, files: src.files.filter(f => f.id !== file.id)};
-        const updatedDest = {...dest, files: [...dest.files, fileWithBlob]};
-        setFoldersSave(folders.map(f => f.id===src.id ? updatedSrc : f.id===dest.id ? updatedDest : f));
-        setActiveFolder(updatedSrc);
-      }} />;
+    return (
+      <SidebarWrapper>
+        <FolderView folder={folder} onBack={() => { setScreen("home"); setActiveFolder(null); }}
+          onOpenFile={(f) => { const restored = {...f, _fileObj: f._fileObj || FILE_STORE.get(f.id) || null}; setActiveFile(restored); setScreen("file"); }}
+          onUpdate={updateFolder}
+          allFolders={folders}
+          onMoveFile={(file, toFolderId) => {
+            const src = folders.find(f => f.id === folder.id);
+            const dest = folders.find(f => f.id === toFolderId);
+            if (!src || !dest) return;
+            const fileWithBlob = {...file, _fileObj: FILE_STORE.get(file.id)||null};
+            const updatedSrc = {...src, files: src.files.filter(f => f.id !== file.id)};
+            const updatedDest = {...dest, files: [...dest.files, fileWithBlob]};
+            setFoldersSave(folders.map(f => f.id===src.id ? updatedSrc : f.id===dest.id ? updatedDest : f));
+            setActiveFolder(updatedSrc);
+          }} />
+      </SidebarWrapper>
+    );
   }
 
   const handleNavigate = (id) => {
@@ -2335,6 +2527,8 @@ export default function App() {
         isMobile={isMobile}
         user={user} isGuest={isGuest}
         onSignOut={isGuest ? handleGuestSignOut : () => signOut(auth)}
+        sidebarExpanded={sidebarExpanded}
+        onToggleSidebar={setSidebarExpanded}
       />
       {/* Command-K Search */}
       {showSearch && <CommandSearch folders={folders} onOpenFile={handleOpenFileFromSearch} onClose={()=>setShowSearch(false)} />}
@@ -2352,10 +2546,17 @@ export default function App() {
 
         {/* ── Dashboard Header ── */}
         {homeTab==="folders" && (
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:28 }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:28, flexWrap:"wrap", gap:10 }}>
             <div>
               <h1 style={{ fontFamily:"'Fraunces',serif", fontSize:isMobile?24:32, fontWeight:700, color:T.text, margin:"0 0 3px", letterSpacing:-.5 }}>Dashboard</h1>
-              <p style={{ fontSize:14, color:T.muted, margin:0 }}>Create new notes</p>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <p style={{ fontSize:14, color:T.muted, margin:0 }}>Create new notes</p>
+                {studyStreak > 1 && (
+                  <span style={{ display:"inline-flex", alignItems:"center", gap:4, background:"linear-gradient(135deg,#FF6B35,#FF4500)", color:"#fff", borderRadius:20, padding:"3px 10px", fontSize:12, fontWeight:700, boxShadow:"0 2px 8px rgba(255,107,53,.35)" }}>
+                    🔥 {studyStreak} day streak
+                  </span>
+                )}
+              </div>
             </div>
             {!isMobile && (
               <button onClick={()=>setShowSearch(true)}
@@ -2408,7 +2609,7 @@ export default function App() {
         {homeTab==="about" && <AboutTab/>}
         {homeTab==="settings" && <SettingsTab onToggleTheme={_toggleTheme}/>}
 
-        {homeTab==="folders" && folders.length===0 && (
+        {homeTab==="folders" && folders.filter(f=>f.id!=="inbox").length===0 && !folders.find(f=>f.id==="inbox")?.files?.length && (
           <div style={{ textAlign:"center", padding:"80px 0" }}>
             <div style={{ width:80, height:80, background:C.accentL, borderRadius:24, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 20px" }}>
               <Icon d={I.folder} size={36} color={C.accent}/>
@@ -2416,16 +2617,49 @@ export default function App() {
             <p style={{ fontSize:18, fontWeight:600, color:C.text, marginBottom:8 }}>No folders yet</p>
             <p style={{ fontSize:14, color:C.muted, maxWidth:280, margin:"0 auto 24px" }}>Create a folder for each subject to organise your files</p>
             <button onClick={()=>setShowNewFolder(true)} className="hov"
-              style={{ background:C.accent, color:"#fff", border:"none", borderRadius:10, padding:"10px 24px", fontSize:14, fontWeight:600, cursor:"pointer" }}>
+              style={{ background:GRAD, color:"#fff", border:"none", borderRadius:10, padding:"10px 24px", fontSize:14, fontWeight:600, cursor:"pointer", boxShadow:"0 3px 12px rgba(124,92,252,.3)" }}>
               Create First Folder
             </button>
           </div>
         )}
 
-        {homeTab==="folders" && folders.length > 0 && (
+        {homeTab==="folders" && (folders.length > 0 || folders.find(f=>f.id==="inbox")?.files?.length > 0) && (
           <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-            <p style={{ fontSize:11, fontWeight:700, color:T.muted, margin:"0 0 10px", letterSpacing:.8, textTransform:"uppercase" }}>Today</p>
-            {folders.map((folder,idx) => {
+            {/* ── Inbox files (no folder) ── */}
+            {(() => {
+              const inbox = folders.find(f=>f.id==="inbox");
+              if (!inbox || !inbox.files?.length) return null;
+              return (
+                <div style={{ marginBottom:20 }}>
+                  <p style={{ fontSize:11, fontWeight:700, color:T.muted, margin:"0 0 10px", letterSpacing:.8, textTransform:"uppercase" }}>Recent uploads</p>
+                  <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                    {inbox.files.map((file,idx)=>{
+                      const fc = getFileColor(file);
+                      const ext = (file.name||"").split(".").pop().toUpperCase();
+                      const isYt = file.type==="text/youtube";
+                      return (
+                        <div key={file.id} className="sq-card"
+                          onClick={()=>{ const r={...file,_fileObj:file._fileObj||FILE_STORE.get(file.id)||null}; setActiveFile(r); setActiveFolder(inbox); setScreen("file"); }}
+                          style={{ display:"flex", alignItems:"center", gap:14, padding:"12px 16px", cursor:"pointer", animation:`quickIn .15s ease ${idx*0.03}s both` }}>
+                          <div style={{ width:42, height:42, background:isYt?"#FEE2E2":fc.bg, borderRadius:12, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                            {isYt ? <span style={{fontSize:18}}>🎬</span> : <><Icon d={I.file} size={16} color={fc.accent}/><span style={{fontSize:7,fontWeight:800,color:fc.accent,marginTop:1}}>{ext.slice(0,4)}</span></>}
+                          </div>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <p style={{ margin:0, fontSize:13, fontWeight:600, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{file.name}</p>
+                            <p style={{ margin:0, fontSize:11, color:T.muted, marginTop:1 }}>{file.uploadedAt} · Click to open</p>
+                          </div>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ height:1, background:T.border, margin:"16px 0 6px" }}/>
+                </div>
+              );
+            })()}
+            {/* ── Folders ── */}
+            <p style={{ fontSize:11, fontWeight:700, color:T.muted, margin:"0 0 10px", letterSpacing:.8, textTransform:"uppercase" }}>Folders</p>
+            {folders.filter(f=>f.id!=="inbox").map((folder,idx) => {
               const fileCount = folder.files?.length || 0;
               return (
                 <div key={folder.id} className="sq-card"
@@ -2614,7 +2848,7 @@ export default function App() {
               style={{ flex:1, padding:"10px", border:`1.5px solid ${C.border}`, borderRadius:10, background:"transparent", fontSize:14, fontWeight:600, cursor:"pointer", color:C.text }}>Cancel</button>
             <button disabled={!newName.trim()}
               onClick={() => { setFoldersSave([...folders,{id:`f${Date.now()}`,name:newName.trim(),color:newColor,files:[]}]); setShowNewFolder(false); setNewName(""); }}
-              style={{ flex:2, padding:"10px", background:newName.trim()?C.accent:C.border, color:newName.trim()?"#fff":C.muted, border:"none", borderRadius:10, fontSize:14, fontWeight:600, cursor:newName.trim()?"pointer":"not-allowed" }}>
+              style={{ flex:2, padding:"10px", background:newName.trim()?GRAD:C.border, color:newName.trim()?"#fff":C.muted, border:"none", borderRadius:10, fontSize:14, fontWeight:600, cursor:newName.trim()?"pointer":"not-allowed", boxShadow:newName.trim()?"0 3px 12px rgba(124,92,252,.3)":"none" }}>
               Create Folder
             </button>
           </div>
@@ -4637,10 +4871,16 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFi
             <div onDragOver={e=>{e.preventDefault();setDragging(true);}} onDragLeave={()=>setDragging(false)}
               onDrop={e=>{e.preventDefault();setDragging(false);addFiles(e.dataTransfer.files);}}
               onClick={()=>fileInput.current.click()}
-              style={{ border:`2px dashed ${dragging?C.accent:C.border}`, borderRadius:16, padding:"28px", textAlign:"center", cursor:"pointer", background:dragging?C.accentL:"transparent", marginBottom:24, transition:"all .2s" }}>
-              <Icon d={I.upload} size={28} color={dragging?C.accent:C.muted} />
-              <p style={{ fontSize:15, fontWeight:600, color:dragging?C.accent:C.text, marginTop:10, marginBottom:4 }}>Drop files here or click to upload</p>
-              <p style={{ fontSize:13, color:C.muted }}>PDF, Word, PowerPoint, images, and more</p>
+              style={{ border:`2px dashed ${dragging?"#7C5CFC":C.border}`, borderRadius:20, padding:"36px 24px", textAlign:"center", cursor:"pointer",
+                background:dragging?"linear-gradient(135deg,#7C5CFC0D,#3D8EF808)":C.surface,
+                marginBottom:24, transition:"all .2s", boxShadow:dragging?"0 0 0 3px #7C5CFC22":"none" }}>
+              <div style={{ width:52, height:52, background:dragging?"linear-gradient(135deg,#7C5CFC22,#3D8EF811)":C.accentL, borderRadius:16, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 14px", transition:"all .2s" }}>
+                <Icon d={I.upload} size={24} color={dragging?"#7C5CFC":C.accent} />
+              </div>
+              <p style={{ fontSize:15, fontWeight:700, color:dragging?"#7C5CFC":C.text, marginBottom:6 }}>
+                {dragging ? "Drop to upload" : "Drop files here or click to upload"}
+              </p>
+              <p style={{ fontSize:12, color:C.muted, margin:0 }}>PDF, Word, PowerPoint, images, and more</p>
               <input ref={fileInput} type="file" multiple style={{ display:"none" }} onChange={e=>addFiles(e.target.files)} />
             </div>
 
@@ -5013,8 +5253,8 @@ ${text}`
             </div>
           )}
           <button onClick={doExplain} disabled={explaining}
-            style={{ display:"flex", alignItems:"center", gap:5, background:C.accent, color:"#fff", border:"none", borderRadius:7, padding:"6px 14px", fontSize:13, fontWeight:600, cursor:explaining?"default":"pointer" }}>
-            <Icon d={I.sparkle} size={12} color="#fff" sw={2} />{explaining?"Explaining…":"AI Explain"}
+            style={{ display:"flex", alignItems:"center", gap:5, background:explaining?"#ccc":GRAD, color:"#fff", border:"none", borderRadius:7, padding:"6px 14px", fontSize:13, fontWeight:600, cursor:explaining?"default":"pointer", boxShadow:explaining?"none":"0 2px 8px rgba(124,92,252,.3)" }}>
+            <Icon d={I.sparkle} size={12} color="#fff" sw={2} />{explaining?"Explaining…":"✨ AI Explain"}
           </button>
         </>)}
       </div>
@@ -5533,6 +5773,20 @@ FORMATTING — strictly follow:
         </div>
       )}
 
+      {/* Quick suggestion chips */}
+      {msgs.length === 0 && !loading && (
+        <div style={{ display:"flex", flexWrap:"wrap", gap:6, padding:"0 0 10px" }}>
+          {["Explain this simply","Summarise key points","Generate a diagram","Create a comparison table","Quiz me on this"].map(s=>(
+            <button key={s} onClick={()=>{ setInp(s); }}
+              style={{ padding:"6px 12px", borderRadius:20, border:`1.5px solid ${C.border}`, background:C.surface, color:C.muted, fontSize:12, fontWeight:600, cursor:"pointer", transition:"all .12s" }}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor=C.accent; e.currentTarget.style.color=C.accent; e.currentTarget.style.background=C.accentL;}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border; e.currentTarget.style.color=C.muted; e.currentTarget.style.background=C.surface;}}>
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div style={{ display:"flex", gap:8, paddingTop:10, borderTop:`1px solid ${C.border}`,
         alignItems:"flex-end" }}>
         {/* Image attach button */}
@@ -5549,14 +5803,16 @@ FORMATTING — strictly follow:
           onChange={e => { attachImage(e.target.files?.[0]); e.target.value=""; }} />
         <input value={inp} onChange={e=>setInp(e.target.value)}
           onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}}
-          placeholder={attachedImage ? "Ask about the image… (or just press Send)" : "Ask a question…"}
+          placeholder={attachedImage ? "Ask about the image… (or just press Send)" : "Ask a question… or pick a suggestion above"}
           style={{ flex:1, border:`1.5px solid ${C.border}`, borderRadius:12,
             padding:"11px 16px", fontSize:14, outline:"none",
             background:C.bg, color:C.text }} />
         <button onClick={send} disabled={(!inp.trim() && !attachedImage) || loading}
-          style={{ flexShrink:0, background:(inp.trim()||attachedImage)&&!loading?C.accent:"#ccc",
+          style={{ flexShrink:0,
+            background:(inp.trim()||attachedImage)&&!loading?"linear-gradient(135deg,#7C5CFC,#3D8EF8)":"#ccc",
             color:"#fff", border:"none", borderRadius:12, padding:"11px 20px",
-            fontSize:14, fontWeight:600,
+            fontSize:14, fontWeight:700,
+            boxShadow:(inp.trim()||attachedImage)&&!loading?"0 3px 10px rgba(124,92,252,.3)":"none",
             cursor:(inp.trim()||attachedImage)&&!loading?"pointer":"not-allowed" }}>
           Send
         </button>
@@ -6032,6 +6288,124 @@ function VoiceNotesTab({ file, user, isGuest, notes, onNotesUpdate,
 
 
 // ─── NOTES TAB ───────────────────────────────────────────────────────────────
+// ─── CLASSIO STRUCTURED TABLE SYSTEM ─────────────────────────────────────────
+// AI returns JSON, frontend renders interactive table + optional chart
+function ClassioTable({ data, onClose }) {
+  if (!data?.table?.columns) return null;
+  const { columns, rows } = data.table;
+  const chart = data.chart;
+  const [showChart, setShowChart] = useState(false);
+  const chartRef = useRef(null);
+  const chartInstance = useRef(null);
+
+  useEffect(() => {
+    if (!showChart || !chart || !chartRef.current) return;
+    // Load Chart.js dynamically
+    const load = async () => {
+      if (!window.Chart) {
+        await new Promise((res,rej)=>{ const s=document.createElement("script"); s.src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"; s.onload=res; s.onerror=rej; document.head.appendChild(s); });
+      }
+      if (chartInstance.current) { chartInstance.current.destroy(); }
+      chartInstance.current = new window.Chart(chartRef.current, {
+        type:"bar",
+        data:{ labels:chart.labels, datasets:[{ label:"Value", data:chart.values,
+          backgroundColor:"rgba(124,92,252,0.7)", borderColor:"#7C5CFC", borderWidth:2, borderRadius:6 }] },
+        options:{ responsive:true, plugins:{ legend:{display:false} },
+          scales:{ y:{ beginAtZero:true, grid:{color:"rgba(0,0,0,.06)"} } } }
+      });
+    };
+    load();
+    return () => { if(chartInstance.current) { chartInstance.current.destroy(); chartInstance.current=null; } };
+  }, [showChart, chart]);
+
+  return (
+    <div style={{ background:C.surface, border:`1.5px solid ${C.accentS}`, borderRadius:16, overflow:"hidden", marginTop:16 }}>
+      {/* Header */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 14px", background:C.accentL, borderBottom:`1px solid ${C.accentS}` }}>
+        <span style={{ fontSize:12, fontWeight:700, color:C.accent, letterSpacing:.5 }}>📊 AI GENERATED TABLE</span>
+        <div style={{ display:"flex", gap:6 }}>
+          {chart && (
+            <button onClick={()=>setShowChart(s=>!s)}
+              style={{ fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:20, border:`1.5px solid ${C.accent}`, background:showChart?C.accent:"transparent", color:showChart?"#fff":C.accent, cursor:"pointer" }}>
+              {showChart ? "Hide Chart" : "📈 Chart"}
+            </button>
+          )}
+          {onClose && <button onClick={onClose} style={{ background:"none",border:"none",cursor:"pointer",color:C.muted,fontSize:16 }}>×</button>}
+        </div>
+      </div>
+      {/* Explanation */}
+      {data.explanation && <div style={{ padding:"8px 14px", fontSize:13, color:C.text, background:C.bg, borderBottom:`1px solid ${C.border}` }}>{data.explanation}</div>}
+      {/* Table */}
+      <div style={{ overflowX:"auto" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+          <thead>
+            <tr>
+              {columns.map((col,ci)=>(
+                <th key={ci} style={{ padding:"10px 14px", textAlign:"left", fontWeight:700, color:C.accent, background:C.accentL, borderBottom:`2px solid ${C.accentS}`, whiteSpace:"nowrap" }}>
+                  {col}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row,ri)=>(
+              <tr key={ri} style={{ background:ri%2===0?C.surface:"transparent" }}
+                onMouseEnter={e=>e.currentTarget.style.background=C.accentL}
+                onMouseLeave={e=>e.currentTarget.style.background=ri%2===0?C.surface:"transparent"}>
+                {row.map((cell,ci)=>(
+                  <td key={ci} style={{ padding:"9px 14px", borderBottom:`1px solid ${C.border}`, color:C.text, lineHeight:1.5 }}>
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {/* Chart */}
+      {showChart && chart && (
+        <div style={{ padding:"16px 14px" }}>
+          <canvas ref={chartRef} style={{ maxHeight:220 }}/>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Prompt AI to return structured JSON table data
+async function generateStructuredTable(fileText, fileName, topic) {
+  const SYSTEM = `You are a data analyst. Return ONLY valid JSON. No markdown, no explanation outside JSON.
+
+Return this exact structure:
+{
+  "explanation": "1-2 sentence summary of what the table shows",
+  "table": {
+    "columns": ["Column 1", "Column 2", "Column 3"],
+    "rows": [
+      ["Row1Val1", "Row1Val2", "Row1Val3"]
+    ]
+  },
+  "chart": {
+    "labels": ["Label1", "Label2"],
+    "values": [10, 20]
+  }
+}
+
+The "chart" key is optional — only include it if the data has numeric values suitable for a bar chart.
+NEVER return markdown tables. ONLY return the JSON object.`;
+
+  const USER = fileText
+    ? `File: "${fileName}"\n\nContent:\n${fileText.slice(0,8000)}\n\nExtract the most important structured data from this content as a comparison table. Focus on: ${topic||"key concepts, comparisons, or properties"}.`
+    : `Create a structured comparison table for: ${topic || fileName}`;
+
+  const raw = await callClaude(SYSTEM, USER, 2000);
+  const clean = raw.replace(/```json|```/g,"").trim();
+  // Extract JSON object
+  const match = clean.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error("No JSON found");
+  return JSON.parse(match[0]);
+}
+
 function NotesTab({ file, onUpdate, user, isGuest }) {
   // Notes start empty — user must load a saved note or generate new ones
   // (unsaved notes are NOT persisted when leaving the file)
@@ -6042,6 +6416,8 @@ function NotesTab({ file, onUpdate, user, isGuest }) {
   const [showTopicInput, setShowTopicInput] = useState(false);
   const [customTopic,    setCustomTopic]    = useState("");
   const [lang,     setLang]    = useState("en-US");
+  const [tableData, setTableData] = useState(null);
+  const [tableGen,  setTableGen]  = useState(false);
 
   // ── Named notes save/load system ──────────────────────────────────────────
   const SAVED_KEY = "saved_notes_" + file.id;
@@ -6085,7 +6461,9 @@ function NotesTab({ file, onUpdate, user, isGuest }) {
     { id:"detailed", label:"📋 Detailed",    desc:"Full notes with headings & examples" },
     { id:"bullet",   label:"• Bullets",      desc:"Bullet points only, grouped by topic" },
     { id:"simple",   label:"🧒 Simple",       desc:"Plain English, easy to understand" },
-    { id:"exam",  label:"📝 Exam Focused", desc:"Key terms, questions & checklist" },
+    { id:"exam",     label:"📝 Exam Focused", desc:"Key terms, questions & checklist" },
+    { id:"quick",    label:"⚡ 1-min Quick",  desc:"Ultra short — top 5 key points only" },
+    { id:"expert",   label:"🎓 Expert",       desc:"Graduate-level depth, technical language" },
   ];
 
   // ── AI generate ───────────────────────────────────────────────────────────
@@ -6106,6 +6484,8 @@ function NotesTab({ file, onUpdate, user, isGuest }) {
         bullet:   "Write ONLY bullet points grouped under ALL CAPS headings. One fact per line.",
         simple:   "Write very simple short notes in plain language. Short sentences. No jargon.",
         exam:     "Write exam revision notes. Include key terms, definitions, possible exam questions, and a checklist.",
+        quick:    "Write an ULTRA SHORT 1-minute summary. Only the 5 most critical key points as numbered bullets. Extremely concise.",
+        expert:   "Write graduate-level expert notes with deep technical detail, nuance, edge cases, and advanced concepts. Use precise scientific terminology.",
       };
       const effectiveStyle = useCustomStyle && customStyle.trim()
         ? `You are a study notes writer. The student's style instruction: "${customStyle.trim()}". Follow exactly.`
@@ -6179,8 +6559,14 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
 
           {/* AI Generate */}
           <button onClick={generate} disabled={gen} className="hov"
-            style={{ display:"flex", alignItems:"center", gap:6, background:C.accentL, color:C.accent, border:"none", borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:600, cursor:gen?"not-allowed":"pointer" }}>
-            <Icon d={gen?I.refresh:I.sparkle} size={14} color={C.accent}/>{gen?"Generating…":"AI Generate"}
+            style={{ display:"flex", alignItems:"center", gap:6,
+              background:gen?"#ccc":"linear-gradient(135deg,#7C5CFC,#3D8EF8)",
+              color:"#fff", border:"none", borderRadius:10, padding:"8px 16px",
+              fontSize:13, fontWeight:700, cursor:gen?"not-allowed":"pointer",
+              boxShadow:gen?"none":"0 3px 10px rgba(124,92,252,.3)" }}>
+            {gen
+              ? <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Generating…</>
+              : <><Icon d={I.sparkle} size={14} color="#fff"/>✨ AI Generate</>}
           </button>
 
           {/* Custom Topic */}
@@ -6223,9 +6609,24 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
             </div>
           )}
 
+          {/* Generate Table button */}
+          <button onClick={async()=>{
+            setTableGen(true); setTableData(null);
+            try {
+              const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
+              const fileText = fileObj ? await extractFileText(fileObj) : null;
+              const d = await generateStructuredTable(fileText, file.name, "");
+              setTableData(d);
+            } catch(e) { alert("Table error: "+e.message); }
+            setTableGen(false);
+          }} disabled={tableGen} className="hov"
+            style={{ display:"flex", alignItems:"center", gap:6, background:tableGen?"#ccc":"linear-gradient(135deg,#7C5CFC,#3D8EF8)", color:"#fff", border:"none", borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:600, cursor:tableGen?"not-allowed":"pointer" }}>
+            {tableGen ? <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Table…</> : <>📊 Table</>}
+          </button>
+
           {/* Save — always rightmost */}
           <button onClick={() => { if(notes.trim()) { setNewNoteName(""); setShowSaveModal(true); } }} disabled={!notes.trim()} className="hov"
-            style={{ display:"flex", alignItems:"center", gap:6, background:notes.trim()?C.accent:"#ccc", color:"#fff", border:"none", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:notes.trim()?"pointer":"not-allowed", opacity:notes.trim()?1:0.6 }}>
+            style={{ display:"flex", alignItems:"center", gap:6, background:notes.trim()?GRAD:"#ccc", color:"#fff", border:"none", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:notes.trim()?"pointer":"not-allowed", opacity:notes.trim()?1:0.6, boxShadow:notes.trim()?"0 3px 10px rgba(124,92,252,.3)":"none" }}>
             <Icon d={I.check} size={13} color="#fff"/> Save
           </button>
         </div>
@@ -6330,6 +6731,11 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
         {/* Q&A Sidebar */}
         <NotesQASidebar file={file} notes={notes} lang={lang} />
       </div>
+
+      {/* ── AI Structured Table ── */}
+      {tableData && (
+        <ClassioTable data={tableData} onClose={()=>setTableData(null)} />
+      )}
 
     </div>
   );
@@ -6501,9 +6907,9 @@ Formatting: plain text only — no LaTeX, no dollar signs, no markdown asterisks
 
   // Desktop: always visible, wider, taller panel
   return (
-    <div style={{ width:260, flexShrink:0, background:C.surface, border:`1.5px solid ${C.border}`,
-      borderRadius:14, overflow:"hidden", display:"flex", flexDirection:"column",
-      height:480, boxShadow:"0 2px 16px rgba(0,0,0,.06)" }}>
+    <div className="sq-card" style={{ width:270, flexShrink:0,
+      overflow:"hidden", display:"flex", flexDirection:"column",
+      height:500, maxHeight:"calc(100vh - 200px)" }}>
       {sidebarContent}
     </div>
   );
@@ -6682,13 +7088,13 @@ function CardsTab({ file, onUpdate }) {
                 ))}
               </div>
               <button onClick={() => { setViewMode("study"); setStudyIdx(0); setFlipped({}); }}
-                style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px",
-                  background:viewMode==="study"?C.accent:C.surface,
-                  color:viewMode==="study"?"#fff":C.muted,
-                  border:`1.5px solid ${viewMode==="study"?C.accent:C.border}`,
-                  borderRadius:8, cursor:"pointer", fontSize:12, fontWeight:700 }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/></svg>
-                Study
+                style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 14px",
+                  background: viewMode==="study" ? "linear-gradient(135deg,#7C5CFC,#3D8EF8)" : C.surface,
+                  color: viewMode==="study" ? "#fff" : C.muted,
+                  border:`1.5px solid ${viewMode==="study"?"transparent":C.border}`,
+                  borderRadius:8, cursor:"pointer", fontSize:12, fontWeight:700,
+                  boxShadow: viewMode==="study" ? "0 2px 8px rgba(124,92,252,.3)" : "none" }}>
+                ▶ Study
               </button>
             </div>
           )}
@@ -6706,8 +7112,14 @@ function CardsTab({ file, onUpdate }) {
             <Icon d={I.plus} size={14} color={C.text} sw={2.5} /> Add Card
           </button>
           <button onClick={() => setShowCountPicker(p => !p)} disabled={gen} className="hov"
-            style={{ display:"flex", alignItems:"center", gap:7, background:C.accentL, color:C.accent, border:"none", borderRadius:10, padding:"9px 16px", fontSize:14, fontWeight:600, cursor:gen?"not-allowed":"pointer" }}>
-            <Icon d={gen?I.refresh:I.sparkle} size={15} color={C.accent} />{gen?"Generating…":"AI Generate"}
+            style={{ display:"flex", alignItems:"center", gap:7,
+              background:gen?"#ccc":"linear-gradient(135deg,#7C5CFC,#3D8EF8)",
+              color:"#fff", border:"none", borderRadius:10, padding:"9px 16px",
+              fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer",
+              boxShadow:gen?"none":"0 3px 10px rgba(124,92,252,.3)" }}>
+            {gen
+              ? <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Generating…</>
+              : <><Icon d={I.sparkle} size={15} color="#fff"/>✨ AI Generate</>}
           </button>
         </div>
       </div>
@@ -6762,13 +7174,13 @@ function CardsTab({ file, onUpdate }) {
                 style={{ width:52, border:"none", outline:"none", fontSize:14, fontWeight:700, color:C.text, background:"transparent", textAlign:"center" }}/>
             </div>
             <button onClick={() => generate(cardCount)} disabled={gen}
-              style={{ flex:1, background:gen?"#ccc":C.accent, color:"#fff", border:"none", borderRadius:10,
+              style={{ flex:1, background:gen?"#ccc":GRAD, color:"#fff", border:"none", borderRadius:10,
                 padding:"10px 0", fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer",
-                boxShadow:gen?"none":`0 3px 12px ${C.accentS}`,
+                boxShadow:gen?"none":"0 3px 12px rgba(124,92,252,.3)",
                 display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
               {gen
                 ? <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Generating…</>
-                : <><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>Generate {cardCount} Cards</>
+                : <>✨ Generate {cardCount} Cards</>
               }
             </button>
           </div>
@@ -7081,6 +7493,7 @@ function YouTubeTab({ file, onUpdate }) {
   const [status,  setStatus]  = useState(""); // progress message
   const [ytCards, setYtCards] = useState([]);
   const [cardsLoading, setCardsLoading] = useState(false);
+  const [ytTableData, setYtTableData] = useState(null);
 
   const extractVideoId = (u) => {
     const m = u.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([A-Za-z0-9_-]{11})/);
@@ -7254,11 +7667,16 @@ RULES:
 
       <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:16, padding:"18px 20px", marginBottom:20 }}>
         {/* Mode selector */}
-        <div style={{ marginBottom:14, display:"flex", gap:8 }}>
-          {[{id:"detailed",label:"📋 Detailed",desc:"Full notes"},{id:"simple",label:"🧒 Simple",desc:"Easy language"}].map(m => (
+        <div style={{ marginBottom:14, display:"flex", gap:8, flexWrap:"wrap" }}>
+          {[
+            {id:"detailed",label:"📋 Detailed",desc:"Full notes"},
+            {id:"simple",label:"🧒 Simple",desc:"Easy language"},
+            {id:"quick",label:"⚡ Quick",desc:"5 key points only"},
+            {id:"expert",label:"🎓 Expert",desc:"Deep technical"},
+          ].map(m => (
             <button key={m.id} onClick={() => setMode(m.id)}
-              style={{ flex:1, padding:"9px 12px", borderRadius:10, border:`1.5px solid ${mode===m.id?C.accent:C.border}`,
-                background:mode===m.id?C.accentL:"transparent", cursor:"pointer", textAlign:"left", transition:"all .15s" }}>
+              style={{ flex:"1 1 0", padding:"9px 12px", borderRadius:10, border:`1.5px solid ${mode===m.id?C.accent:C.border}`,
+                background:mode===m.id?"linear-gradient(135deg,#7C5CFC22,#3D8EF811)":"transparent", cursor:"pointer", textAlign:"left", transition:"all .15s" }}>
               <p style={{ margin:"0 0 1px", fontSize:13, fontWeight:700, color:mode===m.id?C.accent:C.text }}>{m.label}</p>
               <p style={{ margin:0, fontSize:11, color:C.muted }}>{m.desc}</p>
             </button>
@@ -7275,7 +7693,7 @@ RULES:
               fontSize:14, outline:"none", color:C.text, background:C.bg }}
           />
           <button onClick={analyze} disabled={loading || !url.trim()}
-            style={{ background:loading||!url.trim()?"#ccc":"#dc2626", color:"#fff", border:"none", borderRadius:10,
+            style={{ background:loading||!url.trim()?"#ccc":"linear-gradient(135deg,#DC2626,#c41c1c)", color:"#fff", border:"none", borderRadius:10,
               padding:"10px 20px", fontSize:14, fontWeight:700, cursor:loading||!url.trim()?"not-allowed":"pointer",
               display:"flex", alignItems:"center", gap:6, whiteSpace:"nowrap",
               boxShadow:loading||!url.trim()?"none":"0 4px 14px rgba(220,38,38,.3)" }}>
@@ -7286,9 +7704,8 @@ RULES:
           </button>
         </div>
         {error && <p style={{ fontSize:13, color:C.red, marginTop:8 }}>{error}</p>}
-
         <p style={{ fontSize:11, color:C.muted, marginTop:10 }}>
-          Works with any video that has captions/subtitles enabled. If blocked by CORS, paste the transcript text directly below.
+          AI reads the video transcript (captions) — not the video itself. Works with any captioned video.
         </p>
       </div>
 
@@ -7312,17 +7729,26 @@ Only include what's in the transcript.`,
 
       {result && (
         <div style={{ marginTop:16 }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-            <p style={{ fontSize:14, fontWeight:700, color:C.text }}>Study Notes</p>
-            <div style={{ display:"flex", gap:8 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10, flexWrap:"wrap", gap:8 }}>
+            <p style={{ fontSize:14, fontWeight:700, color:C.text, margin:0 }}>Study Notes</p>
+            <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+              {/* Generate Table from YouTube notes */}
+              <button onClick={async()=>{
+                setCardsLoading(true);
+                try { const d = await generateStructuredTable(result, url, "key concepts"); setYtTableData(d); }
+                catch(e) { alert("Table error: "+e.message); }
+                setCardsLoading(false);
+              }} style={{ background:"transparent", border:`1.5px solid ${C.accent}`, color:C.accent, borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+                📊 Generate Table
+              </button>
               <button onClick={saveAll} disabled={cardsLoading}
-                style={{ background:saved?C.greenL:C.accent, color:saved?C.green:"#fff",
-                  border:saved?`1.5px solid ${C.green}44`:"none", borderRadius:10, padding:"8px 16px",
+                style={{ background:saved?"linear-gradient(135deg,#4A7C59,#4A9C69)":"linear-gradient(135deg,#7C5CFC,#3D8EF8)", color:"#fff",
+                  border:"none", borderRadius:10, padding:"8px 16px",
                   fontSize:13, fontWeight:700, cursor:cardsLoading?"not-allowed":"pointer",
                   display:"flex", alignItems:"center", gap:6 }}>
-                {cardsLoading ? "Making cards…" : saved ? "✓ Saved + Cards made" : "💾 Save + Make Flashcards"}
+                {cardsLoading ? "Making cards…" : saved ? "✓ Saved + Cards" : "💾 Save + Flashcards"}
               </button>
-              <button onClick={() => { setResult(""); setUrl(""); setError(""); setSaved(false); }}
+              <button onClick={() => { setResult(""); setUrl(""); setError(""); setSaved(false); setYtTableData(null); }}
                 style={{ background:"none", border:`1.5px solid ${C.border}`, borderRadius:10, padding:"8px 14px", fontSize:13, color:C.muted, cursor:"pointer" }}>
                 Clear
               </button>
@@ -7333,6 +7759,7 @@ Only include what's in the transcript.`,
             maxHeight:520, overflowY:"auto" }}>
             {result}
           </div>
+          {ytTableData && <ClassioTable data={ytTableData} onClose={()=>setYtTableData(null)} />}
         </div>
       )}
 
@@ -7670,10 +8097,10 @@ RULES:
           {(phase === "idle" || phase === "done") && (
             <button onClick={startPodcast} disabled={!notes.trim()}
               style={{ display:"flex", alignItems:"center", gap:7,
-                background:notes.trim()?"#7c3aed":"#ccc", color:"#fff", border:"none",
+                background:notes.trim()?GRAD:"#ccc", color:"#fff", border:"none",
                 borderRadius:10, padding:"10px 22px", fontSize:14, fontWeight:700,
                 cursor:notes.trim()?"pointer":"not-allowed",
-                boxShadow:notes.trim()?"0 4px 14px rgba(124,58,237,.35)":"none" }}>
+                boxShadow:notes.trim()?"0 4px 14px rgba(124,92,252,.35)":"none" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
               {phase === "done" ? "Replay" : script ? "Restart" : "Start Podcast"}
             </button>
@@ -7682,7 +8109,7 @@ RULES:
           {phase === "generating" && (
             <div style={{ display:"flex", alignItems:"center", gap:12, flex:1 }}>
               <div style={{ flex:1, height:6, background:C.border, borderRadius:3, overflow:"hidden" }}>
-                <div style={{ height:"100%", width:`${genPct}%`, background:"#7c3aed", borderRadius:3, transition:"width .3s" }}/>
+                <div style={{ height:"100%", width:`${genPct}%`, background:GRAD, borderRadius:3, transition:"width .3s" }}/>
               </div>
               <span style={{ fontSize:12, color:C.muted, whiteSpace:"nowrap" }}>Generating podcast…</span>
               <button onClick={handleStop} style={{ fontSize:12, color:C.red, background:"none", border:"none", cursor:"pointer", fontWeight:600, whiteSpace:"nowrap" }}>Cancel</button>
@@ -8329,7 +8756,7 @@ function GHeader({ title, score, curr, total, onBack, accent }) {
         <span style={{ fontSize:13, color:C.muted }}>{curr+1}/{total}</span>
       </div>
       <div style={{ height:5, background:C.border, borderRadius:3 }}>
-        <div style={{ height:"100%", width:`${(curr/total)*100}%`, background:accent, borderRadius:3, transition:"width .3s" }} />
+        <div style={{ height:"100%", width:`${(curr/total)*100}%`, background:GRAD, borderRadius:3, transition:"width .3s" }} />
       </div>
     </div>
   );
@@ -8346,7 +8773,7 @@ function GResults({ score, total, onBack, msg }) {
       <p style={{ fontSize:14, color:pct>=80?C.green:pct>=50?C.warm:C.red, fontWeight:600, marginBottom:32 }}>
         {pct>=80?"Excellent!":pct>=50?"Good effort! Keep studying.":"Keep practicing — you've got this!"}
       </p>
-      <button onClick={onBack} style={{ background:C.accent, color:"#fff", border:"none", borderRadius:14, padding:"13px 32px", fontSize:15, fontWeight:700, cursor:"pointer" }}>← Back to Games</button>
+      <button onClick={onBack} style={{ background:GRAD, color:"#fff", border:"none", borderRadius:14, padding:"13px 32px", fontSize:15, fontWeight:700, cursor:"pointer", boxShadow:"0 4px 14px rgba(124,92,252,.3)" }}>← Back to Games</button>
     </div>
   );
 }
@@ -12105,12 +12532,12 @@ function SGAIFlashcardGen({ groupId, db, user, groupFile, onClose }) {
                 ))}
               </div>
               <button onClick={generate} disabled={gen||(!groupFile&&!topic.trim())} style={{
-                background:C.accent, color:"#fff", border:"none", borderRadius:12,
+                background:gen||(!groupFile&&!topic.trim())?"#ccc":GRAD, color:"#fff", border:"none", borderRadius:12,
                 padding:"12px", fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer",
                 display:"flex", alignItems:"center", justifyContent:"center", gap:8,
-                opacity:(!groupFile&&!topic.trim())?.5:1, boxShadow:"0 4px 14px rgba(61,90,128,.3)",
+                opacity:(!groupFile&&!topic.trim())?.5:1, boxShadow:"0 4px 14px rgba(124,92,252,.3)",
               }}>
-                {gen?<><SGSpinner color="#fff"/>Generating…</>:`Generate ${cardCount} Cards`}
+                {gen?<><SGSpinner color="#fff"/>Generating…</>:`✨ Generate ${cardCount} Cards`}
               </button>
             </div>
           )}
@@ -12275,12 +12702,12 @@ Math: proper notation (1×10⁻¹⁰ not words, H₂O not words). Units: standar
             </div>
           </div>
           <button onClick={generate} disabled={gen||(!groupFile&&!topic.trim())} style={{
-            background:C.accent, color:"#fff", border:"none", borderRadius:12,
+            background:gen||(!groupFile&&!topic.trim())?"#ccc":GRAD, color:"#fff", border:"none", borderRadius:12,
             padding:"12px", fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer",
             display:"flex", alignItems:"center", justifyContent:"center", gap:8,
-            opacity:(!groupFile&&!topic.trim())?.5:1, boxShadow:"0 4px 14px rgba(61,90,128,.3)",
+            opacity:(!groupFile&&!topic.trim())?.5:1, boxShadow:"0 4px 14px rgba(124,92,252,.3)",
           }}>
-            {gen?<><SGSpinner color="#fff"/>Generating notes…</>:"Generate Notes"}
+            {gen?<><SGSpinner color="#fff"/>Generating notes…</>:"✨ Generate Notes"}
           </button>
           {notes && (
             <>
