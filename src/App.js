@@ -1744,11 +1744,14 @@ const DARK_CSS = `
 `;
 
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
-function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacter, onToggleTheme, onOpenSearch, isMobile, user, isGuest, onSignOut, sidebarExpanded, onToggleSidebar }) {
+function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacter, onToggleTheme, onOpenSearch, isMobile, user, isGuest, onSignOut, sidebarExpanded, onToggleSidebar, folderTab, onFolderTab, fileTab, onFileTab, folder, file }) {
   const T = useTheme();
   C = T; // keep C in sync
   const expanded = sidebarExpanded;
   const setExpanded = onToggleSidebar;
+  const context = screen === "file" ? "document" : screen === "folder" ? "folder" : "dashboard";
+  const activeTab = context === "document" ? fileTab : context === "folder" ? folderTab : null;
+  const setActiveTab = context === "document" ? onFileTab : context === "folder" ? onFolderTab : null;
 
   const NAV = [
     { id:"home",     label:"Dashboard",   icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> },
@@ -4865,7 +4868,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFi
         </div>
       )}
       {/* Tabs */}
-      {/* Tabs in sidebar */}
+      {/* Tabs controlled by sidebar */}
 
       <div className="page-inner" style={{ maxWidth:860, margin:"0 auto", padding:"32px 24px" }}>
         {tab === "files" && (
@@ -4995,7 +4998,7 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate, act
           <span style={{ fontSize:15, fontWeight:600, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:360 }}>{file.name}</span>
         </div>
       </div>
-      {/* Tabs in sidebar */}
+      {/* Tabs controlled by sidebar */}
       {tab==="view"
         ? <ViewTab file={file} onUpdate={onUpdate} />
         : <div className="page-inner" style={{ maxWidth:900, margin:"0 auto", padding:"32px 24px" }}>
@@ -6279,12 +6282,13 @@ function VoiceNotesTab({ file, user, isGuest, notes, onNotesUpdate,
 // ─── CLASSIO STRUCTURED TABLE SYSTEM ─────────────────────────────────────────
 // AI returns JSON, frontend renders interactive table + optional chart
 function ClassioTable({ data, onClose }) {
-  if (!data?.table?.columns) return null;
-  const { columns, rows } = data.table;
-  const chart = data.chart;
   const [showChart, setShowChart] = useState(false);
   const chartRef = useRef(null);
   const chartInstance = useRef(null);
+
+  const columns = data?.table?.columns || [];
+  const rows = data?.table?.rows || [];
+  const chart = data?.chart || null;
 
   useEffect(() => {
     if (!showChart || !chart || !chartRef.current) return;
