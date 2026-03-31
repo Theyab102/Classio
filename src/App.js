@@ -5127,7 +5127,7 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate, act
       {tab==="view"
         ? <ViewTab file={file} onUpdate={onUpdate} />
         : <div className="page-inner" style={{ maxWidth:900, margin:"0 auto", padding:"32px 24px" }}>
-            {tab==="notes" && <div key="notes" className="page-fade"><NotesTab key={file.id} file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} /></div>}
+            {tab==="notes" && <div key="notes" className="page-fade"><NotesTab key={file.id} file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} onTabChange={setTab} /></div>}
             {tab==="voice" && <div key="voice" className="page-fade"><VoicePodcastTab file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} /></div>}
             {tab==="cards" && <div key="cards" className="page-fade"><CardsTab file={file} onUpdate={onUpdate} /></div>}
             {tab==="ai"    && <div key="ai" className="page-fade"><AITab file={file} allFiles={allFiles} folder={folder} onUpdate={onUpdate} /></div>}
@@ -6490,6 +6490,154 @@ function ClassioTable({ data, onClose }) {
 }
 
 // Prompt AI to return structured JSON table data
+
+// ── Notes Image Insert ────────────────────────────────────────────────────────
+function NotesImageInsert({ file, onInsert }) {
+  const inputRef = useRef(null);
+  const [loading, setLoading] = useState(false);
+  const T = useTheme();
+
+  const handleFile = async (f) => {
+    if (!f) return;
+    setLoading(true);
+    try {
+      // If it's an image, describe it with AI
+      if (f.type.startsWith("image/")) {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          try {
+            const b64 = e.target.result;
+            const desc = await callClaudeVision(
+              "Describe this image briefly for study notes. Include any text, diagrams, labels, or data visible.",
+              [{ role:"user", content:"Describe this image for study notes." }],
+              b64
+            );
+            onInsert(desc || f.name);
+          } catch { onInsert(f.name); }
+          setLoading(false);
+        };
+        reader.readAsDataURL(f);
+      } else {
+        // Non-image: just insert filename reference
+        onInsert(f.name);
+        setLoading(false);
+      }
+    } catch { setLoading(false); }
+  };
+
+  return (
+    <div style={{ position:"relative" }}>
+      <input ref={inputRef} type="file" accept="image/*" style={{ display:"none" }}
+        onChange={e => { if(e.target.files[0]) handleFile(e.target.files[0]); e.target.value=""; }} />
+      <button onClick={() => inputRef.current?.click()} disabled={loading}
+        style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:8,
+          border:`1.5px solid ${T.border}`, background:"none", color:T.muted, fontSize:12, fontWeight:600, cursor:"pointer" }}>
+        {loading ? "Analyzing…" : <>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          Insert Image
+        </>}
+      </button>
+    </div>
+  );
+}
+
+// ── Turbo-style Notes AI Panel ────────────────────────────────────────────────
+function NotesTurboPanel({ file, notes, lang, onTabChange }) {
+  const T = useTheme();
+  const [msgs, setMsgs] = useState([]);
+  const [inp, setInp] = useState("");
+  const [loading, setLoading] = useState(false);
+  const bottomRef = useRef(null);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:"smooth" }); }, [msgs]);
+
+  const send = async () => {
+    const text = inp.trim();
+    if (!text || loading) return;
+    const userMsg = { role:"user", content:text };
+    const newMsgs = [...msgs, userMsg];
+    setMsgs(newMsgs); setInp(""); setLoading(true);
+    try {
+      const fileObj = file?._fileObj || FILE_STORE.get(file?.id) || null;
+      const fileText = fileObj ? await extractFileText(fileObj).catch(()=>"") : "";
+      const sys = `You are a study AI. ${fileText ? `File context: ${fileText.slice(0,6000)}` : ""}
+${notes ? `Current notes: ${notes.slice(0,3000)}` : ""}
+Be concise. No LaTeX. No asterisks.`;
+      const apiMsgs = newMsgs.map(m => ({ role:m.role, content:m.content }));
+      const reply = await callClaudeChat(sys, apiMsgs);
+      setMsgs(m => [...m, { role:"assistant", content:reply }]);
+    } catch(e) { setMsgs(m => [...m, { role:"assistant", content:"Error: "+e.message }]); }
+    setLoading(false);
+  };
+
+  const QUICK = [
+    { label:"Quizzes", icon:"❓", desc:"Test your knowledge", tab:"game" },
+    { label:"Flashcards", icon:"🃏", desc:"Study with active recall", tab:"cards" },
+  ];
+
+  return (
+    <div style={{ width:300, minWidth:260, maxWidth:320, flexShrink:0, display:"flex", flexDirection:"column",
+      background:T.surface, border:`1px solid ${T.border}`, borderRadius:16, overflow:"hidden", height:"fit-content", maxHeight:640 }}>
+
+      {/* Quick actions */}
+      {msgs.length === 0 && (
+        <div style={{ padding:"16px 14px 0" }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:16 }}>
+            {QUICK.map(q => (
+              <button key={q.label} onClick={() => onTabChange && onTabChange(q.tab)}
+                style={{ display:"flex", flexDirection:"column", gap:4, padding:"12px 10px", borderRadius:12,
+                  border:`1px solid ${T.border}`, background:T.bg, cursor:"pointer", textAlign:"left",
+                  transition:"all .15s" }}
+                onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent}
+                onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                <span style={{ fontSize:18 }}>{q.icon}</span>
+                <span style={{ fontSize:12, fontWeight:700, color:T.text }}>{q.label}</span>
+                <span style={{ fontSize:10, color:T.muted }}>{q.desc}</span>
+              </button>
+            ))}
+          </div>
+          <div style={{ textAlign:"center", padding:"20px 0" }}>
+            <p style={{ fontSize:22, fontWeight:800, color:T.text, margin:"0 0 4px", fontFamily:"'Fraunces',serif" }}>AI Assistant</p>
+            <p style={{ fontSize:12, color:T.muted, margin:0 }}>Ask anything about your notes or file</p>
+          </div>
+        </div>
+      )}
+
+      {/* Messages */}
+      {msgs.length > 0 && (
+        <div style={{ flex:1, overflowY:"auto", padding:"12px 14px", display:"flex", flexDirection:"column", gap:10, maxHeight:380 }}>
+          {msgs.map((m,i) => (
+            <div key={i} style={{ display:"flex", justifyContent:m.role==="user"?"flex-end":"flex-start" }}>
+              <div style={{ maxWidth:"88%", padding:"8px 12px", borderRadius:12, fontSize:13, lineHeight:1.6,
+                background:m.role==="user"?T.accent:T.bg,
+                color:m.role==="user"?"#fff":T.text,
+                borderBottomRightRadius:m.role==="user"?2:12,
+                borderBottomLeftRadius:m.role==="user"?12:2 }}>
+                {m.content}
+              </div>
+            </div>
+          ))}
+          {loading && <div style={{ color:T.muted, fontSize:12, padding:"4px 0" }}>Thinking…</div>}
+          <div ref={bottomRef}/>
+        </div>
+      )}
+
+      {/* Input */}
+      <div style={{ padding:"10px 12px", borderTop:`1px solid ${T.border}`, display:"flex", gap:8, alignItems:"center" }}>
+        <input value={inp} onChange={e=>setInp(e.target.value)}
+          onKeyDown={e=>{ if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); send(); }}}
+          placeholder="Ask about your notes…"
+          style={{ flex:1, border:`1px solid ${T.border}`, borderRadius:10, padding:"8px 12px",
+            fontSize:13, outline:"none", color:T.text, background:T.bg, fontFamily:"'DM Sans',sans-serif" }} />
+        <button onClick={send} disabled={loading || !inp.trim()}
+          style={{ width:32, height:32, borderRadius:8, border:"none", background:inp.trim()?T.accent:T.border,
+            cursor:inp.trim()?"pointer":"not-allowed", display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 async function generateStructuredTable(fileText, fileName, topic) {
   const SYSTEM = `You are a data analyst. Return ONLY valid JSON. No markdown, no explanation outside JSON.
 
@@ -6523,7 +6671,7 @@ NEVER return markdown tables. ONLY return the JSON object.`;
   return JSON.parse(match[0]);
 }
 
-function NotesTab({ file, onUpdate, user, isGuest }) {
+function NotesTab({ file, onUpdate, user, isGuest, onTabChange }) {
   // Notes start empty — user must load a saved note or generate new ones
   // (unsaved notes are NOT persisted when leaving the file)
   const { isMobile } = useResponsive();
@@ -6534,7 +6682,6 @@ function NotesTab({ file, onUpdate, user, isGuest }) {
   const [customTopic,    setCustomTopic]    = useState("");
   const [lang,     setLang]    = useState("en-US");
   const [tableData, setTableData] = useState(null);
-  const [tableGen,  setTableGen]  = useState(false);
 
   // ── Named notes save/load system ──────────────────────────────────────────
   const SAVED_KEY = "saved_notes_" + file.id;
@@ -6633,7 +6780,15 @@ STRICT FORMATTING RULES — follow exactly:
       const fixedTxt = fixLanguage(fixMath(txt), lang);
       setNotes(fixedTxt);
       setUnsaved(true);
-      // Don't auto-save to file — user must click Save
+      // Auto-generate table inline if file has structured data
+      try {
+        const fileObj2 = file._fileObj || FILE_STORE.get(file.id) || null;
+        const fileText2 = fileObj2 ? await extractFileText(fileObj2) : null;
+        if (fileText2 && fileText2.length > 500) {
+          const d = await generateStructuredTable(fileText2, file.name, "");
+          if (d?.table?.columns?.length) setTableData(d);
+        }
+      } catch(e2) { /* table gen optional */ }
     } catch(e) { setNotes(`Error: ${e.message}`); }
     setGen(false);
   };
@@ -6726,20 +6881,7 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
             </div>
           )}
 
-          {/* Generate Table button */}
-          <button onClick={async()=>{
-            setTableGen(true); setTableData(null);
-            try {
-              const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
-              const fileText = fileObj ? await extractFileText(fileObj) : null;
-              const d = await generateStructuredTable(fileText, file.name, "");
-              setTableData(d);
-            } catch(e) { alert("Table error: "+e.message); }
-            setTableGen(false);
-          }} disabled={tableGen} className="hov"
-            style={{ display:"flex", alignItems:"center", gap:6, background:tableGen?"#ccc":"linear-gradient(135deg,#7C5CFC,#3D8EF8)", color:"#fff", border:"none", borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:600, cursor:tableGen?"not-allowed":"pointer" }}>
-            {tableGen ? <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Table…</> : <>📊 Table</>}
-          </button>
+
 
           {/* Save — always rightmost */}
           <button onClick={() => { if(notes.trim()) { setNewNoteName(""); setShowSaveModal(true); } }} disabled={!notes.trim()} className="hov"
@@ -6824,35 +6966,41 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
       )}
 
       <div style={{ display:"flex", gap:14, alignItems:"flex-start" }}>
-        {/* Main notes textarea */}
+        {/* Main notes area */}
         <div style={{ flex:1, minWidth:0 }}>
           <textarea value={notes} onChange={e => { setNotes(e.target.value); setUnsaved(true); }}
             dir={isRTL ? "rtl" : "ltr"}
-            placeholder="Notes will clear when you leave. Click AI Generate to create notes, then Save to keep them."
-            style={{ width:"100%", minHeight:440, border:`1.5px solid ${unsaved && notes.trim() ? "#f59e0b" : C.border}`, borderRadius:14, padding:"18px 20px", fontSize:15, lineHeight:1.85, outline:"none", resize:"vertical", color:C.text, background:C.surface, fontFamily:"'DM Sans',sans-serif", direction:isRTL?"rtl":"ltr", boxSizing:"border-box" }}/>
+            placeholder="Notes will clear when you leave. Click ✨ AI Generate to create notes with tables and summaries, then Save to keep them."
+            style={{ width:"100%", minHeight:400, border:`1.5px solid ${unsaved && notes.trim() ? "#f59e0b" : C.border}`, borderRadius:14, padding:"18px 20px", fontSize:15, lineHeight:1.85, outline:"none", resize:"vertical", color:C.text, background:C.surface, fontFamily:"'DM Sans',sans-serif", direction:isRTL?"rtl":"ltr", boxSizing:"border-box" }}/>
 
-          {/* Quick action buttons below textarea */}
+          {/* Inline table — appears right below notes when generated */}
+          {tableData && (
+            <div style={{ marginTop:12 }}>
+              <ClassioTable data={tableData} onClose={()=>setTableData(null)} />
+            </div>
+          )}
+
+          {/* Quick action buttons below */}
           {notes.trim() && (
-            <div style={{ display:"flex", gap:8, marginTop:8, flexWrap:"wrap" }}>
+            <div style={{ display:"flex", gap:8, marginTop:10, flexWrap:"wrap", alignItems:"center" }}>
               <NotesSimplifyBtn notes={notes} onResult={simplified => { setNotes(simplified); setUnsaved(true); }} lang={lang} />
               <NotesExpandBtn notes={notes} onResult={expanded => { setNotes(expanded); setUnsaved(true); }} />
+              {/* Insert image from file */}
+              <NotesImageInsert file={file} onInsert={(desc) => { setNotes(n => n + "
+
+[Image: " + desc + "]"); setUnsaved(true); }} />
               <button onClick={() => { navigator.clipboard?.writeText(notes); }}
                 style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:8, border:`1.5px solid ${C.border}`, background:"none", color:C.muted, fontSize:12, fontWeight:600, cursor:"pointer" }}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2v1"/></svg>
                 Copy
               </button>
             </div>
           )}
         </div>
 
-        {/* Q&A Sidebar */}
-        <NotesQASidebar file={file} notes={notes} lang={lang} />
+        {/* Turbo-style AI panel */}
+        <NotesTurboPanel file={file} notes={notes} lang={lang} onTabChange={onTabChange} />
       </div>
-
-      {/* ── AI Structured Table ── */}
-      {tableData && (
-        <ClassioTable data={tableData} onClose={()=>setTableData(null)} />
-      )}
 
     </div>
   );
