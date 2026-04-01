@@ -80,14 +80,41 @@ async function _callGemini(prompt, maxTok=3000) {
   }
   // Failover 1: OpenRouter
   try { return await _callOpenRouter(prompt, maxTok); } catch {}
-  // Failover 2: Groq
-  const res = await fetch(GROQ_URL, { method:"POST",
-    headers:{"Content-Type":"application/json","Authorization":`Bearer ${GROQ_KEY}`},
-    body:JSON.stringify({ model:"llama-3.3-70b-versatile",
-      messages:[{role:"user",content:prompt}], max_tokens:maxTok }) });
-  const d = await res.json();
-  if (d.error) throw new Error(d.error.message);
-  return d.choices?.[0]?.message?.content || "";
+  // Failover 2: Groq with rate-limit retry
+  return await _callGroqWithRetry([{role:"user",content:prompt}], maxTok);
+}
+
+// Groq caller with rate-limit retry + smaller model fallback
+async function _callGroqWithRetry(messages, maxTok=3000, retries=2) {
+  const models = ["llama-3.3-70b-versatile","llama-3.1-8b-instant","gemma2-9b-it"];
+  for (const model of models) {
+    for (let attempt=0; attempt<=retries; attempt++) {
+      try {
+        const res = await fetch(GROQ_URL, { method:"POST",
+          headers:{"Content-Type":"application/json","Authorization":`Bearer ${GROQ_KEY}`},
+          body:JSON.stringify({ model, messages, max_tokens: Math.min(maxTok, model.includes("8b")||model.includes("9b") ? 2000 : maxTok) }) });
+        const d = await res.json();
+        if (d.error) {
+          const msg = d.error.message || "";
+          if (msg.includes("Rate limit") || msg.includes("rate_limit") || res.status===429) {
+            // Extract wait time from error message if available
+            const waitMatch = msg.match(/try again in (\d+(?:\.\d+)?)s/i);
+            const wait = waitMatch ? Math.min(parseFloat(waitMatch[1])*1000, 8000) : 3000 * (attempt+1);
+            if (attempt < retries) { await new Promise(r=>setTimeout(r,wait)); continue; }
+            else { break; } // try next model
+          }
+          throw new Error(msg);
+        }
+        return d.choices?.[0]?.message?.content || "";
+      } catch(e) {
+        if (attempt < retries && (e.message?.includes("Rate limit") || e.message?.includes("rate_limit"))) {
+          await new Promise(r=>setTimeout(r,3000*(attempt+1)));
+        } else if (attempt >= retries) { break; }
+        else throw e;
+      }
+    }
+  }
+  throw new Error("All AI models are busy. Please wait a moment and try again.");
 }
 
 async function callClaude(system, userMessage, maxTok = 3000) {
@@ -96,13 +123,10 @@ async function callClaude(system, userMessage, maxTok = 3000) {
     try { return await _callGemini(prompt, maxTok); }
     catch(e) { console.warn("AI fallback:", e.message); }
   }
-  const res = await fetch(GROQ_URL, { method:"POST",
-    headers:{"Content-Type":"application/json","Authorization":`Bearer ${GROQ_KEY}`},
-    body:JSON.stringify({ model:"llama-3.3-70b-versatile",
-      messages:[{role:"system",content:system},{role:"user",content:userMessage}], max_tokens:maxTok }) });
-  const data = await res.json();
-  if (data.error) throw new Error(data.error.message);
-  return data.choices?.[0]?.message?.content || "";
+  return await _callGroqWithRetry(
+    [{role:"system",content:system},{role:"user",content:userMessage}],
+    maxTok
+  );
 }
 
 async function callClaudeChat(system, messages) {
@@ -2007,6 +2031,7 @@ function AudioRecordModal({ onClose, onSave }) {
   const [audioUrl, setAudioUrl] = useState(null);
   const [audioBlob, setAudioBlob] = useState(null);
   const [seconds, setSeconds] = useState(0);
+  const [micError, setMicError] = useState("");
   const mediaRef = useRef(null);
   const chunksRef = useRef([]);
   const timerRef = useRef(null);
@@ -2014,6 +2039,7 @@ function AudioRecordModal({ onClose, onSave }) {
   const T = useTheme();
 
   const startRecording = async () => {
+    setMicError("");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mr = new MediaRecorder(stream);
@@ -2030,7 +2056,9 @@ function AudioRecordModal({ onClose, onSave }) {
       setRecording(true);
       setSeconds(0);
       timerRef.current = setInterval(() => setSeconds(s => s+1), 1000);
-    } catch(e) { alert("Microphone access denied. Please allow microphone access."); }
+    } catch(e) {
+      setMicError("Microphone access denied. Please allow microphone access in your browser.");
+    }
   };
 
   const stopRecording = () => {
@@ -2040,55 +2068,79 @@ function AudioRecordModal({ onClose, onSave }) {
   };
 
   useEffect(() => () => { clearInterval(timerRef.current); }, []);
-
   const fmt = s => `${Math.floor(s/60).toString().padStart(2,"0")}:${(s%60).toString().padStart(2,"0")}`;
 
   return (
     <Modal onClose={onClose}>
-      <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:22, fontWeight:700, color:T.text, marginBottom:8 }}>Record or Upload Audio</h2>
-      <p style={{ fontSize:13, color:T.muted, marginBottom:20 }}>Record live or upload an audio file — saves directly to your dashboard.</p>
-      <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:16, padding:"20px 0" }}>
-        {!audioUrl ? (
+      {/* Header */}
+      <div style={{ marginBottom:20 }}>
+        <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:22, fontWeight:700, color:T.text, margin:0 }}>Record or Upload Audio</h2>
+        <p style={{ fontSize:13, color:T.muted, marginTop:4 }}>Record live or upload an audio file — saves directly to your dashboard.</p>
+      </div>
+
+      {!audioUrl ? (
+        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:16, padding:"24px 0" }}>
+          {/* Big gradient mic button */}
           <button onClick={recording ? stopRecording : startRecording}
-            style={{ width:72, height:72, borderRadius:"50%", border:"none", cursor:"pointer",
-              background:recording?"#dc2626":T.accent, color:"#fff",
-              display:"flex", alignItems:"center", justifyContent:"center",
-              boxShadow:`0 4px 20px ${recording?"#dc262644":T.accent+"44"}`,
-              transition:"all .2s" }}>
+            style={{ width:80, height:80, borderRadius:"50%", border:"none", cursor:"pointer",
+              background: recording ? "linear-gradient(135deg,#dc2626,#b91c1c)" : GRAD,
+              color:"#fff", display:"flex", alignItems:"center", justifyContent:"center",
+              boxShadow: recording ? "0 0 0 12px rgba(220,38,38,.12), 0 4px 20px rgba(220,38,38,.4)"
+                                   : "0 0 0 12px rgba(124,92,252,.1), 0 4px 20px rgba(124,92,252,.4)",
+              transition:"all .2s", animation: recording ? "pulse 1.5s infinite" : "none" }}>
             {recording
-              ? <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-              : <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>}
+              ? <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+              : <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>}
           </button>
-        ) : null}
-        {recording && <p style={{ fontSize:20, fontWeight:700, color:"#dc2626", fontFamily:"monospace" }}>{fmt(seconds)}</p>}
-        {recording && <p style={{ fontSize:12, color:T.muted }}>Tap stop when done</p>}
-        {audioUrl && (
-          <div style={{ width:"100%", display:"flex", flexDirection:"column", gap:12 }}>
-            <audio controls src={audioUrl} style={{ width:"100%" }} />
-            <div style={{ display:"flex", gap:8 }}>
-              <button onClick={() => { setAudioUrl(null); setAudioBlob(null); setSeconds(0); }}
-                style={{ flex:1, padding:"9px", border:`1px solid ${T.border}`, borderRadius:10, background:"transparent", cursor:"pointer", fontSize:13, color:T.muted }}>
-                Re-record
+          <style>{`@keyframes pulse{0%,100%{box-shadow:0 0 0 12px rgba(220,38,38,.12),0 4px 20px rgba(220,38,38,.4)}50%{box-shadow:0 0 0 20px rgba(220,38,38,.06),0 4px 20px rgba(220,38,38,.4)}}`}</style>
+
+          {recording
+            ? <p style={{ fontSize:26, fontWeight:800, color:"#dc2626", fontFamily:"monospace", letterSpacing:2 }}>{fmt(seconds)}</p>
+            : <p style={{ fontSize:13, color:T.muted }}>Tap to start recording</p>}
+
+          {micError && <p style={{ fontSize:12, color:"#dc2626", textAlign:"center", maxWidth:280 }}>{micError}</p>}
+
+          {/* Upload divider */}
+          {!recording && (
+            <>
+              <div style={{ display:"flex", alignItems:"center", gap:10, width:"100%" }}>
+                <div style={{ flex:1, height:1, background:T.border }}/>
+                <span style={{ fontSize:12, color:T.muted }}>or upload a file</span>
+                <div style={{ flex:1, height:1, background:T.border }}/>
+              </div>
+              <input ref={inputRef} type="file" accept="audio/*" style={{ display:"none" }}
+                onChange={e => { const f=e.target.files[0]; if(f) onSave(f); e.target.value=""; }} />
+              <button onClick={() => inputRef.current?.click()}
+                style={{ padding:"10px 28px", border:`1.5px solid ${T.border}`, borderRadius:10, background:T.bg, cursor:"pointer", fontSize:13, fontWeight:600, color:T.text, transition:"all .12s" }}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.text;}}>
+                Upload audio file
               </button>
-              <button onClick={() => { const f = new File([audioBlob], `Recording-${Date.now()}.webm`, {type:"audio/webm"}); onSave(f); }}
-                style={{ flex:2, padding:"9px", background:T.accent, color:"#fff", border:"none", borderRadius:10, cursor:"pointer", fontSize:13, fontWeight:700 }}>
-                Save to Dashboard
-              </button>
+            </>
+          )}
+        </div>
+      ) : (
+        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+          <div style={{ background:T.accentL, borderRadius:12, padding:"12px 16px", display:"flex", alignItems:"center", gap:10 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+            <div>
+              <p style={{ margin:0, fontSize:13, fontWeight:700, color:T.text }}>Recording ready</p>
+              <p style={{ margin:0, fontSize:11, color:T.muted }}>{fmt(seconds)} recorded</p>
             </div>
           </div>
-        )}
-        {!recording && !audioUrl && (
-          <div style={{ width:"100%", textAlign:"center" }}>
-            <p style={{ fontSize:12, color:T.muted, margin:"0 0 12px" }}>or upload a file</p>
-            <input ref={inputRef} type="file" accept="audio/*" style={{ display:"none" }}
-              onChange={e => { const f=e.target.files[0]; if(f) onSave(f); e.target.value=""; }} />
-            <button onClick={() => inputRef.current?.click()}
-              style={{ padding:"9px 20px", border:`1.5px solid ${T.border}`, borderRadius:10, background:"transparent", cursor:"pointer", fontSize:13, color:T.text }}>
-              Upload audio file
+          <audio controls src={audioUrl} style={{ width:"100%", borderRadius:10 }} />
+          <div style={{ display:"flex", gap:8 }}>
+            <button onClick={() => { setAudioUrl(null); setAudioBlob(null); setSeconds(0); }}
+              style={{ flex:1, padding:"10px", border:`1.5px solid ${T.border}`, borderRadius:10, background:"transparent", cursor:"pointer", fontSize:13, fontWeight:600, color:T.muted }}>
+              Re-record
+            </button>
+            <button onClick={() => { const f = new File([audioBlob], `Recording-${Date.now()}.webm`, {type:"audio/webm"}); onSave(f); }}
+              style={{ flex:2, padding:"10px", background:GRAD, color:"#fff", border:"none", borderRadius:10, cursor:"pointer", fontSize:13, fontWeight:700, boxShadow:"0 3px 10px rgba(124,92,252,.3)" }}>
+              Save to Dashboard
             </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </Modal>
   );
 }
@@ -2778,18 +2830,65 @@ export default function App() {
                       const fc = getFileColor(file);
                       const ext = (file.name||"").split(".").pop().toUpperCase();
                       const isYt = file.type==="text/youtube";
+                      const realFolders = folders.filter(f=>f.id!=="inbox");
                       return (
                         <div key={file.id} className="sq-card"
-                          onClick={()=>{ const r={...file,_fileObj:file._fileObj||FILE_STORE.get(file.id)||null}; setActiveFile(r); setActiveFolder(inbox); setScreen("file"); }}
-                          style={{ display:"flex", alignItems:"center", gap:14, padding:"12px 16px", cursor:"pointer", animation:`quickIn .15s ease ${idx*0.03}s both` }}>
-                          <div style={{ width:42, height:42, background:isYt?"#FEE2E2":fc.bg, borderRadius:12, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                          style={{ display:"flex", alignItems:"center", gap:14, padding:"12px 16px", animation:`quickIn .15s ease ${idx*0.03}s both` }}>
+                          {/* Icon — clickable to open */}
+                          <div onClick={()=>{ const r={...file,_fileObj:file._fileObj||FILE_STORE.get(file.id)||null}; setActiveFile(r); setActiveFolder(inbox); setScreen("file"); }}
+                            style={{ width:42, height:42, background:isYt?"#FEE2E2":fc.bg, borderRadius:12, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", flexShrink:0, cursor:"pointer" }}>
                             {isYt ? <span style={{fontSize:18}}>🎬</span> : <><Icon d={I.file} size={16} color={fc.accent}/><span style={{fontSize:7,fontWeight:800,color:fc.accent,marginTop:1}}>{ext.slice(0,4)}</span></>}
                           </div>
-                          <div style={{ flex:1, minWidth:0 }}>
+                          {/* Info — clickable to open */}
+                          <div onClick={()=>{ const r={...file,_fileObj:file._fileObj||FILE_STORE.get(file.id)||null}; setActiveFile(r); setActiveFolder(inbox); setScreen("file"); }}
+                            style={{ flex:1, minWidth:0, cursor:"pointer" }}>
                             <p style={{ margin:0, fontSize:13, fontWeight:600, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{file.name}</p>
                             <p style={{ margin:0, fontSize:11, color:T.muted, marginTop:1 }}>{file.uploadedAt} · Click to open</p>
                           </div>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+                          {/* Actions: Move to folder + Delete */}
+                          <div style={{ display:"flex", gap:4, flexShrink:0 }} onClick={e=>e.stopPropagation()}>
+                            {/* Move dropdown */}
+                            {realFolders.length > 0 && (() => {
+                              const [open, setOpen] = useState(false);
+                              return (
+                                <div style={{ position:"relative" }}>
+                                  <button onClick={()=>setOpen(o=>!o)} title="Move to folder"
+                                    style={{ display:"flex", alignItems:"center", gap:4, background:T.accentL, color:T.accent, border:`1px solid ${T.accentS}`, borderRadius:8, padding:"5px 10px", fontSize:11, fontWeight:600, cursor:"pointer" }}>
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                                    Move
+                                  </button>
+                                  {open && (
+                                    <div style={{ position:"absolute", right:0, top:"110%", zIndex:500, background:T.surface, border:`1.5px solid ${T.border}`, borderRadius:12, minWidth:160, boxShadow:"0 8px 28px rgba(0,0,0,.14)", padding:4 }}>
+                                      <p style={{ fontSize:10, fontWeight:700, color:T.muted, padding:"6px 10px 3px", letterSpacing:.7, textTransform:"uppercase" }}>Move to folder</p>
+                                      {realFolders.map(f=>(
+                                        <button key={f.id} onClick={()=>{
+                                          setOpen(false);
+                                          const updatedInbox = {...inbox, files:inbox.files.filter(fi=>fi.id!==file.id)};
+                                          const dest = folders.find(fo=>fo.id===f.id);
+                                          const updatedDest = {...dest, files:[...dest.files, file]};
+                                          setFoldersSave(folders.map(fo=>fo.id==="inbox"?updatedInbox:fo.id===f.id?updatedDest:fo));
+                                        }}
+                                          style={{ display:"flex", alignItems:"center", gap:8, width:"100%", padding:"7px 10px", borderRadius:8, border:"none", background:"transparent", cursor:"pointer", fontSize:12, color:T.text, textAlign:"left" }}
+                                          onMouseEnter={e=>e.currentTarget.style.background=T.accentL}
+                                          onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                                          <div style={{ width:8, height:8, borderRadius:"50%", background:f.color, flexShrink:0 }}/>
+                                          {f.name}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                            {/* Delete */}
+                            <button onClick={()=>{ if(window.confirm(`Delete "${file.name}"?`)){
+                              idbDelete(file.id); FILE_STORE.delete(file.id);
+                              setFoldersSave(folders.map(fo=>fo.id==="inbox"?{...inbox,files:inbox.files.filter(fi=>fi.id!==file.id)}:fo));
+                            }}} title="Delete"
+                              style={{ display:"flex", alignItems:"center", justifyContent:"center", background:T.redL, color:T.red, border:`1px solid ${T.red}33`, borderRadius:8, padding:"5px 8px", cursor:"pointer" }}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4h6v2"/></svg>
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
@@ -2930,15 +3029,17 @@ export default function App() {
       {showNewFolder && (
         <Modal onClose={() => { setShowNewFolder(false); setNewName(""); }}>
           <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:22, fontWeight:700, color:C.text, marginBottom:20 }}>New Folder</h2>
-          <label style={{ fontSize:13, fontWeight:600, color:C.muted, display:"block", marginBottom:6 }}>NAME</label>
+          <label style={{ fontSize:11, fontWeight:800, color:C.muted, display:"block", marginBottom:6, letterSpacing:.8, textTransform:"uppercase" }}>Name</label>
           <input autoFocus value={newName} onChange={e => setNewName(e.target.value)}
             onKeyDown={e => { if (e.key==="Enter" && newName.trim()) { setFoldersSave([...folders,{id:`f${Date.now()}`,name:newName.trim(),color:newColor,files:[]}]); setShowNewFolder(false); setNewName(""); }}}
             placeholder="e.g. Biology, Maths…"
-            style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 14px", fontSize:15, outline:"none", marginBottom:16, color:C.text, background:C.bg }} />
+            style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:12, padding:"11px 14px", fontSize:15, outline:"none", marginBottom:18, color:C.text, background:C.bg, boxSizing:"border-box", transition:"border-color .15s" }}
+            onFocus={e=>e.target.style.borderColor=C.accent}
+            onBlur={e=>e.target.style.borderColor=C.border} />
 
           {/* Subject presets */}
-          <label style={{ fontSize:13, fontWeight:600, color:C.muted, display:"block", marginBottom:8 }}>SUBJECT</label>
-          <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:16 }}>
+          <label style={{ fontSize:11, fontWeight:800, color:C.muted, display:"block", marginBottom:8, letterSpacing:.8, textTransform:"uppercase" }}>Subject</label>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:18 }}>
             {[
               {label:"📐 Physics",    color:"#2563eb", name:"Physics"},
               {label:"🔢 Math",       color:"#7c3aed", name:"Math"},
@@ -2948,26 +3049,26 @@ export default function App() {
               {label:"📚 Other",      color:"#9b9590", name:""},
             ].map(s => (
               <button key={s.label} onClick={() => { if (s.name) setNewName(n => n || s.name); setNewColor(s.color); }}
-                style={{ padding:"6px 12px", borderRadius:20, border:`1.5px solid ${newColor===s.color?s.color:C.border}`,
-                  background:newColor===s.color?s.color+"22":"transparent", cursor:"pointer",
+                style={{ padding:"6px 14px", borderRadius:20, border:`1.5px solid ${newColor===s.color?s.color:C.border}`,
+                  background:newColor===s.color?s.color+"15":"transparent", cursor:"pointer",
                   fontSize:12, fontWeight:600, color:newColor===s.color?s.color:C.muted, transition:"all .12s" }}>
                 {s.label}
               </button>
             ))}
           </div>
 
-          <label style={{ fontSize:13, fontWeight:600, color:C.muted, display:"block", marginBottom:10 }}>COLOUR</label>
-          <div style={{ marginBottom:16 }}>
-            <div style={{ display:"flex", gap:7, flexWrap:"wrap", marginBottom:8, alignItems:"center" }}>
+          <label style={{ fontSize:11, fontWeight:800, color:C.muted, display:"block", marginBottom:10, letterSpacing:.8, textTransform:"uppercase" }}>Colour</label>
+          <div style={{ marginBottom:20 }}>
+            <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:8, alignItems:"center" }}>
               {FOLDER_COLORS.map(col => (
                 <button key={col} className="color-swatch no-min-h" onClick={() => { setNewColor(col); setShowFolderPicker(false); }}
-                  style={{ width:36, height:36, borderRadius:"50%", background:col, cursor:"pointer", flexShrink:0,
+                  style={{ width:34, height:34, borderRadius:"50%", background:col, cursor:"pointer", flexShrink:0,
                     border:`3px solid ${newColor===col?C.text:"transparent"}`,
                     boxShadow:`0 1px 4px rgba(0,0,0,${newColor===col?".35":".15"})`,
                     padding:0, minHeight:"unset" }} />
               ))}
               <button className="no-min-h" onClick={() => setShowFolderPicker(p => !p)}
-                style={{ width:36, height:36, borderRadius:"50%", cursor:"pointer",
+                style={{ width:34, height:34, borderRadius:"50%", cursor:"pointer",
                   border:"2px dashed #bbb", background:showFolderPicker?"#4361ee":"transparent",
                   display:"flex", alignItems:"center", justifyContent:"center",
                   fontSize:14, color:showFolderPicker?"#fff":"#888",
@@ -2976,20 +3077,17 @@ export default function App() {
               </button>
             </div>
             {showFolderPicker && (
-              <div style={{ borderRadius:20, overflow:"hidden",
-                boxShadow:"0 8px 40px rgba(0,0,0,.45)", background:"#18182a" }}>
-                <ColorPicker value={newColor} label="Folder Colour"
-                  onChange={col => setNewColor(col)}
-                  onClose={() => setShowFolderPicker(false)}/>
+              <div style={{ borderRadius:20, overflow:"hidden", boxShadow:"0 8px 40px rgba(0,0,0,.45)", background:"#18182a" }}>
+                <ColorPicker value={newColor} label="Folder Colour" onChange={col => setNewColor(col)} onClose={() => setShowFolderPicker(false)}/>
               </div>
             )}
           </div>
           <div style={{ display:"flex", gap:10 }}>
             <button onClick={() => { setShowNewFolder(false); setNewName(""); }}
-              style={{ flex:1, padding:"10px", border:`1.5px solid ${C.border}`, borderRadius:10, background:"transparent", fontSize:14, fontWeight:600, cursor:"pointer", color:C.text }}>Cancel</button>
+              style={{ flex:1, padding:"11px", border:`1.5px solid ${C.border}`, borderRadius:12, background:"transparent", fontSize:14, fontWeight:600, cursor:"pointer", color:C.text }}>Cancel</button>
             <button disabled={!newName.trim()}
               onClick={() => { setFoldersSave([...folders,{id:`f${Date.now()}`,name:newName.trim(),color:newColor,files:[]}]); setShowNewFolder(false); setNewName(""); }}
-              style={{ flex:2, padding:"10px", background:newName.trim()?GRAD:C.border, color:newName.trim()?"#fff":C.muted, border:"none", borderRadius:10, fontSize:14, fontWeight:600, cursor:newName.trim()?"pointer":"not-allowed", boxShadow:newName.trim()?"0 3px 12px rgba(124,92,252,.3)":"none" }}>
+              style={{ flex:2, padding:"11px", background:newName.trim()?GRAD:C.border, color:newName.trim()?"#fff":C.muted, border:"none", borderRadius:12, fontSize:14, fontWeight:700, cursor:newName.trim()?"pointer":"not-allowed", boxShadow:newName.trim()?"0 3px 12px rgba(124,92,252,.3)":"none", transition:"all .15s" }}>
               Create Folder
             </button>
           </div>
@@ -6621,26 +6719,167 @@ Return this exact structure:
     "rows": [
       ["Row1Val1", "Row1Val2", "Row1Val3"]
     ]
-  },
-  "chart": {
-    "labels": ["Label1", "Label2"],
-    "values": [10, 20]
   }
 }
 
-The "chart" key is optional — only include it if the data has numeric values suitable for a bar chart.
+CRITICAL TABLE RULES:
+- Include ALL important properties/attributes — be comprehensive, not minimal
+- For radiation types: include Nature, Charge, Mass, Speed, Ionising ability, Penetrating power, Deflection in E-field, Deflection in B-field, Stopped by
+- For elements/particles: include Symbol, Charge, Mass, Properties
+- For ANY comparison: include every meaningful attribute that distinguishes the items
+- Rows must have complete data — no empty cells, no "N/A" unless genuinely not applicable
+- Use proper scientific notation: α, β, γ, ×10⁻², m/s², etc.
 NEVER return markdown tables. ONLY return the JSON object.`;
 
   const USER = fileText
-    ? `File: "${fileName}"\n\nContent:\n${fileText.slice(0,8000)}\n\nExtract the most important structured data from this content as a comparison table. Focus on: ${topic||"key concepts, comparisons, or properties"}.`
-    : `Create a structured comparison table for: ${topic || fileName}`;
+    ? `File: "${fileName}"\n\nContent:\n${fileText.slice(0,10000)}\n\nExtract the most important structured comparison data from this content. Focus on: ${topic||"types, properties, comparisons, classifications"}. Include ALL relevant attributes and properties in the columns — be comprehensive.`
+    : `Create a comprehensive structured comparison table for: ${topic || fileName}. Include all important attributes.`;
 
-  const raw = await callClaude(SYSTEM, USER, 2000);
+  const raw = await callClaude(SYSTEM, USER, 2500);
   const clean = raw.replace(/```json|```/g,"").trim();
-  // Extract JSON object
   const match = clean.match(/\{[\s\S]*\}/);
   if (!match) throw new Error("No JSON found");
   return JSON.parse(match[0]);
+}
+
+// ─── NOTES VIEWER — renders notes text with inline tables ─────────────────────
+function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
+  const [editing, setEditing] = useState(false);
+  const [editVal, setEditVal] = useState(notes);
+  useEffect(() => { setEditVal(notes); }, [notes]);
+
+  if (editing) {
+    return (
+      <div>
+        <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:6, gap:6 }}>
+          <button onClick={() => { onChange(editVal); setEditing(false); }}
+            style={{ background:GRAD, color:"#fff", border:"none", borderRadius:8, padding:"6px 16px", fontSize:12, fontWeight:700, cursor:"pointer" }}>Done Editing</button>
+          <button onClick={() => { setEditVal(notes); setEditing(false); }}
+            style={{ background:"none", border:`1.5px solid ${C.border}`, color:C.muted, borderRadius:8, padding:"6px 12px", fontSize:12, cursor:"pointer" }}>Cancel</button>
+        </div>
+        <textarea value={editVal} onChange={e=>setEditVal(e.target.value)}
+          dir={isRTL?"rtl":"ltr"}
+          autoFocus
+          style={{ width:"100%", minHeight:440, border:`1.5px solid ${C.accent}`, borderRadius:14, padding:"18px 20px", fontSize:14, lineHeight:1.85, outline:"none", resize:"vertical", color:C.text, background:C.surface, fontFamily:"'DM Sans',sans-serif", direction:isRTL?"rtl":"ltr", boxSizing:"border-box" }}/>
+      </div>
+    );
+  }
+
+  // Parse notes into sections and detect table markers
+  const renderNotesWithTable = () => {
+    const lines = notes.split("\n");
+    const elements = [];
+    let key = 0;
+    let i = 0;
+    let tableInserted = false;
+
+    while (i < lines.length) {
+      const line = lines[i];
+      const trimmed = line.trim();
+
+      // Detect ALL CAPS headings
+      if (/^[A-Z][A-Z\s\-\/&0-9:]{3,}$/.test(trimmed) && trimmed.length > 3) {
+        // Before rendering a new section, insert table after first section if available
+        if (!tableInserted && tableData?.table?.columns && elements.length > 6) {
+          elements.push(<InlineClassioTable key={`tbl${key++}`} data={tableData} />);
+          tableInserted = true;
+        }
+        elements.push(
+          <p key={key++} style={{ fontWeight:700, fontSize:15, color:C.text, margin:"18px 0 6px", letterSpacing:.3, borderBottom:`1px solid ${C.border}`, paddingBottom:4 }}>
+            {trimmed}
+          </p>
+        );
+        i++; continue;
+      }
+
+      // Bullet point
+      if (trimmed.startsWith("- ") || trimmed.startsWith("• ") || trimmed.startsWith("· ")) {
+        const content = trimmed.slice(2);
+        elements.push(
+          <div key={key++} style={{ display:"flex", gap:8, marginBottom:4, paddingLeft:8 }}>
+            <span style={{ color:C.accent, flexShrink:0, marginTop:2 }}>•</span>
+            <span style={{ fontSize:14, color:C.text, lineHeight:1.7 }}>{content}</span>
+          </div>
+        );
+        i++; continue;
+      }
+
+      // Image placeholder
+      if (trimmed.startsWith("[Image:") && trimmed.endsWith("]")) {
+        const desc = trimmed.slice(7, -1).trim();
+        elements.push(
+          <div key={key++} style={{ background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:10, padding:"8px 14px", margin:"8px 0", fontSize:12, color:C.accent, fontWeight:600 }}>
+            🖼️ {desc}
+          </div>
+        );
+        i++; continue;
+      }
+
+      // Empty line
+      if (!trimmed) { elements.push(<div key={key++} style={{ height:8 }}/>); i++; continue; }
+
+      // Regular text
+      elements.push(
+        <p key={key++} style={{ fontSize:14, color:C.text, lineHeight:1.75, margin:"2px 0" }}>{trimmed}</p>
+      );
+      i++;
+    }
+
+    // Append table at end if not yet inserted
+    if (!tableInserted && tableData?.table?.columns) {
+      elements.push(<InlineClassioTable key={`tbl_end`} data={tableData} />);
+    }
+
+    return elements;
+  };
+
+  return (
+    <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"20px 24px", minHeight:400, position:"relative" }}
+      dir={isRTL?"rtl":"ltr"}>
+      <button onClick={() => setEditing(true)}
+        title="Edit notes"
+        style={{ position:"absolute", top:12, right:12, background:"none", border:`1px solid ${C.border}`, borderRadius:8, padding:"4px 10px", fontSize:11, color:C.muted, cursor:"pointer", display:"flex", alignItems:"center", gap:5 }}>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Edit
+      </button>
+      {renderNotesWithTable()}
+    </div>
+  );
+}
+
+// Inline table that appears inside notes
+function InlineClassioTable({ data }) {
+  if (!data?.table?.columns) return null;
+  const { columns, rows } = data.table;
+  return (
+    <div style={{ margin:"16px 0", border:`1.5px solid ${C.accentS}`, borderRadius:12, overflow:"hidden" }}>
+      <div style={{ background:C.accentL, padding:"6px 14px", display:"flex", alignItems:"center", gap:6 }}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg>
+        <span style={{ fontSize:11, fontWeight:800, color:C.accent, letterSpacing:.6 }}>AI TABLE</span>
+      </div>
+      {data.explanation && <p style={{ fontSize:12, color:C.muted, padding:"6px 14px 0", margin:0 }}>{data.explanation}</p>}
+      <div style={{ overflowX:"auto" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+          <thead>
+            <tr style={{ background:C.accentL }}>
+              {columns.map((col,ci)=>(
+                <th key={ci} style={{ padding:"8px 12px", textAlign:"left", fontWeight:700, color:C.accent, borderBottom:`2px solid ${C.accentS}`, whiteSpace:"nowrap", fontSize:12 }}>{col}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row,ri)=>(
+              <tr key={ri} style={{ background:ri%2===0?C.surface:"transparent", borderBottom:`1px solid ${C.border}` }}>
+                {row.map((cell,ci)=>(
+                  <td key={ci} style={{ padding:"8px 12px", color:C.text, lineHeight:1.5, fontSize:13 }}>{cell}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 function NotesTab({ file, onUpdate, user, isGuest, onTabChange }) {
@@ -6934,11 +7173,22 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
 
       <div style={{ display:"flex", gap:14, alignItems:"flex-start" }}>
         <div style={{ flex:1, minWidth:0 }}>
-          <textarea value={notes} onChange={e => { setNotes(e.target.value); setUnsaved(true); }}
-            dir={isRTL ? "rtl" : "ltr"}
-            placeholder="Click AI Generate to create notes with inline tables. Save to keep them."
-            style={{ width:"100%", minHeight:400, border:`1.5px solid ${unsaved && notes.trim() ? "#f59e0b" : C.border}`, borderRadius:14, padding:"18px 20px", fontSize:15, lineHeight:1.85, outline:"none", resize:"vertical", color:C.text, background:C.surface, fontFamily:"'DM Sans',sans-serif", direction:isRTL?"rtl":"ltr", boxSizing:"border-box" }}/>
-          {tableData && <div style={{ marginTop:12 }}><ClassioTable data={tableData} onClose={()=>setTableData(null)} /></div>}
+          {/* Inline notes viewer with embedded tables */}
+          {notes.trim() ? (
+            <NotesViewer
+              notes={notes}
+              tableData={tableData}
+              isRTL={isRTL}
+              onEdit={() => {}}
+              unsaved={unsaved}
+              onChange={v => { setNotes(v); setUnsaved(true); }}
+            />
+          ) : (
+            <textarea value={notes} onChange={e => { setNotes(e.target.value); setUnsaved(true); }}
+              dir={isRTL ? "rtl" : "ltr"}
+              placeholder="Click AI Generate to create notes. Tables will appear inline inside your notes."
+              style={{ width:"100%", minHeight:400, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"18px 20px", fontSize:15, lineHeight:1.85, outline:"none", resize:"vertical", color:C.text, background:C.surface, fontFamily:"'DM Sans',sans-serif", direction:isRTL?"rtl":"ltr", boxSizing:"border-box" }}/>
+          )}
           {notes.trim() && (
             <div style={{ display:"flex", gap:8, marginTop:10, flexWrap:"wrap", alignItems:"center" }}>
               <NotesSimplifyBtn notes={notes} onResult={s => { setNotes(s); setUnsaved(true); }} lang={lang} />
@@ -7554,21 +7804,42 @@ function CardsTab({ file, onUpdate }) {
               </div>
 
               {/* Ask about this flashcard + ELI5 — image 4 style */}
-              <div style={{ display:"flex", alignItems:"center", gap:8, padding:"0 20px 14px" }}>
-                <button onClick={async()=>{
-                  const k=`eli5_${card.id}`; const cached=sessionStorage.getItem(k);
-                  if(cached){alert(cached);return;}
-                  try{
-                    const r=await callClaude("Explain like the student is 5 years old. Use a simple analogy. 2-3 sentences max. Plain text only.",`Concept: ${card.question}\nAnswer: ${card.answer}`);
-                    sessionStorage.setItem(k,r); alert(r);
-                  }catch(e){alert("Error: "+e.message);}
-                }} className="no-min-h"
-                  style={{ display:"flex", alignItems:"center", gap:6, background:C.accentL, border:`1.5px solid ${C.accentS}`, color:C.accent, borderRadius:10, padding:"8px 14px", fontSize:12, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap", flexShrink:0 }}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
-                  ELI5
-                </button>
-                <AskAboutCard card={card} />
-              </div>
+              {(() => {
+                const [eli5Text, setEli5Text] = React.useState("");
+                const [eli5Loading, setEli5Loading] = React.useState(false);
+                return (
+                  <div style={{ padding:"0 20px 14px", display:"flex", flexDirection:"column", gap:8 }}>
+                    {eli5Text && (
+                      <div style={{ background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:12, padding:"10px 14px", fontSize:13, color:C.text, lineHeight:1.6, position:"relative" }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8 }}>
+                          <div>
+                            <p style={{ margin:"0 0 4px", fontSize:11, fontWeight:800, color:C.accent, letterSpacing:.8 }}>ELI5 — SIMPLE EXPLANATION</p>
+                            <p style={{ margin:0 }}>{eli5Loading ? "Explaining…" : eli5Text}</p>
+                          </div>
+                          <button onClick={()=>setEli5Text("")} style={{ background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:16, flexShrink:0, padding:"0 2px" }}>×</button>
+                        </div>
+                      </div>
+                    )}
+                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                      <button onClick={async()=>{
+                        const k=`eli5_${card.id}`; const cached=sessionStorage.getItem(k);
+                        if(cached){setEli5Text(cached);return;}
+                        setEli5Loading(true); setEli5Text("…");
+                        try{
+                          const r=await callClaude("Explain like the student is 5 years old. Use a simple analogy. 2-3 sentences max. Plain text only.",`Concept: ${card.question}\nAnswer: ${card.answer}`);
+                          sessionStorage.setItem(k,r); setEli5Text(r);
+                        }catch(e){setEli5Text("Error: "+e.message);}
+                        setEli5Loading(false);
+                      }} className="no-min-h"
+                        style={{ display:"flex", alignItems:"center", gap:6, background:C.accentL, border:`1.5px solid ${C.accentS}`, color:C.accent, borderRadius:10, padding:"8px 14px", fontSize:12, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap", flexShrink:0 }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+                        ELI5
+                      </button>
+                      <AskAboutCard card={card} />
+                    </div>
+                  </div>
+                );
+              })()}
               <p style={{ textAlign:"center", fontSize:10, color:C.muted, padding:"0 0 8px" }}>← → navigate &nbsp;·&nbsp; Space to flip</p>
             </div>
           </div>
@@ -11455,8 +11726,9 @@ Be conversational. Under 120 words. No markdown, no asterisks.`,
 // ─── MODAL ────────────────────────────────────────────────────────────────────
 function Modal({ children, onClose }) {
   return (
-    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.4)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
-      <div onClick={e=>e.stopPropagation()} style={{ background:C.surface, borderRadius:20, padding:32, width:"100%", maxWidth:440, boxShadow:"0 20px 60px rgba(0,0,0,.2)" }}>
+    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.35)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:C.surface, borderRadius:20, padding:"28px 32px", width:"100%", maxWidth:460, boxShadow:"0 24px 64px rgba(0,0,0,.18)", border:`1px solid ${C.border}`, position:"relative" }}>
+        <button onClick={onClose} style={{ position:"absolute", top:16, right:16, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:20, lineHeight:1, padding:"2px 6px", borderRadius:6 }}>×</button>
         {children}
       </div>
     </div>
