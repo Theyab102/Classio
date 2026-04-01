@@ -2146,6 +2146,33 @@ function AudioRecordModal({ onClose, onSave }) {
 }
 
 // ── Dashboard Drop Zone ───────────────────────────────────────────────────────
+function MoveFileDropdown({ file, folders, T, onMove }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ position:"relative" }}>
+      <button onClick={()=>setOpen(o=>!o)} title="Move to folder"
+        style={{ display:"flex", alignItems:"center", gap:4, background:T.accentL, color:T.accent, border:`1px solid ${T.accentS}`, borderRadius:8, padding:"5px 10px", fontSize:11, fontWeight:600, cursor:"pointer" }}>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        Move
+      </button>
+      {open && (
+        <div style={{ position:"absolute", right:0, top:"110%", zIndex:500, background:T.surface, border:`1.5px solid ${T.border}`, borderRadius:12, minWidth:160, boxShadow:"0 8px 28px rgba(0,0,0,.14)", padding:4 }}>
+          <p style={{ fontSize:10, fontWeight:700, color:T.muted, padding:"6px 10px 3px", letterSpacing:.7, textTransform:"uppercase" }}>Move to folder</p>
+          {folders.map(f=>(
+            <button key={f.id} onClick={()=>{ setOpen(false); onMove(f.id); }}
+              style={{ display:"flex", alignItems:"center", gap:8, width:"100%", padding:"7px 10px", borderRadius:8, border:"none", background:"transparent", cursor:"pointer", fontSize:12, color:T.text, textAlign:"left" }}
+              onMouseEnter={e=>e.currentTarget.style.background=T.accentL}
+              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+              <div style={{ width:8, height:8, borderRadius:"50%", background:f.color, flexShrink:0 }}/>
+              {f.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DashboardDropZone({ onFilesAdded }) {
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef(null);
@@ -2847,39 +2874,19 @@ export default function App() {
                           </div>
                           {/* Actions: Move to folder + Delete */}
                           <div style={{ display:"flex", gap:4, flexShrink:0 }} onClick={e=>e.stopPropagation()}>
-                            {/* Move dropdown */}
-                            {realFolders.length > 0 && (() => {
-                              const [open, setOpen] = useState(false);
-                              return (
-                                <div style={{ position:"relative" }}>
-                                  <button onClick={()=>setOpen(o=>!o)} title="Move to folder"
-                                    style={{ display:"flex", alignItems:"center", gap:4, background:T.accentL, color:T.accent, border:`1px solid ${T.accentS}`, borderRadius:8, padding:"5px 10px", fontSize:11, fontWeight:600, cursor:"pointer" }}>
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-                                    Move
-                                  </button>
-                                  {open && (
-                                    <div style={{ position:"absolute", right:0, top:"110%", zIndex:500, background:T.surface, border:`1.5px solid ${T.border}`, borderRadius:12, minWidth:160, boxShadow:"0 8px 28px rgba(0,0,0,.14)", padding:4 }}>
-                                      <p style={{ fontSize:10, fontWeight:700, color:T.muted, padding:"6px 10px 3px", letterSpacing:.7, textTransform:"uppercase" }}>Move to folder</p>
-                                      {realFolders.map(f=>(
-                                        <button key={f.id} onClick={()=>{
-                                          setOpen(false);
-                                          const updatedInbox = {...inbox, files:inbox.files.filter(fi=>fi.id!==file.id)};
-                                          const dest = folders.find(fo=>fo.id===f.id);
-                                          const updatedDest = {...dest, files:[...dest.files, file]};
-                                          setFoldersSave(folders.map(fo=>fo.id==="inbox"?updatedInbox:fo.id===f.id?updatedDest:fo));
-                                        }}
-                                          style={{ display:"flex", alignItems:"center", gap:8, width:"100%", padding:"7px 10px", borderRadius:8, border:"none", background:"transparent", cursor:"pointer", fontSize:12, color:T.text, textAlign:"left" }}
-                                          onMouseEnter={e=>e.currentTarget.style.background=T.accentL}
-                                          onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                                          <div style={{ width:8, height:8, borderRadius:"50%", background:f.color, flexShrink:0 }}/>
-                                          {f.name}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })()}
+                            {realFolders.length > 0 && (
+                              <MoveFileDropdown
+                                file={file}
+                                folders={realFolders}
+                                T={T}
+                                onMove={(targetFolderId) => {
+                                  const updatedInbox = {...inbox, files:inbox.files.filter(fi=>fi.id!==file.id)};
+                                  const dest = folders.find(fo=>fo.id===targetFolderId);
+                                  const updatedDest = {...dest, files:[...dest.files, file]};
+                                  setFoldersSave(folders.map(fo=>fo.id==="inbox"?updatedInbox:fo.id===targetFolderId?updatedDest:fo));
+                                }}
+                              />
+                            )}
                             {/* Delete */}
                             <button onClick={()=>{ if(window.confirm(`Delete "${file.name}"?`)){
                               idbDelete(file.id); FILE_STORE.delete(file.id);
@@ -7395,6 +7402,43 @@ function clamp(len) {
 }
 
 // ─── ASK ABOUT CARD — inline mini-chat for study mode ────────────────────────
+function ELI5Panel({ card }) {
+  const [eli5Text, setEli5Text] = useState("");
+  const [eli5Loading, setEli5Loading] = useState(false);
+  return (
+    <div style={{ padding:"0 20px 14px", display:"flex", flexDirection:"column", gap:8 }}>
+      {eli5Text && (
+        <div style={{ background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:12, padding:"10px 14px", fontSize:13, color:C.text, lineHeight:1.6 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8 }}>
+            <div>
+              <p style={{ margin:"0 0 4px", fontSize:11, fontWeight:800, color:C.accent, letterSpacing:.8 }}>ELI5 — SIMPLE EXPLANATION</p>
+              <p style={{ margin:0 }}>{eli5Loading ? "Explaining…" : eli5Text}</p>
+            </div>
+            <button onClick={()=>setEli5Text("")} style={{ background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:16, flexShrink:0, padding:"0 2px" }}>×</button>
+          </div>
+        </div>
+      )}
+      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+        <button onClick={async()=>{
+          const k=`eli5_${card.id}`; const cached=sessionStorage.getItem(k);
+          if(cached){setEli5Text(cached);return;}
+          setEli5Loading(true); setEli5Text("…");
+          try{
+            const r=await callClaude("Explain like the student is 5 years old. Use a simple analogy. 2-3 sentences max. Plain text only.",`Concept: ${card.question}\nAnswer: ${card.answer}`);
+            sessionStorage.setItem(k,r); setEli5Text(r);
+          }catch(e){setEli5Text("Error: "+e.message);}
+          setEli5Loading(false);
+        }} className="no-min-h"
+          style={{ display:"flex", alignItems:"center", gap:6, background:C.accentL, border:`1.5px solid ${C.accentS}`, color:C.accent, borderRadius:10, padding:"8px 14px", fontSize:12, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap", flexShrink:0 }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+          ELI5
+        </button>
+        <AskAboutCard card={card} />
+      </div>
+    </div>
+  );
+}
+
 function AskAboutCard({ card }) {
   const [q, setQ] = useState("");
   const [ans, setAns] = useState("");
@@ -7804,42 +7848,7 @@ function CardsTab({ file, onUpdate }) {
               </div>
 
               {/* Ask about this flashcard + ELI5 — image 4 style */}
-              {(() => {
-                const [eli5Text, setEli5Text] = React.useState("");
-                const [eli5Loading, setEli5Loading] = React.useState(false);
-                return (
-                  <div style={{ padding:"0 20px 14px", display:"flex", flexDirection:"column", gap:8 }}>
-                    {eli5Text && (
-                      <div style={{ background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:12, padding:"10px 14px", fontSize:13, color:C.text, lineHeight:1.6, position:"relative" }}>
-                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8 }}>
-                          <div>
-                            <p style={{ margin:"0 0 4px", fontSize:11, fontWeight:800, color:C.accent, letterSpacing:.8 }}>ELI5 — SIMPLE EXPLANATION</p>
-                            <p style={{ margin:0 }}>{eli5Loading ? "Explaining…" : eli5Text}</p>
-                          </div>
-                          <button onClick={()=>setEli5Text("")} style={{ background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:16, flexShrink:0, padding:"0 2px" }}>×</button>
-                        </div>
-                      </div>
-                    )}
-                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                      <button onClick={async()=>{
-                        const k=`eli5_${card.id}`; const cached=sessionStorage.getItem(k);
-                        if(cached){setEli5Text(cached);return;}
-                        setEli5Loading(true); setEli5Text("…");
-                        try{
-                          const r=await callClaude("Explain like the student is 5 years old. Use a simple analogy. 2-3 sentences max. Plain text only.",`Concept: ${card.question}\nAnswer: ${card.answer}`);
-                          sessionStorage.setItem(k,r); setEli5Text(r);
-                        }catch(e){setEli5Text("Error: "+e.message);}
-                        setEli5Loading(false);
-                      }} className="no-min-h"
-                        style={{ display:"flex", alignItems:"center", gap:6, background:C.accentL, border:`1.5px solid ${C.accentS}`, color:C.accent, borderRadius:10, padding:"8px 14px", fontSize:12, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap", flexShrink:0 }}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
-                        ELI5
-                      </button>
-                      <AskAboutCard card={card} />
-                    </div>
-                  </div>
-                );
-              })()}
+              <ELI5Panel card={card} />
               <p style={{ textAlign:"center", fontSize:10, color:C.muted, padding:"0 0 8px" }}>← → navigate &nbsp;·&nbsp; Space to flip</p>
             </div>
           </div>
