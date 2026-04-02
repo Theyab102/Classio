@@ -2793,19 +2793,10 @@ export default function App() {
         {homeTab==="folders" && (
           <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)", gap:12, marginBottom:32 }}>
             {[
-              { grad:"linear-gradient(135deg,#7C5CFC22,#7C5CFC11)", ic:"#7C5CFC", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C5CFC" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>, label:"Blank document", sub:"Start from scratch", action:()=>{
-              const inbox = folders.find(f=>f.id==="inbox") || {id:"inbox",name:"Inbox",color:"#6B4E8A",files:[]};
-              const id = "fi"+Date.now();
-              const newDoc = { id, name:"Untitled Document", type:"text/plain", size:0, colorIndex:0, notes:"", studyCards:[], uploadedAt:new Date().toLocaleDateString(), linkedFileIds:[], isBlankDoc:true };
-              const updInbox = {...inbox, files:[...inbox.files,newDoc]};
-              setFoldersSave([updInbox, ...folders.filter(f=>f.id!=="inbox")]);
-              setActiveFile({...newDoc, _fileObj:null});
-              setActiveFolder(updInbox);
-              setScreen("file"); if(setFileTab) setFileTab("notes");
-            } },
+              { grad:"linear-gradient(135deg,#7C5CFC22,#7C5CFC11)", ic:"#7C5CFC", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C5CFC" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>, label:"New Folder", sub:"Start from scratch", action:()=>setShowNewFolder(true) },
               { grad:"linear-gradient(135deg,#3D8EF822,#3D8EF811)", ic:"#3D8EF8", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3D8EF8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>, label:"Record audio", sub:"Upload an audio file", action:()=>setShowRecordModal(true) },
               { grad:"linear-gradient(135deg,#4A7C5922,#4A7C5911)", ic:"#4A7C59", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4A7C59" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>, label:"Document upload", sub:"Any PDF, DOC, PPT, etc", action:()=>setShowUploadModal(true) },
-              { grad:"linear-gradient(135deg,#C45C5C22,#C45C5C11)", ic:"#C45C5C", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C45C5C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.54C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg>, label:"Website or URL", sub:"Any website, YouTube, article", action:()=>setShowWebLinkModal(true) },
+              { grad:"linear-gradient(135deg,#C45C5C22,#C45C5C11)", ic:"#C45C5C", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C45C5C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.54C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg>, label:"Website link", sub:"YouTube or website link", action:()=>setShowWebLinkModal(true) },
             ].map((a,i) => (
               <button key={i} onClick={a.action}
                 style={{ display:"flex", alignItems:"center", gap:12, background:T.surface, border:`1.5px solid ${T.border}`, borderRadius:20, padding:"16px 18px", cursor:"pointer", textAlign:"left", boxShadow:T.cardShadow, transition:"box-shadow .15s,transform .15s", animation:`quickIn .2s ease ${i*0.06}s both` }}
@@ -6662,9 +6653,28 @@ function NotesTurboPanel({ file, notes, lang, onTabChange }) {
     try {
       const fileObj = file?._fileObj || FILE_STORE.get(file?.id) || null;
       const fileText = fileObj ? await extractFileText(fileObj).catch(()=>"") : "";
-      const sys = "You are a study AI. " + (fileText ? "File: " + fileText.slice(0,6000) : "") + (notes ? " Notes: " + notes.slice(0,2000) : "") + " Be concise. No LaTeX. No asterisks.";
+      const sys = `You are a study AI assistant. ${fileText ? "File context: " + fileText.slice(0,6000) : ""} ${notes ? "Current notes: " + notes.slice(0,2000) : ""}
+
+FORMATTING: Use **bold** for key terms, > for important formulas/definitions, - for bullet points. Be clear and thorough.
+TABLES: If the user asks for a comparison or table, respond with ONLY valid JSON in this exact format (no other text):
+{"TABLE":{"explanation":"...","columns":["Col1","Col2"],"rows":[["A","B"]]}}
+
+Otherwise respond normally with formatted text.`;
       const reply = await callClaudeChat(sys, newMsgs.map(m => ({ role:m.role, content:m.content })));
-      setMsgs(m => [...m, { role:"assistant", content:reply }]);
+      // Check if reply is a table JSON
+      let tableAdded = false;
+      try {
+        const clean = reply.replace(/```json|```/g,"").trim();
+        const match = clean.match(/\{"TABLE":\{[\s\S]*\}\}/);
+        if (match) {
+          const parsed = JSON.parse(match[0]);
+          if (parsed.TABLE?.columns) {
+            setMsgs(m => [...m, { role:"assistant", content:"__TABLE__", tableData: { table: { columns: parsed.TABLE.columns, rows: parsed.TABLE.rows }, explanation: parsed.TABLE.explanation } }]);
+            tableAdded = true;
+          }
+        }
+      } catch {}
+      if (!tableAdded) setMsgs(m => [...m, { role:"assistant", content:reply }]);
     } catch(e) { setMsgs(m => [...m, { role:"assistant", content:"Error: " + e.message }]); }
     setLoading(false);
   };
@@ -6694,12 +6704,18 @@ function NotesTurboPanel({ file, notes, lang, onTabChange }) {
         </div>
       )}
       {msgs.length > 0 && (
-        <div style={{ flex:1, overflowY:"auto", padding:"10px 12px", display:"flex", flexDirection:"column", gap:8, maxHeight:360 }}>
+        <div style={{ flex:1, overflowY:"auto", padding:"10px 12px", display:"flex", flexDirection:"column", gap:10, maxHeight:500, minHeight:200 }}>
           {msgs.map((m,i)=>(
             <div key={i} style={{ display:"flex", justifyContent:m.role==="user"?"flex-end":"flex-start" }}>
-              <div style={{ maxWidth:"88%", padding:"7px 10px", borderRadius:10, fontSize:12, lineHeight:1.6,
-                background:m.role==="user"?T.accent:T.bg, color:m.role==="user"?"#fff":T.text }}>
-                {m.content}
+              <div style={{ maxWidth:"98%", padding:m.role==="user"?"8px 12px":"10px 14px", borderRadius:m.role==="user"?12:14, fontSize:13, lineHeight:1.6,
+                background:m.role==="user"?T.accent:T.surface, color:m.role==="user"?"#fff":T.text,
+                alignSelf:m.role==="user"?"flex-end":"flex-start", border:m.role==="user"?"none":`1px solid ${T.border}` }}>
+                {m.content === "__TABLE__" && m.tableData
+                  ? <InlineClassioTable data={m.tableData} />
+                  : m.role === "assistant"
+                    ? <RichText text={m.content} />
+                    : m.content
+                }
               </div>
             </div>
           ))}
@@ -6759,105 +6775,226 @@ NEVER return markdown tables. ONLY return the JSON object.`;
 }
 
 // ─── NOTES VIEWER — renders notes text with inline tables ─────────────────────
+
+// ── Raw text edit modal ───────────────────────────────────────────────────────
+function RawEditModal({ notes, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [val, setVal] = useState(notes);
+  const T = useTheme();
+  useEffect(() => { if (open) setVal(notes); }, [open, notes]);
+  return (
+    <>
+      <button onClick={() => setOpen(true)}
+        style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:8, border:`1.5px solid ${T.border}`, background:"none", color:T.muted, fontSize:12, fontWeight:600, cursor:"pointer" }}>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Edit Raw
+      </button>
+      {open && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.55)", zIndex:900, display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}
+          onClick={e=>{ if(e.target===e.currentTarget) setOpen(false); }}>
+          <div style={{ width:"100%", maxWidth:800, maxHeight:"85vh", background:T.surface, borderRadius:18, display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"0 32px 80px rgba(0,0,0,.4)" }}>
+            <div style={{ padding:"14px 20px", borderBottom:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <p style={{ margin:0, fontSize:14, fontWeight:700, color:T.text }}>Edit Notes (Raw Text)</p>
+              <div style={{ display:"flex", gap:8 }}>
+                <button onClick={()=>setOpen(false)} style={{ padding:"6px 14px", border:`1px solid ${T.border}`, borderRadius:8, background:"transparent", cursor:"pointer", fontSize:13, color:T.muted }}>Cancel</button>
+                <button onClick={()=>{ onChange(val); setOpen(false); }} style={{ padding:"6px 16px", border:"none", borderRadius:8, background:"linear-gradient(135deg,#7C5CFC,#3D8EF8)", cursor:"pointer", fontSize:13, fontWeight:700, color:"#fff" }}>Save</button>
+              </div>
+            </div>
+            <textarea value={val} onChange={e=>setVal(e.target.value)} autoFocus
+              style={{ flex:1, border:"none", outline:"none", padding:"16px 20px", fontSize:14, lineHeight:1.8, resize:"none", color:T.text, background:T.surface, fontFamily:"'DM Sans',sans-serif", minHeight:500 }}/>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
   const [editing, setEditing] = useState(false);
   const [editVal, setEditVal] = useState(notes);
   useEffect(() => { setEditVal(notes); }, [notes]);
 
-  if (editing) {
-    return (
-      <div>
-        <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:6, gap:6 }}>
-          <button onClick={() => { onChange(editVal); setEditing(false); }}
-            style={{ background:GRAD, color:"#fff", border:"none", borderRadius:8, padding:"6px 16px", fontSize:12, fontWeight:700, cursor:"pointer" }}>Done Editing</button>
-          <button onClick={() => { setEditVal(notes); setEditing(false); }}
-            style={{ background:"none", border:`1.5px solid ${C.border}`, color:C.muted, borderRadius:8, padding:"6px 12px", fontSize:12, cursor:"pointer" }}>Cancel</button>
-        </div>
-        <textarea value={editVal} onChange={e=>setEditVal(e.target.value)}
-          dir={isRTL?"rtl":"ltr"}
-          autoFocus
-          style={{ width:"100%", minHeight:440, border:`1.5px solid ${C.accent}`, borderRadius:14, padding:"18px 20px", fontSize:14, lineHeight:1.85, outline:"none", resize:"vertical", color:C.text, background:C.surface, fontFamily:"'DM Sans',sans-serif", direction:isRTL?"rtl":"ltr", boxSizing:"border-box" }}/>
-      </div>
-    );
-  }
+  // Editing handled externally via RawEditModal
 
-  // Parse notes into sections and detect table markers
+  // ── Turbo-style rich notes renderer ─────────────────────────────────────
+  const SECTION_EMOJIS = ["🔬","📡","⚛️","🧪","📐","🔭","🧬","📊","⚡","🌊","🔋","🧲","💡","🔑","📌"];
+  let _sectionCount = 0;
+
+  const renderInlineMarkup = (text, keyPrefix) => {
+    // Handle **bold** inline
+    const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+    return parts.map((p, pi) => {
+      if (p.startsWith("**") && p.endsWith("**")) return <strong key={pi} style={{ color:C.text, fontWeight:700 }}>{p.slice(2,-2)}</strong>;
+      if (p.startsWith("`") && p.endsWith("`")) return <code key={pi} style={{ background:C.accentL, color:C.accent, borderRadius:4, padding:"1px 6px", fontSize:13, fontFamily:"monospace" }}>{p.slice(1,-1)}</code>;
+      return p;
+    });
+  };
+
   const renderNotesWithTable = () => {
+    if (!notes?.trim()) return null;
     const lines = notes.split("\n");
     const elements = [];
     let key = 0;
     let i = 0;
     let tableInserted = false;
+    let firstSectionDone = false;
+    _sectionCount = 0;
 
     while (i < lines.length) {
       const line = lines[i];
       const trimmed = line.trim();
 
-      // Detect ALL CAPS headings
-      if (/^[A-Z][A-Z\s\-\/&0-9:]{3,}$/.test(trimmed) && trimmed.length > 3) {
-        // Before rendering a new section, insert table after first section if available
-        if (!tableInserted && tableData?.table?.columns && elements.length > 6) {
+      // ── Turbo-style: # Heading or ## subheading
+      if (trimmed.startsWith("## ")) {
+        const text = trimmed.slice(3);
+        elements.push(
+          <h3 key={key++} style={{ fontFamily:"'DM Sans',sans-serif", fontSize:17, fontWeight:700, color:C.text, margin:"20px 0 8px", display:"flex", alignItems:"center", gap:8 }}>
+            {text}
+          </h3>
+        );
+        i++; continue;
+      }
+
+      if (trimmed.startsWith("# ")) {
+        const text = trimmed.slice(2);
+        const emoji = SECTION_EMOJIS[_sectionCount % SECTION_EMOJIS.length];
+        _sectionCount++;
+        if (!tableInserted && tableData?.table?.columns && firstSectionDone) {
           elements.push(<InlineClassioTable key={`tbl${key++}`} data={tableData} />);
           tableInserted = true;
         }
+        firstSectionDone = true;
+        elements.push(<div key={key++} style={{ height:1, background:C.border, margin:"20px 0 16px" }}/>);
         elements.push(
-          <p key={key++} style={{ fontWeight:700, fontSize:15, color:C.text, margin:"18px 0 6px", letterSpacing:.3, borderBottom:`1px solid ${C.border}`, paddingBottom:4 }}>
-            {trimmed}
-          </p>
+          <h2 key={key++} style={{ fontFamily:"'DM Sans',sans-serif", fontSize:22, fontWeight:700, color:C.text, margin:"0 0 12px", display:"flex", alignItems:"center", gap:10 }}>
+            <span style={{ fontSize:22 }}>{emoji}</span>{text}
+          </h2>
         );
         i++; continue;
       }
 
-      // Bullet point
-      if (trimmed.startsWith("- ") || trimmed.startsWith("• ") || trimmed.startsWith("· ")) {
-        const content = trimmed.slice(2);
+      // ── ALL CAPS heading (legacy support)
+      if (/^[A-Z][A-Z\s\-\/&0-9:]{3,}$/.test(trimmed) && trimmed.length > 3 && !trimmed.includes(".")) {
+        const emoji = SECTION_EMOJIS[_sectionCount % SECTION_EMOJIS.length];
+        _sectionCount++;
+        if (!tableInserted && tableData?.table?.columns && firstSectionDone) {
+          elements.push(<InlineClassioTable key={`tbl${key++}`} data={tableData} />);
+          tableInserted = true;
+        }
+        firstSectionDone = true;
+        elements.push(<div key={key++} style={{ height:1, background:C.border, margin:"20px 0 14px" }}/>);
         elements.push(
-          <div key={key++} style={{ display:"flex", gap:8, marginBottom:4, paddingLeft:8 }}>
-            <span style={{ color:C.accent, flexShrink:0, marginTop:2 }}>•</span>
-            <span style={{ fontSize:14, color:C.text, lineHeight:1.7 }}>{content}</span>
+          <h2 key={key++} style={{ fontFamily:"'DM Sans',sans-serif", fontSize:20, fontWeight:700, color:C.text, margin:"0 0 10px", display:"flex", alignItems:"center", gap:10 }}>
+            <span>{emoji}</span>{trimmed.charAt(0) + trimmed.slice(1).toLowerCase()}
+          </h2>
+        );
+        i++; continue;
+      }
+
+      // ── Blockquote / formula / definition line
+      if (trimmed.startsWith("> ") || trimmed.startsWith(">> ")) {
+        const text = trimmed.replace(/^>+\s/, "");
+        elements.push(
+          <div key={key++} style={{ borderLeft:`4px solid ${C.accent}`, paddingLeft:14, margin:"10px 0", fontFamily:"monospace", fontSize:14, color:C.text, background:C.accentL, borderRadius:"0 8px 8px 0", padding:"10px 14px" }}>
+            {text}
           </div>
         );
         i++; continue;
       }
 
-      // Image placeholder
+      // ── Formula lines (contains = sign and math chars)
+      if (/[=\+\-×÷±≈≥≤≠∝∞√]/.test(trimmed) && trimmed.length < 120 && !trimmed.includes("http")) {
+        // Only treat as formula if it's a standalone equation-like line
+        if (/^[A-Za-z0-9\s=+\-×÷±≈≥≤≠∝∞√\(\)\[\]\.,:;α-ωΑ-Ω⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉⁻]+$/.test(trimmed)) {
+          elements.push(
+            <div key={key++} style={{ background:C.isDark?"#1a1a2e":"#f8f7ff", border:`1px solid ${C.accentS}`, borderRadius:8, padding:"8px 16px", margin:"8px 0", fontFamily:"monospace", fontSize:14, color:C.text }}>
+              {trimmed}
+            </div>
+          );
+          i++; continue;
+        }
+      }
+
+      // ── Bullet point
+      if (trimmed.startsWith("- ") || trimmed.startsWith("• ") || trimmed.startsWith("· ") || trimmed.startsWith("* ")) {
+        const content = trimmed.slice(2);
+        elements.push(
+          <div key={key++} style={{ display:"flex", gap:8, marginBottom:5, paddingLeft:4 }}>
+            <span style={{ color:C.accent, flexShrink:0, fontWeight:700, marginTop:1 }}>•</span>
+            <span style={{ fontSize:14, color:C.text, lineHeight:1.7 }}>{renderInlineMarkup(content, key)}</span>
+          </div>
+        );
+        i++; continue;
+      }
+
+      // ── Numbered list
+      if (/^\d+[\.\)]\s/.test(trimmed)) {
+        const match = trimmed.match(/^(\d+)[\.\)]\s(.*)/);
+        if (match) {
+          elements.push(
+            <div key={key++} style={{ display:"flex", gap:8, marginBottom:5, paddingLeft:4 }}>
+              <span style={{ color:C.accent, flexShrink:0, fontWeight:700, minWidth:20 }}>{match[1]}.</span>
+              <span style={{ fontSize:14, color:C.text, lineHeight:1.7 }}>{renderInlineMarkup(match[2], key)}</span>
+            </div>
+          );
+          i++; continue;
+        }
+      }
+
+      // ── Image placeholder from file
       if (trimmed.startsWith("[Image:") && trimmed.endsWith("]")) {
         const desc = trimmed.slice(7, -1).trim();
         elements.push(
-          <div key={key++} style={{ background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:10, padding:"8px 14px", margin:"8px 0", fontSize:12, color:C.accent, fontWeight:600 }}>
-            🖼️ {desc}
+          <div key={key++} style={{ margin:"12px 0", borderRadius:10, overflow:"hidden", border:`1px solid ${C.border}` }}>
+            <div style={{ background:C.accentL, padding:"6px 12px", fontSize:11, fontWeight:700, color:C.accent, display:"flex", alignItems:"center", gap:6 }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              Image from document
+            </div>
+            <div style={{ padding:"10px 14px", fontSize:13, color:C.text, background:C.surface }}>{desc}</div>
           </div>
         );
         i++; continue;
       }
 
-      // Empty line
-      if (!trimmed) { elements.push(<div key={key++} style={{ height:8 }}/>); i++; continue; }
+      // ── Web image [WebImage: url | caption]
+      if (trimmed.startsWith("[WebImage:") && trimmed.endsWith("]")) {
+        const inner = trimmed.slice(10, -1).trim();
+        const [url, caption] = inner.split("|").map(s => s.trim());
+        if (url) {
+          elements.push(
+            <div key={key++} style={{ margin:"12px 0" }}>
+              <img src={url} alt={caption||"image"} onError={e=>e.target.style.display="none"}
+                style={{ maxWidth:"100%", borderRadius:10, border:`1px solid ${C.border}` }}/>
+              {caption && <p style={{ fontSize:11, color:C.muted, textAlign:"center", margin:"4px 0 0" }}>{caption}</p>}
+            </div>
+          );
+          i++; continue;
+        }
+      }
 
-      // Regular text
+      // ── Empty line
+      if (!trimmed) { elements.push(<div key={key++} style={{ height:6 }}/>); i++; continue; }
+
+      // ── Regular paragraph
       elements.push(
-        <p key={key++} style={{ fontSize:14, color:C.text, lineHeight:1.75, margin:"2px 0" }}>{trimmed}</p>
+        <p key={key++} style={{ fontSize:14, color:C.text, lineHeight:1.8, margin:"3px 0" }}>
+          {renderInlineMarkup(trimmed, key)}
+        </p>
       );
       i++;
     }
 
     // Append table at end if not yet inserted
     if (!tableInserted && tableData?.table?.columns) {
-      elements.push(<InlineClassioTable key={`tbl_end`} data={tableData} />);
+      elements.push(<InlineClassioTable key="tbl_end" data={tableData} />);
     }
 
     return elements;
   };
 
   return (
-    <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"20px 24px", minHeight:400, position:"relative" }}
+    <div style={{ background:C.surface, borderRadius:14, padding:"24px 28px", minHeight:400 }}
       dir={isRTL?"rtl":"ltr"}>
-      <button onClick={() => setEditing(true)}
-        title="Edit notes"
-        style={{ position:"absolute", top:12, right:12, background:"none", border:`1px solid ${C.border}`, borderRadius:8, padding:"4px 10px", fontSize:11, color:C.muted, cursor:"pointer", display:"flex", alignItems:"center", gap:5 }}>
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-        Edit
-      </button>
       {renderNotesWithTable()}
     </div>
   );
@@ -6971,12 +7108,12 @@ function NotesTab({ file, onUpdate, user, isGuest, onTabChange }) {
         : `Create comprehensive study notes for: "${file.name}". Make them detailed and useful for exam revision. Cover all key topics, definitions, formulas, and concepts.`;
 
       const styleGuide = {
-        detailed: "Write detailed notes split into sections. Each section has a heading in ALL CAPS followed by bullet points.",
-        bullet:   "Write ONLY bullet points grouped under ALL CAPS headings. One fact per line.",
-        simple:   "Write very simple short notes in plain language. Short sentences. No jargon.",
-        exam:     "Write exam revision notes. Include key terms, definitions, possible exam questions, and a checklist.",
-        quick:    "Write an ULTRA SHORT 1-minute summary. Only the 5 most critical key points as numbered bullets. Extremely concise.",
-        expert:   "Write graduate-level expert notes with deep technical detail, nuance, edge cases, and advanced concepts. Use precise scientific terminology.",
+        detailed: "Write detailed notes split into sections using # for main headings and ## for subheadings. Include examples, formulas, and key definitions.",
+        bullet:   "Write ONLY bullet points grouped under # headings. One fact per line with - bullets.",
+        simple:   "Write very simple short notes in plain language. Short sentences. No jargon. Use # for section headings.",
+        exam:     "Write exam revision notes. Use # headings for topics. Include key terms, definitions, and > blockquotes for important formulas.",
+        quick:    "Write an ULTRA SHORT 1-minute summary. Only the 5 most critical key points as numbered bullets under one # heading. Extremely concise.",
+        expert:   "Write graduate-level expert notes with deep technical detail. Use # headings, ## subheadings, > for key equations, and **bold** for terms.",
       };
       const effectiveStyle = useCustomStyle && customStyle.trim()
         ? `You are a study notes writer. The student's style instruction: "${customStyle.trim()}". Follow exactly.`
@@ -6986,21 +7123,17 @@ function NotesTab({ file, onUpdate, user, isGuest, onTabChange }) {
         `${effectiveStyle}
 ${getLangInstruction(lang)}
 
-STRICT FORMATTING RULES — follow exactly:
-1. NEVER use asterisks (*) or double asterisks (**) anywhere
-2. NEVER use pound signs (#) for headings
-3. Section headings: ALL CAPS on their own line (e.g., ATOMIC STRUCTURE)
-4. Bullet points: use a dash (-)
-5. Plain text only — no markdown symbols
-6. Math & science notation: use proper symbols, never words
-   - Write: 1 × 10⁻¹⁰ m  NOT "one times ten to the power of negative ten metres"
-   - Write: 9.81 m/s²  NOT "nine point eight one metres per second squared"
-   - Write: H₂O, CO₂, O₂  NOT "H 2 O" or "H two O"
-   - Write: F = ma, E = mc²  NOT words
-   - Write: π, α, β, λ, Δ, μ  NOT "pi", "alpha", "beta"
-   - Write: ×, ÷, ≈, ≥, ≤, ≠, ±  NOT words
-7. Units: always use standard abbreviations (m, km, kg, g, s, J, N, W, V, A, K, °C, mol, Hz)
-8. ONLY use content from the provided file — do not invent facts`,
+FORMATTING RULES — follow exactly:
+1. Use # for main section headings (e.g., # Background Radiation)
+2. Use ## for sub-headings (e.g., ## Natural Sources)
+3. Use - for bullet points
+4. Use **term** for bold key terms inline
+5. Use > for important formulas or definitions (e.g., > E = mc²)
+6. Use numbered lists (1. 2. 3.) for steps or ordered items
+7. For images/diagrams from the document, add: [Image: description of what the image shows]
+8. Math: use proper symbols — α, β, γ, ×, ÷, ≈, ±, π, Δ, μ, superscripts like m², m/s²
+9. ONLY use content from the provided file — do not invent facts
+10. Be comprehensive — cover EVERY section of the document`,
         userMsg,
         4000
       );
@@ -7217,6 +7350,8 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
               </button>
             </div>
           )}
+          {/* Edit as raw text */}
+          {notes.trim() && <RawEditModal notes={notes} onChange={v=>{setNotes(v); setUnsaved(true);}} />}
         </div>
         <NotesTurboPanel file={file} notes={notes} lang={lang} onTabChange={onTabChange} />
       </div>
@@ -7411,153 +7546,192 @@ function clamp(len) {
 }
 
 // ─── ASK ABOUT CARD — inline mini-chat for study mode ────────────────────────
+// ── Render rich markdown-like text for ELI5 responses ───────────────────────
+function RichText({ text }) {
+  const T = useTheme();
+  if (!text) return null;
+  const lines = text.split("\n");
+  const els = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!line.trim()) { els.push(<div key={i} style={{ height:10 }}/>); i++; continue; }
+    // Bold heading: **text** or line ends with ?
+    if (line.startsWith("**") && line.endsWith("**")) {
+      els.push(<p key={i} style={{ fontWeight:700, fontSize:15, color:T.text, margin:"12px 0 4px" }}>{line.slice(2,-2)}</p>); i++; continue;
+    }
+    // Blockquote: > text
+    if (line.startsWith("> ") || line.startsWith(""")) {
+      els.push(<div key={i} style={{ borderLeft:`3px solid #7C5CFC`, paddingLeft:14, margin:"8px 0", fontStyle:"italic", color:T.accent, fontSize:14, lineHeight:1.6 }}>{line.replace(/^> /,"").replace(/^"|"$/g,"")}</div>); i++; continue;
+    }
+    // Bullet
+    if (line.startsWith("• ") || line.startsWith("- ") || line.startsWith("* ")) {
+      els.push(<div key={i} style={{ display:"flex", gap:8, alignItems:"flex-start", margin:"4px 0" }}><span style={{ color:T.accent, fontWeight:700, flexShrink:0 }}>•</span><span style={{ fontSize:14, color:T.text, lineHeight:1.6 }}>{line.slice(2)}</span></div>); i++; continue;
+    }
+    // Bold inline: **word** in text
+    if (line.includes("**")) {
+      const parts = line.split(/\*\*(.+?)\*\*/g);
+      const rendered = parts.map((p,pi) => pi%2===1 ? <strong key={pi} style={{ color:T.text }}>{p}</strong> : p);
+      els.push(<p key={i} style={{ fontSize:14, color:T.text, lineHeight:1.7, margin:"4px 0" }}>{rendered}</p>); i++; continue;
+    }
+    els.push(<p key={i} style={{ fontSize:14, color:T.text, lineHeight:1.7, margin:"4px 0" }}>{line}</p>);
+    i++;
+  }
+  return <div>{els}</div>;
+}
 
-// ── Turbo Study Bar — ELI5 + Ask about card ──────────────────────────────────
-function TurboStudyBar({ card }) {
-  const [mode, setMode] = useState(null); // null | "eli5" | "ask"
+function ELI5Panel({ card }) {
+  const [open, setOpen] = useState(false);
   const [eli5Text, setEli5Text] = useState("");
   const [eli5Loading, setEli5Loading] = useState(false);
   const [askQ, setAskQ] = useState("");
-  const [askAns, setAskAns] = useState("");
-  const [askLoading, setAskLoading] = useState(false);
-  const [showPanel, setShowPanel] = useState(false);
+  const [msgs, setMsgs] = useState([]);  // [{role, content}]
+  const [sending, setSending] = useState(false);
   const T = useTheme();
+  const inputRef = useRef(null);
+  const bottomRef = useRef(null);
+
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:"smooth" }); }, [msgs, eli5Text]);
 
   const doELI5 = async () => {
-    if (eli5Text) { setShowPanel(true); return; }
+    setOpen(true);
+    if (eli5Text) return;
     setEli5Loading(true);
+    // Auto-send the ELI5 prompt as a user message
+    const prompt = `Explain this term and definition to me as if I'm a young student with no background in the subject. Don't just restate the definition, explain why it is defined this way and how it relates to the term. Keep it clear and thorough, but simple.`;
+    setMsgs([{ role:"user", content:prompt }]);
     try {
-      const r = await callClaude("Explain like the student is 5 years old. Use a simple analogy. 2-3 sentences max. Plain text only.",
-        `Concept: ${card.question}
-Answer: ${card.answer}`);
+      const k = `eli5_${card.id}`;
+      const cached = sessionStorage.getItem(k);
+      let r = cached;
+      if (!r) {
+        r = await callClaude(
+          `You are a friendly tutor explaining to a young student. Use analogies, bold key terms with **text**, use > for important quotes, and bullet points. Make it engaging and clear.`,
+          `Term: ${card.question}\nDefinition: ${card.answer}\n\n${prompt}`
+        );
+        sessionStorage.setItem(k, r);
+      }
       setEli5Text(r);
-    } catch(e) { setEli5Text("Error: " + e.message); }
+      setMsgs(m => [...m, { role:"assistant", content:r }]);
+    } catch(e) { setMsgs(m => [...m, { role:"assistant", content:"Error: " + e.message }]); }
     setEli5Loading(false);
-    setShowPanel(true);
   };
 
-  const doAsk = async () => {
-    if (!askQ.trim() || askLoading) return;
-    setAskLoading(true); setAskAns("");
+  const sendAsk = async () => {
+    const text = askQ.trim();
+    if (!text || sending) return;
+    const newMsgs = [...msgs, { role:"user", content:text }];
+    setMsgs(newMsgs); setAskQ(""); setSending(true);
     try {
-      const r = await callClaude("You are a helpful study tutor. Answer the student's question about this flashcard concisely. Plain text only.",
-        `Flashcard Q: ${card.question}
-Flashcard A: ${card.answer}
-
-Student question: ${askQ}`);
-      setAskAns(r);
-    } catch(e) { setAskAns("Error: " + e.message); }
-    setAskLoading(false);
+      const r = await callClaude(
+        `You are a helpful study tutor explaining flashcard content. Use **bold** for key terms, > for quotes, and bullet points. Be clear and thorough.`,
+        `Flashcard: ${card.question}\nAnswer: ${card.answer}\n\nQuestion: ${text}`
+      );
+      setMsgs(m => [...m, { role:"assistant", content:r }]);
+    } catch(e) { setMsgs(m => [...m, { role:"assistant", content:"Error: " + e.message }]); }
+    setSending(false);
+    setTimeout(() => inputRef.current?.focus(), 100);
   };
 
   return (
-    <div>
-      {/* ELI5 Panel */}
-      {showPanel && eli5Text && (
-        <div style={{ margin:"0 28px 10px", background:T.isDark?"#1a1a2e":"#f0f0ff", border:`1px solid ${T.accent}33`, borderRadius:14, padding:"14px 16px", position:"relative" }}>
-          <button onClick={()=>setShowPanel(false)} style={{ position:"absolute", top:10, right:12, background:"none", border:"none", cursor:"pointer", color:T.muted, fontSize:16 }}>×</button>
-          <p style={{ margin:"0 0 4px", fontSize:11, fontWeight:800, color:T.accent, letterSpacing:.8, textTransform:"uppercase" }}>ELI5 — SIMPLE EXPLANATION</p>
-          <p style={{ margin:0, fontSize:13, color:T.text, lineHeight:1.6 }}>{eli5Text}</p>
-        </div>
-      )}
-      {/* Bottom action bar */}
-      <div style={{ padding:"10px 28px 14px", display:"flex", alignItems:"center", gap:10, background:T.surface, borderTop:`1px solid ${T.border}` }}>
-        <button onClick={()=>{ setMode("eli5"); doELI5(); }}
-          style={{ display:"flex", alignItems:"center", gap:7, padding:"9px 16px", border:`2px solid ${T.accent}`, borderRadius:12,
+    <>
+      {/* Bottom bar - ELI5 button + ask input */}
+      <div style={{ padding:"10px 28px 14px", display:"flex", alignItems:"center", gap:10 }}>
+        <button onClick={doELI5} className="no-min-h"
+          style={{ display:"flex", alignItems:"center", gap:7, padding:"9px 16px",
+            border:`2px solid ${T.accent}`, borderRadius:12,
             background:T.accentL, color:T.accent, fontSize:13, fontWeight:700, cursor:"pointer", flexShrink:0 }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          {eli5Loading ? "Explaining…" : "ELI5"}
+          ELI5
         </button>
         <div style={{ flex:1, display:"flex", gap:6, alignItems:"center" }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink:0 }}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          <input value={askQ} onChange={e=>setAskQ(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")doAsk();}}
+          <input
             placeholder="Ask about this flashcard…"
+            value={askQ}
+            onChange={e => setAskQ(e.target.value)}
+            onKeyDown={e => { if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); if(askQ.trim()){setOpen(true); sendAsk();} }}}
+            onFocus={() => { if(askQ.trim()) setOpen(true); }}
             style={{ flex:1, border:`1px solid ${T.border}`, borderRadius:10, padding:"8px 12px", fontSize:13, outline:"none", color:T.text, background:T.bg, fontFamily:"inherit" }}/>
-          <button onClick={doAsk} disabled={!askQ.trim()||askLoading}
-            style={{ width:34, height:34, borderRadius:"50%", border:"none", background:askQ.trim()&&!askLoading?"linear-gradient(135deg,#7C5CFC,#3D8EF8)":T.border, cursor:askQ.trim()&&!askLoading?"pointer":"not-allowed", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+          <button onClick={() => { setOpen(true); sendAsk(); }} disabled={!askQ.trim()||sending}
+            style={{ width:34, height:34, borderRadius:"50%", border:"none",
+              background:askQ.trim()&&!sending?"linear-gradient(135deg,#7C5CFC,#3D8EF8)":T.border,
+              cursor:askQ.trim()&&!sending?"pointer":"not-allowed",
+              display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           </button>
         </div>
       </div>
-      {askAns && (
-        <div style={{ margin:"0 28px 10px", background:T.surface, border:`1px solid ${T.border}`, borderRadius:12, padding:"12px 14px" }}>
-          <p style={{ margin:"0 0 4px", fontSize:11, fontWeight:800, color:T.muted, letterSpacing:.8 }}>AI ANSWER</p>
-          <p style={{ margin:0, fontSize:13, color:T.text, lineHeight:1.6 }}>{askAns}</p>
-        </div>
-      )}
-    </div>
-  );
-}
 
-function ELI5Panel({ card }) {
-  const [eli5Text, setEli5Text] = useState("");
-  const [eli5Loading, setEli5Loading] = useState(false);
-  return (
-    <div style={{ padding:"0 20px 14px", display:"flex", flexDirection:"column", gap:8 }}>
-      {eli5Text && (
-        <div style={{ background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:12, padding:"10px 14px", fontSize:13, color:C.text, lineHeight:1.6 }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8 }}>
-            <div>
-              <p style={{ margin:"0 0 4px", fontSize:11, fontWeight:800, color:C.accent, letterSpacing:.8 }}>ELI5 — SIMPLE EXPLANATION</p>
-              <p style={{ margin:0 }}>{eli5Loading ? "Explaining…" : eli5Text}</p>
+      {/* Full-screen modal overlay */}
+      {open && (
+        <div style={{ position:"fixed", inset:0, zIndex:800, background:"rgba(0,0,0,.55)", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}
+          onClick={e=>{ if(e.target===e.currentTarget) setOpen(false); }}>
+          <div style={{ width:"100%", maxWidth:780, maxHeight:"85vh", background:T.isDark?"#1c1c1e":"#ffffff", borderRadius:20,
+            boxShadow:"0 32px 80px rgba(0,0,0,.4)", display:"flex", flexDirection:"column", overflow:"hidden",
+            animation:"pageIn .2s cubic-bezier(.22,1,.36,1)" }}>
+            {/* Header */}
+            <div style={{ padding:"16px 20px 14px", borderBottom:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0 }}>
+              <p style={{ margin:0, fontSize:14, color:T.muted, fontWeight:500 }}>Ask me any questions about your notes or flashcards!</p>
+              <button onClick={()=>setOpen(false)} style={{ background:"none", border:"none", cursor:"pointer", color:T.muted, fontSize:22, lineHeight:1, padding:"0 4px" }}>×</button>
             </div>
-            <button onClick={()=>setEli5Text("")} style={{ background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:16, flexShrink:0, padding:"0 2px" }}>×</button>
+
+            {/* Messages */}
+            <div style={{ flex:1, overflowY:"auto", padding:"20px 24px", display:"flex", flexDirection:"column", gap:16 }}>
+              {msgs.length === 0 && (
+                <p style={{ fontSize:13, color:T.muted, textAlign:"center", margin:"40px 0" }}>Click ELI5 or type a question below</p>
+              )}
+              {msgs.map((m, i) => (
+                <div key={i} style={{ maxWidth: m.role==="user" ? "85%" : "100%", alignSelf: m.role==="user" ? "flex-end" : "flex-start" }}>
+                  {m.role === "user" ? (
+                    <div style={{ background:"linear-gradient(135deg,#7C5CFC,#3D8EF8)", color:"#fff", borderRadius:16, padding:"12px 18px", fontSize:14, lineHeight:1.6 }}>
+                      {m.content}
+                    </div>
+                  ) : (
+                    <div style={{ background:T.isDark?"#2a2a2e":"#f5f5f7", borderRadius:16, padding:"16px 20px", fontSize:14, color:T.text }}>
+                      {i === msgs.length-1 && eli5Loading
+                        ? <div style={{ display:"flex", gap:4 }}>{[0,1,2].map(j=><span key={j} style={{width:6,height:6,borderRadius:"50%",background:T.accent,animation:`bounce .8s ease-in-out ${j*0.15}s infinite`,display:"inline-block"}}/>)}</div>
+                        : <RichText text={m.content} />
+                      }
+                    </div>
+                  )}
+                </div>
+              ))}
+              {sending && (
+                <div style={{ background:T.isDark?"#2a2a2e":"#f5f5f7", borderRadius:16, padding:"14px 18px", alignSelf:"flex-start" }}>
+                  <div style={{ display:"flex", gap:4 }}>{[0,1,2].map(j=><span key={j} style={{width:6,height:6,borderRadius:"50%",background:T.accent,animation:`bounce .8s ease-in-out ${j*0.15}s infinite`,display:"inline-block"}}/>)}</div>
+                </div>
+              )}
+              <div ref={bottomRef}/>
+            </div>
+
+            {/* Input */}
+            <div style={{ padding:"12px 20px 16px", borderTop:`1px solid ${T.border}`, display:"flex", gap:10, alignItems:"center", flexShrink:0 }}>
+              <input ref={inputRef} value={askQ} onChange={e=>setAskQ(e.target.value)}
+                onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); sendAsk(); }}}
+                placeholder="Type a question here…"
+                style={{ flex:1, border:"none", outline:"none", fontSize:14, color:T.text, background:"transparent", fontFamily:"inherit" }}
+                autoFocus/>
+              <button onClick={sendAsk} disabled={!askQ.trim()||sending}
+                style={{ width:38, height:38, borderRadius:"50%", border:"none",
+                  background:askQ.trim()&&!sending?"linear-gradient(135deg,#7C5CFC,#3D8EF8)":"#ef4444",
+                  cursor:askQ.trim()&&!sending?"pointer":"default",
+                  display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                {sending
+                  ? <div style={{ width:14, height:14, borderRadius:"50%", background:"#fff" }}/>
+                  : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>}
+              </button>
+            </div>
           </div>
         </div>
       )}
-      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-        <button onClick={async()=>{
-          const k=`eli5_${card.id}`; const cached=sessionStorage.getItem(k);
-          if(cached){setEli5Text(cached);return;}
-          setEli5Loading(true); setEli5Text("…");
-          try{
-            const r=await callClaude("Explain like the student is 5 years old. Use a simple analogy. 2-3 sentences max. Plain text only.",`Concept: ${card.question}\nAnswer: ${card.answer}`);
-            sessionStorage.setItem(k,r); setEli5Text(r);
-          }catch(e){setEli5Text("Error: "+e.message);}
-          setEli5Loading(false);
-        }} className="no-min-h"
-          style={{ display:"flex", alignItems:"center", gap:6, background:C.accentL, border:`1.5px solid ${C.accentS}`, color:C.accent, borderRadius:10, padding:"8px 14px", fontSize:12, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap", flexShrink:0 }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
-          ELI5
-        </button>
-        <AskAboutCard card={card} />
-      </div>
-    </div>
+    </>
   );
 }
 
 function AskAboutCard({ card }) {
-  const [q, setQ] = useState("");
-  const [ans, setAns] = useState("");
-  const [busy, setBusy] = useState(false);
-  const ask = async () => {
-    if (!q.trim() || busy) return;
-    setBusy(true); setAns("");
-    try {
-      const r = await callClaude(
-        "You are a helpful study tutor. Answer the student's question about this flashcard concisely. Plain text only, no markdown.",
-        `Flashcard Q: ${card.question}\nFlashcard A: ${card.answer}\n\nStudent question: ${q}`
-      );
-      setAns(r);
-    } catch(e){ setAns("Error: "+e.message); }
-    setBusy(false);
-  };
-  return (
-    <div style={{ flex:1, display:"flex", flexDirection:"column", gap:4 }}>
-      {ans && <div style={{ fontSize:12, color:C.text, background:C.accentL, borderRadius:8, padding:"6px 10px", lineHeight:1.5 }}>{ans}</div>}
-      <div style={{ display:"flex", gap:6 }}>
-        <input value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")ask();}} placeholder="Ask about this flashcard…"
-          style={{ flex:1, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"7px 12px", fontSize:12, outline:"none", color:C.text, background:C.bg }}/>
-        <button onClick={ask} disabled={!q.trim()||busy} className="no-min-h"
-          style={{ width:34, height:34, borderRadius:10, border:"none", background:q.trim()&&!busy?"linear-gradient(135deg,#7C5CFC,#3D8EF8)":"#ccc",
-            color:"#fff", cursor:q.trim()&&!busy?"pointer":"not-allowed", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-          {busy
-            ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-            : <svg width="12" height="12" viewBox="0 0 24 24" fill="white"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>}
-        </button>
-      </div>
-    </div>
-  );
+  // Kept for backward compat — redirects to ELI5Panel modal
+  return null;
 }
 
 // ─── STUDY CARDS TAB ──────────────────────────────────────────────────────────
@@ -7582,8 +7756,6 @@ function CardsTab({ file, onUpdate }) {
   useEffect(() => {
     const handler = (e) => {
       if (viewMode !== "study") return;
-      const tag = document.activeElement?.tagName?.toLowerCase();
-      if (tag === "input" || tag === "textarea" || document.activeElement?.isContentEditable) return;
       if (e.key === "ArrowRight" || e.key === " ") {
         e.preventDefault();
         if (e.key === " ") setFlipped(f => {
@@ -7650,159 +7822,140 @@ function CardsTab({ file, onUpdate }) {
 
   return (
     <div>
-      {/* ══ Turbo-style Flashcard browser ══ */}
-      {viewMode !== "study" && (
+      {/* ── Header ── */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18, flexWrap:"wrap", gap:12 }}>
         <div>
-          {/* Title bar */}
-          <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:12, flexWrap:"wrap" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:10, flex:1 }}>
-              <div style={{ width:38, height:38, borderRadius:12, background:"linear-gradient(135deg,#7C5CFC,#3D8EF8)", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/></svg>
-              </div>
-              <div>
-                <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:700, color:C.text, margin:0 }}>Flashcards</h2>
-                <p style={{ fontSize:11, color:C.muted, margin:0 }}>{cards.length} Total Flashcards</p>
-              </div>
-            </div>
-            <div style={{ display:"flex", gap:8 }}>
-              <button onClick={() => setShowAdd(true)} style={{ display:"flex", alignItems:"center", gap:6, background:C.surface, color:C.text, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"7px 13px", fontSize:12, fontWeight:600, cursor:"pointer" }}>
-                <Icon d={I.plus} size={13} color={C.text} sw={2.5}/> Add
-              </button>
-              <button onClick={() => setShowCountPicker(p=>!p)} disabled={gen} style={{ display:"flex", alignItems:"center", gap:6, background:gen?"#ccc":"linear-gradient(135deg,#7C5CFC,#3D8EF8)", color:"#fff", border:"none", borderRadius:10, padding:"7px 14px", fontSize:12, fontWeight:700, cursor:gen?"not-allowed":"pointer" }}>
-                {gen ? "Generating…" : <><Icon d={I.sparkle} size={12} color="#fff"/>✨ Generate</>}
-              </button>
-            </div>
-          </div>
-
-          {/* Mastery pills */}
-          <div style={{ display:"flex", gap:8, marginBottom:14 }}>
+          <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:22, fontWeight:700, color:C.text, marginBottom:8 }}>
+            Study Cards
+          </h2>
+          {/* Mastery pills — image 3 style */}
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
             <span className="pill-new">{cards.length - knownCount - starredCount} New</span>
             <span className="pill-learning">{starredCount} Learning</span>
             <span className="pill-mastered">{knownCount} Mastered</span>
-            {(knownCount>0||starredCount>0) && <button onClick={resetProgress} style={{ fontSize:11, color:C.muted, background:"none", border:"none", cursor:"pointer", textDecoration:"underline" }}>Reset</button>}
           </div>
-
-          {/* Count picker */}
-          {showCountPicker && (
-            <div style={{ background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:12, padding:12, marginBottom:14 }}>
-              <p style={{ fontSize:12, fontWeight:700, color:C.accent, marginBottom:8 }}>How many cards?</p>
-              <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:8 }}>
-                {[8,12,16,20,30].map(n=>(<button key={n} onClick={()=>setCardCount(n)} style={{ padding:"5px 12px", borderRadius:8, border:`1.5px solid ${cardCount===n?C.accent:C.border}`, background:cardCount===n?C.accentL:"transparent", color:cardCount===n?C.accent:C.muted, fontSize:12, fontWeight:700, cursor:"pointer" }}>{n}</button>))}
-              </div>
-              <button onClick={()=>generate(cardCount)} style={{ background:C.accent, color:"#fff", border:"none", borderRadius:8, padding:"8px 18px", fontSize:13, fontWeight:700, cursor:"pointer" }}>Generate {cardCount} Cards</button>
-            </div>
-          )}
-
           {cards.length > 0 && (
-            <>
-              {/* Big preview card - current first non-mastered card */}
-              {(() => {
-                const previewCard = displayCards[0];
-                if (!previewCard) return null;
-                const isFlipped = !!flipped[previewCard.id];
-                return (
-                  <div style={{ height:280, perspective:1200, marginBottom:14, cursor:"pointer" }}
-                    onClick={()=>setFlipped(f=>({...f,[previewCard.id]:!f[previewCard.id]}))}>
-                    <div style={{ width:"100%", height:"100%", transformStyle:"preserve-3d", transition:"transform .5s cubic-bezier(.4,0,.2,1)", transform:isFlipped?"rotateY(180deg)":"none" }}>
-                      <div style={{ position:"absolute", inset:0, backfaceVisibility:"hidden", WebkitBackfaceVisibility:"hidden", background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:16, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"32px 48px", textAlign:"center" }}>
-                        <p style={{ fontSize:20, fontWeight:600, color:C.text, lineHeight:1.5 }}>{previewCard.question}</p>
-                      </div>
-                      <div style={{ position:"absolute", inset:0, backfaceVisibility:"hidden", WebkitBackfaceVisibility:"hidden", transform:"rotateY(180deg)", background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:16, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"32px 48px", textAlign:"center" }}>
-                        <p style={{ fontSize:18, color:C.text, lineHeight:1.5 }}>{previewCard.answer}</p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Nav row */}
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20 }}>
-                <button onClick={() => { setViewMode("list"); }}
-                  style={{ display:"flex", alignItems:"center", gap:7, padding:"9px 18px", border:`1.5px solid ${C.border}`, borderRadius:10, background:C.surface, cursor:"pointer", fontSize:13, fontWeight:600, color:C.text }}>
-                  <Icon d={I.edit} size={13} color={C.text}/> Edit Flashcards
-                </button>
-                <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-                  <button onClick={()=>setShuffled(s=>!s)} style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 12px", border:`1.5px solid ${shuffled?C.purple:C.border}`, borderRadius:10, background:shuffled?C.purpleL:"transparent", color:shuffled?C.purple:C.muted, fontSize:12, fontWeight:600, cursor:"pointer" }}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
-                    Shuffle
-                  </button>
-                  <button onClick={()=>{ setViewMode("study"); setStudyIdx(0); setFlipped({}); }}
-                    style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 24px", border:"none", borderRadius:10, background:"linear-gradient(135deg,#7C5CFC,#3D8EF8)", cursor:"pointer", fontSize:13, fontWeight:700, color:"#fff", boxShadow:"0 4px 14px rgba(124,92,252,.35)" }}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                    Start Studying
-                  </button>
-                </div>
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:10 }}>
+              <div style={{ height:5, background:C.border, borderRadius:3, width:160, overflow:"hidden" }}>
+                <div style={{ height:"100%", width:`${progress}%`, background:"linear-gradient(90deg,#7C5CFC,#3D8EF8)", borderRadius:3, transition:"width .4s" }}/>
               </div>
-
-              {/* Card list by section */}
-              {[{label:"New",cards:displayCards.filter(c=>!known[c.id]&&!starred[c.id]),color:C.accent},
-                {label:"Learning",cards:displayCards.filter(c=>starred[c.id]&&!known[c.id]),color:"#f59e0b"},
-                {label:"Mastered",cards:displayCards.filter(c=>known[c.id]),color:C.green}
-              ].filter(s=>s.cards.length>0).map(sec=>(
-                <div key={sec.label} style={{ marginBottom:20 }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
-                    <div style={{ flex:1, height:1, background:C.border }}/>
-                    <span style={{ fontSize:13, fontWeight:700, color:sec.color }}>{sec.label}</span>
-                    <span style={{ background:sec.color+"22", color:sec.color, borderRadius:20, fontSize:11, fontWeight:700, padding:"1px 8px" }}>{sec.cards.length} cards</span>
-                    <div style={{ flex:1, height:1, background:C.border }}/>
-                  </div>
-                  {sec.cards.map(card=>(
-                    <div key={card.id} style={{ display:"grid", gridTemplateColumns:"1fr 1fr", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, overflow:"hidden", marginBottom:2 }}>
-                      <div style={{ padding:"10px 14px", borderRight:`1px solid ${C.border}`, display:"flex", alignItems:"center", gap:8 }}>
-                        <div style={{ width:7, height:7, borderRadius:"50%", background:sec.color, flexShrink:0 }}/>
-                        <span style={{ fontSize:13, color:C.text, lineHeight:1.4 }}>{card.question}</span>
-                      </div>
-                      <div style={{ padding:"10px 14px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                        <span style={{ fontSize:13, color:C.muted }}>{card.answer}</span>
-                        <div style={{ display:"flex", gap:3, flexShrink:0 }}>
-                          <button onClick={e=>{e.stopPropagation();toggleStar(card.id,e);}} style={{ background:"none",border:"none",cursor:"pointer",fontSize:13,opacity:starred[card.id]?1:.3 }}>⭐</button>
-                          <button onClick={e=>{e.stopPropagation();toggleKnown(card.id,e);}} style={{ background:"none",border:"none",cursor:"pointer",fontSize:12,opacity:known[card.id]?1:.3 }}>✓</button>
-                          <button onClick={e=>{e.stopPropagation();del(card.id);}} style={{ background:"none",border:"none",cursor:"pointer",opacity:.4 }}><Icon d={I.trash} size={11} color={C.muted}/></button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </>
-          )}
-
-          {cards.length === 0 && !gen && (
-            <div style={{ textAlign:"center", padding:"60px 0" }}>
-              <p style={{ fontSize:14, color:C.muted }}>No flashcards yet — click Generate to create some</p>
+              <span style={{ fontSize:12, color:C.accent, fontWeight:700 }}>{progress}% mastered</span>
+              {(knownCount > 0 || starredCount > 0) && (
+                <button onClick={resetProgress} style={{ fontSize:11, color:C.muted, background:"none", border:"none", cursor:"pointer", textDecoration:"underline" }}>Reset</button>
+              )}
             </div>
           )}
         </div>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+          {/* View toggle */}
+          {cards.length > 0 && (
+            <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+              <div style={{ display:"flex", border:`1.5px solid ${C.border}`, borderRadius:8, overflow:"hidden" }}>
+                {[{id:"grid",svg:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>},
+                  {id:"list",svg:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>}]
+                  .map(v => (
+                    <button key={v.id} onClick={() => setViewMode(v.id)}
+                      style={{ padding:"6px 10px", border:"none", cursor:"pointer", background:viewMode===v.id?C.accent:"transparent", color:viewMode===v.id?"#fff":C.muted }}>
+                      {v.svg}
+                    </button>
+                ))}
+              </div>
+              <button onClick={() => { setViewMode("study"); setStudyIdx(0); setFlipped({}); }}
+                style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 14px",
+                  background: viewMode==="study" ? "linear-gradient(135deg,#7C5CFC,#3D8EF8)" : C.surface,
+                  color: viewMode==="study" ? "#fff" : C.muted,
+                  border:`1.5px solid ${viewMode==="study"?"transparent":C.border}`,
+                  borderRadius:8, cursor:"pointer", fontSize:12, fontWeight:700,
+                  boxShadow: viewMode==="study" ? "0 2px 8px rgba(124,92,252,.3)" : "none" }}>
+                ▶ Study
+              </button>
+            </div>
+          )}
+          {/* Shuffle */}
+          {cards.length > 0 && (
+            <button onClick={() => setShuffled(s=>!s)}
+              style={{ display:"flex", alignItems:"center", gap:6, background:shuffled?C.purpleL:"transparent", color:shuffled?C.purple:C.muted,
+                border:`1.5px solid ${shuffled?C.purple:C.border}`, borderRadius:8, padding:"7px 12px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
+              Shuffle
+            </button>
+          )}
+          <button onClick={() => setShowAdd(true)} className="hov"
+            style={{ display:"flex", alignItems:"center", gap:7, background:C.surface, color:C.text, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"9px 14px", fontSize:14, fontWeight:600, cursor:"pointer" }}>
+            <Icon d={I.plus} size={14} color={C.text} sw={2.5} /> Add Card
+          </button>
+          <button onClick={() => setShowCountPicker(p => !p)} disabled={gen} className="hov"
+            style={{ display:"flex", alignItems:"center", gap:7,
+              background:gen?"#ccc":"linear-gradient(135deg,#7C5CFC,#3D8EF8)",
+              color:"#fff", border:"none", borderRadius:10, padding:"9px 16px",
+              fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer",
+              boxShadow:gen?"none":"0 3px 10px rgba(124,92,252,.3)" }}>
+            {gen
+              ? <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Generating…</>
+              : <><Icon d={I.sparkle} size={15} color="#fff"/>✨ AI Generate</>}
+          </button>
+        </div>
+      </div>
+
+      {/* Filter tabs */}
+      {cards.length > 0 && (
+        <div style={{ display:"flex", gap:6, marginBottom:16, flexWrap:"wrap" }}>
+          {FILTER_OPTS.map(f => (
+            <button key={f.id} onClick={() => setFilter(f.id)}
+              style={{ padding:"6px 14px", borderRadius:20, border:`1.5px solid ${filter===f.id?C.accent:C.border}`,
+                background:filter===f.id?C.accentL:"transparent", color:filter===f.id?C.accent:C.muted,
+                fontSize:12, fontWeight:700, cursor:"pointer", transition:"all .12s" }}>
+              {f.label}
+            </button>
+          ))}
+        </div>
       )}
 
-      {/* List edit mode */}
-      {viewMode === "list" && (
-        <div style={{ marginBottom:16 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
-            <button onClick={()=>setViewMode("grid")} style={{ display:"flex", alignItems:"center", gap:5, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:13 }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> Back
-            </button>
-            <h3 style={{ fontSize:16, fontWeight:700, color:C.text, margin:0 }}>Edit Flashcards</h3>
+      {showCountPicker && (
+        <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:16,
+          padding:"20px 20px 16px", marginBottom:16,
+          boxShadow:"0 4px 20px rgba(0,0,0,.07)" }}>
+          {/* Header */}
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
+            <div>
+              <p style={{ fontSize:15, fontWeight:700, color:C.text, margin:0 }}>How many cards?</p>
+              <p style={{ fontSize:12, color:C.muted, margin:"2px 0 0" }}>AI will generate from your file content</p>
+            </div>
+            <button onClick={() => setShowCountPicker(false)} className="no-min-h"
+              style={{ width:28, height:28, borderRadius:"50%", background:C.bg, border:`1px solid ${C.border}`,
+                cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:C.muted, fontSize:16 }}>×</button>
           </div>
-          <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-            {displayCards.map((card, idx) => {
-              const isFlipped = !!flipped[card.id];
-              return (
-                <div key={card.id} style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:10, overflow:"hidden" }}>
-                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", minHeight:50 }}>
-                    <div style={{ padding:"10px 14px", borderRight:`1px solid ${C.border}`, fontSize:13, color:C.text, display:"flex", alignItems:"center" }}>{idx+1}. {card.question}</div>
-                    <div style={{ padding:"10px 14px", fontSize:13, color:C.muted, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                      {card.answer}
-                      <div style={{ display:"flex", gap:4, flexShrink:0 }}>
-                        <button onClick={e=>{e.stopPropagation();const q=window.prompt("Edit question:",card.question); if(q?.trim()){const u=cards.map(c=>c.id===card.id?{...c,question:q.trim()}:c);setCards(u);onUpdate({...file,studyCards:u});}}} style={{ background:"none",border:"none",cursor:"pointer",opacity:.5 }}><Icon d={I.edit} size={12} color={C.muted}/></button>
-                        <button onClick={e=>{e.stopPropagation();toggleStar(card.id,e);}} style={{ background:"none",border:"none",cursor:"pointer",fontSize:12,opacity:starred[card.id]?1:.3 }}>⭐</button>
-                        <button onClick={e=>{e.stopPropagation();del(card.id);}} style={{ background:"none",border:"none",cursor:"pointer",opacity:.4 }}><Icon d={I.trash} size={12} color={C.muted}/></button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+          {/* Quick-pick chips */}
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:16 }}>
+            {[5, 8, 10, 15, 20, 25, 30].map(n => (
+              <button key={n} onClick={() => setCardCount(n)} className="no-min-h"
+                style={{ padding:"8px 16px", borderRadius:20, fontSize:13, fontWeight:700, cursor:"pointer", transition:"all .12s",
+                  background: cardCount===n ? C.accent : C.bg,
+                  color:      cardCount===n ? "#fff"   : C.muted,
+                  border:     `1.5px solid ${cardCount===n ? C.accent : C.border}`,
+                  boxShadow:  cardCount===n ? `0 2px 8px ${C.accentS}` : "none" }}>
+                {n}
+              </button>
+            ))}
+          </div>
+          {/* Custom + Generate row */}
+          <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:6, background:C.bg, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"6px 10px" }}>
+              <span style={{ fontSize:12, color:C.muted, whiteSpace:"nowrap" }}>Custom</span>
+              <input type="number" min="1" max="50" value={cardCount}
+                onChange={e => setCardCount(Math.min(50, Math.max(1, parseInt(e.target.value)||1)))}
+                style={{ width:52, border:"none", outline:"none", fontSize:14, fontWeight:700, color:C.text, background:"transparent", textAlign:"center" }}/>
+            </div>
+            <button onClick={() => generate(cardCount)} disabled={gen}
+              style={{ flex:1, background:gen?"#ccc":GRAD, color:"#fff", border:"none", borderRadius:10,
+                padding:"10px 0", fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer",
+                boxShadow:gen?"none":"0 3px 12px rgba(124,92,252,.3)",
+                display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
+              {gen
+                ? <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Generating…</>
+                : <>✨ Generate {cardCount} Cards</>
+              }
+            </button>
           </div>
         </div>
       )}
@@ -7850,7 +8003,7 @@ function CardsTab({ file, onUpdate }) {
 
             {/* Top bar */}
             <div style={{ flexShrink:0, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 28px", background:C.surface, borderBottom:`1px solid ${C.border}` }}>
-              <button onClick={() => { setViewMode("list"); setFlipped({}); }}
+              <button onClick={() => { setViewMode("grid"); setFlipped({}); }}
                 style={{ display:"flex", alignItems:"center", gap:7, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14, fontWeight:600 }}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
                 Back
@@ -7955,8 +8108,9 @@ function CardsTab({ file, onUpdate }) {
                 </button>
               </div>
 
-              {/* Turbo-style ELI5 + Ask bar */}
-              <TurboStudyBar card={card} />
+              {/* Ask about this flashcard + ELI5 — image 4 style */}
+              <ELI5Panel card={card} />
+              <p style={{ textAlign:"center", fontSize:10, color:C.muted, padding:"0 0 8px" }}>← → navigate &nbsp;·&nbsp; Space to flip</p>
             </div>
           </div>
         );
@@ -9422,7 +9576,6 @@ function MCQ({ cards, onBack }) {
   // Learn More state
   const [learnMore,    setLearnMore]    = useState(null); // null | "loading" | string
   const [showLearnMore, setShowLearnMore] = useState(false);
-  const [askQ, setAskQ] = useState("");
 
   useEffect(() => {
     buildAIOptions(deck).then(map => { setOptsMap(map); setLoading(false); });
@@ -9476,29 +9629,13 @@ Keep it under 150 words. Be encouraging.`,
   const isWrong = sel && sel !== deck[curr].answer;
 
   return (
-    <div style={{ maxWidth:720, margin:"0 auto", display:"flex", flexDirection:"column", minHeight:"calc(100vh - 120px)" }}>
-      {/* Top bar */}
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 0 16px" }}>
-        <button onClick={onBack} style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14 }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> Back
-        </button>
-        <div style={{ flex:1, height:4, background:C.border, borderRadius:4, margin:"0 16px" }}>
-          <div style={{ height:"100%", width:`${((curr)/deck.length)*100}%`, background:"linear-gradient(90deg,#7C5CFC,#3D8EF8)", borderRadius:4, transition:"width .3s" }}/>
-        </div>
-        <span style={{ fontSize:13, fontWeight:700, color:C.accent, background:C.accentL, padding:"4px 12px", borderRadius:20 }}>{score} / {deck.length}</span>
+    <div style={{ maxWidth:560, margin:"0 auto" }}>
+      <GHeader title="Multiple Choice" score={score} curr={curr} total={deck.length} onBack={onBack} accent={C.accent} />
+      <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:20, padding:"28px", marginBottom:16 }}>
+        <p style={{ fontSize:12, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:"uppercase", marginBottom:12 }}>Question</p>
+        <p style={{ fontSize:17, color:C.text, lineHeight:1.6 }}>{deck[curr].question}</p>
       </div>
-
-      {/* Question card */}
-      <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:20, padding:"28px 32px", marginBottom:20, flex:"0 0 auto" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
-          <div style={{ background:C.accentL, borderRadius:8, padding:"3px 10px", fontSize:11, fontWeight:700, color:C.accent }}>Question {curr+1}</div>
-          {deck[curr].topic && <div style={{ background:C.accentL, borderRadius:8, padding:"3px 10px", fontSize:11, color:C.accent, border:`1px solid ${C.accentS}` }}>🏷 {deck[curr].topic}</div>}
-        </div>
-        <p style={{ fontSize:18, color:C.text, lineHeight:1.7, margin:0 }}>{deck[curr].question}</p>
-      </div>
-
-      {/* Options A B C D */}
-      <div style={{ display:"flex", flexDirection:"column", gap:10, flex:1 }}>
+      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
         {opts.map((o, i) => {
           const ok = o === deck[curr].answer, is = o === sel;
           let bg = C.surface, bd = C.border, col = C.text;
@@ -9507,26 +9644,14 @@ Keep it under 150 words. Be encouraging.`,
             else if (is) { bg = C.redL;   bd = C.red;   col = C.red;   }
           }
           return (
-            <button key={i} onClick={() => pick(o)}
-              style={{ background:bg, border:`1.5px solid ${bd}`, borderRadius:14, padding:"16px 20px", textAlign:"left", fontSize:15, color:col, cursor:sel?"default":"pointer", fontWeight:is||(sel&&ok)?600:400, transition:"all .2s", display:"flex", alignItems:"center", gap:14 }}
-              onMouseEnter={e=>{ if(!sel) e.currentTarget.style.borderColor=C.accentS; }}
-              onMouseLeave={e=>{ if(!sel) e.currentTarget.style.borderColor=C.border; }}>
-              <span style={{ width:32, height:32, borderRadius:8, background:sel?(ok?"#22c55e33":is?"#ef444433":C.accentL):C.accentL, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, color:sel?(ok?C.green:is?C.red:C.accent):C.accent, fontSize:14, flexShrink:0 }}>{"ABCD"[i]}</span>
-              <span style={{ flex:1 }}>{o}</span>
+            <button key={i} onClick={() => pick(o)} style={{ background:bg, border:`1.5px solid ${bd}`, borderRadius:12, padding:"14px 18px", textAlign:"left", fontSize:15, color:col, cursor:sel?"default":"pointer", fontWeight:is||(sel&&ok)?600:400, transition:"all .2s", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <span><span style={{ fontWeight:700, marginRight:10, color:C.muted }}>{"ABCD"[i]}.</span>{o}</span>
               {sel && ok  && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>}
               {sel && is && !ok && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.red} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>}
             </button>
           );
         })}
       </div>
-
-      {/* Show Hint button */}
-      {!sel && !showLearnMore && (
-        <button onClick={fetchLearnMore} style={{ marginTop:14, width:"100%", padding:"12px", border:`1.5px solid ${C.border}`, borderRadius:14, background:"transparent", cursor:"pointer", fontSize:14, color:C.muted, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          Show Hint
-        </button>
-      )}
 
       {/* Wrong answer feedback with Learn More */}
       {isWrong && (
@@ -9570,26 +9695,11 @@ Keep it under 150 words. Be encouraging.`,
         </div>
       )}
 
-      {/* Bottom bar: Previous / Ask AI / Next */}
-      <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:14, paddingTop:12, borderTop:`1px solid ${C.border}` }}>
-        <button onClick={()=>{ if(curr>0){setCurr(c=>c-1);setSel(null);setLearnMore(null);setShowLearnMore(false);}}} disabled={curr===0}
-          style={{ display:"flex", alignItems:"center", gap:5, padding:"10px 16px", border:`1.5px solid ${C.border}`, borderRadius:10, background:C.surface, cursor:curr===0?"not-allowed":"pointer", fontSize:13, color:C.muted, opacity:curr===0?.4:1 }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg> Previous
+      {sel && (
+        <button onClick={next} style={{ marginTop:12, width:"100%", background:C.accent, color:"#fff", border:"none", borderRadius:12, padding:"13px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
+          {curr + 1 >= deck.length ? "See Results" : "Next →"}
         </button>
-        <div style={{ flex:1, display:"flex", gap:6 }}>
-          <input value={askQ||""} onChange={e=>setAskQ(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&askQ)fetchLearnMore();}}
-            placeholder="Ask AI for help…"
-            style={{ flex:1, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"9px 14px", fontSize:13, outline:"none", color:C.text, background:C.bg }}/>
-          <button onClick={fetchLearnMore} disabled={!sel&&!askQ}
-            style={{ width:36, height:36, borderRadius:"50%", border:"none", background:"linear-gradient(135deg,#7C5CFC,#3D8EF8)", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-          </button>
-        </div>
-        <button onClick={next} disabled={!sel}
-          style={{ display:"flex", alignItems:"center", gap:5, padding:"10px 16px", border:"none", borderRadius:10, background:sel?"linear-gradient(135deg,#7C5CFC,#3D8EF8)":C.border, cursor:sel?"pointer":"not-allowed", fontSize:13, fontWeight:700, color:"#fff", opacity:sel?1:.5 }}>
-          {curr + 1 >= deck.length ? "Results" : "Next"} <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-        </button>
-      </div>
+      )}
     </div>
   );
 }
