@@ -2799,7 +2799,7 @@ export default function App() {
               { grad:"linear-gradient(135deg,#C45C5C22,#C45C5C11)", ic:"#C45C5C", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C45C5C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.54C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg>, label:"Website link", sub:"YouTube or website link", action:()=>setShowWebLinkModal(true) },
             ].map((a,i) => (
               <button key={i} onClick={a.action}
-                style={{ display:"flex", alignItems:"center", gap:12, background:T.surface, border:`1.5px solid ${T.border}`, borderRadius:20, padding:"16px 18px", cursor:"pointer", textAlign:"left", boxShadow:T.cardShadow, transition:"box-shadow .15s,transform .15s", animation:`quickIn .2s ease ${i*0.06}s both` }}
+                style={{ display:"flex", alignItems:"center", gap:12, background:T.surface, border:`1.5px solid ${T.border}`, borderRadius:20, padding:"16px 18px", cursor:"pointer", textAlign:"left", boxShadow:T.cardShadow, transition:"box-shadow .15s,transform .15s", animation:`quickIn .2s ease ${i*0.06}s both`, minHeight:76, height:76, overflow:"hidden" }}
                 onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px) scale(1.01)"; e.currentTarget.style.boxShadow="0 8px 28px rgba(124,92,252,.18)";}}
                 onMouseLeave={e=>{e.currentTarget.style.transform="none"; e.currentTarget.style.boxShadow=T.cardShadow;}}>
                 <div style={{ width:44, height:44, borderRadius:14, background:a.grad, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{a.icon}</div>
@@ -5432,8 +5432,8 @@ ${text}`
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 112px)" }}>
 
-      {/* Toolbar */}
-      <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"6px 14px", display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+      {/* Turbo-style top toolbar */}
+      <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"8px 16px", display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", minHeight:50 }}>
         {isPDF ? (<>
           {TOOLS.map(t => (
             <button key={t.id} onClick={() => setTool(t.id)}
@@ -5483,13 +5483,17 @@ ${text}`
         </>)}
       </div>
 
-      {/* Viewer */}
+      {/* Turbo split-pane: document left, AI chat right */}
       <div style={{ flex:1, display:"flex", overflow:"hidden" }}>
-        <div style={{ flex:1, overflow:"auto", background:"#404040", padding:"24px", display:"flex", justifyContent:"center", alignItems:"flex-start" }}>
+        {/* Left — document */}
+        <div style={{ flex:1, overflow:"auto", background:C.isDark?"#1a1a1a":"#525252", padding:"24px", display:"flex", justifyContent:"center", alignItems:"flex-start", position:"relative" }}>
+          <div style={{ position:"absolute", top:10, left:10, fontSize:13, fontWeight:700, color:"#fff", opacity:.7, userSelect:"none" }}>
+            {fileName}
+          </div>
 
           {isPDF && (
-            <div style={{ position:"relative", display:"inline-block", lineHeight:0, boxShadow:"0 4px 32px rgba(0,0,0,.6)" }}>
-              <canvas ref={canvasRef} style={{ display:"block" }} />
+            <div style={{ position:"relative", display:"inline-block", lineHeight:0, boxShadow:"0 8px 40px rgba(0,0,0,.7)", borderRadius:2 }}>
+              <canvas ref={canvasRef} style={{ display:"block", borderRadius:2 }} />
               <canvas ref={drawRef}
                 style={{ position:"absolute", top:0, left:0, width:"100%", height:"100%", cursor:tool==="eraser"?"cell":"crosshair", touchAction:"none" }}
                 onMouseDown={startDraw} onMouseMove={doDraw} onMouseUp={stopDraw} onMouseLeave={stopDraw}
@@ -5508,25 +5512,128 @@ ${text}`
           )}
         </div>
 
-        {/* Explain panel */}
-        {showExplain && (
-          <div style={{ width:300, background:C.surface, borderLeft:`1px solid ${C.border}`, display:"flex", flexDirection:"column", flexShrink:0 }}>
-            <div style={{ padding:"12px 16px", borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-              <span style={{ fontSize:13, fontWeight:700, color:C.text }}>
-                {isPDF ? `Page ${pageNum} — Explanation` : "AI Explanation"}
-              </span>
-              <button onClick={() => setShowExplain(false)} style={{ background:"none", border:"none", cursor:"pointer" }}>
-                <Icon d={I.x} size={14} color={C.muted} />
-              </button>
-            </div>
-            <div style={{ flex:1, overflowY:"auto", padding:"14px 16px" }}>
-              {explaining
-                ? <div style={{ display:"flex", gap:5 }}>{[0,1,2].map(j=><div key={j} style={{ width:7,height:7,borderRadius:"50%",background:C.accent,animation:"bounce 1.2s infinite",animationDelay:`${j*.2}s` }}/>)}</div>
-                : <div style={{ fontSize:13, lineHeight:1.7, color:C.text, whiteSpace:"pre-wrap" }}>{explanation}</div>
-              }
+        {/* Right — Turbo AI chat panel */}
+        <ViewAIPanel file={file} explaining={explaining} explanation={explanation}
+          showExplain={showExplain} onHideExplain={()=>setShowExplain(false)}
+          isPDF={isPDF} pageNum={pageNum} />
+      </div>
+    </div>
+  );
+}
+
+// ── Turbo-style View AI Panel ─────────────────────────────────────────────────
+function ViewAIPanel({ file, explaining, explanation, showExplain, onHideExplain, isPDF, pageNum }) {
+  const T = useTheme();
+  const [msgs, setMsgs] = useState([]);
+  const [inp, setInp] = useState("");
+  const [loading, setLoading] = useState(false);
+  const bottomRef = useRef(null);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:"smooth" }); }, [msgs, explanation]);
+
+  const SUGGESTIONS = [
+    "What are the most significant real-world applications?",
+    "How does ionizing ability relate to kinetic energy and electric charge?",
+    "Can you summarize the key relationships?",
+  ];
+
+  const send = async (text) => {
+    const q = (text || inp).trim();
+    if (!q || loading) return;
+    const newMsgs = [...msgs, { role:"user", content:q }];
+    setMsgs(newMsgs); setInp(""); setLoading(true);
+    try {
+      const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
+      const fileText = fileObj ? await extractFileText(fileObj).catch(()=>"") : "";
+      const sys = `You are a study AI. ${fileText ? "Document content: " + fileText.slice(0,8000) : ""} Be clear, use **bold** for key terms, > for formulas.`;
+      const reply = await callClaudeChat(sys, newMsgs.map(m=>({role:m.role,content:m.content})));
+      setMsgs(m => [...m, { role:"assistant", content:reply }]);
+    } catch(e) { setMsgs(m => [...m, { role:"assistant", content:"Error: "+e.message }]); }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ width:340, flexShrink:0, background:T.isDark?"#111":"#1a1a1a", display:"flex", flexDirection:"column", borderLeft:"1px solid rgba(255,255,255,.1)" }}>
+      {msgs.length === 0 && !explanation && (
+        <>
+          {/* Header prompt */}
+          <div style={{ padding:"18px 20px 0" }}>
+            <div style={{ background:T.isDark?"#222":"#2a2a2a", borderRadius:12, padding:"12px 16px", marginBottom:16 }}>
+              <p style={{ margin:0, fontSize:13, color:"#ccc" }}>Ask me any question about your notes or content!</p>
             </div>
           </div>
-        )}
+          {/* Suggestion pills */}
+          <div style={{ flex:1, padding:"0 20px", display:"flex", flexDirection:"column", justifyContent:"flex-end", gap:8, paddingBottom:16 }}>
+            {SUGGESTIONS.map((s,i) => (
+              <button key={i} onClick={()=>send(s)}
+                style={{ width:"100%", padding:"12px 16px", background:T.isDark?"#222":"#2a2a2a", border:"1px solid rgba(255,255,255,.1)", borderRadius:12, color:"#ccc", fontSize:13, textAlign:"left", cursor:"pointer", lineHeight:1.4 }}
+                onMouseEnter={e=>e.currentTarget.style.background=T.isDark?"#2a2a2a":"#333"}
+                onMouseLeave={e=>e.currentTarget.style.background=T.isDark?"#222":"#2a2a2a"}>
+                {s}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Explanation from AI Explain button */}
+      {explanation && msgs.length === 0 && (
+        <div style={{ flex:1, overflowY:"auto", padding:"16px 20px" }}>
+          <div style={{ background:T.isDark?"#222":"#2a2a2a", borderRadius:14, padding:"14px 16px" }}>
+            <p style={{ margin:"0 0 8px", fontSize:11, fontWeight:700, color:"#7C5CFC", letterSpacing:.8, textTransform:"uppercase" }}>
+              {isPDF ? `Page ${pageNum} — Explanation` : "AI Explanation"}
+            </p>
+            <p style={{ margin:0, fontSize:13, lineHeight:1.75, color:"#ddd", whiteSpace:"pre-wrap" }}>{explanation}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Chat messages */}
+      {msgs.length > 0 && (
+        <div style={{ flex:1, overflowY:"auto", padding:"16px 20px", display:"flex", flexDirection:"column", gap:12 }}>
+          {msgs.map((m,i) => (
+            <div key={i} style={{ display:"flex", justifyContent:m.role==="user"?"flex-end":"flex-start" }}>
+              <div style={{ maxWidth:"90%", padding:"10px 14px", borderRadius:14, fontSize:13, lineHeight:1.65,
+                background:m.role==="user"?"linear-gradient(135deg,#7C5CFC,#3D8EF8)":"rgba(255,255,255,.08)",
+                color:m.role==="user"?"#fff":"#ddd",
+                borderBottomRightRadius:m.role==="user"?2:14,
+                borderBottomLeftRadius:m.role==="user"?14:2 }}>
+                {m.role==="assistant" ? <RichText text={m.content}/> : m.content}
+              </div>
+            </div>
+          ))}
+          {loading && (
+            <div style={{ alignSelf:"flex-start", padding:"10px 14px", background:"rgba(255,255,255,.08)", borderRadius:14 }}>
+              <div style={{ display:"flex", gap:4 }}>{[0,1,2].map(j=><span key={j} style={{width:6,height:6,borderRadius:"50%",background:"#7C5CFC",animation:`bounce .8s ease-in-out ${j*0.15}s infinite`,display:"inline-block"}}/>)}</div>
+            </div>
+          )}
+          <div ref={bottomRef}/>
+        </div>
+      )}
+
+      {/* Input bar */}
+      <div style={{ padding:"12px 16px 16px", borderTop:"1px solid rgba(255,255,255,.08)", background:"transparent" }}>
+        <div style={{ background:T.isDark?"#222":"#2a2a2a", borderRadius:14, padding:"10px 14px", display:"flex", alignItems:"flex-end", gap:10 }}>
+          <textarea value={inp} onChange={e=>setInp(e.target.value)}
+            onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();} }}
+            placeholder="Type a question here…"
+            rows={1}
+            style={{ flex:1, border:"none", outline:"none", background:"transparent", fontSize:13, color:"#eee", resize:"none", fontFamily:"'DM Sans',sans-serif", lineHeight:1.5, maxHeight:80, overflowY:"auto" }}/>
+          <div style={{ display:"flex", gap:8, flexShrink:0, alignItems:"center" }}>
+            <button style={{ background:"none", border:"none", cursor:"pointer", opacity:.5 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+            </button>
+            <button style={{ background:"none", border:"none", cursor:"pointer", opacity:.5 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            </button>
+            <button onClick={()=>send()} disabled={!inp.trim()||loading}
+              style={{ width:34, height:34, borderRadius:"50%", border:"none",
+                background:inp.trim()&&!loading?"linear-gradient(135deg,#7C5CFC,#3D8EF8)":"rgba(255,255,255,.15)",
+                cursor:inp.trim()&&!loading?"pointer":"default",
+                display:"flex", alignItems:"center", justifyContent:"center" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -7561,7 +7668,7 @@ function RichText({ text }) {
       els.push(<p key={i} style={{ fontWeight:700, fontSize:15, color:T.text, margin:"12px 0 4px" }}>{line.slice(2,-2)}</p>); i++; continue;
     }
     // Blockquote: > text
-    if (line.startsWith("> ") || line.startsWith(""")) {
+    if (line.startsWith("> ")) {
       els.push(<div key={i} style={{ borderLeft:`3px solid #7C5CFC`, paddingLeft:14, margin:"8px 0", fontStyle:"italic", color:T.accent, fontSize:14, lineHeight:1.6 }}>{line.replace(/^> /,"").replace(/^"|"$/g,"")}</div>); i++; continue;
     }
     // Bullet
