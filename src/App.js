@@ -6961,11 +6961,11 @@ function RawEditModal({ notes, onChange }) {
 
 // Auto-fetch image from Wikipedia for [Image: description] in notes
 function AutoFetchImage({ description }) {
-  const [imgUrl, setImgUrl] = React.useState(null);
-  const [loading, setLoading] = React.useState(true);
-  const [failed, setFailed] = React.useState(false);
+  const [imgUrl, setImgUrl] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     let cancelled = false;
     const fetchImg = async () => {
       try {
@@ -7205,12 +7205,12 @@ function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
 
 // Inline chart component using Canvas (no external lib needed)
 function InlineChart({ data }) {
-  const canvasRef = React.useRef(null);
-  const chartRef = React.useRef(null);
+  const canvasRef = useRef(null);
+  const chartRef = useRef(null);
   const T = useTheme();
   const { type, title, labels, datasets } = data;
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!canvasRef.current) return;
     const loadAndRender = async () => {
       if (!window.Chart) {
@@ -8082,7 +8082,7 @@ function CardsTab({ file, onUpdate }) {
   ];
 
   // ── preview card index (browse before studying)
-  const [previewIdx, setPreviewIdx] = React.useState(0);
+  const [previewIdx, setPreviewIdx] = useState(0);
 
   return (
     <div>
