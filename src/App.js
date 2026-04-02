@@ -2007,16 +2007,16 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
         </button>
         {/* User */}
         <button onClick={onOpenCharacter}
-          style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"8px 12px", borderRadius:10, border:"none", cursor:"pointer", background:"transparent" }}
+          style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"8px 12px", borderRadius:10, border:"none", cursor:"pointer", background:"transparent", justifyContent:expanded?"flex-start":"center" }}
           onMouseEnter={e=>{e.currentTarget.style.background=T.sidebarActive;}}
           onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
-          <div style={{ width:32, height:32, borderRadius:"50%", overflow:"hidden", border:`2px solid ${T.border}`, flexShrink:0 }}>
+          <div style={{ width:32, height:32, borderRadius:"50%", overflow:"hidden", border:`2px solid ${T.border}`, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
             <MiniAvatar character={character||{}} size={32} />
           </div>
-          <div style={{ textAlign:"left", minWidth:0 }}>
+          {expanded && <div style={{ textAlign:"left", minWidth:0 }}>
             <p style={{ margin:0, fontSize:13, fontWeight:600, color:T.navText, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{character?.name || (user?.displayName?.split(" ")[0]) || (isGuest?"Guest":"You")}</p>
             <p style={{ margin:0, fontSize:11, color:T.muted }}>{isGuest?"Guest mode":"Student"}</p>
-          </div>
+          </div>}
         </button>
       </div>
     </div>
@@ -2793,7 +2793,7 @@ export default function App() {
         {homeTab==="folders" && (
           <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)", gap:12, marginBottom:32 }}>
             {[
-              { grad:"linear-gradient(135deg,#7C5CFC22,#7C5CFC11)", ic:"#7C5CFC", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C5CFC" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>, label:"New Folder", sub:"Start from scratch", action:()=>setShowNewFolder(true) },
+              { grad:"linear-gradient(135deg,#7C5CFC22,#7C5CFC11)", ic:"#7C5CFC", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C5CFC" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>, label:"Blank Document", sub:"Start fresh notebook", action:()=>{ const blankId=`blank_${Date.now()}`; const blankFile={id:blankId,name:"Untitled Document",type:"text/plain",_fileObj:null,notes:"",studyCards:[],_isBlank:true}; const inboxExists=folders.find(f=>f.id==="inbox"); const newFolders=inboxExists?folders.map(f=>f.id==="inbox"?{...f,files:[blankFile,...(f.files||[])]}:f):[...folders,{id:"inbox",name:"Inbox",color:"#7C5CFC",files:[blankFile]}]; setFoldersSave(newFolders); const newInbox=newFolders.find(f=>f.id==="inbox"); setActiveFile(blankFile); setActiveFolder(newInbox); setScreen("file"); } },
               { grad:"linear-gradient(135deg,#3D8EF822,#3D8EF811)", ic:"#3D8EF8", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3D8EF8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>, label:"Record audio", sub:"Upload an audio file", action:()=>setShowRecordModal(true) },
               { grad:"linear-gradient(135deg,#4A7C5922,#4A7C5911)", ic:"#4A7C59", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4A7C59" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>, label:"Document upload", sub:"Any PDF, DOC, PPT, etc", action:()=>setShowUploadModal(true) },
               { grad:"linear-gradient(135deg,#C45C5C22,#C45C5C11)", ic:"#C45C5C", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C45C5C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.54C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg>, label:"Website link", sub:"YouTube or website link", action:()=>setShowWebLinkModal(true) },
@@ -3034,71 +3034,97 @@ export default function App() {
       {showTutorial && <OnboardingTutorial onDone={() => setShowTutorial(false)} />}
 
       {showNewFolder && (
-        <Modal onClose={() => { setShowNewFolder(false); setNewName(""); }}>
-          <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:22, fontWeight:700, color:C.text, marginBottom:20 }}>New Folder</h2>
-          <label style={{ fontSize:11, fontWeight:800, color:C.muted, display:"block", marginBottom:6, letterSpacing:.8, textTransform:"uppercase" }}>Name</label>
-          <input autoFocus value={newName} onChange={e => setNewName(e.target.value)}
-            onKeyDown={e => { if (e.key==="Enter" && newName.trim()) { setFoldersSave([...folders,{id:`f${Date.now()}`,name:newName.trim(),color:newColor,files:[]}]); setShowNewFolder(false); setNewName(""); }}}
-            placeholder="e.g. Biology, Maths…"
-            style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:12, padding:"11px 14px", fontSize:15, outline:"none", marginBottom:18, color:C.text, background:C.bg, boxSizing:"border-box", transition:"border-color .15s" }}
-            onFocus={e=>e.target.style.borderColor=C.accent}
-            onBlur={e=>e.target.style.borderColor=C.border} />
+        <div onClick={()=>{setShowNewFolder(false);setNewName("");}} style={{ position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:800,display:"flex",alignItems:"center",justifyContent:"center",padding:24 }}>
+          <div onClick={e=>e.stopPropagation()} style={{ background:C.surface,borderRadius:24,padding:"28px 28px 24px",width:"100%",maxWidth:440,boxShadow:"0 24px 64px rgba(0,0,0,.18)",border:`1px solid ${C.border}` }}>
+            {/* Header */}
+            <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:22 }}>
+              <div style={{ width:42,height:42,background:"linear-gradient(135deg,#7C5CFC22,#7C5CFC11)",borderRadius:14,display:"flex",alignItems:"center",justifyContent:"center" }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C5CFC" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              </div>
+              <div>
+                <h2 style={{ fontFamily:"'Fraunces',serif",fontSize:20,fontWeight:700,color:C.text,margin:0 }}>New Folder</h2>
+                <p style={{ margin:0,fontSize:12,color:C.muted }}>Organise your study files</p>
+              </div>
+              <button onClick={()=>{setShowNewFolder(false);setNewName("");}} style={{ marginLeft:"auto",width:30,height:30,borderRadius:"50%",border:`1px solid ${C.border}`,background:C.bg,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:C.muted,fontSize:16 }}>×</button>
+            </div>
 
-          {/* Subject presets */}
-          <label style={{ fontSize:11, fontWeight:800, color:C.muted, display:"block", marginBottom:8, letterSpacing:.8, textTransform:"uppercase" }}>Subject</label>
-          <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:18 }}>
-            {[
-              {label:"📐 Physics",    color:"#2563eb", name:"Physics"},
-              {label:"🔢 Math",       color:"#7c3aed", name:"Math"},
-              {label:"⚗️ Chemistry",  color:"#16a34a", name:"Chemistry"},
-              {label:"🧬 Biology",    color:"#059669", name:"Biology"},
-              {label:"🔭 STEM",       color:"#0891b2", name:"STEM"},
-              {label:"📚 Other",      color:"#9b9590", name:""},
-            ].map(s => (
-              <button key={s.label} onClick={() => { if (s.name) setNewName(n => n || s.name); setNewColor(s.color); }}
-                style={{ padding:"6px 14px", borderRadius:20, border:`1.5px solid ${newColor===s.color?s.color:C.border}`,
-                  background:newColor===s.color?s.color+"15":"transparent", cursor:"pointer",
-                  fontSize:12, fontWeight:600, color:newColor===s.color?s.color:C.muted, transition:"all .12s" }}>
-                {s.label}
-              </button>
-            ))}
-          </div>
+            {/* Name input */}
+            <label style={{ fontSize:11,fontWeight:800,color:C.muted,display:"block",marginBottom:6,letterSpacing:.8,textTransform:"uppercase" }}>Folder Name</label>
+            <input autoFocus value={newName} onChange={e=>setNewName(e.target.value)}
+              onKeyDown={e=>{if(e.key==="Enter"&&newName.trim()){setFoldersSave([...folders,{id:`f${Date.now()}`,name:newName.trim(),color:newColor,files:[]}]);setShowNewFolder(false);setNewName("");}}}
+              placeholder="e.g. Biology, Maths, History…"
+              style={{ width:"100%",border:`1.5px solid ${C.border}`,borderRadius:12,padding:"11px 14px",fontSize:15,outline:"none",marginBottom:18,color:C.text,background:C.bg,boxSizing:"border-box",transition:"border-color .15s",fontFamily:"'DM Sans',sans-serif" }}
+              onFocus={e=>e.target.style.borderColor=C.accent}
+              onBlur={e=>e.target.style.borderColor=C.border}/>
 
-          <label style={{ fontSize:11, fontWeight:800, color:C.muted, display:"block", marginBottom:10, letterSpacing:.8, textTransform:"uppercase" }}>Colour</label>
-          <div style={{ marginBottom:20 }}>
-            <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:8, alignItems:"center" }}>
-              {FOLDER_COLORS.map(col => (
-                <button key={col} className="color-swatch no-min-h" onClick={() => { setNewColor(col); setShowFolderPicker(false); }}
-                  style={{ width:34, height:34, borderRadius:"50%", background:col, cursor:"pointer", flexShrink:0,
-                    border:`3px solid ${newColor===col?C.text:"transparent"}`,
-                    boxShadow:`0 1px 4px rgba(0,0,0,${newColor===col?".35":".15"})`,
-                    padding:0, minHeight:"unset" }} />
+            {/* Subject chips */}
+            <label style={{ fontSize:11,fontWeight:800,color:C.muted,display:"block",marginBottom:8,letterSpacing:.8,textTransform:"uppercase" }}>Subject</label>
+            <div style={{ display:"flex",flexWrap:"wrap",gap:6,marginBottom:18 }}>
+              {[
+                {label:"📐 Physics",color:"#2563eb",name:"Physics"},
+                {label:"🔢 Math",color:"#7c3aed",name:"Math"},
+                {label:"⚗️ Chemistry",color:"#16a34a",name:"Chemistry"},
+                {label:"🧬 Biology",color:"#059669",name:"Biology"},
+                {label:"🔭 STEM",color:"#0891b2",name:"STEM"},
+                {label:"📚 Other",color:"#9b9590",name:""},
+              ].map(s=>(
+                <button key={s.label} onClick={()=>{if(s.name)setNewName(n=>n||s.name);setNewColor(s.color);}}
+                  style={{ padding:"7px 14px",borderRadius:20,border:`1.5px solid ${newColor===s.color?s.color:C.border}`,
+                    background:newColor===s.color?s.color+"18":"transparent",cursor:"pointer",
+                    fontSize:12,fontWeight:600,color:newColor===s.color?s.color:C.muted,transition:"all .12s" }}>
+                  {s.label}
+                </button>
               ))}
-              <button className="no-min-h" onClick={() => setShowFolderPicker(p => !p)}
-                style={{ width:34, height:34, borderRadius:"50%", cursor:"pointer",
-                  border:"2px dashed #bbb", background:showFolderPicker?"#4361ee":"transparent",
-                  display:"flex", alignItems:"center", justifyContent:"center",
-                  fontSize:14, color:showFolderPicker?"#fff":"#888",
-                  padding:0, minHeight:"unset", flexShrink:0 }}>
-                {showFolderPicker ? "×" : "+"}
+            </div>
+
+            {/* Color swatches */}
+            <label style={{ fontSize:11,fontWeight:800,color:C.muted,display:"block",marginBottom:10,letterSpacing:.8,textTransform:"uppercase" }}>Colour</label>
+            <div style={{ marginBottom:22 }}>
+              <div style={{ display:"flex",gap:8,flexWrap:"wrap",alignItems:"center" }}>
+                {FOLDER_COLORS.map(col=>(
+                  <button key={col} className="color-swatch no-min-h" onClick={()=>{setNewColor(col);setShowFolderPicker(false);}}
+                    style={{ width:32,height:32,borderRadius:"50%",background:col,cursor:"pointer",flexShrink:0,
+                      border:`3px solid ${newColor===col?C.text:"transparent"}`,
+                      boxShadow:`0 2px 6px rgba(0,0,0,${newColor===col?".35":".12"})`,
+                      padding:0,minHeight:"unset" }}/>
+                ))}
+                <button className="no-min-h" onClick={()=>setShowFolderPicker(p=>!p)}
+                  style={{ width:32,height:32,borderRadius:"50%",cursor:"pointer",
+                    border:`2px dashed ${C.border}`,background:showFolderPicker?C.accent:"transparent",
+                    display:"flex",alignItems:"center",justifyContent:"center",
+                    fontSize:14,color:showFolderPicker?"#fff":C.muted,
+                    padding:0,minHeight:"unset",flexShrink:0 }}>
+                  {showFolderPicker?"×":"+"}
+                </button>
+              </div>
+              {showFolderPicker&&(
+                <div style={{ borderRadius:20,overflow:"hidden",boxShadow:"0 8px 40px rgba(0,0,0,.45)",background:"#18182a",marginTop:10 }}>
+                  <ColorPicker value={newColor} label="Folder Colour" onChange={col=>setNewColor(col)} onClose={()=>setShowFolderPicker(false)}/>
+                </div>
+              )}
+            </div>
+
+            {/* Folder preview chip */}
+            <div style={{ display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:newColor+"12",borderRadius:12,border:`1.5px solid ${newColor+"44"}`,marginBottom:22 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={newColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              <span style={{ fontSize:13,fontWeight:700,color:C.text }}>{newName.trim()||"My Folder"}</span>
+              <span style={{ fontSize:11,color:C.muted,marginLeft:"auto" }}>0 files</span>
+            </div>
+
+            {/* Buttons */}
+            <div style={{ display:"flex",gap:10 }}>
+              <button onClick={()=>{setShowNewFolder(false);setNewName("");}}
+                style={{ flex:1,padding:"12px",border:`1.5px solid ${C.border}`,borderRadius:12,background:"transparent",fontSize:14,fontWeight:600,cursor:"pointer",color:C.text }}>
+                Cancel
+              </button>
+              <button disabled={!newName.trim()}
+                onClick={()=>{setFoldersSave([...folders,{id:`f${Date.now()}`,name:newName.trim(),color:newColor,files:[]}]);setShowNewFolder(false);setNewName("");}}
+                style={{ flex:2,padding:"12px",background:newName.trim()?GRAD:C.border,color:newName.trim()?"#fff":C.muted,border:"none",borderRadius:12,fontSize:14,fontWeight:700,cursor:newName.trim()?"pointer":"not-allowed",boxShadow:newName.trim()?"0 3px 14px rgba(124,92,252,.35)":"none",transition:"all .15s" }}>
+                Create Folder
               </button>
             </div>
-            {showFolderPicker && (
-              <div style={{ borderRadius:20, overflow:"hidden", boxShadow:"0 8px 40px rgba(0,0,0,.45)", background:"#18182a" }}>
-                <ColorPicker value={newColor} label="Folder Colour" onChange={col => setNewColor(col)} onClose={() => setShowFolderPicker(false)}/>
-              </div>
-            )}
           </div>
-          <div style={{ display:"flex", gap:10 }}>
-            <button onClick={() => { setShowNewFolder(false); setNewName(""); }}
-              style={{ flex:1, padding:"11px", border:`1.5px solid ${C.border}`, borderRadius:12, background:"transparent", fontSize:14, fontWeight:600, cursor:"pointer", color:C.text }}>Cancel</button>
-            <button disabled={!newName.trim()}
-              onClick={() => { setFoldersSave([...folders,{id:`f${Date.now()}`,name:newName.trim(),color:newColor,files:[]}]); setShowNewFolder(false); setNewName(""); }}
-              style={{ flex:2, padding:"11px", background:newName.trim()?GRAD:C.border, color:newName.trim()?"#fff":C.muted, border:"none", borderRadius:12, fontSize:14, fontWeight:700, cursor:newName.trim()?"pointer":"not-allowed", boxShadow:newName.trim()?"0 3px 12px rgba(124,92,252,.3)":"none", transition:"all .15s" }}>
-              Create Folder
-            </button>
-          </div>
-        </Modal>
+        </div>
       )}
     </div>
   );
@@ -5486,7 +5512,7 @@ ${text}`
       {/* Turbo split-pane: document left, AI chat right */}
       <div style={{ flex:1, display:"flex", overflow:"hidden" }}>
         {/* Left — document */}
-        <div style={{ flex:1, overflow:"auto", background:C.isDark?"#1a1a1a":"#525252", padding:"24px", display:"flex", justifyContent:"center", alignItems:"flex-start", position:"relative" }}>
+        <div style={{ flex:1, overflow:"auto", background:C.isDark?"#111110":"#2a2a26", padding:"24px", display:"flex", justifyContent:"center", alignItems:"flex-start", position:"relative" }}>
           <div style={{ position:"absolute", top:10, left:10, fontSize:13, fontWeight:700, color:"#fff", opacity:.7, userSelect:"none" }}>
             {fileName}
           </div>
@@ -6763,31 +6789,45 @@ function NotesTurboPanel({ file, notes, lang, onTabChange }) {
       const sys = `You are a study AI assistant. ${fileText ? "File context: " + fileText.slice(0,6000) : ""} ${notes ? "Current notes: " + notes.slice(0,2000) : ""}
 
 FORMATTING: Use **bold** for key terms, > for important formulas/definitions, - for bullet points. Be clear and thorough.
-TABLES: If the user asks for a comparison or table, respond with ONLY valid JSON in this exact format (no other text):
+TABLES: If the user asks for a comparison, table, or list of items with properties, respond with ONLY valid JSON (no other text):
 {"TABLE":{"explanation":"...","columns":["Col1","Col2"],"rows":[["A","B"]]}}
+
+GRAPHS/CHARTS: If the user asks for a graph, chart, plot, or visualization of data, respond with ONLY valid JSON (no other text):
+{"GRAPH":{"type":"bar","title":"...","labels":["A","B","C"],"datasets":[{"label":"Series 1","data":[10,20,30],"backgroundColor":["#7C5CFC","#3D8EF8","#06b6d4"]}]}}
+Supported graph types: bar, line, pie, doughnut.
 
 Otherwise respond normally with formatted text.`;
       const reply = await callClaudeChat(sys, newMsgs.map(m => ({ role:m.role, content:m.content })));
-      // Check if reply is a table JSON
-      let tableAdded = false;
+      // Check if reply is a table or graph JSON
+      let specialAdded = false;
       try {
         const clean = reply.replace(/```json|```/g,"").trim();
-        const match = clean.match(/\{"TABLE":\{[\s\S]*\}\}/);
-        if (match) {
-          const parsed = JSON.parse(match[0]);
+        const tableMatch = clean.match(/\{"TABLE":\{[\s\S]*?\}\}/);
+        if (tableMatch) {
+          const parsed = JSON.parse(tableMatch[0]);
           if (parsed.TABLE?.columns) {
             setMsgs(m => [...m, { role:"assistant", content:"__TABLE__", tableData: { table: { columns: parsed.TABLE.columns, rows: parsed.TABLE.rows }, explanation: parsed.TABLE.explanation } }]);
-            tableAdded = true;
+            specialAdded = true;
+          }
+        }
+        if (!specialAdded) {
+          const graphMatch = clean.match(/\{"GRAPH":\{[\s\S]*?\}\}/);
+          if (graphMatch) {
+            const parsed = JSON.parse(graphMatch[0]);
+            if (parsed.GRAPH?.labels && parsed.GRAPH?.datasets) {
+              setMsgs(m => [...m, { role:"assistant", content:"__GRAPH__", graphData: parsed.GRAPH }]);
+              specialAdded = true;
+            }
           }
         }
       } catch {}
-      if (!tableAdded) setMsgs(m => [...m, { role:"assistant", content:reply }]);
+      if (!specialAdded) setMsgs(m => [...m, { role:"assistant", content:reply }]);
     } catch(e) { setMsgs(m => [...m, { role:"assistant", content:"Error: " + e.message }]); }
     setLoading(false);
   };
 
   return (
-    <div style={{ width:290, minWidth:260, flexShrink:0, display:"flex", flexDirection:"column",
+    <div style={{ width:320, minWidth:280, flexShrink:0, display:"flex", flexDirection:"column",
       background:T.surface, border:`1px solid ${T.border}`, borderRadius:16, overflow:"hidden" }}>
       {msgs.length === 0 && (
         <div style={{ padding:"14px 12px 0" }}>
@@ -6805,13 +6845,13 @@ Otherwise respond normally with formatted text.`;
             ))}
           </div>
           <div style={{ textAlign:"center", padding:"12px 0 8px" }}>
-            <p style={{ fontSize:18, fontWeight:800, color:T.text, margin:"0 0 3px", fontFamily:"'Fraunces',serif" }}>AI Assistant</p>
+            <p style={{ fontSize:22, fontWeight:800, color:T.text, margin:"0 0 4px", fontFamily:"'Fraunces',serif" }}>AI Assistant</p>
             <p style={{ fontSize:11, color:T.muted, margin:0 }}>Ask anything about your file or notes</p>
           </div>
         </div>
       )}
       {msgs.length > 0 && (
-        <div style={{ flex:1, overflowY:"auto", padding:"10px 12px", display:"flex", flexDirection:"column", gap:10, maxHeight:500, minHeight:200 }}>
+        <div style={{ flex:1, overflowY:"auto", padding:"10px 12px", display:"flex", flexDirection:"column", gap:10, maxHeight:"calc(100vh - 400px)", minHeight:200 }}>
           {msgs.map((m,i)=>(
             <div key={i} style={{ display:"flex", justifyContent:m.role==="user"?"flex-end":"flex-start" }}>
               <div style={{ maxWidth:"98%", padding:m.role==="user"?"8px 12px":"10px 14px", borderRadius:m.role==="user"?12:14, fontSize:13, lineHeight:1.6,
@@ -6819,6 +6859,8 @@ Otherwise respond normally with formatted text.`;
                 alignSelf:m.role==="user"?"flex-end":"flex-start", border:m.role==="user"?"none":`1px solid ${T.border}` }}>
                 {m.content === "__TABLE__" && m.tableData
                   ? <InlineClassioTable data={m.tableData} />
+                  : m.content === "__GRAPH__" && m.graphData
+                  ? <InlineChart data={m.graphData} />
                   : m.role === "assistant"
                     ? <RichText text={m.content} />
                     : m.content
@@ -6833,7 +6875,7 @@ Otherwise respond normally with formatted text.`;
       <div style={{ padding:"8px 10px", borderTop:`1px solid ${T.border}`, display:"flex", gap:6 }}>
         <input value={inp} onChange={e=>setInp(e.target.value)}
           onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); }}}
-          placeholder="Ask about your notes…"
+          placeholder="Ask a question, request a table or graph…"
           style={{ flex:1, border:`1px solid ${T.border}`, borderRadius:8, padding:"7px 10px",
             fontSize:12, outline:"none", color:T.text, background:T.bg }} />
         <button onClick={send} disabled={loading||!inp.trim()}
@@ -6913,6 +6955,66 @@ function RawEditModal({ notes, onChange }) {
         </div>
       )}
     </>
+  );
+}
+
+
+// Auto-fetch image from Wikipedia for [Image: description] in notes
+function AutoFetchImage({ description }) {
+  const [imgUrl, setImgUrl] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [failed, setFailed] = React.useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const fetchImg = async () => {
+      try {
+        // Try Wikipedia search for an image matching the description
+        const searchTerm = encodeURIComponent(description.split(",")[0].trim().slice(0, 60));
+        const res = await fetch(`https://en.wikipedia.org/w/api.php?action=query&prop=pageimages&format=json&piprop=original&titles=${searchTerm}&origin=*`);
+        const data = await res.json();
+        const pages = data?.query?.pages || {};
+        const page = Object.values(pages)[0];
+        const url = page?.original?.source;
+        if (!cancelled) {
+          if (url && (url.endsWith(".jpg") || url.endsWith(".png") || url.endsWith(".jpeg") || url.endsWith(".gif") || url.endsWith(".svg") || url.endsWith(".webp"))) {
+            setImgUrl(url);
+          } else {
+            setFailed(true);
+          }
+          setLoading(false);
+        }
+      } catch {
+        if (!cancelled) { setFailed(true); setLoading(false); }
+      }
+    };
+    fetchImg();
+    return () => { cancelled = true; };
+  }, [description]);
+
+  if (loading) return (
+    <div style={{ margin:"12px 0", borderRadius:10, background:C.accentL, padding:"14px", display:"flex", alignItems:"center", gap:8, border:`1px solid ${C.border}` }}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+      <span style={{ fontSize:12, color:C.muted }}>Loading image: {description}</span>
+    </div>
+  );
+
+  if (failed || !imgUrl) return (
+    <div style={{ margin:"12px 0", borderRadius:10, overflow:"hidden", border:`1px solid ${C.border}` }}>
+      <div style={{ background:C.accentL, padding:"6px 12px", fontSize:11, fontWeight:700, color:C.accent, display:"flex", alignItems:"center", gap:6 }}>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        Diagram / Image
+      </div>
+      <div style={{ padding:"10px 14px", fontSize:13, color:C.text, background:C.surface, fontStyle:"italic" }}>{description}</div>
+    </div>
+  );
+
+  return (
+    <div style={{ margin:"14px 0", borderRadius:12, overflow:"hidden", border:`1px solid ${C.border}`, boxShadow:"0 2px 8px rgba(0,0,0,.08)" }}>
+      <img src={imgUrl} alt={description} onError={()=>setFailed(true)}
+        style={{ width:"100%", maxHeight:320, objectFit:"contain", background:"#fff", display:"block" }}/>
+      <div style={{ padding:"7px 12px", background:C.accentL, fontSize:11, color:C.muted, fontStyle:"italic" }}>{description}</div>
+    </div>
   );
 }
 
@@ -7048,18 +7150,11 @@ function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
         }
       }
 
-      // ── Image placeholder from file
+      // ── Image placeholder — auto-fetch from Wikipedia/Wikimedia
       if (trimmed.startsWith("[Image:") && trimmed.endsWith("]")) {
         const desc = trimmed.slice(7, -1).trim();
-        elements.push(
-          <div key={key++} style={{ margin:"12px 0", borderRadius:10, overflow:"hidden", border:`1px solid ${C.border}` }}>
-            <div style={{ background:C.accentL, padding:"6px 12px", fontSize:11, fontWeight:700, color:C.accent, display:"flex", alignItems:"center", gap:6 }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-              Image from document
-            </div>
-            <div style={{ padding:"10px 14px", fontSize:13, color:C.text, background:C.surface }}>{desc}</div>
-          </div>
-        );
+        const imgKey = key++;
+        elements.push(<AutoFetchImage key={imgKey} description={desc} />);
         i++; continue;
       }
 
@@ -7100,9 +7195,68 @@ function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
   };
 
   return (
-    <div style={{ background:C.surface, borderRadius:14, padding:"24px 28px", minHeight:400 }}
+    <div style={{ background:C.surface, borderRadius:14, padding:"24px 28px", minHeight:400, border:`1.5px solid ${C.border}`, boxShadow:"0 2px 8px rgba(0,0,0,.05)" }}
       dir={isRTL?"rtl":"ltr"}>
       {renderNotesWithTable()}
+    </div>
+  );
+}
+
+
+// Inline chart component using Canvas (no external lib needed)
+function InlineChart({ data }) {
+  const canvasRef = React.useRef(null);
+  const chartRef = React.useRef(null);
+  const T = useTheme();
+  const { type, title, labels, datasets } = data;
+
+  React.useEffect(() => {
+    if (!canvasRef.current) return;
+    const loadAndRender = async () => {
+      if (!window.Chart) {
+        await new Promise((res, rej) => {
+          const s = document.createElement("script");
+          s.src = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js";
+          s.onload = res; s.onerror = rej; document.head.appendChild(s);
+        });
+      }
+      if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
+      const ctx = canvasRef.current.getContext("2d");
+      const COLORS = ["#7C5CFC","#3D8EF8","#06b6d4","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899"];
+      const processedDatasets = datasets.map((ds, di) => ({
+        ...ds,
+        backgroundColor: ds.backgroundColor || (type === "bar" || type === "line" ? COLORS[di % COLORS.length] + "cc" : labels.map((_, li) => COLORS[li % COLORS.length] + "cc")),
+        borderColor: ds.borderColor || (type === "line" ? COLORS[di % COLORS.length] : undefined),
+        borderWidth: type === "line" ? 2 : 1,
+        fill: type === "line" ? false : undefined,
+        tension: type === "line" ? 0.4 : undefined,
+        pointBackgroundColor: type === "line" ? COLORS[di % COLORS.length] : undefined,
+      }));
+      chartRef.current = new window.Chart(ctx, {
+        type: type || "bar",
+        data: { labels, datasets: processedDatasets },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: datasets.length > 1, labels: { color: T.text, font: { size: 11 } } },
+            title: title ? { display: true, text: title, color: T.text, font: { size: 13, weight: "700" } } : { display: false },
+          },
+          scales: (type === "pie" || type === "doughnut") ? {} : {
+            x: { ticks: { color: T.muted, font: { size: 10 } }, grid: { color: T.border } },
+            y: { ticks: { color: T.muted, font: { size: 10 } }, grid: { color: T.border } },
+          },
+        },
+      });
+    };
+    loadAndRender().catch(console.error);
+    return () => { if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
+  }, [data, T]);
+
+  return (
+    <div style={{ margin:"8px 0", background:T.bg, borderRadius:12, padding:"12px", border:`1px solid ${T.border}` }}>
+      <div style={{ height: (type === "pie" || type === "doughnut") ? 220 : 200, position:"relative" }}>
+        <canvas ref={canvasRef} />
+      </div>
     </div>
   );
 }
@@ -7927,141 +8081,82 @@ function CardsTab({ file, onUpdate }) {
     {id:"known",   label:`✓ Known (${knownCount})`},
   ];
 
+  // ── preview card index (browse before studying)
+  const [previewIdx, setPreviewIdx] = React.useState(0);
+
   return (
     <div>
-      {/* ── Header ── */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18, flexWrap:"wrap", gap:12 }}>
-        <div>
-          <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:22, fontWeight:700, color:C.text, marginBottom:8 }}>
-            Study Cards
-          </h2>
-          {/* Mastery pills — image 3 style */}
-          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-            <span className="pill-new">{cards.length - knownCount - starredCount} New</span>
-            <span className="pill-learning">{starredCount} Learning</span>
-            <span className="pill-mastered">{knownCount} Mastered</span>
-          </div>
-          {cards.length > 0 && (
-            <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:10 }}>
-              <div style={{ height:5, background:C.border, borderRadius:3, width:160, overflow:"hidden" }}>
-                <div style={{ height:"100%", width:`${progress}%`, background:"linear-gradient(90deg,#7C5CFC,#3D8EF8)", borderRadius:3, transition:"width .4s" }}/>
-              </div>
-              <span style={{ fontSize:12, color:C.accent, fontWeight:700 }}>{progress}% mastered</span>
-              {(knownCount > 0 || starredCount > 0) && (
-                <button onClick={resetProgress} style={{ fontSize:11, color:C.muted, background:"none", border:"none", cursor:"pointer", textDecoration:"underline" }}>Reset</button>
-              )}
-            </div>
-          )}
+      {/* ── Turbo-style header with icon + count ── */}
+      <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20 }}>
+        <div style={{ width:48, height:48, background:"linear-gradient(135deg,#7C5CFC22,#3D8EF811)", borderRadius:16, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7C5CFC" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/></svg>
         </div>
-        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-          {/* View toggle */}
-          {cards.length > 0 && (
-            <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-              <div style={{ display:"flex", border:`1.5px solid ${C.border}`, borderRadius:8, overflow:"hidden" }}>
-                {[{id:"grid",svg:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>},
-                  {id:"list",svg:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>}]
-                  .map(v => (
-                    <button key={v.id} onClick={() => setViewMode(v.id)}
-                      style={{ padding:"6px 10px", border:"none", cursor:"pointer", background:viewMode===v.id?C.accent:"transparent", color:viewMode===v.id?"#fff":C.muted }}>
-                      {v.svg}
-                    </button>
-                ))}
-              </div>
-              <button onClick={() => { setViewMode("study"); setStudyIdx(0); setFlipped({}); }}
-                style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 14px",
-                  background: viewMode==="study" ? "linear-gradient(135deg,#7C5CFC,#3D8EF8)" : C.surface,
-                  color: viewMode==="study" ? "#fff" : C.muted,
-                  border:`1.5px solid ${viewMode==="study"?"transparent":C.border}`,
-                  borderRadius:8, cursor:"pointer", fontSize:12, fontWeight:700,
-                  boxShadow: viewMode==="study" ? "0 2px 8px rgba(124,92,252,.3)" : "none" }}>
-                ▶ Study
-              </button>
-            </div>
-          )}
-          {/* Shuffle */}
-          {cards.length > 0 && (
-            <button onClick={() => setShuffled(s=>!s)}
-              style={{ display:"flex", alignItems:"center", gap:6, background:shuffled?C.purpleL:"transparent", color:shuffled?C.purple:C.muted,
-                border:`1.5px solid ${shuffled?C.purple:C.border}`, borderRadius:8, padding:"7px 12px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
-              Shuffle
-            </button>
-          )}
-          <button onClick={() => setShowAdd(true)} className="hov"
-            style={{ display:"flex", alignItems:"center", gap:7, background:C.surface, color:C.text, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"9px 14px", fontSize:14, fontWeight:600, cursor:"pointer" }}>
-            <Icon d={I.plus} size={14} color={C.text} sw={2.5} /> Add Card
+        <div>
+          <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:22, fontWeight:700, color:C.text, margin:0 }}>Study Cards</h2>
+          <p style={{ margin:0, fontSize:13, color:C.muted }}>{cards.length} Total Flashcard{cards.length!==1?"s":""}</p>
+        </div>
+        <div style={{ marginLeft:"auto", display:"flex", gap:8, flexWrap:"wrap" }}>
+          <button onClick={()=>setShowAdd(true)} className="hov"
+            style={{ display:"flex", alignItems:"center", gap:6, background:C.surface, color:C.text, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+            <Icon d={I.plus} size={13} color={C.text} sw={2.5}/> Add Card
           </button>
-          <button onClick={() => setShowCountPicker(p => !p)} disabled={gen} className="hov"
-            style={{ display:"flex", alignItems:"center", gap:7,
-              background:gen?"#ccc":"linear-gradient(135deg,#7C5CFC,#3D8EF8)",
-              color:"#fff", border:"none", borderRadius:10, padding:"9px 16px",
-              fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer",
-              boxShadow:gen?"none":"0 3px 10px rgba(124,92,252,.3)" }}>
-            {gen
-              ? <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Generating…</>
-              : <><Icon d={I.sparkle} size={15} color="#fff"/>✨ AI Generate</>}
+          <button onClick={()=>setShowCountPicker(p=>!p)} disabled={gen} className="hov"
+            style={{ display:"flex", alignItems:"center", gap:7, background:gen?"#ccc":"linear-gradient(135deg,#7C5CFC,#3D8EF8)", color:"#fff", border:"none", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:gen?"not-allowed":"pointer", boxShadow:gen?"none":"0 3px 10px rgba(124,92,252,.3)" }}>
+            {gen ? <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Generating…</> : <><Icon d={I.sparkle} size={13} color="#fff"/>✨ AI Generate</>}
           </button>
         </div>
       </div>
 
-      {/* Filter tabs */}
+      {/* ── Mastery pill bar ── */}
+      <div style={{ display:"flex", gap:8, marginBottom:20, flexWrap:"wrap" }}>
+        <span className="pill-new">{cards.length - knownCount - starredCount} New</span>
+        <span className="pill-learning">{starredCount} Learning</span>
+        <span className="pill-mastered">{knownCount} Mastered</span>
+        {cards.length > 0 && <span style={{ fontSize:12, color:C.accent, fontWeight:700, alignSelf:"center", marginLeft:4 }}>{progress}% mastered</span>}
+        {(knownCount > 0 || starredCount > 0) && (
+          <button onClick={resetProgress} style={{ fontSize:11, color:C.muted, background:"none", border:"none", cursor:"pointer", textDecoration:"underline", alignSelf:"center" }}>Reset</button>
+        )}
+      </div>
+
+      {/* ── Progress bar ── */}
       {cards.length > 0 && (
-        <div style={{ display:"flex", gap:6, marginBottom:16, flexWrap:"wrap" }}>
-          {FILTER_OPTS.map(f => (
-            <button key={f.id} onClick={() => setFilter(f.id)}
-              style={{ padding:"6px 14px", borderRadius:20, border:`1.5px solid ${filter===f.id?C.accent:C.border}`,
-                background:filter===f.id?C.accentL:"transparent", color:filter===f.id?C.accent:C.muted,
-                fontSize:12, fontWeight:700, cursor:"pointer", transition:"all .12s" }}>
-              {f.label}
-            </button>
-          ))}
+        <div style={{ height:5, background:C.border, borderRadius:3, marginBottom:20, overflow:"hidden" }}>
+          <div style={{ height:"100%", width:`${progress}%`, background:"linear-gradient(90deg,#7C5CFC,#3D8EF8)", borderRadius:3, transition:"width .4s" }}/>
         </div>
       )}
 
+      {/* ── Count picker ── */}
       {showCountPicker && (
-        <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:16,
-          padding:"20px 20px 16px", marginBottom:16,
-          boxShadow:"0 4px 20px rgba(0,0,0,.07)" }}>
-          {/* Header */}
+        <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:16, padding:"20px 20px 16px", marginBottom:16, boxShadow:"0 4px 20px rgba(0,0,0,.07)" }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
             <div>
               <p style={{ fontSize:15, fontWeight:700, color:C.text, margin:0 }}>How many cards?</p>
               <p style={{ fontSize:12, color:C.muted, margin:"2px 0 0" }}>AI will generate from your file content</p>
             </div>
-            <button onClick={() => setShowCountPicker(false)} className="no-min-h"
-              style={{ width:28, height:28, borderRadius:"50%", background:C.bg, border:`1px solid ${C.border}`,
-                cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:C.muted, fontSize:16 }}>×</button>
+            <button onClick={()=>setShowCountPicker(false)} className="no-min-h"
+              style={{ width:28, height:28, borderRadius:"50%", background:C.bg, border:`1px solid ${C.border}`, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:C.muted, fontSize:16 }}>×</button>
           </div>
-          {/* Quick-pick chips */}
           <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:16 }}>
-            {[5, 8, 10, 15, 20, 25, 30].map(n => (
-              <button key={n} onClick={() => setCardCount(n)} className="no-min-h"
+            {[5,8,10,15,20,25,30].map(n=>(
+              <button key={n} onClick={()=>setCardCount(n)} className="no-min-h"
                 style={{ padding:"8px 16px", borderRadius:20, fontSize:13, fontWeight:700, cursor:"pointer", transition:"all .12s",
-                  background: cardCount===n ? C.accent : C.bg,
-                  color:      cardCount===n ? "#fff"   : C.muted,
-                  border:     `1.5px solid ${cardCount===n ? C.accent : C.border}`,
-                  boxShadow:  cardCount===n ? `0 2px 8px ${C.accentS}` : "none" }}>
+                  background:cardCount===n?C.accent:C.bg, color:cardCount===n?"#fff":C.muted,
+                  border:`1.5px solid ${cardCount===n?C.accent:C.border}`,
+                  boxShadow:cardCount===n?`0 2px 8px ${C.accentS}`:"none" }}>
                 {n}
               </button>
             ))}
           </div>
-          {/* Custom + Generate row */}
           <div style={{ display:"flex", gap:10, alignItems:"center" }}>
             <div style={{ display:"flex", alignItems:"center", gap:6, background:C.bg, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"6px 10px" }}>
               <span style={{ fontSize:12, color:C.muted, whiteSpace:"nowrap" }}>Custom</span>
               <input type="number" min="1" max="50" value={cardCount}
-                onChange={e => setCardCount(Math.min(50, Math.max(1, parseInt(e.target.value)||1)))}
+                onChange={e=>setCardCount(Math.min(50,Math.max(1,parseInt(e.target.value)||1)))}
                 style={{ width:52, border:"none", outline:"none", fontSize:14, fontWeight:700, color:C.text, background:"transparent", textAlign:"center" }}/>
             </div>
-            <button onClick={() => generate(cardCount)} disabled={gen}
-              style={{ flex:1, background:gen?"#ccc":GRAD, color:"#fff", border:"none", borderRadius:10,
-                padding:"10px 0", fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer",
-                boxShadow:gen?"none":"0 3px 12px rgba(124,92,252,.3)",
-                display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
-              {gen
-                ? <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Generating…</>
-                : <>✨ Generate {cardCount} Cards</>
-              }
+            <button onClick={()=>generate(cardCount)} disabled={gen}
+              style={{ flex:1, background:gen?"#ccc":GRAD, color:"#fff", border:"none", borderRadius:10, padding:"10px 0", fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer", boxShadow:gen?"none":"0 3px 12px rgba(124,92,252,.3)", display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
+              {gen ? <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Generating…</> : <>✨ Generate {cardCount} Cards</>}
             </button>
           </div>
         </div>
@@ -8069,8 +8164,10 @@ function CardsTab({ file, onUpdate }) {
 
       {showAdd && (
         <div style={{ background:C.surface, border:`1.5px solid ${C.accentS}`, borderRadius:14, padding:20, marginBottom:20 }}>
-          <input value={nQ} onChange={e=>setNQ(e.target.value)} placeholder="Question" style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:8, padding:"9px 12px", fontSize:14, marginBottom:10, outline:"none", color:C.text, background:C.bg }} />
-          <input value={nA} onChange={e=>setNA(e.target.value)} placeholder="Answer" style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:8, padding:"9px 12px", fontSize:14, marginBottom:14, outline:"none", color:C.text, background:C.bg }} />
+          <input value={nQ} onChange={e=>setNQ(e.target.value)} placeholder="Question"
+            style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:8, padding:"9px 12px", fontSize:14, marginBottom:10, outline:"none", color:C.text, background:C.bg }}/>
+          <input value={nA} onChange={e=>setNA(e.target.value)} placeholder="Answer"
+            style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:8, padding:"9px 12px", fontSize:14, marginBottom:14, outline:"none", color:C.text, background:C.bg }}/>
           <div style={{ display:"flex", gap:8 }}>
             <button onClick={()=>setShowAdd(false)} style={{ flex:1, padding:"8px", border:`1.5px solid ${C.border}`, borderRadius:8, background:"none", cursor:"pointer", fontSize:14, color:C.text }}>Cancel</button>
             <button onClick={add} style={{ flex:2, padding:"8px", background:C.accent, color:"#fff", border:"none", borderRadius:8, cursor:"pointer", fontSize:14, fontWeight:600 }}>Add Card</button>
@@ -8078,272 +8175,231 @@ function CardsTab({ file, onUpdate }) {
         </div>
       )}
 
-      {displayCards.length === 0 && (
+      {cards.length === 0 && (
         <div style={{ textAlign:"center", padding:"60px 0", color:C.muted }}>
-          <Icon d={I.cards} size={40} color={C.border} />
-          <p style={{ marginTop:12, fontSize:15 }}>
-            {cards.length === 0 ? "No cards yet — generate or add some" : `No cards match the "${filter}" filter`}
-          </p>
+          <Icon d={I.cards} size={40} color={C.border}/>
+          <p style={{ marginTop:12, fontSize:15 }}>No cards yet — generate or add some</p>
         </div>
       )}
 
       {/* ── Study mode — fullscreen single card flipper ── */}
-      {viewMode === "study" && displayCards.length > 0 && (() => {
+      {viewMode === "study" && displayCards.length > 0 && (()=>{
         const card = displayCards[Math.min(studyIdx, displayCards.length-1)];
         const isFlipped = !!flipped[card?.id];
         const isStarred = !!starred[card?.id];
         const isKnown   = !!known[card?.id];
         const pct = Math.round(((studyIdx + 1) / displayCards.length) * 100);
         return (
-          <div style={{
-            position:"fixed", inset:0, zIndex:500,
-            background:C.bg,
-            display:"flex", flexDirection:"column",
-            fontFamily:"'DM Sans',sans-serif",
-          }}>
+          <div style={{ position:"fixed", inset:0, zIndex:500, background:C.bg, display:"flex", flexDirection:"column", fontFamily:"'DM Sans',sans-serif" }}>
             <style>{`
               .ql-wrap{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .5s cubic-bezier(.4,0,.2,1)}
               .ql-wrap.flipped{transform:rotateY(180deg)}
               .ql-side{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 56px;text-align:center;cursor:pointer}
               .ql-back{transform:rotateY(180deg)}
             `}</style>
-
-            {/* Top bar */}
             <div style={{ flexShrink:0, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 28px", background:C.surface, borderBottom:`1px solid ${C.border}` }}>
-              <button onClick={() => { setViewMode("grid"); setFlipped({}); }}
+              <button onClick={()=>{setViewMode("grid");setFlipped({});}}
                 style={{ display:"flex", alignItems:"center", gap:7, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14, fontWeight:600 }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-                Back
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>Back
               </button>
-
-              <span style={{ fontSize:15, fontWeight:700, color:C.text }}>
-                {studyIdx + 1} <span style={{ color:C.muted, fontWeight:400 }}>/ {displayCards.length}</span>
-              </span>
-
+              <span style={{ fontSize:15, fontWeight:700, color:C.text }}>{studyIdx+1} <span style={{ color:C.muted, fontWeight:400 }}>/ {displayCards.length}</span></span>
               <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                <button onClick={e => toggleStar(card.id, e)} className="no-min-h"
-                  style={{ background:"none", border:"none", cursor:"pointer", fontSize:20, opacity:isStarred?1:.3 }}>
-                  ⭐
-                </button>
-                <button onClick={() => setShuffled(s => !s)} className="no-min-h"
+                <button onClick={e=>toggleStar(card.id,e)} className="no-min-h" style={{ background:"none", border:"none", cursor:"pointer", fontSize:20, opacity:isStarred?1:.3 }}>⭐</button>
+                <button onClick={()=>setShuffled(s=>!s)} className="no-min-h"
                   style={{ display:"flex", alignItems:"center", gap:5, background:shuffled?C.purpleL:"transparent", border:`1.5px solid ${shuffled?C.purple:C.border}`, borderRadius:20, padding:"5px 14px", cursor:"pointer", fontSize:12, fontWeight:700, color:shuffled?C.purple:C.muted }}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
-                  Shuffle
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>Shuffle
                 </button>
               </div>
             </div>
-
-            {/* Progress bar */}
             <div style={{ flexShrink:0, height:5, background:C.border }}>
               <div style={{ height:"100%", width:`${pct}%`, background:"linear-gradient(90deg,#7C5CFC,#3D8EF8)", transition:"width .35s ease" }}/>
             </div>
-
-            {/* Mastery status bar */}
             <div style={{ flexShrink:0, display:"flex", justifyContent:"center", gap:16, padding:"10px 28px 0", background:C.bg }}>
               <span className="pill-new">{(displayCards.length - Object.values(known).filter(Boolean).length - Object.values(starred).filter(Boolean).length)} New</span>
               <span className="pill-learning">{Object.values(starred).filter(Boolean).length} Learning</span>
               <span className="pill-mastered">{Object.values(known).filter(Boolean).length} Mastered</span>
             </div>
-
-            {/* Card */}
             <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", padding:"16px 32px", minHeight:0, perspective:1400 }}>
-              <div
-                className={`ql-wrap${isFlipped ? " flipped" : ""}`}
-                onClick={() => setFlipped(f => ({...f, [card.id]: !f[card.id]}))}
+              <div className={`ql-wrap${isFlipped?" flipped":""}`}
+                onClick={()=>setFlipped(f=>({...f,[card.id]:!f[card.id]}))}
                 style={{ width:"100%", maxWidth:760, height:"min(340px, calc(100vh - 280px))", cursor:"pointer", userSelect:"none" }}>
-                {/* Front */}
-                <div className="ql-side" style={{
-                  background: isKnown ? C.greenL : C.surface,
-                  border: `2px solid ${isKnown ? C.green : isStarred ? "#f59e0b" : C.border}`,
-                  boxShadow: C.cardShadow,
-                }}>
-                  {/* Edit icon top-left */}
+                <div className="ql-side" style={{ background:isKnown?C.greenL:C.surface, border:`2px solid ${isKnown?C.green:isStarred?"#f59e0b":C.border}`, boxShadow:C.cardShadow }}>
                   <div style={{ position:"absolute", top:16, left:16, cursor:"pointer", opacity:.4 }}
-                    onClick={e=>{e.stopPropagation(); const q=window.prompt("Edit question:",card.question); if(q&&q.trim()){const u=cards.map(c=>c.id===card.id?{...c,question:q.trim()}:c); setCards(u); onUpdate({...file,studyCards:u});}}}>
+                    onClick={e=>{e.stopPropagation();const q=window.prompt("Edit question:",card.question);if(q&&q.trim()){const u=cards.map(c=>c.id===card.id?{...c,question:q.trim()}:c);setCards(u);onUpdate({...file,studyCards:u});}}}>
                     <Icon d={I.edit} size={16} color={C.muted}/>
                   </div>
-                  {/* Star top-right */}
                   <button onClick={e=>toggleStar(card.id,e)} className="no-min-h"
                     style={{ position:"absolute", top:14, right:14, background:"none", border:"none", cursor:"pointer", fontSize:18, opacity:isStarred?1:.3 }}>☆</button>
                   <p style={{ fontSize:11, fontWeight:800, letterSpacing:2, textTransform:"uppercase", color:C.muted, marginBottom:20 }}>QUESTION</p>
                   <p style={{ fontSize:clamp(card.question?.length), color:C.text, lineHeight:1.65, fontWeight:500, maxWidth:640 }}>{card.question}</p>
                   <p style={{ fontSize:12, color:C.muted, marginTop:24 }}>Click to flip</p>
                 </div>
-                {/* Back */}
-                <div className="ql-side ql-back" style={{
-                  background: C.accentL, border: `2px solid ${C.accentS}`, boxShadow: C.cardShadow,
-                }}>
+                <div className="ql-side ql-back" style={{ background:C.accentL, border:`2px solid ${C.accentS}`, boxShadow:C.cardShadow }}>
                   <p style={{ fontSize:11, fontWeight:800, letterSpacing:2, textTransform:"uppercase", color:C.accent, marginBottom:20 }}>ANSWER</p>
                   <p style={{ fontSize:clamp(card.answer?.length), color:C.text, lineHeight:1.65, fontWeight:500, maxWidth:640 }}>{card.answer}</p>
                   <p style={{ fontSize:12, color:C.accent, marginTop:24 }}>Click to flip back</p>
                 </div>
               </div>
             </div>
-
-            {/* Bottom — mastery controls */}
             <div style={{ flexShrink:0, background:C.surface, borderTop:`1px solid ${C.border}` }}>
-              {/* Don't Know / Know row */}
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 28px 10px" }}>
-                <button onClick={() => { setStudyIdx(i => Math.max(0, i-1)); setFlipped({}); }}
-                  disabled={studyIdx===0} className="no-min-h"
+                <button onClick={()=>{setStudyIdx(i=>Math.max(0,i-1));setFlipped({});}} disabled={studyIdx===0} className="no-min-h"
                   style={{ width:44, height:44, borderRadius:"50%", border:`1.5px solid ${C.border}`, background:C.bg, cursor:studyIdx===0?"not-allowed":"pointer", opacity:studyIdx===0?.35:1, display:"flex", alignItems:"center", justifyContent:"center" }}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.text} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
                 </button>
-
                 <div style={{ display:"flex", gap:10 }}>
-                  {/* Don't Know */}
-                  <button onClick={() => { if(starred[card.id]) toggleStar(card.id,{stopPropagation:()=>{}}); setStudyIdx(i=>Math.min(displayCards.length-1,i+1)); setFlipped({}); }} className="no-min-h"
+                  <button onClick={()=>{if(starred[card.id])toggleStar(card.id,{stopPropagation:()=>{}});setStudyIdx(i=>Math.min(displayCards.length-1,i+1));setFlipped({});}} className="no-min-h"
                     style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 24px", borderRadius:12, border:`1.5px solid ${C.red}55`, background:C.redL, color:C.red, fontSize:14, fontWeight:700, cursor:"pointer" }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                    Don't Know
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>Don't Know
                   </button>
-                  {/* Know */}
-                  <button onClick={e=>{toggleKnown(card.id,e); setStudyIdx(i=>Math.min(displayCards.length-1,i+1)); setFlipped({});}} className="no-min-h"
-                    style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 28px", borderRadius:12, border:"none",
-                      background: isKnown ? C.green : "linear-gradient(135deg,#7C5CFC,#3D8EF8)",
-                      color:"#fff", fontSize:14, fontWeight:700, cursor:"pointer",
-                      boxShadow: isKnown ? `0 3px 12px ${C.green}55` : "0 3px 12px rgba(124,92,252,.35)" }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
-                    {isKnown ? "Mastered!" : "Know"}
+                  <button onClick={e=>{toggleKnown(card.id,e);setStudyIdx(i=>Math.min(displayCards.length-1,i+1));setFlipped({});}} className="no-min-h"
+                    style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 28px", borderRadius:12, border:"none", background:isKnown?C.green:"linear-gradient(135deg,#7C5CFC,#3D8EF8)", color:"#fff", fontSize:14, fontWeight:700, cursor:"pointer", boxShadow:isKnown?`0 3px 12px ${C.green}55`:"0 3px 12px rgba(124,92,252,.35)" }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>{isKnown?"Mastered!":"Know"}
                   </button>
                 </div>
-
-                <button onClick={() => { setStudyIdx(i => Math.min(displayCards.length-1, i+1)); setFlipped({}); }}
-                  disabled={studyIdx===displayCards.length-1} className="no-min-h"
+                <button onClick={()=>{setStudyIdx(i=>Math.min(displayCards.length-1,i+1));setFlipped({});}} disabled={studyIdx===displayCards.length-1} className="no-min-h"
                   style={{ width:44, height:44, borderRadius:"50%", border:`1.5px solid ${C.border}`, background:C.bg, cursor:studyIdx===displayCards.length-1?"not-allowed":"pointer", opacity:studyIdx===displayCards.length-1?.35:1, display:"flex", alignItems:"center", justifyContent:"center" }}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.text} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
                 </button>
               </div>
-
-              {/* Ask about this flashcard + ELI5 — image 4 style */}
-              <ELI5Panel card={card} />
+              <ELI5Panel card={card}/>
               <p style={{ textAlign:"center", fontSize:10, color:C.muted, padding:"0 0 8px" }}>← → navigate &nbsp;·&nbsp; Space to flip</p>
             </div>
           </div>
         );
       })()}
 
-            {/* ── Grid view ── */}
-      {displayCards.length > 0 && viewMode === "grid" && (
+      {/* ── Turbo AI style: big preview card + action buttons + list below ── */}
+      {cards.length > 0 && viewMode !== "study" && (
         <>
-          <style>{`
-            .card-flip-inner{position:relative;width:100%;height:100%;transition:transform .45s cubic-bezier(.4,0,.2,1);transform-style:preserve-3d}
-            .card-flip-wrap:hover .card-flip-inner{box-shadow:0 8px 28px rgba(61,90,128,.14)}
-            .card-flip-wrap.is-flipped .card-flip-inner{transform:rotateY(180deg)}
-            .card-face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:14px;padding:20px;display:flex;flex-direction:column;justify-content:space-between}
-            .card-face-back{transform:rotateY(180deg)}
-            @media(max-width:600px){.cards-grid{grid-template-columns:1fr!important}}
-            @media(min-width:601px) and (max-width:1024px){.cards-grid{grid-template-columns:1fr 1fr!important}}
-          `}</style>
-          <div className="cards-grid" style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:14 }}>
-            {displayCards.map(card => {
-              const isFlipped  = !!flipped[card.id];
-              const isStarred  = !!starred[card.id];
-              const isKnown    = !!known[card.id];
-              return (
-                <div key={card.id}
-                  className={`card-flip-wrap${isFlipped ? " is-flipped" : ""}`}
-                  onClick={() => setFlipped(f=>({...f,[card.id]:!f[card.id]}))}
-                  style={{ height:180, perspective:1000, cursor:"pointer" }}>
-                  <div className="card-flip-inner">
-                    {/* Front face — Question */}
-                    <div className="card-face"
-                      style={{
-                        background: isKnown ? C.greenL : C.surface,
-                        border: `1.5px solid ${isKnown ? C.green : isStarred ? "#f59e0b" : C.border}`,
-                        boxShadow: isStarred ? "0 0 0 2px #f59e0b22" : "0 2px 8px rgba(0,0,0,.06)",
-                      }}>
-                      {isKnown && (
-                        <span style={{ position:"absolute", top:8, left:10, background:C.green, color:"#fff", borderRadius:20, fontSize:9, fontWeight:800, padding:"2px 7px" }}>✓ KNOWN</span>
-                      )}
-                      <div style={{ paddingTop: isKnown ? 18 : 0 }}>
-                        <p style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:1, textTransform:"uppercase", marginBottom:8 }}>QUESTION</p>
-                        <p style={{ fontSize:13, color:C.text, lineHeight:1.55, overflow:"hidden", display:"-webkit-box", WebkitLineClamp:4, WebkitBoxOrient:"vertical" }}>{card.question}</p>
-                      </div>
-                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", paddingTop:8, borderTop:`1px solid ${C.border}`, marginTop:8 }}>
-                        <span style={{ fontSize:10, color:C.muted }}>Tap to flip</span>
-                        <div style={{ display:"flex", gap:3 }} onClick={e=>e.stopPropagation()}>
-                          <button onClick={e=>toggleStar(card.id,e)} className="no-min-h"
-                            style={{ background:"none", border:"none", cursor:"pointer", fontSize:13, opacity:isStarred?1:.3, padding:"2px 3px" }}>⭐</button>
-                          <button onClick={e=>toggleKnown(card.id,e)} className="no-min-h"
-                            style={{ background:isKnown?C.greenL:"none", border:`1.5px solid ${isKnown?C.green:C.border}`, borderRadius:5, cursor:"pointer", padding:"2px 6px", fontSize:10, fontWeight:700, color:isKnown?C.green:C.muted }}>
-                            {isKnown?"✓":"Got it"}
-                          </button>
-                          <button onClick={e=>{e.stopPropagation();del(card.id);}} className="no-min-h"
-                            style={{ background:"none", border:"none", cursor:"pointer", padding:"2px 3px", opacity:.35 }}>
-                            <Icon d={I.trash} size={12} color={C.muted} />
-                          </button>
+          {/* Big preview card */}
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", marginBottom:20 }}>
+            <div style={{ width:"100%", maxWidth:680, position:"relative" }}>
+              <div
+                className={`ql-wrap${!!flipped[displayCards[Math.min(previewIdx,displayCards.length-1)]?.id]?" flipped":""}`}
+                onClick={()=>{const c=displayCards[Math.min(previewIdx,displayCards.length-1)];if(c)setFlipped(f=>({...f,[c.id]:!f[c.id]}));}}
+                style={{ width:"100%", height:220, cursor:"pointer", userSelect:"none", position:"relative", transformStyle:"preserve-3d", transition:"transform .5s cubic-bezier(.4,0,.2,1)" }}>
+                <style>{`
+                  .ql-wrap{position:relative;width:100%;transform-style:preserve-3d;transition:transform .5s cubic-bezier(.4,0,.2,1)}
+                  .ql-wrap.flipped{transform:rotateY(180deg)}
+                  .ql-side{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 48px;text-align:center}
+                  .ql-back{transform:rotateY(180deg)}
+                `}</style>
+                {(() => {
+                  const c = displayCards[Math.min(previewIdx,displayCards.length-1)];
+                  const isK = c ? !!known[c.id] : false;
+                  const isS = c ? !!starred[c.id] : false;
+                  return (<>
+                    <div className="ql-side" style={{ background:isK?C.greenL:C.surface, border:`2px solid ${isK?C.green:isS?"#f59e0b":C.border}`, boxShadow:"0 4px 20px rgba(0,0,0,.09)" }}>
+                      <p style={{ fontSize:11, fontWeight:800, letterSpacing:2, textTransform:"uppercase", color:C.muted, marginBottom:16 }}>QUESTION</p>
+                      <p style={{ fontSize:clamp(c?.question?.length), color:C.text, lineHeight:1.65, fontWeight:500 }}>{c?.question||"No cards"}</p>
+                      <p style={{ fontSize:11, color:C.muted, marginTop:20 }}>Click to flip</p>
+                    </div>
+                    <div className="ql-side ql-back" style={{ background:C.accentL, border:`2px solid ${C.accentS}`, boxShadow:"0 4px 20px rgba(0,0,0,.09)" }}>
+                      <p style={{ fontSize:11, fontWeight:800, letterSpacing:2, textTransform:"uppercase", color:C.accent, marginBottom:16 }}>ANSWER</p>
+                      <p style={{ fontSize:clamp(c?.answer?.length), color:C.text, lineHeight:1.65, fontWeight:500 }}>{c?.answer||""}</p>
+                    </div>
+                  </>);
+                })()}
+              </div>
+            </div>
+
+            {/* Card nav */}
+            <div style={{ display:"flex", alignItems:"center", gap:16, marginTop:14 }}>
+              <button onClick={()=>{setPreviewIdx(i=>Math.max(0,i-1));setFlipped({});}} disabled={previewIdx===0} className="no-min-h"
+                style={{ width:36, height:36, borderRadius:"50%", border:`1.5px solid ${C.border}`, background:C.surface, cursor:previewIdx===0?"default":"pointer", opacity:previewIdx===0?.3:1, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.text} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+              </button>
+              <span style={{ fontSize:14, color:C.muted, fontWeight:500 }}>{Math.min(previewIdx+1,displayCards.length)} / {displayCards.length}</span>
+              <button onClick={()=>{setPreviewIdx(i=>Math.min(displayCards.length-1,i+1));setFlipped({});}} disabled={previewIdx>=displayCards.length-1} className="no-min-h"
+                style={{ width:36, height:36, borderRadius:"50%", border:`1.5px solid ${C.border}`, background:C.surface, cursor:previewIdx>=displayCards.length-1?"default":"pointer", opacity:previewIdx>=displayCards.length-1?.3:1, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.text} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Action buttons: Edit + Start Studying */}
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:22 }}>
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={()=>setShowAdd(true)} className="hov"
+                style={{ display:"flex", alignItems:"center", gap:6, background:C.surface, color:C.text, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+                <Icon d={I.edit} size={13} color={C.text}/> Edit Flashcards
+              </button>
+              <button onClick={()=>setShuffled(s=>!s)} className="hov"
+                style={{ display:"flex", alignItems:"center", gap:6, background:shuffled?C.purpleL:"transparent", color:shuffled?C.purple:C.muted, border:`1.5px solid ${shuffled?C.purple:C.border}`, borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
+                Shuffle
+              </button>
+            </div>
+            <button onClick={()=>{setViewMode("study");setStudyIdx(0);setFlipped({});}} className="hov"
+              style={{ display:"flex", alignItems:"center", gap:8, background:"linear-gradient(135deg,#7C5CFC,#3D8EF8)", color:"#fff", border:"none", borderRadius:12, padding:"10px 24px", fontSize:14, fontWeight:700, cursor:"pointer", boxShadow:"0 3px 14px rgba(124,92,252,.35)" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Start Studying
+            </button>
+          </div>
+
+          {/* Filter tabs + list */}
+          <div style={{ display:"flex", gap:6, marginBottom:14, flexWrap:"wrap" }}>
+            {FILTER_OPTS.map(f=>(
+              <button key={f.id} onClick={()=>{setFilter(f.id);setPreviewIdx(0);}}
+                style={{ padding:"6px 14px", borderRadius:20, border:`1.5px solid ${filter===f.id?C.accent:C.border}`,
+                  background:filter===f.id?C.accentL:"transparent", color:filter===f.id?C.accent:C.muted,
+                  fontSize:12, fontWeight:700, cursor:"pointer", transition:"all .12s" }}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Card list rows — Turbo style */}
+          {(() => {
+            const grouped = filter === "all" ? [
+              { label:"New", labelCls:"pill-new", items: displayCards.filter(c=>!known[c.id]&&!starred[c.id]) },
+              { label:"Learning", labelCls:"pill-learning", items: displayCards.filter(c=>starred[c.id]) },
+              { label:"Mastered", labelCls:"pill-mastered", items: displayCards.filter(c=>known[c.id]) },
+            ] : [{ label: filter, labelCls:"", items: displayCards }];
+            return grouped.filter(g=>g.items.length>0).map(group=>(
+              <div key={group.label} style={{ marginBottom:20 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+                  <div style={{ flex:1, height:1, background:C.border }}/>
+                  <span className={group.labelCls||"pill-new"} style={{ fontSize:11 }}>{group.label} <span style={{ background:"rgba(0,0,0,.1)", borderRadius:20, padding:"1px 7px", marginLeft:4 }}>{group.items.length} cards</span></span>
+                  <div style={{ flex:1, height:1, background:C.border }}/>
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                  {group.items.map((card,idx)=>{
+                    const isF = !!flipped[card.id];
+                    const isS = !!starred[card.id];
+                    const isK = !!known[card.id];
+                    return (
+                      <div key={card.id} style={{ background:isK?C.greenL:C.surface, border:`1.5px solid ${isK?C.green:isS?"#f59e0b":C.border}`, borderRadius:14, padding:"14px 16px", cursor:"pointer", position:"relative" }}
+                        onClick={()=>{setPreviewIdx(displayCards.indexOf(card));setFlipped({});}}>
+                        <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:6, marginBottom:8 }}>
+                          <span style={{ fontSize:9, fontWeight:800, color:C.muted, letterSpacing:1, textTransform:"uppercase" }}>QUESTION</span>
+                          <div style={{ display:"flex", gap:3 }} onClick={e=>e.stopPropagation()}>
+                            <button onClick={e=>toggleStar(card.id,e)} className="no-min-h" style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, opacity:isS?1:.3, padding:"1px 2px" }}>⭐</button>
+                            <button onClick={e=>toggleKnown(card.id,e)} className="no-min-h"
+                              style={{ background:isK?C.greenL:"none", border:`1.5px solid ${isK?C.green:C.border}`, borderRadius:5, cursor:"pointer", padding:"1px 6px", fontSize:9, fontWeight:700, color:isK?C.green:C.muted }}>
+                              {isK?"✓":"Got it"}
+                            </button>
+                            <button onClick={e=>{e.stopPropagation();del(card.id);}} className="no-min-h" style={{ background:"none", border:"none", cursor:"pointer", padding:"1px 2px", opacity:.35 }}>
+                              <Icon d={I.trash} size={11} color={C.muted}/>
+                            </button>
+                          </div>
+                        </div>
+                        <p style={{ fontSize:13, color:C.text, lineHeight:1.5, margin:"0 0 6px", overflow:"hidden", display:"-webkit-box", WebkitLineClamp:3, WebkitBoxOrient:"vertical" }}>{card.question}</p>
+                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", paddingTop:8, borderTop:`1px solid ${C.border}`, marginTop:4 }}>
+                          <span style={{ fontSize:10, color:C.muted }}>Tap to preview</span>
+                          {isK && <span style={{ fontSize:9, fontWeight:800, color:C.green, letterSpacing:.5 }}>MASTERED</span>}
                         </div>
                       </div>
-                    </div>
-                    {/* Back face — Answer */}
-                    <div className="card-face card-face-back"
-                      style={{
-                        background: C.accentL,
-                        border: `1.5px solid ${C.accentS}`,
-                        boxShadow: "0 2px 8px rgba(61,90,128,.1)",
-                      }}>
-                      <div>
-                        <p style={{ fontSize:10, fontWeight:800, color:C.accent, letterSpacing:1, textTransform:"uppercase", marginBottom:8 }}>ANSWER</p>
-                        <p style={{ fontSize:13, color:C.text, lineHeight:1.55, overflow:"hidden", display:"-webkit-box", WebkitLineClamp:5, WebkitBoxOrient:"vertical" }}>{card.answer}</p>
-                      </div>
-                      <div style={{ display:"flex", justifyContent:"flex-end", paddingTop:8, borderTop:`1px solid ${C.accentS}`, marginTop:8 }}>
-                        <span style={{ fontSize:10, color:C.accent }}>Tap to flip back</span>
-                      </div>
-                    </div>
-                  </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            ));
+          })()}
         </>
       )}
 
-      {/* ── List view ── */}
-      {displayCards.length > 0 && viewMode === "list" && (
-        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-          {displayCards.map((card, idx) => {
-            const isFlipped = !!flipped[card.id];
-            const isStarred = !!starred[card.id];
-            const isKnown   = !!known[card.id];
-            return (
-              <div key={card.id}
-                style={{ background:isKnown?C.greenL:C.surface, border:`1.5px solid ${isKnown?C.green:C.border}`,
-                  borderRadius:12, padding:"14px 16px", boxShadow:isStarred?`0 0 0 2px #f59e0b`:"none" }}>
-                <div style={{ display:"flex", alignItems:"flex-start", gap:12 }}>
-                  <span style={{ fontSize:12, fontWeight:800, color:C.muted, minWidth:24, paddingTop:2 }}>{idx+1}</span>
-                  <div style={{ flex:1 }}>
-                    <p style={{ fontSize:13, color:C.text, fontWeight:600, marginBottom: isFlipped ? 8 : 0, lineHeight:1.5 }}>{card.question}</p>
-                    {isFlipped && (
-                      <div style={{ background:C.accentL, borderRadius:8, padding:"8px 12px", fontSize:13, color:C.text, lineHeight:1.6 }}>
-                        <span style={{ fontSize:10, fontWeight:700, color:C.accent, display:"block", marginBottom:4, letterSpacing:.8, textTransform:"uppercase" }}>Answer</span>
-                        {card.answer}
-                      </div>
-                    )}
-                  </div>
-                  <div style={{ display:"flex", gap:4, flexShrink:0, alignItems:"center" }}>
-                    <button onClick={() => setFlipped(f=>({...f,[card.id]:!f[card.id]}))}
-                      style={{ padding:"5px 10px", border:`1.5px solid ${C.border}`, borderRadius:8, background:"none",
-                        fontSize:11, fontWeight:700, color:C.muted, cursor:"pointer" }}>
-                      {isFlipped ? "Hide" : "Show"}
-                    </button>
-                    <button onClick={e=>toggleStar(card.id,e)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:14, opacity:isStarred?1:.3 }}>⭐</button>
-                    <button onClick={e=>toggleKnown(card.id,e)}
-                      style={{ background:isKnown?C.greenL:"none", border:`1.5px solid ${isKnown?C.green:C.border}`,
-                        borderRadius:6, cursor:"pointer", padding:"4px 8px", fontSize:11, fontWeight:700,
-                        color:isKnown?C.green:C.muted }}>
-                      {isKnown ? "✓" : "Got it"}
-                    </button>
-                    <button onClick={e=>{e.stopPropagation();del(card.id);}} style={{ background:"none", border:"none", cursor:"pointer", padding:2, opacity:.4 }}>
-                      <Icon d={I.trash} size={13} color={C.muted} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }
