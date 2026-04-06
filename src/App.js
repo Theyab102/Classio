@@ -2793,7 +2793,7 @@ export default function App() {
         {homeTab==="folders" && (
           <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)", gap:12, marginBottom:32 }}>
             {[
-              { grad:"linear-gradient(135deg,#7C5CFC22,#7C5CFC11)", ic:"#7C5CFC", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C5CFC" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>, label:"Blank Document", sub:"Start fresh notebook", action:()=>{ const blankId=`blank_${Date.now()}`; const blankFile={id:blankId,name:"Untitled Document",type:"text/plain",_fileObj:null,notes:"",studyCards:[],_isBlank:true}; const inboxExists=folders.find(f=>f.id==="inbox"); const newFolders=inboxExists?folders.map(f=>f.id==="inbox"?{...f,files:[blankFile,...(f.files||[])]}:f):[...folders,{id:"inbox",name:"Inbox",color:"#7C5CFC",files:[blankFile]}]; setFoldersSave(newFolders); const newInbox=newFolders.find(f=>f.id==="inbox"); setActiveFile(blankFile); setActiveFolder(newInbox); setScreen("file"); } },
+              { grad:"linear-gradient(135deg,#7C5CFC22,#7C5CFC11)", ic:"#7C5CFC", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C5CFC" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>, label:"Blank Document", sub:"Start fresh notebook", action:()=>{ const blankId=`blank_${Date.now()}`; const blankFile={id:blankId,name:"Untitled Document",type:"text/plain",_fileObj:null,notes:"",studyCards:[],_isBlank:true}; const inboxExists=folders.find(f=>f.id==="inbox"); const newFolders=inboxExists?folders.map(f=>f.id==="inbox"?{...f,files:[blankFile,...(f.files||[])]}:f):[...folders,{id:"inbox",name:"Inbox",color:"#7C5CFC",files:[blankFile]}]; setFoldersSave(newFolders); const newInbox=newFolders.find(f=>f.id==="inbox"); setActiveFile(blankFile); setActiveFolder(newInbox); setScreen("file"); setFileTab("notes"); } },
               { grad:"linear-gradient(135deg,#3D8EF822,#3D8EF811)", ic:"#3D8EF8", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3D8EF8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>, label:"Record audio", sub:"Upload an audio file", action:()=>setShowRecordModal(true) },
               { grad:"linear-gradient(135deg,#4A7C5922,#4A7C5911)", ic:"#4A7C59", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4A7C59" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>, label:"Document upload", sub:"Any PDF, DOC, PPT, etc", action:()=>setShowUploadModal(true) },
               { grad:"linear-gradient(135deg,#C45C5C22,#C45C5C11)", ic:"#C45C5C", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C45C5C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.54C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg>, label:"Website link", sub:"YouTube or website link", action:()=>setShowWebLinkModal(true) },
@@ -6832,21 +6832,26 @@ Otherwise respond normally with formatted text.`;
       {msgs.length === 0 && (
         <div style={{ padding:"14px 12px 0" }}>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12 }}>
-            {[{label:"Quizzes",icon:"❓",desc:"Test your knowledge",tab:"game"},{label:"Flashcards",icon:"🃏",desc:"Active recall",tab:"cards"}].map(q=>(
+            {[
+              {label:"Quizzes",icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,badge:null,desc:"Test your knowledge",tab:"game"},
+              {label:"Flashcards",icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>,badge:"Popular",desc:"Study with active recall",tab:"cards"}
+            ].map(q=>(
               <button key={q.label} onClick={()=>onTabChange&&onTabChange(q.tab)}
-                style={{ display:"flex", flexDirection:"column", gap:3, padding:"10px 8px", borderRadius:12,
-                  border:`1px solid ${T.border}`, background:T.bg, cursor:"pointer", textAlign:"left" }}
+                style={{ display:"flex", flexDirection:"column", gap:4, padding:"12px 10px", borderRadius:14,
+                  border:`1px solid ${T.border}`, background:T.bg, cursor:"pointer", textAlign:"left",
+                  position:"relative", transition:"border-color .15s" }}
                 onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent}
                 onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-                <span style={{ fontSize:16 }}>{q.icon}</span>
-                <span style={{ fontSize:11, fontWeight:700, color:T.text }}>{q.label}</span>
-                <span style={{ fontSize:10, color:T.muted }}>{q.desc}</span>
+                {q.badge && <span style={{ position:"absolute", top:6, right:6, background:"#10b981", color:"#fff", fontSize:9, fontWeight:700, padding:"1px 6px", borderRadius:20 }}>{q.badge}</span>}
+                <span style={{ display:"flex" }}>{q.icon}</span>
+                <span style={{ fontSize:12, fontWeight:700, color:T.text, marginTop:2 }}>{q.label}</span>
+                <span style={{ fontSize:11, color:T.muted }}>{q.desc}</span>
               </button>
             ))}
           </div>
-          <div style={{ textAlign:"center", padding:"12px 0 8px" }}>
-            <p style={{ fontSize:22, fontWeight:800, color:T.text, margin:"0 0 4px", fontFamily:"'Fraunces',serif" }}>AI Assistant</p>
-            <p style={{ fontSize:11, color:T.muted, margin:0 }}>Ask anything about your file or notes</p>
+          <div style={{ textAlign:"center", padding:"14px 0 10px" }}>
+            <p style={{ fontSize:20, fontWeight:800, color:T.text, margin:"0 0 4px", fontFamily:"'DM Sans',sans-serif", letterSpacing:-.3 }}>AI Assistant</p>
+            <p style={{ fontSize:12, color:T.muted, margin:0 }}>Ask anything about your file or notes</p>
           </div>
         </div>
       )}
@@ -6872,16 +6877,19 @@ Otherwise respond normally with formatted text.`;
           <div ref={bottomRef}/>
         </div>
       )}
-      <div style={{ padding:"8px 10px", borderTop:`1px solid ${T.border}`, display:"flex", gap:6 }}>
+      <div style={{ padding:"8px 12px 10px", borderTop:`1px solid ${T.border}`, display:"flex", gap:6, alignItems:"center" }}>
         <input value={inp} onChange={e=>setInp(e.target.value)}
           onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); }}}
           placeholder="Ask a question, request a table or graph…"
-          style={{ flex:1, border:`1px solid ${T.border}`, borderRadius:8, padding:"7px 10px",
-            fontSize:12, outline:"none", color:T.text, background:T.bg }} />
+          style={{ flex:1, border:`1px solid ${T.border}`, borderRadius:20, padding:"8px 14px",
+            fontSize:12, outline:"none", color:T.text, background:T.bg,
+            fontFamily:"'DM Sans',sans-serif" }} />
         <button onClick={send} disabled={loading||!inp.trim()}
-          style={{ width:30, height:30, borderRadius:8, border:"none",
-            background:inp.trim()&&!loading?T.accent:T.border, cursor:inp.trim()&&!loading?"pointer":"not-allowed",
-            display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+          style={{ width:32, height:32, borderRadius:"50%", border:"none",
+            background:inp.trim()&&!loading?T.accent:T.border,
+            cursor:inp.trim()&&!loading?"pointer":"not-allowed",
+            display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
+            transition:"background .15s" }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         </button>
       </div>
@@ -7436,30 +7444,30 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
   return (
     <div dir={isRTL ? "rtl" : "ltr"}>
 
-      {/* ── Top toolbar ─────────────────────────────────────────────────── */}
+      {/* ── Top toolbar — Turbo style ─────────────────────────────────────── */}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:10 }}>
-        <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:700, color:C.text, margin:0 }}>Notes</h2>
+        <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:24, fontWeight:800, color:C.text, margin:0 }}>Notes</h2>
 
         <div style={{ display:"flex", gap:7, flexWrap:"wrap", alignItems:"center" }}>
 
           {/* Language */}
           <LangPicker value={lang} onChange={setLang} />
 
-          {/* AI Generate */}
+          {/* AI Generate — Turbo purple pill */}
           <button onClick={generate} disabled={gen} className="hov"
             style={{ display:"flex", alignItems:"center", gap:6,
-              background:gen?"#ccc":"linear-gradient(135deg,#7C5CFC,#3D8EF8)",
-              color:"#fff", border:"none", borderRadius:10, padding:"8px 16px",
-              fontSize:13, fontWeight:700, cursor:gen?"not-allowed":"pointer",
-              boxShadow:gen?"none":"0 3px 10px rgba(124,92,252,.3)" }}>
+              background:gen?"#ccc":"linear-gradient(135deg,#7C5CFC,#5B47E0)",
+              color:"#fff", border:"none", borderRadius:24, padding:"9px 20px",
+              fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer",
+              boxShadow:gen?"none":"0 4px 14px rgba(124,92,252,.4)" }}>
             {gen
-              ? <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Generating…</>
-              : <><Icon d={I.sparkle} size={14} color="#fff"/>✨ AI Generate</>}
+              ? <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Generating…</>
+              : <><Icon d={I.sparkle} size={14} color="#fff" sw={2}/> ✨ AI Generate</>}
           </button>
 
-          {/* Custom Topic */}
+          {/* Topic */}
           <button onClick={() => setShowTopicInput(t => !t)} disabled={gen} className="hov"
-            style={{ display:"flex", alignItems:"center", gap:6, background:C.surface, color:C.text, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+            style={{ display:"flex", alignItems:"center", gap:6, background:C.surface, color:C.text, border:`1.5px solid ${C.border}`, borderRadius:24, padding:"9px 16px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
             <Icon d={I.edit} size={13} color={C.text}/> Topic
           </button>
 
@@ -7467,7 +7475,7 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
           {savedNotes.length > 0 && (
             <div style={{ position:"relative" }}>
               <button onClick={() => setShowDropdown(d => !d)} className="hov"
-                style={{ display:"flex", alignItems:"center", gap:5, background:C.greenL, color:C.green, border:`1px solid ${C.green}44`, borderRadius:10, padding:"8px 13px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+                style={{ display:"flex", alignItems:"center", gap:5, background:C.surface, color:C.text, border:`1.5px solid ${C.border}`, borderRadius:24, padding:"9px 14px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
                 Saved ({savedNotes.length}) ▾
               </button>
               {showDropdown && (
@@ -7499,10 +7507,15 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
 
 
 
-          {/* Save — always rightmost */}
+          {/* Save */}
           <button onClick={() => { if(notes.trim()) { setNewNoteName(""); setShowSaveModal(true); } }} disabled={!notes.trim()} className="hov"
-            style={{ display:"flex", alignItems:"center", gap:6, background:notes.trim()?GRAD:"#ccc", color:"#fff", border:"none", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:notes.trim()?"pointer":"not-allowed", opacity:notes.trim()?1:0.6, boxShadow:notes.trim()?"0 3px 10px rgba(124,92,252,.3)":"none" }}>
-            <Icon d={I.check} size={13} color="#fff"/> Save
+            style={{ display:"flex", alignItems:"center", gap:6,
+              background:notes.trim()?"transparent":"transparent",
+              color:notes.trim()?C.green:C.muted,
+              border:`1.5px solid ${notes.trim()?C.green:C.border}`,
+              borderRadius:24, padding:"9px 16px", fontSize:13, fontWeight:700,
+              cursor:notes.trim()?"pointer":"not-allowed", opacity:notes.trim()?1:0.5 }}>
+            {notes.trim() ? <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg> Save</> : "Save"}
           </button>
         </div>
       </div>
@@ -7533,12 +7546,15 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
         </div>
       )}
 
-      {/* ── Style selector ────────────────────────────────────────────────── */}
-      <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"12px 14px", marginBottom:14 }}>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
-          <span style={{ fontSize:11, fontWeight:800, color:C.muted, letterSpacing:1 }}>NOTE STYLE</span>
+      {/* ── Note style pills — Turbo layout ────────────────────────────────── */}
+      <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:"12px 16px", marginBottom:16 }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+          <span style={{ fontSize:11, fontWeight:700, color:C.muted, letterSpacing:.8, textTransform:"uppercase" }}>NOTE STYLE</span>
           <button onClick={() => setUseCustomStyle(u => !u)}
-            style={{ fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:20, border:`1.5px solid ${useCustomStyle?C.accent:C.border}`, background:useCustomStyle?C.accentL:"transparent", color:useCustomStyle?C.accent:C.muted, cursor:"pointer" }}>
+            style={{ fontSize:11, fontWeight:600, padding:"3px 12px", borderRadius:20,
+              border:`1px solid ${useCustomStyle?C.accent:C.border}`,
+              background:useCustomStyle?C.accentL:"transparent",
+              color:useCustomStyle?C.accent:C.muted, cursor:"pointer" }}>
             {useCustomStyle ? "Custom (on)" : "Custom style"}
           </button>
         </div>
@@ -7546,7 +7562,12 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
           <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
             {NOTE_STYLES.map(s => (
               <button key={s.id} onClick={() => setNoteStyle(s.id)} title={s.desc}
-                style={{ padding:"6px 12px", borderRadius:20, border:`1.5px solid ${noteStyle===s.id?C.accent:C.border}`, background:noteStyle===s.id?C.accentL:"#fff", color:noteStyle===s.id?C.accent:C.muted, cursor:"pointer", fontWeight:noteStyle===s.id?700:500, fontSize:12, transition:"all .12s" }}>
+                style={{ padding:"6px 14px", borderRadius:20,
+                  border:`1.5px solid ${noteStyle===s.id?C.accent:C.border}`,
+                  background:noteStyle===s.id?C.accentL:C.bg,
+                  color:noteStyle===s.id?C.accent:C.muted,
+                  cursor:"pointer", fontWeight:noteStyle===s.id?700:400, fontSize:13,
+                  transition:"all .12s" }}>
                 {s.label}
               </button>
             ))}
@@ -7555,8 +7576,7 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
           <div>
             <textarea value={customStyle} onChange={e => setCustomStyle(e.target.value)}
               placeholder="e.g. 'Short bullet points with key definitions', 'Explain simply for a beginner', 'Focus only on exam topics'"
-              style={{ width:"100%", minHeight:68, border:`1.5px solid ${C.accentS}`, borderRadius:10, padding:"10px 12px", fontSize:13, outline:"none", resize:"vertical", color:C.text, background:"#fff", lineHeight:1.5, fontFamily:"'DM Sans',sans-serif" }}/>
-            <p style={{ fontSize:11, color:C.muted, marginTop:5 }}>The AI will follow your instructions exactly when generating notes.</p>
+              style={{ width:"100%", minHeight:60, border:`1px solid ${C.border}`, borderRadius:10, padding:"10px 12px", fontSize:13, outline:"none", resize:"vertical", color:C.text, background:C.bg, lineHeight:1.5, fontFamily:"'DM Sans',sans-serif" }}/>
           </div>
         )}
       </div>
