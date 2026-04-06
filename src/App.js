@@ -6827,41 +6827,45 @@ Otherwise respond normally with formatted text.`;
   };
 
   return (
-    <div style={{ width:320, minWidth:280, flexShrink:0, display:"flex", flexDirection:"column",
-      background:T.surface, border:`1px solid ${T.border}`, borderRadius:16, overflow:"hidden" }}>
-      {msgs.length === 0 && (
-        <div style={{ padding:"14px 12px 0" }}>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12 }}>
-            {[
-              {label:"Quizzes",icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,badge:null,desc:"Test your knowledge",tab:"game"},
-              {label:"Flashcards",icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>,badge:"Popular",desc:"Study with active recall",tab:"cards"}
-            ].map(q=>(
-              <button key={q.label} onClick={()=>onTabChange&&onTabChange(q.tab)}
-                style={{ display:"flex", flexDirection:"column", gap:4, padding:"12px 10px", borderRadius:14,
-                  border:`1px solid ${T.border}`, background:T.bg, cursor:"pointer", textAlign:"left",
-                  position:"relative", transition:"border-color .15s" }}
-                onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent}
-                onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-                {q.badge && <span style={{ position:"absolute", top:6, right:6, background:"#10b981", color:"#fff", fontSize:9, fontWeight:700, padding:"1px 6px", borderRadius:20 }}>{q.badge}</span>}
-                <span style={{ display:"flex" }}>{q.icon}</span>
-                <span style={{ fontSize:12, fontWeight:700, color:T.text, marginTop:2 }}>{q.label}</span>
-                <span style={{ fontSize:11, color:T.muted }}>{q.desc}</span>
-              </button>
-            ))}
-          </div>
-          <div style={{ textAlign:"center", padding:"14px 0 10px" }}>
-            <p style={{ fontSize:20, fontWeight:800, color:T.text, margin:"0 0 4px", fontFamily:"'DM Sans',sans-serif", letterSpacing:-.3 }}>AI Assistant</p>
-            <p style={{ fontSize:12, color:T.muted, margin:0 }}>Ask anything about your file or notes</p>
-          </div>
+    <div style={{ width:360, minWidth:300, flexShrink:0, display:"flex", flexDirection:"column",
+      background:T.surface, borderLeft:`1px solid ${T.border}`, marginLeft:6,
+      borderRadius:16, overflow:"hidden", border:`1px solid ${T.border}` }}>
+
+      {/* Quizzes + Flashcards cards — always visible at top */}
+      <div style={{ padding:"16px 14px 0", flexShrink:0 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:0 }}>
+          {[
+            {label:"Quizzes",icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,badge:"Popular",desc:"Test your knowledge",tab:"game"},
+            {label:"Flashcards",icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>,badge:null,desc:"Study with active recall",tab:"cards"}
+          ].map(q=>(
+            <button key={q.label} onClick={()=>onTabChange&&onTabChange(q.tab)}
+              style={{ display:"flex", flexDirection:"column", gap:4, padding:"14px 12px", borderRadius:14,
+                border:`1px solid ${T.border}`, background:T.bg, cursor:"pointer", textAlign:"left",
+                position:"relative", transition:"border-color .15s" }}
+              onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent}
+              onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+              {q.badge && <span style={{ position:"absolute", top:7, right:7, background:"#10b981", color:"#fff", fontSize:9, fontWeight:700, padding:"2px 7px", borderRadius:20 }}>{q.badge}</span>}
+              <span style={{ display:"flex" }}>{q.icon}</span>
+              <span style={{ fontSize:13, fontWeight:700, color:T.text, marginTop:4 }}>{q.label}</span>
+              <span style={{ fontSize:11, color:T.muted }}>{q.desc}</span>
+            </button>
+          ))}
         </div>
-      )}
-      {msgs.length > 0 && (
-        <div style={{ flex:1, overflowY:"auto", padding:"10px 12px", display:"flex", flexDirection:"column", gap:10, maxHeight:"calc(100vh - 400px)", minHeight:200 }}>
+      </div>
+
+      {/* Messages or greeting */}
+      {msgs.length === 0 ? (
+        <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"24px 20px 0", textAlign:"center" }}>
+          <p style={{ fontSize:28, fontWeight:800, color:T.text, margin:"0 0 8px", fontFamily:"'Fraunces',serif", lineHeight:1.2 }}>Hey, I'm<br/>your AI</p>
+          <p style={{ fontSize:14, color:T.muted, margin:0, lineHeight:1.5 }}>I can work with you on your notes and answer any questions!</p>
+        </div>
+      ) : (
+        <div style={{ flex:1, overflowY:"auto", padding:"14px 14px 0", display:"flex", flexDirection:"column", gap:10 }}>
           {msgs.map((m,i)=>(
             <div key={i} style={{ display:"flex", justifyContent:m.role==="user"?"flex-end":"flex-start" }}>
-              <div style={{ maxWidth:"98%", padding:m.role==="user"?"8px 12px":"10px 14px", borderRadius:m.role==="user"?12:14, fontSize:13, lineHeight:1.6,
-                background:m.role==="user"?T.accent:T.surface, color:m.role==="user"?"#fff":T.text,
-                alignSelf:m.role==="user"?"flex-end":"flex-start", border:m.role==="user"?"none":`1px solid ${T.border}` }}>
+              <div style={{ maxWidth:"92%", padding:m.role==="user"?"9px 14px":"10px 14px", borderRadius:m.role==="user"?14:14, fontSize:13, lineHeight:1.6,
+                background:m.role==="user"?T.accent:T.bg, color:m.role==="user"?"#fff":T.text,
+                border:m.role==="user"?"none":`1px solid ${T.border}` }}>
                 {m.content === "__TABLE__" && m.tableData
                   ? <InlineClassioTable data={m.tableData} />
                   : m.content === "__GRAPH__" && m.graphData
@@ -6873,25 +6877,40 @@ Otherwise respond normally with formatted text.`;
               </div>
             </div>
           ))}
-          {loading && <div style={{ color:T.muted, fontSize:11 }}>Thinking…</div>}
+          {loading && <div style={{ display:"flex", alignItems:"center", gap:6, color:T.muted, fontSize:12, padding:"4px 0" }}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Thinking…</div>}
           <div ref={bottomRef}/>
         </div>
       )}
-      <div style={{ padding:"8px 12px 10px", borderTop:`1px solid ${T.border}`, display:"flex", gap:6, alignItems:"center" }}>
-        <input value={inp} onChange={e=>setInp(e.target.value)}
-          onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); }}}
-          placeholder="Ask a question, request a table or graph…"
-          style={{ flex:1, border:`1px solid ${T.border}`, borderRadius:20, padding:"8px 14px",
-            fontSize:12, outline:"none", color:T.text, background:T.bg,
-            fontFamily:"'DM Sans',sans-serif" }} />
-        <button onClick={send} disabled={loading||!inp.trim()}
-          style={{ width:32, height:32, borderRadius:"50%", border:"none",
-            background:inp.trim()&&!loading?T.accent:T.border,
-            cursor:inp.trim()&&!loading?"pointer":"not-allowed",
-            display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
-            transition:"background .15s" }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-        </button>
+
+      {/* Input — Turbo AI style with mic + clip + send */}
+      <div style={{ padding:"14px 14px 16px", flexShrink:0 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, background:T.bg, border:`1.5px solid ${T.border}`, borderRadius:14, padding:"10px 12px", transition:"border-color .15s" }}
+          onFocusCapture={e=>e.currentTarget.style.borderColor=T.accent}
+          onBlurCapture={e=>e.currentTarget.style.borderColor=T.border}>
+          {/* Mic icon */}
+          <button className="no-min-h" title="Voice input"
+            style={{ background:"none", border:"none", cursor:"pointer", color:T.muted, padding:0, display:"flex", flexShrink:0 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          </button>
+          <input value={inp} onChange={e=>setInp(e.target.value)}
+            onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); }}}
+            placeholder="Type a question here or type '@' to reference documents..."
+            style={{ flex:1, border:"none", outline:"none", fontSize:13, color:T.text, background:"transparent", fontFamily:"'DM Sans',sans-serif" }}/>
+          {/* Attachment icon */}
+          <button className="no-min-h" title="Attach"
+            style={{ background:"none", border:"none", cursor:"pointer", color:T.muted, padding:0, display:"flex", flexShrink:0 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          </button>
+          {/* Send arrow */}
+          <button onClick={send} disabled={loading||!inp.trim()} className="no-min-h"
+            style={{ width:30, height:30, borderRadius:8, border:"none",
+              background:inp.trim()&&!loading?T.accent:T.border,
+              cursor:inp.trim()&&!loading?"pointer":"not-allowed",
+              display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
+              transition:"background .15s" }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -7203,7 +7222,7 @@ function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
   };
 
   return (
-    <div style={{ background:C.surface, borderRadius:14, padding:"24px 28px", minHeight:400, border:`1.5px solid ${C.border}`, boxShadow:"0 2px 8px rgba(0,0,0,.05)" }}
+    <div style={{ background:C.surface, borderRadius:14, padding:"28px 32px", minHeight:480, border:`1.5px solid ${C.border}`, boxShadow:"0 2px 12px rgba(0,0,0,.06)", flex:1 }}
       dir={isRTL?"rtl":"ltr"}>
       {renderNotesWithTable()}
     </div>
@@ -7546,39 +7565,34 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
         </div>
       )}
 
-      {/* ── Note style pills — Turbo layout ────────────────────────────────── */}
-      <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:"12px 16px", marginBottom:16 }}>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
-          <span style={{ fontSize:11, fontWeight:700, color:C.muted, letterSpacing:.8, textTransform:"uppercase" }}>NOTE STYLE</span>
+      {/* ── Note style pills — inline compact row like Turbo AI ── */}
+      <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:"10px 14px", marginBottom:14 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+          <span style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:.8, textTransform:"uppercase", flexShrink:0 }}>NOTE STYLE</span>
+          {!useCustomStyle && NOTE_STYLES.map(s => (
+            <button key={s.id} onClick={() => setNoteStyle(s.id)} title={s.desc}
+              style={{ padding:"5px 13px", borderRadius:20,
+                border:`1.5px solid ${noteStyle===s.id?C.accent:C.border}`,
+                background:noteStyle===s.id?C.accentL:"transparent",
+                color:noteStyle===s.id?C.accent:C.muted,
+                cursor:"pointer", fontWeight:noteStyle===s.id?700:400, fontSize:12,
+                transition:"all .12s", whiteSpace:"nowrap" }}>
+              {s.label}
+            </button>
+          ))}
+          {useCustomStyle && (
+            <input value={customStyle} onChange={e => setCustomStyle(e.target.value)}
+              placeholder="Describe your style, e.g. 'Short bullets, focus on exam topics'…"
+              style={{ flex:1, border:`1px solid ${C.border}`, borderRadius:8, padding:"5px 10px", fontSize:12, outline:"none", color:C.text, background:C.bg, fontFamily:"'DM Sans',sans-serif", minWidth:180 }}/>
+          )}
           <button onClick={() => setUseCustomStyle(u => !u)}
-            style={{ fontSize:11, fontWeight:600, padding:"3px 12px", borderRadius:20,
+            style={{ fontSize:11, fontWeight:600, padding:"4px 12px", borderRadius:20, flexShrink:0,
               border:`1px solid ${useCustomStyle?C.accent:C.border}`,
               background:useCustomStyle?C.accentL:"transparent",
-              color:useCustomStyle?C.accent:C.muted, cursor:"pointer" }}>
-            {useCustomStyle ? "Custom (on)" : "Custom style"}
+              color:useCustomStyle?C.accent:C.muted, cursor:"pointer", whiteSpace:"nowrap" }}>
+            {useCustomStyle ? "✓ Custom" : "Custom style"}
           </button>
         </div>
-        {!useCustomStyle ? (
-          <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-            {NOTE_STYLES.map(s => (
-              <button key={s.id} onClick={() => setNoteStyle(s.id)} title={s.desc}
-                style={{ padding:"6px 14px", borderRadius:20,
-                  border:`1.5px solid ${noteStyle===s.id?C.accent:C.border}`,
-                  background:noteStyle===s.id?C.accentL:C.bg,
-                  color:noteStyle===s.id?C.accent:C.muted,
-                  cursor:"pointer", fontWeight:noteStyle===s.id?700:400, fontSize:13,
-                  transition:"all .12s" }}>
-                {s.label}
-              </button>
-            ))}
-          </div>
-        ) : (
-          <div>
-            <textarea value={customStyle} onChange={e => setCustomStyle(e.target.value)}
-              placeholder="e.g. 'Short bullet points with key definitions', 'Explain simply for a beginner', 'Focus only on exam topics'"
-              style={{ width:"100%", minHeight:60, border:`1px solid ${C.border}`, borderRadius:10, padding:"10px 12px", fontSize:13, outline:"none", resize:"vertical", color:C.text, background:C.bg, lineHeight:1.5, fontFamily:"'DM Sans',sans-serif" }}/>
-          </div>
-        )}
       </div>
 
       {/* ── Custom topic input ─────────────────────────────────────────────── */}
@@ -7601,9 +7615,11 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
         </div>
       )}
 
-      <div style={{ display:"flex", gap:14, alignItems:"flex-start" }}>
-        <div style={{ flex:1, minWidth:0 }}>
-          {/* Inline notes viewer with embedded tables */}
+      {/* ── Turbo AI split pane: notes left, AI panel right ── */}
+      <div style={{ display:"flex", gap:20, alignItems:"stretch", minHeight:"calc(100vh - 320px)" }}>
+
+        {/* Left — notes area */}
+        <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:10 }}>
           {notes.trim() ? (
             <NotesViewer
               notes={notes}
@@ -7617,10 +7633,10 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
             <textarea value={notes} onChange={e => { setNotes(e.target.value); setUnsaved(true); }}
               dir={isRTL ? "rtl" : "ltr"}
               placeholder="Click AI Generate to create notes. Tables will appear inline inside your notes."
-              style={{ width:"100%", minHeight:400, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"18px 20px", fontSize:15, lineHeight:1.85, outline:"none", resize:"vertical", color:C.text, background:C.surface, fontFamily:"'DM Sans',sans-serif", direction:isRTL?"rtl":"ltr", boxSizing:"border-box" }}/>
+              style={{ width:"100%", flex:1, minHeight:480, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"20px 22px", fontSize:15, lineHeight:1.9, outline:"none", resize:"none", color:C.text, background:C.surface, fontFamily:"'DM Sans',sans-serif", direction:isRTL?"rtl":"ltr", boxSizing:"border-box" }}/>
           )}
           {notes.trim() && (
-            <div style={{ display:"flex", gap:8, marginTop:10, flexWrap:"wrap", alignItems:"center" }}>
+            <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
               <NotesSimplifyBtn notes={notes} onResult={s => { setNotes(s); setUnsaved(true); }} lang={lang} />
               <NotesExpandBtn notes={notes} onResult={e => { setNotes(e); setUnsaved(true); }} />
               <NotesImageInsert file={file} onInsert={(desc) => { setNotes(n => n + "\n\n[Image: " + desc + "]"); setUnsaved(true); }} />
@@ -7629,11 +7645,12 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                 Copy
               </button>
+              <RawEditModal notes={notes} onChange={v=>{setNotes(v); setUnsaved(true);}} />
             </div>
           )}
-          {/* Edit as raw text */}
-          {notes.trim() && <RawEditModal notes={notes} onChange={v=>{setNotes(v); setUnsaved(true);}} />}
         </div>
+
+        {/* Right — AI panel, Turbo AI style */}
         <NotesTurboPanel file={file} notes={notes} lang={lang} onTabChange={onTabChange} />
       </div>
 
