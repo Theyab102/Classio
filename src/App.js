@@ -685,20 +685,55 @@ async function extractFileText(fileObj) {
 
 // ─── RESPONSIVE HOOK ─────────────────────────────────────────────────────────
 function useResponsive() {
-  const [size, setSize] = useState(() => {
+  const getState = () => {
     const w = window.innerWidth;
-    return w <= 600 ? "phone" : w <= 1024 ? "tablet" : "desktop";
-  });
+    const h = window.innerHeight;
+    const isLandscape = w > h;
+    // On rotation, browser may briefly report wrong values — use both axes
+    const shortEdge = Math.min(w, h);
+    const longEdge  = Math.max(w, h);
+    // Phone: short edge ≤ 480px (covers portrait & landscape phone)
+    const isPhone  = shortEdge <= 480;
+    // Tablet: short edge 481–800px
+    const isTabletDevice = shortEdge > 480 && shortEdge <= 800;
+    const size = isPhone ? "phone" : isTabletDevice ? "tablet" : "desktop";
+    return { size, isLandscape, w, h, shortEdge, longEdge };
+  };
+
+  const [state, setState] = useState(getState);
+
   useEffect(() => {
+    let raf;
     const fn = () => {
-      const w = window.innerWidth;
-      setSize(w <= 600 ? "phone" : w <= 1024 ? "tablet" : "desktop");
+      // Use rAF to wait for browser to finish rotation reflow
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => setState(getState()));
     };
-    window.addEventListener("resize", fn);
-    window.addEventListener("orientationchange", fn);
-    return () => { window.removeEventListener("resize", fn); window.removeEventListener("orientationchange", fn); };
+    window.addEventListener("resize", fn, { passive: true });
+    window.addEventListener("orientationchange", fn, { passive: true });
+    // Also listen to screen.orientation if available
+    screen.orientation?.addEventListener("change", fn);
+    return () => {
+      window.removeEventListener("resize", fn);
+      window.removeEventListener("orientationchange", fn);
+      screen.orientation?.removeEventListener("change", fn);
+      cancelAnimationFrame(raf);
+    };
   }, []);
-  return { isMobile: size === "phone", isTablet: size === "tablet", isDesktop: size === "desktop", size };
+
+  const { size, isLandscape, w, h } = state;
+  const isMobile   = size === "phone";
+  const isTablet   = size === "tablet";
+  const isDesktop  = size === "desktop";
+  // Landscape phone = small screen rotated horizontally
+  const isPhoneLandscape = isMobile && isLandscape;
+  // Tablet landscape = common reading/study mode
+  const isTabletLandscape = isTablet && isLandscape;
+  // Any touch-first device
+  const isTouchDevice = isMobile || isTablet;
+
+  return { isMobile, isTablet, isDesktop, size, isLandscape,
+           isPhoneLandscape, isTabletLandscape, isTouchDevice, w, h };
 }
 
 // ─── COLORS ───────────────────────────────────────────────────────────────────
@@ -1105,6 +1140,72 @@ const GS = `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@3
 @media(max-width:900px){
   .nav-tabs{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
   .nav-tabs::-webkit-scrollbar{display:none}
+}
+
+/* ── Tablet portrait ── */
+@media(min-width:601px) and (max-width:900px) and (orientation:portrait){
+  .notes-split{flex-direction:column!important}
+  .notes-ai-panel{width:100%!important;min-width:unset!important;max-height:340px}
+  .cards-grid{grid-template-columns:1fr 1fr!important}
+  .game-grid{grid-template-columns:1fr 1fr 1fr!important}
+  .quick-actions{grid-template-columns:1fr 1fr!important}
+  .view-split{flex-direction:column!important}
+  .view-ai-panel{width:100%!important;height:300px!important;border-left:none!important;border-top:1px solid var(--border)}
+  .file-list-actions{flex-wrap:wrap}
+}
+
+/* ── Tablet landscape ── */
+@media(min-width:601px) and (max-width:1024px) and (orientation:landscape){
+  .notes-split{gap:12px!important}
+  .notes-ai-panel{width:260px!important;min-width:240px!important}
+  .cards-grid{grid-template-columns:1fr 1fr 1fr!important}
+  .sidebar-desktop{width:52px!important}
+  .main-content{margin-left:52px!important}
+}
+
+/* ── Phone portrait ── */
+@media(max-width:480px) and (orientation:portrait){
+  .notes-split{flex-direction:column!important}
+  .notes-ai-panel{display:none!important}
+  .study-card-bottom{flex-direction:column!important;gap:8px}
+  .study-card-know-row{flex-direction:row!important;gap:8px;width:100%}
+  .study-card-know-row button{flex:1}
+  .mcq-options{gap:8px!important}
+  .mcq-option{padding:12px 14px!important;font-size:14px!important}
+  .cards-grid{grid-template-columns:1fr!important}
+  .quick-actions{grid-template-columns:1fr 1fr!important}
+  .folder-file-row{flex-wrap:wrap!important}
+  .folder-file-actions{width:100%!important;justify-content:flex-end!important;margin-top:4px}
+  .view-split{flex-direction:column!important}
+  .view-ai-panel{width:100%!important;max-height:260px;border-left:none!important;border-top:1px solid rgba(255,255,255,.1)}
+  .modal-inner{border-radius:18px 18px 0 0!important;position:fixed!important;bottom:0!important;left:0!important;right:0!important;width:100%!important;max-width:100%!important}
+  .notes-toolbar{flex-wrap:wrap!important;gap:6px!important}
+  .notes-toolbar-right{flex-wrap:wrap!important;gap:6px!important}
+}
+
+/* ── Phone landscape ── */
+@media(max-width:900px) and (orientation:landscape) and (max-height:480px){
+  .bottom-nav{height:48px!important}
+  .bottom-nav button{padding:2px 4px!important}
+  .bottom-nav .nav-label{display:none!important}
+  .study-mode-wrap{padding:6px 16px!important}
+  .study-card-area{padding:8px 16px!important}
+  .app-header-file{display:none!important}
+  .notes-ai-panel{display:none!important}
+  .view-ai-panel{width:280px!important;max-width:280px}
+  .ad-banner-wrap{display:none!important}
+  .page-with-ad{padding-bottom:0!important}
+}
+
+/* Safe area for notched phones (iPhone X+, Android) */
+@supports(padding: max(0px)){
+  .bottom-nav{
+    padding-bottom: max(0px, env(safe-area-inset-bottom))!important;
+    height: calc(56px + env(safe-area-inset-bottom))!important;
+  }
+  .page-with-ad{
+    padding-bottom: calc(60px + env(safe-area-inset-bottom))!important;
+  }
 }
 
 /* Hard cap on AdSense iframe */
@@ -1765,7 +1866,83 @@ const DARK_CSS = `
   .pill-new     { background:#EEF0FF; color:#6C5CE7; border:1.5px solid #D4CCFF; border-radius:20px; padding:5px 14px; font-size:12px; font-weight:700; }
   .pill-learning{ background:#FFF8E6; color:#B45309; border:1.5px solid #FDE68A; border-radius:20px; padding:5px 14px; font-size:12px; font-weight:700; }
   .pill-mastered{ background:#E6F4EA; color:#2E7D32; border:1.5px solid #A8D5B0; border-radius:20px; padding:5px 14px; font-size:12px; font-weight:700; }
-`;
+
+
+/* ── Touch & scroll improvements ── */
+html { -webkit-text-size-adjust:100%; text-size-adjust:100%; }
+body { overscroll-behavior-y:contain; -webkit-tap-highlight-color:transparent; }
+* { -webkit-font-smoothing:antialiased; }
+
+/* Prevent iOS zoom on input focus — must be 16px */
+input,textarea,select { font-size:16px; }
+@media(max-width:900px){
+  input,textarea { font-size:16px!important; }
+}
+
+/* Touch targets for coarse pointer (finger) */
+@media(pointer:coarse){
+  button:not(.no-min-h){ min-height:44px; }
+}
+
+/* Bottom nav safe-area for notched phones */
+.bottom-nav {
+  padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+  height: calc(56px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+/* View split pane */
+.view-split { display:flex; overflow:hidden; }
+
+/* Notes split defaults */
+.notes-split { display:flex; gap:20px; }
+.notes-ai-panel { width:320px; min-width:280px; flex-shrink:0; }
+
+/* ── Phone portrait ── */
+@media(max-width:480px) and (orientation:portrait){
+  .notes-split { flex-direction:column !important; }
+  .notes-ai-panel { display:none !important; }
+  .view-split { flex-direction:column !important; }
+  .view-ai-panel-inner { width:100% !important; height:260px; border-left:none !important; border-top:1px solid rgba(255,255,255,.1); }
+  .quick-actions { grid-template-columns:1fr 1fr !important; }
+  .study-card-know-row { flex-direction:row !important; gap:8px; width:100%; }
+  .study-card-know-row button { flex:1; }
+  .mcq-options { gap:8px !important; }
+  .mcq-option { padding:12px 14px !important; font-size:14px !important; }
+  .folder-file-actions { width:100% !important; justify-content:flex-end !important; margin-top:4px; }
+  .notes-toolbar { flex-wrap:wrap !important; }
+  .notes-toolbar-right { gap:6px !important; }
+}
+
+/* ── Phone landscape ── */
+@media(max-width:900px) and (orientation:landscape) and (max-height:480px){
+  .bottom-nav { height:calc(48px + env(safe-area-inset-bottom,0px)) !important; }
+  .notes-ai-panel { display:none !important; }
+  .view-ai-panel-inner { width:260px !important; }
+  .ad-banner-wrap { display:none !important; }
+  .page-with-ad { padding-bottom:0 !important; }
+}
+
+/* ── Tablet portrait ── */
+@media(min-width:481px) and (max-width:900px) and (orientation:portrait){
+  .notes-split { flex-direction:column !important; }
+  .notes-ai-panel { width:100% !important; min-width:unset !important; max-height:320px; }
+  .view-split { flex-direction:column !important; }
+  .view-ai-panel-inner { width:100% !important; height:300px; border-left:none !important; border-top:1px solid rgba(255,255,255,.1); }
+  .quick-actions { grid-template-columns:1fr 1fr !important; }
+}
+
+/* ── Tablet landscape ── */
+@media(min-width:481px) and (max-width:1024px) and (orientation:landscape){
+  .notes-ai-panel { width:260px !important; min-width:220px !important; }
+  .view-ai-panel-inner { width:280px !important; }
+}
+
+/* Prevent horizontal overflow */
+body { overflow-x:hidden; }
+.page-inner { overflow-x:hidden !important; }
+
+/* Smooth scrolling on touch */
+.scroll-view { -webkit-overflow-scrolling:touch; }`;
 
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
 function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacter, onToggleTheme, onOpenSearch, isMobile, user, isGuest, onSignOut, sidebarExpanded, onToggleSidebar, folderTab, onFolderTab, fileTab, onFileTab, folder, file }) {
@@ -1805,7 +1982,7 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
     if (context === "document") {
       const mobileTabs = FILE_TABS.slice(0, 5); // View, Notes, Voice, Cards, AI
       return (
-        <div style={{ position:"fixed", bottom:0, left:0, right:0, height:56, background:T.sidebar, borderTop:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"space-around", zIndex:300, overflowX:"auto" }}>
+        <div className="bottom-nav" style={{ position:"fixed", bottom:0, left:0, right:0, height:56, background:T.sidebar, borderTop:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"space-around", zIndex:300, overflowX:"auto" }}>
           <button onClick={() => onNavigate("home")} style={{ background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:T.muted, padding:"4px 6px", flexShrink:0 }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
             <span style={{ fontSize:8, fontWeight:600 }}>Back</span>
@@ -1831,7 +2008,7 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
 
     if (context === "folder") {
       return (
-        <div style={{ position:"fixed", bottom:0, left:0, right:0, height:56, background:T.sidebar, borderTop:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"space-around", zIndex:300 }}>
+        <div className="bottom-nav" style={{ position:"fixed", bottom:0, left:0, right:0, height:56, background:T.sidebar, borderTop:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"space-around", zIndex:300 }}>
           <button onClick={() => onNavigate("home")} style={{ background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:T.muted, padding:"4px 8px" }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
             <span style={{ fontSize:8, fontWeight:600 }}>Back</span>
@@ -2762,7 +2939,7 @@ export default function App() {
       {/* Main content area — offset by sidebar */}
       <div style={{ flex:1, marginLeft:isMobile?0:(sidebarExpanded?220:60), marginBottom:isMobile?56:0, minHeight:"100vh", display:"flex", flexDirection:"column", background:T.bg }}>
       <AdBanner sideW={sidebarExpanded ? 220 : 60} />
-      <div style={{ maxWidth:960, margin:"0 auto", padding:isMobile?"12px 14px":"32px 36px", width:"100%", boxSizing:"border-box" }}>
+      <div style={{ maxWidth:960, margin:"0 auto", padding:isMobile?"12px 14px":isTablet?"20px 24px":"32px 36px", width:"100%", boxSizing:"border-box" }}>
 
         {/* ── Dashboard Header ── */}
         {homeTab==="folders" && (
@@ -2791,7 +2968,7 @@ export default function App() {
 
         {/* ── Quick Action Cards (Turbo-style) ── */}
         {homeTab==="folders" && (
-          <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)", gap:12, marginBottom:32 }}>
+          <div className="quick-actions" style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":isTablet?"1fr 1fr":"repeat(4,1fr)", gap:12, marginBottom:32 }}>
             {[
               { grad:"linear-gradient(135deg,#7C5CFC22,#7C5CFC11)", ic:"#7C5CFC", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C5CFC" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>, label:"Blank Document", sub:"Start fresh notebook", action:()=>{ const blankId=`blank_${Date.now()}`; const blankFile={id:blankId,name:"Untitled Document",type:"text/plain",_fileObj:null,notes:"",studyCards:[],_isBlank:true}; const inboxExists=folders.find(f=>f.id==="inbox"); const newFolders=inboxExists?folders.map(f=>f.id==="inbox"?{...f,files:[blankFile,...(f.files||[])]}:f):[...folders,{id:"inbox",name:"Inbox",color:"#7C5CFC",files:[blankFile]}]; setFoldersSave(newFolders); const newInbox=newFolders.find(f=>f.id==="inbox"); setActiveFile(blankFile); setActiveFolder(newInbox); setScreen("file"); setFileTab("notes"); } },
               { grad:"linear-gradient(135deg,#3D8EF822,#3D8EF811)", ic:"#3D8EF8", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3D8EF8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>, label:"Record audio", sub:"Upload an audio file", action:()=>setShowRecordModal(true) },
@@ -5177,7 +5354,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFi
                             </p>
                           </div>
                           {/* Actions */}
-                          <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
+                          <div className="folder-file-actions" style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
                             <FileColorPicker file={file}
                               onPick={(patch) => onUpdate({...folder,files:folder.files.map(f=>f.id===file.id?{...f,...patch}:f)})}/>
                             <LinkBtn file={file} allFiles={folder.files}
@@ -5542,6 +5719,7 @@ ${text}`
         <ViewAIPanel file={file} explaining={explaining} explanation={explanation}
           showExplain={showExplain} onHideExplain={()=>setShowExplain(false)}
           isPDF={isPDF} pageNum={pageNum} />
+        </div>
       </div>
     </div>
   );
@@ -5578,7 +5756,7 @@ function ViewAIPanel({ file, explaining, explanation, showExplain, onHideExplain
   };
 
   return (
-    <div style={{ width:340, flexShrink:0, background:T.isDark?"#111":"#1a1a1a", display:"flex", flexDirection:"column", borderLeft:"1px solid rgba(255,255,255,.1)" }}>
+    <div className="view-ai-panel-inner" style={{ width:340, flexShrink:0, background:T.isDark?"#111":"#1a1a1a", display:"flex", flexDirection:"column", borderLeft:"1px solid rgba(255,255,255,.1)" }}>
       {msgs.length === 0 && !explanation && (
         <>
           {/* Header prompt */}
@@ -7464,10 +7642,10 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
     <div dir={isRTL ? "rtl" : "ltr"}>
 
       {/* ── Top toolbar — Turbo style ─────────────────────────────────────── */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:10 }}>
-        <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:24, fontWeight:800, color:C.text, margin:0 }}>Notes</h2>
+      <div className="notes-toolbar" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:10 }}>
+        <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:isMobile?20:24, fontWeight:800, color:C.text, margin:0 }}>Notes</h2>
 
-        <div style={{ display:"flex", gap:7, flexWrap:"wrap", alignItems:"center" }}>
+        <div className="notes-toolbar-right" style={{ display:"flex", gap:7, flexWrap:"wrap", alignItems:"center" }}>
 
           {/* Language */}
           <LangPicker value={lang} onChange={setLang} />
@@ -7616,7 +7794,7 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
       )}
 
       {/* ── Turbo AI split pane: notes left, AI panel right ── */}
-      <div style={{ display:"flex", gap:20, alignItems:"stretch", minHeight:"calc(100vh - 320px)" }}>
+      <div className="notes-split" style={{ display:"flex", gap:20, alignItems:"stretch", minHeight:"calc(100vh - 320px)" }}>
 
         {/* Left — notes area */}
         <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:10 }}>
@@ -7650,11 +7828,46 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
           )}
         </div>
 
-        {/* Right — AI panel, Turbo AI style */}
+        {/* Right — AI panel — hidden on narrow screens via CSS */}
         <NotesTurboPanel file={file} notes={notes} lang={lang} onTabChange={onTabChange} />
       </div>
 
+      {/* Mobile floating AI button */}
+      {isMobile && <MobileAIButton file={file} notes={notes} lang={lang} onTabChange={onTabChange} />}
+
     </div>
+  );
+}
+
+// ── Mobile floating AI button for notes ──────────────────────────────────────
+function MobileAIButton({ file, notes, lang, onTabChange }) {
+  const [open, setOpen] = useState(false);
+  const T = useTheme();
+  return (
+    <>
+      <button onClick={() => setOpen(true)}
+        style={{ position:"fixed", bottom:72, right:16, zIndex:400, width:52, height:52, borderRadius:"50%",
+          background:"linear-gradient(135deg,#7C5CFC,#3D8EF8)", border:"none", cursor:"pointer",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          boxShadow:"0 4px 20px rgba(124,92,252,.45)" }}>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      </button>
+      {open && (
+        <div style={{ position:"fixed", inset:0, zIndex:700, background:"rgba(0,0,0,.5)", display:"flex", flexDirection:"column", justifyContent:"flex-end" }}
+          onClick={e=>{ if(e.target===e.currentTarget) setOpen(false); }}>
+          <div style={{ background:T.surface, borderRadius:"20px 20px 0 0", maxHeight:"80vh", display:"flex", flexDirection:"column", overflow:"hidden",
+            paddingBottom:"env(safe-area-inset-bottom,0px)" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 16px 10px", borderBottom:`1px solid ${T.border}` }}>
+              <p style={{ margin:0, fontSize:15, fontWeight:700, color:T.text }}>AI Assistant</p>
+              <button onClick={()=>setOpen(false)} style={{ background:"none", border:"none", cursor:"pointer", color:T.muted, fontSize:22 }}>×</button>
+            </div>
+            <div style={{ flex:1, overflow:"hidden", display:"flex", flexDirection:"column" }}>
+              <NotesTurboPanel file={file} notes={notes} lang={lang} onTabChange={(tab)=>{ onTabChange(tab); setOpen(false); }} />
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
