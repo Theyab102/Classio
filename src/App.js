@@ -5618,17 +5618,33 @@ ${text}`
   ];
 
   if (!fileObj) return (
-    <div style={{ textAlign:"center", padding:"60px 24px" }}>
-      <div style={{ width:56,height:56,borderRadius:16,background:C.accentL,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:12 }}><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="{C.accent}" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div>
-      <p style={{ fontSize:16, fontWeight:600, color:C.text, marginBottom:8 }}>File not loaded</p>
-      <p style={{ fontSize:13, color:C.muted, marginBottom:20 }}>Files need to be re-uploaded once after a full page refresh.</p>
-      <label style={{ display:"inline-flex", alignItems:"center", gap:8, background:C.accent, color:"#fff", borderRadius:10, padding:"11px 22px", cursor:"pointer", fontSize:14, fontWeight:600 }}>
-        Re-open File
-        <input type="file" style={{ display:"none" }} onChange={e => {
-          const f = e.target.files?.[0]; if (!f) return;
-          FILE_STORE.set(file.id, f); idbSave(file.id, f); onUpdate({...file, _fileObj: f});
-        }} />
-      </label>
+    <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 112px)" }}>
+      {/* Empty toolbar placeholder */}
+      <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, height:50 }}/>
+      <div style={{ flex:1, display:"flex", overflow:"hidden" }}>
+        {/* Left: blank document placeholder */}
+        <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", background:C.isDark?"#111110":"#2a2a26", padding:40 }}>
+          <div style={{ background:C.surface, borderRadius:16, padding:"48px 56px", maxWidth:520, width:"100%", boxShadow:"0 8px 40px rgba(0,0,0,.3)", textAlign:"center" }}>
+            <div style={{ width:64, height:64, background:"linear-gradient(135deg,#7C5CFC22,#7C5CFC11)", borderRadius:18, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 20px" }}>
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#7C5CFC" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            </div>
+            <p style={{ fontSize:20, fontWeight:700, color:C.text, marginBottom:8, fontFamily:"'Fraunces',serif" }}>Untitled Document</p>
+            <p style={{ fontSize:14, color:C.muted, marginBottom:28, lineHeight:1.6 }}>This is a blank notebook. Go to the <strong style={{color:C.accent}}>Notes</strong> tab to start writing or generate AI notes.</p>
+            <div style={{ display:"flex", gap:10, justifyContent:"center", flexWrap:"wrap" }}>
+              <label style={{ display:"inline-flex", alignItems:"center", gap:8, background:"transparent", color:C.muted, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 20px", cursor:"pointer", fontSize:13, fontWeight:600 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                Upload a file instead
+                <input type="file" style={{ display:"none" }} onChange={e => {
+                  const f = e.target.files?.[0]; if (!f) return;
+                  FILE_STORE.set(file.id, f); idbSave(file.id, f); onUpdate({...file, _fileObj: f, name: f.name});
+                }} />
+              </label>
+            </div>
+          </div>
+        </div>
+        {/* Right: AI panel still visible */}
+        <ViewAIPanel file={file} explaining={false} explanation="" showExplain={false} onHideExplain={()=>{}} isPDF={false} pageNum={1}/>
+      </div>
     </div>
   );
 
@@ -5748,7 +5764,16 @@ function ViewAIPanel({ file, explaining, explanation, showExplain, onHideExplain
     try {
       const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
       const fileText = fileObj ? await extractFileText(fileObj).catch(()=>"") : "";
-      const sys = `You are a study AI. ${fileText ? "Document content: " + fileText.slice(0,8000) : ""} Be clear, use **bold** for key terms, > for formulas.`;
+      const sys = `You are a knowledgeable study assistant. ${fileText ? "Document content: " + fileText.slice(0,8000) : ""}
+
+FORMATTING RULES — always follow:
+- Use # for main headings, ## for sub-headings
+- Use **bold** for key terms and important phrases
+- Use bullet points (- ) for lists of facts
+- Use > for important formulas, definitions, or quotes
+- Use tables (| col | col |) when comparing multiple items
+- Use numbered lists for steps or ranked items
+- Be thorough but clear`;
       const reply = await callClaudeChat(sys, newMsgs.map(m=>({role:m.role,content:m.content})));
       setMsgs(m => [...m, { role:"assistant", content:reply }]);
     } catch(e) { setMsgs(m => [...m, { role:"assistant", content:"Error: "+e.message }]); }
@@ -5756,7 +5781,7 @@ function ViewAIPanel({ file, explaining, explanation, showExplain, onHideExplain
   };
 
   return (
-    <div className="view-ai-panel-inner" style={{ width:340, flexShrink:0, background:T.isDark?"#111":"#1a1a1a", display:"flex", flexDirection:"column", borderLeft:"1px solid rgba(255,255,255,.1)" }}>
+    <div className="view-ai-panel-inner" style={{ width:360, flexShrink:0, background:T.isDark?"#111":"#1a1a1a", display:"flex", flexDirection:"column", borderLeft:"1px solid rgba(255,255,255,.1)" }}>
       {msgs.length === 0 && !explanation && (
         <>
           {/* Header prompt */}
@@ -5786,7 +5811,7 @@ function ViewAIPanel({ file, explaining, explanation, showExplain, onHideExplain
             <p style={{ margin:"0 0 8px", fontSize:11, fontWeight:700, color:"#7C5CFC", letterSpacing:.8, textTransform:"uppercase" }}>
               {isPDF ? `Page ${pageNum} — Explanation` : "AI Explanation"}
             </p>
-            <p style={{ margin:0, fontSize:13, lineHeight:1.75, color:"#ddd", whiteSpace:"pre-wrap" }}>{explanation}</p>
+            <div style={{ fontSize:13, lineHeight:1.75, color:"#ddd" }}><RichText text={explanation}/></div>
           </div>
         </div>
       )}
@@ -5819,7 +5844,7 @@ function ViewAIPanel({ file, explaining, explanation, showExplain, onHideExplain
         <div style={{ background:T.isDark?"#222":"#2a2a2a", borderRadius:14, padding:"10px 14px", display:"flex", alignItems:"flex-end", gap:10 }}>
           <textarea value={inp} onChange={e=>setInp(e.target.value)}
             onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();} }}
-            placeholder="Type a question here…"
+            placeholder="Type a question here or type '@' to reference documents..."
             rows={1}
             style={{ flex:1, border:"none", outline:"none", background:"transparent", fontSize:13, color:"#eee", resize:"none", fontFamily:"'DM Sans',sans-serif", lineHeight:1.5, maxHeight:80, overflowY:"auto" }}/>
           <div style={{ display:"flex", gap:8, flexShrink:0, alignItems:"center" }}>
@@ -7879,16 +7904,19 @@ function NotesSimplifyBtn({ notes, onResult, lang }) {
     try {
       const langLabel = LANG_OPTIONS.find(l => l[0] === lang)?.[1] || lang;
       const result = await callClaude(
-        `You are a note simplifier. Rewrite the given study notes in very simple, easy-to-understand language.
-Rules:
-- Use short sentences (max 15 words each)
-- Replace all jargon with simple words a 12-year-old would understand
-- Keep all the facts and information — don't remove content
-- Keep ALL CAPS headings and dash bullets
-- Never use asterisks or pound signs
+        `You are an expert teacher who explains complex topics to a 12-year-old student.
+Rewrite the study notes following these rules exactly:
+- Use # for main headings and ## for sub-headings
+- Explain every concept as if the student has NEVER heard of it before
+- Use simple words — replace ALL jargon with everyday language
+- Use bullet points (- ) for every key fact
+- Add a real-world analogy or example for each section
+- Keep ALL the facts — don't remove any information
+- Use **bold** for the most important terms
+- Short sentences only — max 15 words per sentence
 - ${getLangInstruction(lang)}`,
-        `Simplify these notes into easy language:\n\n${notes.slice(0, 8000)}`,
-        3000
+        `Rewrite these notes so a 12-year-old can understand them. Make it engaging and clear:\n\n${notes.slice(0, 8000)}`,
+        3500
       );
       onResult(result);
     } catch(e) { console.error(e); }
@@ -8061,34 +8089,128 @@ function clamp(len) {
 function RichText({ text }) {
   const T = useTheme();
   if (!text) return null;
+
+  // Inline markup: bold, code, links
+  const renderInline = (str, key) => {
+    const parts = str.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+    return parts.map((p, pi) => {
+      if (p.startsWith("**") && p.endsWith("**")) return <strong key={pi} style={{ color:T.text, fontWeight:700 }}>{p.slice(2,-2)}</strong>;
+      if (p.startsWith("`") && p.endsWith("`")) return <code key={pi} style={{ background:T.isDark?"#2a2a3a":"#f0eeff", color:"#7C5CFC", borderRadius:4, padding:"1px 6px", fontSize:12, fontFamily:"monospace" }}>{p.slice(1,-1)}</code>;
+      return p;
+    });
+  };
+
   const lines = text.split("\n");
   const els = [];
   let i = 0;
+
   while (i < lines.length) {
     const line = lines[i];
-    if (!line.trim()) { els.push(<div key={i} style={{ height:10 }}/>); i++; continue; }
-    // Bold heading: **text** or line ends with ?
-    if (line.startsWith("**") && line.endsWith("**")) {
-      els.push(<p key={i} style={{ fontWeight:700, fontSize:15, color:T.text, margin:"12px 0 4px" }}>{line.slice(2,-2)}</p>); i++; continue;
+    const trim = line.trim();
+
+    // Empty line
+    if (!trim) { els.push(<div key={i} style={{ height:8 }}/>); i++; continue; }
+
+    // H1: # heading
+    if (trim.startsWith("# ")) {
+      els.push(<h2 key={i} style={{ fontSize:17, fontWeight:800, color:T.text, margin:"16px 0 6px", fontFamily:"'DM Sans',sans-serif", borderBottom:`1px solid ${T.border}`, paddingBottom:6 }}>{trim.slice(2)}</h2>);
+      i++; continue;
     }
-    // Blockquote: > text
-    if (line.startsWith("> ")) {
-      els.push(<div key={i} style={{ borderLeft:`3px solid #7C5CFC`, paddingLeft:14, margin:"8px 0", fontStyle:"italic", color:T.accent, fontSize:14, lineHeight:1.6 }}>{line.replace(/^> /,"").replace(/^"|"$/g,"")}</div>); i++; continue;
+    // H2: ## heading
+    if (trim.startsWith("## ")) {
+      els.push(<h3 key={i} style={{ fontSize:15, fontWeight:700, color:T.text, margin:"12px 0 4px" }}>{trim.slice(3)}</h3>);
+      i++; continue;
     }
-    // Bullet
-    if (line.startsWith("• ") || line.startsWith("- ") || line.startsWith("* ")) {
-      els.push(<div key={i} style={{ display:"flex", gap:8, alignItems:"flex-start", margin:"4px 0" }}><span style={{ color:T.accent, fontWeight:700, flexShrink:0 }}>•</span><span style={{ fontSize:14, color:T.text, lineHeight:1.6 }}>{line.slice(2)}</span></div>); i++; continue;
+    // H3: ### heading
+    if (trim.startsWith("### ")) {
+      els.push(<h4 key={i} style={{ fontSize:14, fontWeight:700, color:T.accent, margin:"10px 0 3px" }}>{trim.slice(4)}</h4>);
+      i++; continue;
     }
-    // Bold inline: **word** in text
-    if (line.includes("**")) {
-      const parts = line.split(/\*\*(.+?)\*\*/g);
-      const rendered = parts.map((p,pi) => pi%2===1 ? <strong key={pi} style={{ color:T.text }}>{p}</strong> : p);
-      els.push(<p key={i} style={{ fontSize:14, color:T.text, lineHeight:1.7, margin:"4px 0" }}>{rendered}</p>); i++; continue;
+
+    // Table: | col | col |
+    if (trim.startsWith("|") && trim.endsWith("|")) {
+      const tableLines = [];
+      while (i < lines.length && lines[i].trim().startsWith("|")) {
+        tableLines.push(lines[i].trim()); i++;
+      }
+      const isSep = r => /^\|[\s\-:|]+\|$/.test(r.replace(/\|[\s\-:|]+/g,"|"));
+      const rows = tableLines.filter(r => !isSep(r));
+      if (rows.length > 0) {
+        const parseRow = r => r.split("|").filter((_,ci) => ci > 0 && ci < r.split("|").length-1).map(c => c.trim());
+        const headers = parseRow(rows[0]);
+        const body = rows.slice(1);
+        els.push(
+          <div key={i} style={{ margin:"12px 0", overflowX:"auto", borderRadius:10, border:`1.5px solid ${T.border}` }}>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+              <thead>
+                <tr style={{ background:T.isDark?"#252520":"#f0eeff" }}>
+                  {headers.map((h,ci) => <th key={ci} style={{ padding:"8px 12px", textAlign:"left", fontWeight:700, color:"#7C5CFC", borderBottom:`2px solid ${T.border}`, whiteSpace:"nowrap" }}>{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {body.map((row,ri) => {
+                  const cells = parseRow(row);
+                  return <tr key={ri} style={{ borderBottom:`1px solid ${T.border}`, background:ri%2===0?"transparent":(T.isDark?"#1a1a1800":"#f8f7f400") }}>
+                    {cells.map((c,ci) => <td key={ci} style={{ padding:"7px 12px", color:T.text, lineHeight:1.5 }}>{renderInline(c, ci)}</td>)}
+                  </tr>;
+                })}
+              </tbody>
+            </table>
+          </div>
+        );
+      }
+      continue;
     }
-    els.push(<p key={i} style={{ fontSize:14, color:T.text, lineHeight:1.7, margin:"4px 0" }}>{line}</p>);
+
+    // Blockquote
+    if (trim.startsWith("> ")) {
+      els.push(<div key={i} style={{ borderLeft:"3px solid #7C5CFC", paddingLeft:14, margin:"8px 0", color:T.accent, fontSize:14, lineHeight:1.65, fontStyle:"italic", background:T.isDark?"#7C5CFC11":"#7C5CFC08", borderRadius:"0 8px 8px 0", padding:"8px 14px" }}>{renderInline(trim.slice(2), i)}</div>);
+      i++; continue;
+    }
+
+    // Bullet: - or * or •
+    if (trim.match(/^[-*•] /)) {
+      const bulletLines = [];
+      while (i < lines.length && lines[i].trim().match(/^[-*•] /)) {
+        bulletLines.push(lines[i].trim().replace(/^[-*•] /,"")); i++;
+      }
+      els.push(
+        <ul key={i+"ul"} style={{ margin:"6px 0", paddingLeft:0, listStyle:"none" }}>
+          {bulletLines.map((b,bi) => (
+            <li key={bi} style={{ display:"flex", gap:8, alignItems:"flex-start", margin:"3px 0" }}>
+              <span style={{ color:"#7C5CFC", fontWeight:700, flexShrink:0, marginTop:2 }}>•</span>
+              <span style={{ fontSize:14, color:T.text, lineHeight:1.65 }}>{renderInline(b, bi)}</span>
+            </li>
+          ))}
+        </ul>
+      );
+      continue;
+    }
+
+    // Numbered list
+    if (trim.match(/^\d+\. /)) {
+      const numLines = [];
+      while (i < lines.length && lines[i].trim().match(/^\d+\. /)) {
+        numLines.push(lines[i].trim().replace(/^\d+\. /,"")); i++;
+      }
+      els.push(
+        <ol key={i+"ol"} style={{ margin:"6px 0", paddingLeft:0, listStyle:"none" }}>
+          {numLines.map((b,bi) => (
+            <li key={bi} style={{ display:"flex", gap:8, alignItems:"flex-start", margin:"3px 0" }}>
+              <span style={{ color:"#7C5CFC", fontWeight:700, flexShrink:0, minWidth:20, textAlign:"right" }}>{bi+1}.</span>
+              <span style={{ fontSize:14, color:T.text, lineHeight:1.65 }}>{renderInline(b, bi)}</span>
+            </li>
+          ))}
+        </ol>
+      );
+      continue;
+    }
+
+    // Regular paragraph
+    els.push(<p key={i} style={{ fontSize:14, color:T.text, lineHeight:1.75, margin:"3px 0" }}>{renderInline(trim, i)}</p>);
     i++;
   }
-  return <div>{els}</div>;
+  return <div style={{ fontFamily:"'DM Sans',sans-serif" }}>{els}</div>;
 }
 
 function ELI5Panel({ card }) {
