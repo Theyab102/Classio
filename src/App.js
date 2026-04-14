@@ -5621,13 +5621,13 @@ ${text}`
     <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 112px)" }}>
       <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, height:50, flexShrink:0 }}/>
       <div style={{ flex:1, display:"flex", overflow:"hidden" }}>
-        <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", background:C.isDark?"#111110":"#2a2a26", padding:40 }}>
+        <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", background:C.isDark?"#111110":"#2a2a26", padding:40 }}>
           <div style={{ background:C.surface, borderRadius:20, padding:"48px 56px", maxWidth:500, width:"100%", boxShadow:"0 8px 40px rgba(0,0,0,.3)", textAlign:"center", border:`1px solid ${C.border}` }}>
             <div style={{ width:64, height:64, background:"linear-gradient(135deg,#7C5CFC22,#7C5CFC11)", borderRadius:18, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 20px" }}>
               <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#7C5CFC" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
             </div>
             <p style={{ fontSize:20, fontWeight:700, color:C.text, marginBottom:8, fontFamily:"'Fraunces',serif" }}>Untitled Document</p>
-            <p style={{ fontSize:14, color:C.muted, marginBottom:28, lineHeight:1.6 }}>This is a blank notebook. Switch to the <strong style={{color:C.accent}}>Notes</strong> tab to write or generate AI notes from a topic.</p>
+            <p style={{ fontSize:14, color:C.muted, marginBottom:28, lineHeight:1.6 }}>This is a blank notebook. Switch to the <strong style={{color:C.accent}}>Notes</strong> tab to write or generate AI notes.</p>
             <label style={{ display:"inline-flex", alignItems:"center", gap:8, background:"transparent", color:C.muted, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 20px", cursor:"pointer", fontSize:13, fontWeight:600 }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
               Upload a file instead
@@ -5638,7 +5638,6 @@ ${text}`
             </label>
           </div>
         </div>
-        <ViewAIPanel file={file} explaining={false} explanation="" showExplain={false} onHideExplain={()=>{}} isPDF={false} pageNum={1}/>
       </div>
     </div>
   );
@@ -5730,7 +5729,6 @@ ${text}`
         <ViewAIPanel file={file} explaining={explaining} explanation={explanation}
           showExplain={showExplain} onHideExplain={()=>setShowExplain(false)}
           isPDF={isPDF} pageNum={pageNum} />
-        </div>
       </div>
     </div>
   );
@@ -5760,7 +5758,7 @@ function ViewAIPanel({ file, explaining, explanation, showExplain, onHideExplain
       const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
       const fileText = fileObj ? await extractFileText(fileObj).catch(()=>"") : "";
       const sys = `You are a knowledgeable study assistant. ${fileText ? "Document content: " + fileText.slice(0,8000) : ""}
-Format all responses with proper markdown: # headings, **bold** key terms, - bullet points, > for formulas/quotes, and | tables | for comparisons.`;
+Format responses with markdown: # headings, **bold** key terms, - bullet points, > for formulas/quotes, | tables | for comparisons.`;
       const reply = await callClaudeChat(sys, newMsgs.map(m=>({role:m.role,content:m.content})));
       setMsgs(m => [...m, { role:"assistant", content:reply }]);
     } catch(e) { setMsgs(m => [...m, { role:"assistant", content:"Error: "+e.message }]); }
@@ -8092,11 +8090,11 @@ function RichText({ text }) {
     const trim = line.trim();
     if (!trim) { els.push(<div key={i} style={{ height:8 }}/>); i++; continue; }
     if (trim.startsWith("# ")) {
-      els.push(<h2 key={i} style={{ fontSize:17, fontWeight:800, color:T.text, margin:"16px 0 6px", borderBottom:`1px solid ${T.border}`, paddingBottom:6 }}>{trim.slice(2)}</h2>);
+      els.push(<h2 key={i} style={{ fontSize:17, fontWeight:800, color:T.text, margin:"16px 0 6px", borderBottom:`1px solid ${T.border}`, paddingBottom:6, fontFamily:"'DM Sans',sans-serif" }}>{trim.slice(2)}</h2>);
       i++; continue;
     }
     if (trim.startsWith("## ")) {
-      els.push(<h3 key={i} style={{ fontSize:15, fontWeight:700, color:T.text, margin:"12px 0 4px" }}>{trim.slice(3)}</h3>);
+      els.push(<h3 key={i} style={{ fontSize:15, fontWeight:700, color:T.text, margin:"12px 0 4px", fontFamily:"'DM Sans',sans-serif" }}>{trim.slice(3)}</h3>);
       i++; continue;
     }
     if (trim.startsWith("### ")) {
@@ -8112,7 +8110,7 @@ function RichText({ text }) {
         const parseRow = r => r.split("|").slice(1,-1).map(c => c.trim());
         const headers = parseRow(rows[0]);
         const body = rows.slice(1);
-        els.push(<div key={i} style={{ margin:"12px 0", overflowX:"auto", borderRadius:10, border:`1.5px solid ${T.border}` }}>
+        els.push(<div key={"t"+i} style={{ margin:"12px 0", overflowX:"auto", borderRadius:10, border:`1.5px solid ${T.border}` }}>
           <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
             <thead><tr style={{ background:T.isDark?"#252520":"#f0eeff" }}>
               {headers.map((h,ci) => <th key={ci} style={{ padding:"8px 12px", textAlign:"left", fontWeight:700, color:"#7C5CFC", borderBottom:`2px solid ${T.border}`, whiteSpace:"nowrap" }}>{h}</th>)}
@@ -8129,13 +8127,13 @@ function RichText({ text }) {
       continue;
     }
     if (trim.startsWith("> ")) {
-      els.push(<div key={i} style={{ borderLeft:"3px solid #7C5CFC", paddingLeft:14, margin:"8px 0", color:"#7C5CFC", fontSize:14, lineHeight:1.65, fontStyle:"italic", background:T.isDark?"#7C5CFC11":"#7C5CFC08", borderRadius:"0 8px 8px 0", padding:"8px 14px" }}>{renderInline(trim.slice(2))}</div>);
+      els.push(<div key={i} style={{ borderLeft:"3px solid #7C5CFC", padding:"8px 14px", margin:"8px 0", color:"#7C5CFC", fontSize:14, lineHeight:1.65, fontStyle:"italic", background:T.isDark?"#7C5CFC11":"#7C5CFC08", borderRadius:"0 8px 8px 0" }}>{renderInline(trim.slice(2))}</div>);
       i++; continue;
     }
     if (trim.match(/^[-*\u2022] /)) {
       const bullets = [];
       while (i < lines.length && lines[i].trim().match(/^[-*\u2022] /)) { bullets.push(lines[i].trim().replace(/^[-*\u2022] /,"")); i++; }
-      els.push(<ul key={i+"ul"} style={{ margin:"6px 0", paddingLeft:0, listStyle:"none" }}>
+      els.push(<ul key={"ul"+i} style={{ margin:"6px 0", paddingLeft:0, listStyle:"none" }}>
         {bullets.map((b,bi) => <li key={bi} style={{ display:"flex", gap:8, alignItems:"flex-start", margin:"3px 0" }}>
           <span style={{ color:"#7C5CFC", fontWeight:700, flexShrink:0, marginTop:2 }}>•</span>
           <span style={{ fontSize:14, color:T.text, lineHeight:1.65 }}>{renderInline(b)}</span>
@@ -8146,7 +8144,7 @@ function RichText({ text }) {
     if (trim.match(/^\d+\. /)) {
       const items = [];
       while (i < lines.length && lines[i].trim().match(/^\d+\. /)) { items.push(lines[i].trim().replace(/^\d+\. /,"")); i++; }
-      els.push(<ol key={i+"ol"} style={{ margin:"6px 0", paddingLeft:0, listStyle:"none" }}>
+      els.push(<ol key={"ol"+i} style={{ margin:"6px 0", paddingLeft:0, listStyle:"none" }}>
         {items.map((b,bi) => <li key={bi} style={{ display:"flex", gap:8, alignItems:"flex-start", margin:"3px 0" }}>
           <span style={{ color:"#7C5CFC", fontWeight:700, flexShrink:0, minWidth:20 }}>{bi+1}.</span>
           <span style={{ fontSize:14, color:T.text, lineHeight:1.65 }}>{renderInline(b)}</span>
