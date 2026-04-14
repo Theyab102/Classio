@@ -712,11 +712,11 @@ function useResponsive() {
     window.addEventListener("resize", fn, { passive: true });
     window.addEventListener("orientationchange", fn, { passive: true });
     // Also listen to screen.orientation if available
-    screen.orientation?.addEventListener("change", fn);
+    window.screen?.orientation?.addEventListener("change", fn);
     return () => {
       window.removeEventListener("resize", fn);
       window.removeEventListener("orientationchange", fn);
-      screen.orientation?.removeEventListener("change", fn);
+      window.screen?.orientation?.removeEventListener("change", fn);
       cancelAnimationFrame(raf);
     };
   }, []);
