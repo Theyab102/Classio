@@ -1851,6 +1851,11 @@ const DARK_CSS = `
   @keyframes cmdIn { from { opacity:0; transform:translateY(-14px) scale(.97); } to { opacity:1; transform:translateY(0) scale(1); } }
   @keyframes sidebarIn { from { opacity:0; transform:translateX(-12px); } to { opacity:1; transform:translateX(0); } }
   @keyframes quickIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes cardIn { from{opacity:0;transform:translateY(14px) scale(.98)} to{opacity:1;transform:translateY(0) scale(1)} }
+  @keyframes rowIn { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:translateX(0)} }
+  @keyframes screenIn { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes popIn { from{opacity:0;transform:scale(.7)} to{opacity:1;transform:scale(1)} }
+  button:active:not(:disabled):not(.no-min-h) { transform: scale(0.97); } }
   @keyframes pageIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
   @keyframes slideInRight { from { opacity:0; transform:translateX(16px); } to { opacity:1; transform:translateX(0); } }
   @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
@@ -1859,6 +1864,7 @@ const DARK_CSS = `
   @keyframes gradShift { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
 
   .page-enter { animation: pageIn .22s cubic-bezier(.22,1,.36,1) both; }
+.screen-enter { animation: screenIn .25s cubic-bezier(.22,1,.36,1) both; }
   .slide-enter { animation: slideInRight .2s cubic-bezier(.22,1,.36,1) both; }
   .fade-enter { animation: fadeIn .18s ease both; }
 
@@ -2203,117 +2209,272 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
 
 
 // ── Audio Record Modal ────────────────────────────────────────────────────────
-function AudioRecordModal({ onClose, onSave }) {
-  const [recording, setRecording] = useState(false);
-  const [audioUrl, setAudioUrl] = useState(null);
-  const [audioBlob, setAudioBlob] = useState(null);
-  const [seconds, setSeconds] = useState(0);
-  const [micError, setMicError] = useState("");
-  const mediaRef = useRef(null);
-  const chunksRef = useRef([]);
-  const timerRef = useRef(null);
-  const inputRef = useRef(null);
+function AudioRecordModal({ onClose, onSave, onSaveNote }) {
   const T = useTheme();
+  const [phase, setPhase] = useState("idle"); // idle | recording | processing | done | upload
+  const [seconds, setSeconds] = useState(0);
+  const [status, setStatus] = useState("");
+  const [transcript, setTranscript] = useState("");
+  const [notes, setNotes] = useState("");
+  const [micError, setMicError] = useState("");
+  const [bars, setBars] = useState([3,5,8,4,9,6,3,7,5,8,4,6]);
+  const recognitionRef = useRef(null);
+  const transcriptRef  = useRef("");
+  const timerRef       = useRef(null);
+  const barsRef        = useRef(null);
+  const inputRef       = useRef(null);
+  const isRecordingRef = useRef(false);
+  const fmt = s => `${Math.floor(s/60).toString().padStart(2,"0")}:${(s%60).toString().padStart(2,"0")}`;
 
-  const startRecording = async () => {
+  // Animate waveform bars while recording
+  useEffect(() => {
+    if (phase === "recording") {
+      barsRef.current = setInterval(() => {
+        setBars(prev => prev.map(() => Math.floor(Math.random() * 28) + 3));
+      }, 120);
+    } else {
+      clearInterval(barsRef.current);
+      setBars([3,5,8,4,9,6,3,7,5,8,4,6]);
+    }
+    return () => clearInterval(barsRef.current);
+  }, [phase]);
+
+  useEffect(() => () => {
+    clearInterval(timerRef.current);
+    clearInterval(barsRef.current);
+    isRecordingRef.current = false;
+    recognitionRef.current?.stop();
+  }, []);
+
+  const startRecording = () => {
     setMicError("");
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      setMicError("Live transcription needs Chrome or Edge. Try uploading an audio file instead.");
+      return;
+    }
+    transcriptRef.current = "";
+    isRecordingRef.current = true;
+    const rec = new SR();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = "en-US";
+    rec.onresult = (e) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) transcriptRef.current += e.results[i][0].transcript + " ";
+        else interim += e.results[i][0].transcript;
+      }
+      const preview = (transcriptRef.current + interim).trim();
+      setTranscript(preview ? preview.slice(-120) : "");
+      setStatus("Listening…");
+    };
+    rec.onerror = (e) => {
+      if (e.error === "not-allowed") setMicError("Microphone access denied. Allow it in your browser settings.");
+      else if (e.error !== "no-speech") setMicError("Mic error: " + e.error);
+    };
+    rec.onend = () => { if (isRecordingRef.current) { try { rec.start(); } catch {} } };
+    rec.start();
+    recognitionRef.current = rec;
+    setPhase("recording");
+    setSeconds(0);
+    setStatus("Listening… speak now");
+    timerRef.current = setInterval(() => setSeconds(s => s + 1), 1000);
+  };
+
+  const stopAndProcess = async () => {
+    isRecordingRef.current = false;
+    clearInterval(timerRef.current);
+    if (recognitionRef.current) {
+      recognitionRef.current.onend = null;
+      try { recognitionRef.current.stop(); } catch {}
+    }
+    await new Promise(r => setTimeout(r, 300));
+    const raw = transcriptRef.current.trim();
+    if (!raw) {
+      setMicError("Nothing captured — make sure your microphone is working and try again.");
+      setPhase("idle");
+      return;
+    }
+    setPhase("processing");
+    setStatus("AI is organising your notes…");
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream);
-      chunksRef.current = [];
-      mr.ondataavailable = e => chunksRef.current.push(e.data);
-      mr.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type:"audio/webm" });
-        setAudioBlob(blob);
-        setAudioUrl(URL.createObjectURL(blob));
-        stream.getTracks().forEach(t => t.stop());
-      };
-      mr.start();
-      mediaRef.current = mr;
-      setRecording(true);
-      setSeconds(0);
-      timerRef.current = setInterval(() => setSeconds(s => s+1), 1000);
+      const result = await callClaude(
+        `You are an expert note-taker. A student just recorded a lecture, study session, or revision. Turn their spoken words into clean, well-organised study notes.
+
+RULES:
+1. Remove ALL filler words (um, uh, er, like, you know, basically, right, okay so)
+2. Fix grammar and sentence structure
+3. Organise into clear structure using # headings and - bullet points
+4. Fix speech-recognition errors using context
+5. Convert spoken math/science to proper notation: "ten to the power of negative ten" → 10⁻¹⁰, "times" → ×, "squared" → ², "pi" → π
+6. Keep ALL facts — do not remove content, do not add new facts
+7. Use **bold** for key terms
+8. Use > for important formulas or definitions`,
+        `Turn this spoken recording into clean study notes:
+
+"${raw}"`
+      );
+      setNotes(result);
+      setPhase("done");
+      setStatus("");
     } catch(e) {
-      setMicError("Microphone access denied. Please allow microphone access in your browser.");
+      setMicError("AI error: " + e.message);
+      setPhase("idle");
     }
   };
 
-  const stopRecording = () => {
-    mediaRef.current?.stop();
-    setRecording(false);
-    clearInterval(timerRef.current);
+  const saveAsNote = () => {
+    // Create a note document on the dashboard
+    onSaveNote && onSaveNote(notes);
+    onClose();
   };
-
-  useEffect(() => () => { clearInterval(timerRef.current); }, []);
-  const fmt = s => `${Math.floor(s/60).toString().padStart(2,"0")}:${(s%60).toString().padStart(2,"0")}`;
 
   return (
     <Modal onClose={onClose}>
+      <style>{`
+        @keyframes arm-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(124,92,252,.4),0 4px 20px rgba(124,92,252,.3)} 50%{box-shadow:0 0 0 16px rgba(124,92,252,.0),0 4px 20px rgba(124,92,252,.3)} }
+        @keyframes arm-pulse-red { 0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.35),0 4px 20px rgba(220,38,38,.3)} 50%{box-shadow:0 0 0 20px rgba(220,38,38,.0),0 4px 20px rgba(220,38,38,.3)} }
+        @keyframes arm-fadein { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes arm-spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+        .arm-bar { border-radius:3px; background:linear-gradient(to top,#7C5CFC,#3D8EF8); transition:height .1s ease; }
+      `}</style>
+
       {/* Header */}
-      <div style={{ marginBottom:20 }}>
-        <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:22, fontWeight:700, color:T.text, margin:0 }}>Record or Upload Audio</h2>
-        <p style={{ fontSize:13, color:T.muted, marginTop:4 }}>Record live or upload an audio file — saves directly to your dashboard.</p>
+      <div style={{ marginBottom:22 }}>
+        <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:22, fontWeight:700, color:T.text, margin:0 }}>
+          Record or Upload Audio
+        </h2>
+        <p style={{ fontSize:13, color:T.muted, marginTop:5, lineHeight:1.5 }}>
+          Lecture, study session, or revision — record it and AI converts it to notes.
+        </p>
       </div>
 
-      {!audioUrl ? (
-        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:16, padding:"24px 0" }}>
-          {/* Big gradient mic button */}
-          <button onClick={recording ? stopRecording : startRecording}
-            style={{ width:80, height:80, borderRadius:"50%", border:"none", cursor:"pointer",
-              background: recording ? "linear-gradient(135deg,#dc2626,#b91c1c)" : GRAD,
-              color:"#fff", display:"flex", alignItems:"center", justifyContent:"center",
-              boxShadow: recording ? "0 0 0 12px rgba(220,38,38,.12), 0 4px 20px rgba(220,38,38,.4)"
-                                   : "0 0 0 12px rgba(124,92,252,.1), 0 4px 20px rgba(124,92,252,.4)",
-              transition:"all .2s", animation: recording ? "pulse 1.5s infinite" : "none" }}>
-            {recording
-              ? <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-              : <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>}
-          </button>
-          <style>{`@keyframes pulse{0%,100%{box-shadow:0 0 0 12px rgba(220,38,38,.12),0 4px 20px rgba(220,38,38,.4)}50%{box-shadow:0 0 0 20px rgba(220,38,38,.06),0 4px 20px rgba(220,38,38,.4)}}`}</style>
+      {/* ── IDLE / RECORDING ── */}
+      {(phase === "idle" || phase === "recording") && (
+        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:20 }}>
 
-          {recording
-            ? <p style={{ fontSize:26, fontWeight:800, color:"#dc2626", fontFamily:"monospace", letterSpacing:2 }}>{fmt(seconds)}</p>
+          {/* Mic button */}
+          <button onClick={phase === "recording" ? stopAndProcess : startRecording}
+            style={{ width:88, height:88, borderRadius:"50%", border:"none", cursor:"pointer",
+              background: phase === "recording" ? "linear-gradient(135deg,#dc2626,#b91c1c)" : GRAD,
+              color:"#fff", display:"flex", alignItems:"center", justifyContent:"center",
+              animation: phase === "recording" ? "arm-pulse-red 1.5s ease infinite" : "arm-pulse 2.5s ease infinite",
+              transition:"background .25s, transform .15s",
+              flexShrink:0 }}
+            onMouseEnter={e => e.currentTarget.style.transform = "scale(1.06)"}
+            onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}>
+            {phase === "recording"
+              ? <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+              : <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>}
+          </button>
+
+          {/* Waveform bars — animate when recording */}
+          <div style={{ display:"flex", alignItems:"center", gap:3, height:36 }}>
+            {bars.map((h, i) => (
+              <div key={i} className="arm-bar"
+                style={{ width:4, height: phase === "recording" ? h : 4, opacity: phase === "recording" ? 1 : 0.25 }}/>
+            ))}
+          </div>
+
+          {/* Timer / status */}
+          {phase === "recording"
+            ? <p style={{ fontSize:28, fontWeight:800, color:"#dc2626", fontFamily:"monospace", letterSpacing:3, animation:"arm-fadein .3s ease" }}>{fmt(seconds)}</p>
             : <p style={{ fontSize:13, color:T.muted }}>Tap to start recording</p>}
 
-          {micError && <p style={{ fontSize:12, color:"#dc2626", textAlign:"center", maxWidth:280 }}>{micError}</p>}
+          {/* Live transcript preview */}
+          {phase === "recording" && transcript && (
+            <div style={{ background:T.accentL, border:`1px solid ${T.accentS}`, borderRadius:10,
+              padding:"10px 14px", fontSize:12, color:T.text, lineHeight:1.6,
+              maxHeight:80, overflowY:"auto", width:"100%", animation:"arm-fadein .3s ease",
+              fontStyle:"italic", textAlign:"center" }}>
+              "…{transcript.slice(-100)}"
+            </div>
+          )}
 
-          {/* Upload divider */}
-          {!recording && (
-            <>
-              <div style={{ display:"flex", alignItems:"center", gap:10, width:"100%" }}>
+          {micError && (
+            <p style={{ fontSize:12, color:"#dc2626", textAlign:"center", background:"#fef2f2",
+              border:"1px solid #fecaca", borderRadius:8, padding:"8px 14px", width:"100%", animation:"arm-fadein .3s ease" }}>
+              {micError}
+            </p>
+          )}
+
+          {/* Upload option */}
+          {phase === "idle" && (
+            <div style={{ width:"100%", display:"flex", flexDirection:"column", gap:12, marginTop:4 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                 <div style={{ flex:1, height:1, background:T.border }}/>
-                <span style={{ fontSize:12, color:T.muted }}>or upload a file</span>
+                <span style={{ fontSize:12, color:T.muted }}>or upload an audio file</span>
                 <div style={{ flex:1, height:1, background:T.border }}/>
               </div>
               <input ref={inputRef} type="file" accept="audio/*" style={{ display:"none" }}
-                onChange={e => { const f=e.target.files[0]; if(f) onSave(f); e.target.value=""; }} />
+                onChange={e => { const f = e.target.files[0]; if(f) { onSave(f); onClose(); } e.target.value=""; }} />
               <button onClick={() => inputRef.current?.click()}
-                style={{ padding:"10px 28px", border:`1.5px solid ${T.border}`, borderRadius:10, background:T.bg, cursor:"pointer", fontSize:13, fontWeight:600, color:T.text, transition:"all .12s" }}
+                style={{ padding:"10px", border:`1.5px solid ${T.border}`, borderRadius:10,
+                  background:"transparent", cursor:"pointer", fontSize:13, fontWeight:600,
+                  color:T.text, transition:"all .15s" }}
                 onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
                 onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.text;}}>
-                Upload audio file
+                📁 Upload audio file
               </button>
-            </>
+            </div>
           )}
         </div>
-      ) : (
-        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-          <div style={{ background:T.accentL, borderRadius:12, padding:"12px 16px", display:"flex", alignItems:"center", gap:10 }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+      )}
+
+      {/* ── PROCESSING ── */}
+      {phase === "processing" && (
+        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:18, padding:"28px 0", animation:"arm-fadein .3s ease" }}>
+          <div style={{ width:56, height:56, borderRadius:"50%", background:T.accentL,
+            display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={T.accent} strokeWidth="2.5"
+              strokeLinecap="round" strokeLinejoin="round" style={{ animation:"arm-spin 1s linear infinite" }}>
+              <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+            </svg>
+          </div>
+          <div style={{ textAlign:"center" }}>
+            <p style={{ fontSize:15, fontWeight:700, color:T.text, margin:"0 0 4px" }}>AI is organising your notes</p>
+            <p style={{ fontSize:13, color:T.muted }}>{fmt(seconds)} of audio · cleaning up transcript…</p>
+          </div>
+          <div style={{ display:"flex", gap:5 }}>
+            {[0,1,2].map(i => (
+              <div key={i} style={{ width:8, height:8, borderRadius:"50%", background:T.accent,
+                animation:`bounce .8s ease-in-out ${i*0.15}s infinite` }}/>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── DONE — show notes preview ── */}
+      {phase === "done" && (
+        <div style={{ display:"flex", flexDirection:"column", gap:14, animation:"arm-fadein .3s ease" }}>
+          <div style={{ background:T.accentL, border:`1px solid ${T.accentS}`, borderRadius:12,
+            padding:"10px 16px", display:"flex", alignItems:"center", gap:10 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.accent} strokeWidth="2.5"
+              strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
             <div>
-              <p style={{ margin:0, fontSize:13, fontWeight:700, color:T.text }}>Recording ready</p>
-              <p style={{ margin:0, fontSize:11, color:T.muted }}>{fmt(seconds)} recorded</p>
+              <p style={{ margin:0, fontSize:13, fontWeight:700, color:T.text }}>Notes ready!</p>
+              <p style={{ margin:0, fontSize:11, color:T.muted }}>{fmt(seconds)} recorded · {notes.trim().split(/\s+/).length} words generated</p>
             </div>
           </div>
-          <audio controls src={audioUrl} style={{ width:"100%", borderRadius:10 }} />
+
+          <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:12,
+            padding:"14px 16px", maxHeight:200, overflowY:"auto", fontSize:13, color:T.text,
+            lineHeight:1.7, whiteSpace:"pre-wrap" }}>
+            {notes.slice(0, 600)}{notes.length > 600 ? "…" : ""}
+          </div>
+
           <div style={{ display:"flex", gap:8 }}>
-            <button onClick={() => { setAudioUrl(null); setAudioBlob(null); setSeconds(0); }}
-              style={{ flex:1, padding:"10px", border:`1.5px solid ${T.border}`, borderRadius:10, background:"transparent", cursor:"pointer", fontSize:13, fontWeight:600, color:T.muted }}>
+            <button onClick={() => { setPhase("idle"); setTranscript(""); setNotes(""); setSeconds(0); setMicError(""); }}
+              style={{ flex:1, padding:"10px", border:`1.5px solid ${T.border}`, borderRadius:10,
+                background:"transparent", cursor:"pointer", fontSize:13, fontWeight:600, color:T.muted }}>
               Re-record
             </button>
-            <button onClick={() => { const f = new File([audioBlob], `Recording-${Date.now()}.webm`, {type:"audio/webm"}); onSave(f); }}
-              style={{ flex:2, padding:"10px", background:GRAD, color:"#fff", border:"none", borderRadius:10, cursor:"pointer", fontSize:13, fontWeight:700, boxShadow:"0 3px 10px rgba(124,92,252,.3)" }}>
-              Save to Dashboard
+            <button onClick={saveAsNote}
+              style={{ flex:2, padding:"10px", background:GRAD, color:"#fff", border:"none",
+                borderRadius:10, cursor:"pointer", fontSize:13, fontWeight:700,
+                boxShadow:"0 3px 10px rgba(124,92,252,.3)" }}>
+              ✨ Save as Notes
             </button>
           </div>
         </div>
@@ -3088,7 +3249,7 @@ export default function App() {
               return (
                 <div key={folder.id} className="sq-card"
                   onClick={() => { setActiveFolder(folder); setScreen("folder"); }}
-                  style={{ display:"flex", alignItems:"center", gap:14, padding:"14px 18px", cursor:"pointer", animation:`quickIn .18s ease ${idx*0.04}s both`, position:"relative" }}
+                  style={{ display:"flex", alignItems:"center", gap:14, padding:"14px 18px", cursor:"pointer", animation:`rowIn .22s ease ${idx*0.05}s both`, position:"relative" }}
                   onMouseEnter={e=>{e.currentTarget.style.background=T.sidebarActive; e.currentTarget.style.borderColor=T.accentS;}}
                   onMouseLeave={e=>{e.currentTarget.style.background=T.surface; e.currentTarget.style.borderColor=T.border;}}>
                   {/* Colour dot + folder icon */}
@@ -3147,6 +3308,7 @@ export default function App() {
         <AudioRecordModal
           onClose={() => setShowRecordModal(false)}
           onSave={(file) => {
+            // Fallback: save raw audio file to dashboard
             const inbox = folders.find(f=>f.id==="inbox") || {id:"inbox",name:"Inbox",color:"#6B4E8A",files:[]};
             const id = `fi${Date.now()}-${Math.random()}`;
             FILE_STORE.set(id, file); idbSave(id, file);
@@ -3154,6 +3316,22 @@ export default function App() {
               colorIndex:0, notes:"", studyCards:[], uploadedAt:new Date().toLocaleDateString(), linkedFileIds:[], _fileObj:file };
             setFoldersSave([{...inbox,files:[...inbox.files,newFile]}, ...folders.filter(f=>f.id!=="inbox")]);
             setShowRecordModal(false);
+          }}
+          onSaveNote={(notesText) => {
+            // Primary: save AI-generated notes as a blank document
+            const inbox = folders.find(f=>f.id==="inbox") || {id:"inbox",name:"Inbox",color:"#6B4E8A",files:[]};
+            const id = `fi${Date.now()}-${Math.random()}`;
+            const title = "Voice Notes — " + new Date().toLocaleDateString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
+            const newFile = { id, name:title, type:"text/plain", size:0,
+              colorIndex:0, notes:notesText, studyCards:[],
+              uploadedAt:new Date().toLocaleDateString(), linkedFileIds:[], _fileObj:null, isBlankDoc:true };
+            setFoldersSave([{...inbox,files:[...inbox.files,newFile]}, ...folders.filter(f=>f.id!=="inbox")]);
+            setShowRecordModal(false);
+            // Open the note immediately
+            setActiveFile({...newFile});
+            setActiveFolder({...inbox,files:[...inbox.files,newFile]});
+            setScreen("file");
+            if(setFileTab) setFileTab("notes");
           }}
         />
       )}
@@ -5254,7 +5432,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFi
   const TABS = [{ id:"files", label:"Files", icon:I.file },{ id:"youtube", label:"YouTube", icon:I.link },{ id:"ai", label:"AI Assistant", icon:I.ai }];
 
   return (
-    <div className="page-with-ad page-enter" style={{ minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif" }}>
+    <div className="page-with-ad page-enter screen-enter" style={{ minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif" }}>
       <style>{GS}</style>
       {/* Top bar */}
       <div className="app-header" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", height:64, display:"flex", alignItems:"center", gap:16 }}>
