@@ -1974,6 +1974,7 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
     { id:"cards",   label:"Study Cards",     icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/></svg> },
     { id:"ai",      label:"AI Assistant",    icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8"/></svg> },
     { id:"game",    label:"Game Mode",       icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4M8 10v4M15 12h.01M18 12h.01"/></svg> },
+    { id:"present", label:"AI Presentation",  icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg> },
     { id:"youtube", label:"YouTube",         icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.54C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg> },
   ];
 
@@ -5574,6 +5575,7 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate, act
     {id:"ai",      label:"AI Assistant",    icon:I.ai},
     {id:"game",    label:"Game Mode",       icon:I.game},
     {id:"youtube", label:"YouTube",         icon:I.link},
+    {id:"present", label:"AI Presentation", icon:I.file},
   ];
   const fc = getFileColor(file);
 
@@ -5613,17 +5615,22 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate, act
         </div>
       </div>
       {/* Tabs controlled by sidebar */}
-      {tab==="view"
-        ? <ViewTab file={file} onUpdate={onUpdate} />
-        : <div className="page-inner" style={{ maxWidth:900, margin:"0 auto", padding:"32px 24px" }}>
-            {tab==="notes" && <div key="notes" className="page-fade"><NotesTab key={file.id} file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} onTabChange={setTab} /></div>}
-            {tab==="voice" && <div key="voice" className="page-fade"><VoicePodcastTab file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} /></div>}
-            {tab==="cards" && <div key="cards" className="page-fade"><CardsTab file={file} onUpdate={onUpdate} /></div>}
-            {tab==="ai"    && <div key="ai" className="page-fade"><AITab file={file} allFiles={allFiles} folder={folder} onUpdate={onUpdate} /></div>}
-            {tab==="game"  && <div key="game" className="page-fade"><GameTab file={file} /></div>}
-            {tab==="youtube" && <div key="yt" className="page-fade"><YouTubeTab file={file} onUpdate={onUpdate} /></div>}
+      {(() => {
+        const isBlank = file._isBlank || (!file._fileObj && !FILE_STORE.get(file.id));
+        const effectiveTab = (isBlank && tab === "view") ? "notes" : tab;
+        if (effectiveTab === "view") return <ViewTab file={file} onUpdate={onUpdate} />;
+        return (
+          <div className="page-inner" style={{ maxWidth:900, margin:"0 auto", padding:"32px 24px" }}>
+            {effectiveTab==="notes" && <div key="notes" className="page-fade"><NotesTab key={file.id} file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} onTabChange={setTab} /></div>}
+            {effectiveTab==="voice" && <div key="voice" className="page-fade"><VoicePodcastTab file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} /></div>}
+            {effectiveTab==="cards" && <div key="cards" className="page-fade"><CardsTab file={file} onUpdate={onUpdate} /></div>}
+            {effectiveTab==="ai"    && <div key="ai" className="page-fade"><AITab file={file} allFiles={allFiles} folder={folder} onUpdate={onUpdate} /></div>}
+            {effectiveTab==="game"  && <div key="game" className="page-fade"><GameTab file={file} /></div>}
+            {effectiveTab==="youtube" && <div key="yt" className="page-fade"><YouTubeTab file={file} onUpdate={onUpdate} /></div>}
+            {effectiveTab==="present" && <div key="present" className="page-fade"><PresentationTab file={file} onUpdate={onUpdate} /></div>}
           </div>
-      }
+        );
+      })()}
     </div>
   );
 }
@@ -7195,7 +7202,8 @@ Otherwise respond normally with formatted text.`;
   return (
     <div style={{ width:360, minWidth:300, flexShrink:0, display:"flex", flexDirection:"column",
       background:T.surface, borderLeft:`1px solid ${T.border}`, marginLeft:6,
-      borderRadius:16, overflow:"hidden", border:`1px solid ${T.border}` }}>
+      borderRadius:16, overflow:"hidden", border:`1px solid ${T.border}`,
+      position:"sticky", top:16, maxHeight:"calc(100vh - 140px)" }}>
 
       {/* Quizzes + Flashcards cards — always visible at top */}
       <div style={{ padding:"16px 14px 0", flexShrink:0 }}>
@@ -7982,7 +7990,7 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
       )}
 
       {/* ── Turbo AI split pane: notes left, AI panel right ── */}
-      <div className="notes-split" style={{ display:"flex", gap:20, alignItems:"stretch", minHeight:"calc(100vh - 320px)" }}>
+      <div className="notes-split" style={{ display:"flex", gap:20, alignItems:"flex-start", minHeight:"calc(100vh - 320px)" }}>
 
         {/* Left — notes area */}
         <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:10 }}>
@@ -10089,6 +10097,322 @@ async function aiCheckAnswer(question, correct, userAnswer) {
     );
     return res.trim().toLowerCase().startsWith("yes");
   } catch { return false; }
+}
+
+// ── AI PRESENTATION BUILDER ────────────────────────────────────────────────────
+function PresentationTab({ file, onUpdate }) {
+  const T = useTheme();
+  const [topic, setTopic] = useState("");
+  const [slides, setSlides] = useState(file.presentation || []);
+  const [generating, setGenerating] = useState(false);
+  const [slideCount, setSlideCount] = useState(8);
+  const [theme, setTheme] = useState("modern");
+  const [editIdx, setEditIdx] = useState(null);
+  const [editVal, setEditVal] = useState({});
+  const [exporting, setExporting] = useState(false);
+
+  const THEMES = [
+    { id:"modern",    label:"Modern",    bg:"#1e1b4b", accent:"#818cf8", text:"#f8fafc", sub:"#cbd5e1" },
+    { id:"ocean",     label:"Ocean",     bg:"#0c4a6e", accent:"#38bdf8", text:"#f0f9ff", sub:"#bae6fd" },
+    { id:"forest",    label:"Forest",    bg:"#14532d", accent:"#4ade80", text:"#f0fdf4", sub:"#bbf7d0" },
+    { id:"sunset",    label:"Sunset",    bg:"#7c2d12", accent:"#fb923c", text:"#fff7ed", sub:"#fed7aa" },
+    { id:"minimal",   label:"Minimal",   bg:"#ffffff", accent:"#7C5CFC", text:"#1e1b4b", sub:"#6b7280" },
+    { id:"dark",      label:"Dark",      bg:"#0f172a", accent:"#7C5CFC", text:"#f8fafc", sub:"#94a3b8" },
+  ];
+  const currentTheme = THEMES.find(t => t.id === theme) || THEMES[0];
+
+  const generate = async () => {
+    if (!topic.trim() && !file._fileObj && !FILE_STORE.get(file.id)) return;
+    setGenerating(true);
+    try {
+      const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
+      const fileText = fileObj ? await extractFileText(fileObj).catch(()=>"") : "";
+      const context = fileText ? `File content:\n${fileText.slice(0, 10000)}` : "";
+      const topicStr = topic.trim() || file.name;
+
+      const raw = await callClaude(
+        `You are an expert presentation designer. Create a professional, engaging presentation.
+Return ONLY valid JSON — no markdown, no explanation.
+Format:
+{
+  "title": "Presentation Title",
+  "slides": [
+    {
+      "type": "title",
+      "title": "Main Title",
+      "subtitle": "Subtitle or tagline"
+    },
+    {
+      "type": "content",
+      "title": "Slide Title",
+      "bullets": ["Key point 1", "Key point 2", "Key point 3"],
+      "note": "Optional speaker note"
+    },
+    {
+      "type": "two-col",
+      "title": "Comparison",
+      "left": { "heading": "Left Side", "bullets": ["Point A", "Point B"] },
+      "right": { "heading": "Right Side", "bullets": ["Point X", "Point Y"] }
+    },
+    {
+      "type": "quote",
+      "quote": "An inspiring or key quote from the content",
+      "author": "Source or attribution"
+    },
+    {
+      "type": "summary",
+      "title": "Key Takeaways",
+      "bullets": ["Takeaway 1", "Takeaway 2", "Takeaway 3"]
+    }
+  ]
+}
+Slide types to use: title (1 slide), content (most slides), two-col (for comparisons), quote (1-2 slides), summary (last slide).
+Make exactly ${slideCount} slides total. Be comprehensive and educational.`,
+        `Topic: "${topicStr}"\n${context}\n\nCreate a ${slideCount}-slide presentation covering all key concepts thoroughly.`,
+        4000
+      );
+      const clean = raw.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(clean.match(/\{[\s\S]*\}/)[0]);
+      const newSlides = parsed.slides || [];
+      setSlides(newSlides);
+      onUpdate({ ...file, presentation: newSlides, presentationTitle: parsed.title });
+    } catch(e) { console.error("Presentation gen error:", e); }
+    setGenerating(false);
+  };
+
+  const exportPDF = async () => {
+    setExporting(true);
+    try {
+      // Build HTML for each slide and open print dialog
+      const thm = currentTheme;
+      const slideHTML = slides.map((s, i) => {
+        let body = "";
+        if (s.type === "title") {
+          body = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;text-align:center;padding:60px">
+            <h1 style="font-size:52px;font-weight:900;color:${thm.text};margin:0 0 20px;line-height:1.1">${s.title||""}</h1>
+            <p style="font-size:24px;color:${thm.sub};margin:0">${s.subtitle||""}</p>
+          </div>`;
+        } else if (s.type === "quote") {
+          body = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;text-align:center;padding:60px">
+            <p style="font-size:32px;font-style:italic;color:${thm.accent};margin:0 0 24px;line-height:1.4">"${s.quote||""}"</p>
+            <p style="font-size:18px;color:${thm.sub}">— ${s.author||""}</p>
+          </div>`;
+        } else if (s.type === "two-col") {
+          const leftBullets = (s.left?.bullets||[]).map(b=>`<li style="margin:6px 0;color:${thm.sub};font-size:16px">${b}</li>`).join("");
+          const rightBullets = (s.right?.bullets||[]).map(b=>`<li style="margin:6px 0;color:${thm.sub};font-size:16px">${b}</li>`).join("");
+          body = `<div style="padding:40px 60px">
+            <h2 style="font-size:32px;font-weight:800;color:${thm.text};margin:0 0 32px">${s.title||""}</h2>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px">
+              <div><h3 style="color:${thm.accent};font-size:20px;margin:0 0 16px">${s.left?.heading||""}</h3><ul style="padding-left:20px;margin:0">${leftBullets}</ul></div>
+              <div><h3 style="color:${thm.accent};font-size:20px;margin:0 0 16px">${s.right?.heading||""}</h3><ul style="padding-left:20px;margin:0">${rightBullets}</ul></div>
+            </div>
+          </div>`;
+        } else {
+          const bullets = (s.bullets||[]).map(b=>`<li style="margin:8px 0;color:${thm.sub};font-size:18px;line-height:1.5">${b}</li>`).join("");
+          body = `<div style="padding:40px 60px">
+            <h2 style="font-size:36px;font-weight:800;color:${thm.text};margin:0 0 8px;border-bottom:3px solid ${thm.accent};padding-bottom:16px">${s.title||""}</h2>
+            <ul style="padding-left:24px;margin:24px 0 0">${bullets}</ul>
+          </div>`;
+        }
+        return `<div style="width:1280px;height:720px;background:${thm.bg};page-break-after:always;box-sizing:border-box;font-family:'DM Sans',sans-serif;position:relative;overflow:hidden">
+          <div style="position:absolute;bottom:0;left:0;right:0;height:5px;background:${thm.accent}"></div>
+          <div style="position:absolute;top:20px;right:30px;font-size:13px;color:${thm.sub};opacity:.5">${i+1} / ${slides.length}</div>
+          ${body}
+        </div>`;
+      }).join("");
+
+      const win = window.open("", "_blank");
+      win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Presentation</title>
+        <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+        <style>@media print{@page{size:1280px 720px;margin:0}body{margin:0}}</style>
+      </head><body style="margin:0;padding:0">${slideHTML}</body></html>`);
+      win.document.close();
+      setTimeout(() => { win.print(); }, 800);
+    } catch(e) { console.error(e); }
+    setExporting(false);
+  };
+
+  const exportPPTX = async () => {
+    setExporting(true);
+    try {
+      // Load PptxGenJS
+      if (!window.PptxGenJS) {
+        await new Promise((res,rej) => {
+          const s = document.createElement("script");
+          s.src = "https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js";
+          s.onload = res; s.onerror = rej;
+          document.head.appendChild(s);
+        });
+      }
+      const pptx = new window.PptxGenJS();
+      const thm = currentTheme;
+      pptx.layout = "LAYOUT_WIDE";
+      pptx.defineSlideMaster({
+        title: "MASTER",
+        background: { color: thm.bg.replace("#","") },
+      });
+
+      slides.forEach((s) => {
+        const slide = pptx.addSlide();
+        slide.background = { color: thm.bg.replace("#","") };
+        // Bottom accent bar
+        slide.addShape(pptx.ShapeType.rect, { x:0, y:6.9, w:13.33, h:0.1, fill:{ color: thm.accent.replace("#","") } });
+
+        if (s.type === "title") {
+          slide.addText(s.title||"", { x:0.5, y:2.2, w:12.3, h:1.5, fontSize:44, bold:true, color:thm.text.replace("#",""), align:"center", fontFace:"DM Sans" });
+          if (s.subtitle) slide.addText(s.subtitle, { x:0.5, y:4.0, w:12.3, h:0.8, fontSize:22, color:thm.sub.replace("#",""), align:"center", fontFace:"DM Sans" });
+        } else if (s.type === "quote") {
+          slide.addText(`"${s.quote||""}"`, { x:0.8, y:2.0, w:11.7, h:2.5, fontSize:26, italic:true, color:thm.accent.replace("#",""), align:"center", fontFace:"DM Sans" });
+          if (s.author) slide.addText(`— ${s.author}`, { x:0.8, y:4.7, w:11.7, h:0.5, fontSize:18, color:thm.sub.replace("#",""), align:"center" });
+        } else if (s.type === "two-col") {
+          slide.addText(s.title||"", { x:0.5, y:0.3, w:12.3, h:0.8, fontSize:28, bold:true, color:thm.text.replace("#",""), fontFace:"DM Sans" });
+          slide.addShape(pptx.ShapeType.rect, { x:0.5, y:1.15, w:12.3, h:0.04, fill:{ color:thm.accent.replace("#","") } });
+          if (s.left?.heading) slide.addText(s.left.heading, { x:0.5, y:1.4, w:5.9, h:0.5, fontSize:18, bold:true, color:thm.accent.replace("#","") });
+          (s.left?.bullets||[]).forEach((b,bi) => slide.addText(`• ${b}`, { x:0.5, y:2.0+bi*0.6, w:5.9, h:0.55, fontSize:15, color:thm.sub.replace("#","") }));
+          if (s.right?.heading) slide.addText(s.right.heading, { x:6.9, y:1.4, w:5.9, h:0.5, fontSize:18, bold:true, color:thm.accent.replace("#","") });
+          (s.right?.bullets||[]).forEach((b,bi) => slide.addText(`• ${b}`, { x:6.9, y:2.0+bi*0.6, w:5.9, h:0.55, fontSize:15, color:thm.sub.replace("#","") }));
+        } else {
+          slide.addText(s.title||"", { x:0.5, y:0.3, w:12.3, h:0.8, fontSize:30, bold:true, color:thm.text.replace("#",""), fontFace:"DM Sans" });
+          slide.addShape(pptx.ShapeType.rect, { x:0.5, y:1.15, w:12.3, h:0.05, fill:{ color:thm.accent.replace("#","") } });
+          (s.bullets||[]).forEach((b,bi) => {
+            slide.addText(`• ${b}`, { x:0.6, y:1.4+bi*0.7, w:12.1, h:0.65, fontSize:17, color:thm.sub.replace("#",""), fontFace:"DM Sans" });
+          });
+        }
+      });
+
+      await pptx.writeFile({ fileName: (file.presentationTitle || "Presentation") + ".pptx" });
+    } catch(e) { console.error("PPTX export error:", e); alert("Export failed: " + e.message); }
+    setExporting(false);
+  };
+
+  return (
+    <div style={{ fontFamily:"'DM Sans',sans-serif" }}>
+      {/* Header */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, flexWrap:"wrap", gap:12 }}>
+        <div>
+          <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:24, fontWeight:800, color:C.text, margin:0 }}>AI Presentation</h2>
+          <p style={{ margin:"4px 0 0", fontSize:13, color:C.muted }}>Generate a beautiful slide deck from any topic or file</p>
+        </div>
+        {slides.length > 0 && (
+          <div style={{ display:"flex", gap:8 }}>
+            <button onClick={exportPDF} disabled={exporting}
+              style={{ display:"flex", alignItems:"center", gap:6, padding:"9px 18px", borderRadius:10, border:`1.5px solid ${C.border}`, background:C.surface, color:C.text, fontSize:13, fontWeight:600, cursor:"pointer" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              Export PDF
+            </button>
+            <button onClick={exportPPTX} disabled={exporting}
+              style={{ display:"flex", alignItems:"center", gap:6, padding:"9px 18px", borderRadius:10, border:"none", background:"linear-gradient(135deg,#7C5CFC,#3D8EF8)", color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer", boxShadow:"0 3px 10px rgba(124,92,252,.3)" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              {exporting ? "Exporting…" : "Export PPTX"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Generator controls */}
+      <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:16, padding:"20px 22px", marginBottom:20 }}>
+        <div style={{ display:"flex", gap:12, marginBottom:16, flexWrap:"wrap" }}>
+          <input value={topic} onChange={e=>setTopic(e.target.value)}
+            onKeyDown={e=>{ if(e.key==="Enter") generate(); }}
+            placeholder="Topic or title (leave blank to use file content)…"
+            style={{ flex:1, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 14px", fontSize:14, outline:"none", color:C.text, background:C.bg, fontFamily:"'DM Sans',sans-serif", minWidth:200 }}
+            onFocus={e=>e.target.style.borderColor=C.accent}
+            onBlur={e=>e.target.style.borderColor=C.border}/>
+          <select value={slideCount} onChange={e=>setSlideCount(+e.target.value)}
+            style={{ border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 12px", fontSize:13, color:C.text, background:C.bg, outline:"none", cursor:"pointer" }}>
+            {[5,8,10,12,15,20].map(n=><option key={n} value={n}>{n} slides</option>)}
+          </select>
+          <button onClick={generate} disabled={generating}
+            style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 22px", borderRadius:10, border:"none", background:generating?"#ccc":"linear-gradient(135deg,#7C5CFC,#3D8EF8)", color:"#fff", fontSize:14, fontWeight:700, cursor:generating?"not-allowed":"pointer", boxShadow:generating?"none":"0 3px 12px rgba(124,92,252,.3)", whiteSpace:"nowrap" }}>
+            {generating ? <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Generating…</> : <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Generate</>}
+          </button>
+        </div>
+        {/* Theme picker */}
+        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+          <span style={{ fontSize:11, fontWeight:700, color:C.muted, letterSpacing:.8, textTransform:"uppercase", flexShrink:0 }}>Theme</span>
+          {THEMES.map(t=>(
+            <button key={t.id} onClick={()=>setTheme(t.id)}
+              style={{ display:"flex", alignItems:"center", gap:6, padding:"5px 12px", borderRadius:20, border:`2px solid ${theme===t.id?C.accent:C.border}`, background:theme===t.id?C.accentL:"transparent", cursor:"pointer", fontSize:12, fontWeight:600, color:theme===t.id?C.accent:C.muted, transition:"all .12s" }}>
+              <span style={{ width:12, height:12, borderRadius:"50%", background:t.bg, border:"1.5px solid rgba(255,255,255,.3)", flexShrink:0, display:"inline-block" }}/>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Slide preview grid */}
+      {slides.length === 0 && !generating && (
+        <div style={{ textAlign:"center", padding:"60px 24px", color:C.muted }}>
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={C.border} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{marginBottom:16}}><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          <p style={{ fontSize:16, fontWeight:600, color:C.text, marginBottom:6 }}>No slides yet</p>
+          <p style={{ fontSize:13, color:C.muted }}>Enter a topic above and click Generate to create your presentation</p>
+        </div>
+      )}
+
+      {slides.length > 0 && (
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))", gap:16 }}>
+          {slides.map((s, idx) => {
+            const thm = currentTheme;
+            const isEditing = editIdx === idx;
+            return (
+              <div key={idx} style={{ borderRadius:14, overflow:"hidden", boxShadow:"0 4px 20px rgba(0,0,0,.12)", cursor:"pointer", border:`2px solid ${isEditing?C.accent:"transparent"}`, transition:"border-color .15s" }}
+                onClick={()=>{ setEditIdx(isEditing?null:idx); setEditVal({...s}); }}>
+                {/* Slide preview */}
+                <div style={{ background:thm.bg, padding:"20px 22px", minHeight:180, position:"relative", fontFamily:"'DM Sans',sans-serif" }}>
+                  <div style={{ position:"absolute", bottom:0, left:0, right:0, height:3, background:thm.accent }}/>
+                  <span style={{ position:"absolute", top:10, right:12, fontSize:10, color:thm.sub, opacity:.6 }}>{idx+1}/{slides.length}</span>
+                  {s.type === "title" ? (
+                    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:160, textAlign:"center" }}>
+                      <p style={{ fontSize:20, fontWeight:900, color:thm.text, margin:"0 0 8px", lineHeight:1.2 }}>{s.title}</p>
+                      {s.subtitle && <p style={{ fontSize:13, color:thm.sub, margin:0 }}>{s.subtitle}</p>}
+                    </div>
+                  ) : s.type === "quote" ? (
+                    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:160, textAlign:"center", padding:"0 8px" }}>
+                      <p style={{ fontSize:14, fontStyle:"italic", color:thm.accent, margin:"0 0 10px", lineHeight:1.4 }}>"{s.quote}"</p>
+                      {s.author && <p style={{ fontSize:11, color:thm.sub }}>— {s.author}</p>}
+                    </div>
+                  ) : s.type === "two-col" ? (
+                    <>
+                      <p style={{ fontSize:15, fontWeight:800, color:thm.text, margin:"0 0 10px", borderBottom:`2px solid ${thm.accent}`, paddingBottom:6 }}>{s.title}</p>
+                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                        <div><p style={{ fontSize:11, fontWeight:700, color:thm.accent, margin:"0 0 4px" }}>{s.left?.heading}</p>{(s.left?.bullets||[]).slice(0,3).map((b,bi)=><p key={bi} style={{ fontSize:10, color:thm.sub, margin:"2px 0" }}>• {b}</p>)}</div>
+                        <div><p style={{ fontSize:11, fontWeight:700, color:thm.accent, margin:"0 0 4px" }}>{s.right?.heading}</p>{(s.right?.bullets||[]).slice(0,3).map((b,bi)=><p key={bi} style={{ fontSize:10, color:thm.sub, margin:"2px 0" }}>• {b}</p>)}</div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p style={{ fontSize:15, fontWeight:800, color:thm.text, margin:"0 0 10px", borderBottom:`2px solid ${thm.accent}`, paddingBottom:6 }}>{s.title}</p>
+                      {(s.bullets||[]).slice(0,4).map((b,bi)=><p key={bi} style={{ fontSize:11, color:thm.sub, margin:"4px 0" }}>• {b}</p>)}
+                    </>
+                  )}
+                </div>
+                {/* Edit panel */}
+                {isEditing && (
+                  <div style={{ background:C.surface, padding:"14px 16px", borderTop:`1px solid ${C.border}` }} onClick={e=>e.stopPropagation()}>
+                    <input value={editVal.title||""} onChange={e=>setEditVal(v=>({...v,title:e.target.value}))}
+                      placeholder="Slide title"
+                      style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:8, padding:"7px 10px", fontSize:13, outline:"none", color:C.text, background:C.bg, marginBottom:8, boxSizing:"border-box" }}/>
+                    {(editVal.type==="content"||editVal.type==="summary") && (
+                      <textarea value={(editVal.bullets||[]).join("\n")} onChange={e=>setEditVal(v=>({...v,bullets:e.target.value.split("\n")}))}
+                        placeholder="One bullet per line"
+                        rows={4}
+                        style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:8, padding:"7px 10px", fontSize:12, outline:"none", color:C.text, background:C.bg, resize:"vertical", marginBottom:8, boxSizing:"border-box" }}/>
+                    )}
+                    <div style={{ display:"flex", gap:6 }}>
+                      <button onClick={()=>{ const ns=[...slides]; ns[idx]=editVal; setSlides(ns); onUpdate({...file,presentation:ns}); setEditIdx(null); }}
+                        style={{ flex:2, padding:"7px", background:C.accent, color:"#fff", border:"none", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>Save</button>
+                      <button onClick={()=>{ const ns=slides.filter((_,i)=>i!==idx); setSlides(ns); onUpdate({...file,presentation:ns}); setEditIdx(null); }}
+                        style={{ flex:1, padding:"7px", background:"transparent", color:C.muted, border:`1px solid ${C.border}`, borderRadius:8, fontSize:12, cursor:"pointer" }}>Delete</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function GameTab({ file }) {
