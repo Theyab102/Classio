@@ -1145,22 +1145,29 @@ const GS = `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@3
 /* ── Tablet portrait ── */
 @media(min-width:601px) and (max-width:900px) and (orientation:portrait){
   .notes-split{flex-direction:column!important}
-  .notes-ai-panel{width:100%!important;min-width:unset!important;max-height:340px}
+  .notes-ai-panel{width:100%!important;min-width:unset!important;max-height:320px!important;position:relative!important;top:auto!important}
   .cards-grid{grid-template-columns:1fr 1fr!important}
   .game-grid{grid-template-columns:1fr 1fr 1fr!important}
   .quick-actions{grid-template-columns:1fr 1fr!important}
   .view-split{flex-direction:column!important}
-  .view-ai-panel{width:100%!important;height:300px!important;border-left:none!important;border-top:1px solid var(--border)}
+  .view-ai-panel{width:100%!important;height:280px!important;border-left:none!important;border-top:1px solid var(--border)}
   .file-list-actions{flex-wrap:wrap}
+  /* Presentation grid 2 cols on tablet portrait */
+  .pres-grid{grid-template-columns:1fr 1fr!important}
+  /* Notes toolbar wraps */
+  .notes-toolbar{gap:8px!important}
+  .notes-toolbar-right{gap:6px!important;flex-wrap:wrap!important}
 }
 
 /* ── Tablet landscape ── */
 @media(min-width:601px) and (max-width:1024px) and (orientation:landscape){
-  .notes-split{gap:12px!important}
-  .notes-ai-panel{width:260px!important;min-width:240px!important}
+  .notes-split{gap:0!important}
+  .notes-ai-panel{width:280px!important;min-width:240px!important;position:relative!important;top:auto!important}
   .cards-grid{grid-template-columns:1fr 1fr 1fr!important}
   .sidebar-desktop{width:52px!important}
   .main-content{margin-left:52px!important}
+  /* Presentation grid 2 cols */
+  .pres-grid{grid-template-columns:1fr 1fr!important}
 }
 
 /* ── Phone portrait ── */
@@ -1177,10 +1184,24 @@ const GS = `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@3
   .folder-file-row{flex-wrap:wrap!important}
   .folder-file-actions{width:100%!important;justify-content:flex-end!important;margin-top:4px}
   .view-split{flex-direction:column!important}
-  .view-ai-panel{width:100%!important;max-height:260px;border-left:none!important;border-top:1px solid rgba(255,255,255,.1)}
+  .view-ai-panel{width:100%!important;max-height:240px;border-left:none!important;border-top:1px solid rgba(255,255,255,.1)}
   .modal-inner{border-radius:18px 18px 0 0!important;position:fixed!important;bottom:0!important;left:0!important;right:0!important;width:100%!important;max-width:100%!important}
-  .notes-toolbar{flex-wrap:wrap!important;gap:6px!important}
-  .notes-toolbar-right{flex-wrap:wrap!important;gap:6px!important}
+  .notes-toolbar{flex-wrap:wrap!important;gap:6px!important;padding:8px 14px!important}
+  .notes-toolbar-right{flex-wrap:wrap!important;gap:5px!important}
+  /* Presentation single col on phone */
+  .pres-grid{grid-template-columns:1fr!important}
+  /* Presentation controls stack */
+  .pres-controls{flex-direction:column!important;gap:8px!important}
+  /* Fix header buttons off-screen on small phones */
+  .app-header{gap:6px!important;padding:0 10px!important}
+  .app-header button{font-size:11px!important;padding:4px 7px!important}
+  /* Quick actions 2 col */
+  .quick-action-grid{grid-template-columns:1fr 1fr!important}
+  /* Fix stretched cards */
+  .sq-card{min-height:unset!important}
+  /* Note style pills wrap properly */
+  .note-style-row{overflow-x:auto!important;flex-wrap:nowrap!important;-webkit-overflow-scrolling:touch!important;padding-bottom:4px!important}
+  .note-style-row::-webkit-scrollbar{display:none!important}
 }
 
 /* ── Phone landscape ── */
@@ -3344,7 +3365,16 @@ export default function App() {
           <p style={{ fontSize:13, color:C.muted, marginBottom:16 }}>Drop your file — it appears on your dashboard instantly. Move to a folder anytime.</p>
           <DashboardDropZone onFilesAdded={(files) => {
             const inbox = folders.find(f=>f.id==="inbox") || {id:"inbox",name:"Inbox",color:"#6B4E8A",files:[]};
-            const added = Array.from(files).map(f => { const id=`fi${Date.now()}-${Math.random()}`; FILE_STORE.set(id,f); idbSave(id,f); return {id,name:f.name,type:f.type,size:f.size,colorIndex:0,notes:"",studyCards:[],uploadedAt:new Date().toLocaleDateString(),linkedFileIds:[],_fileObj:f}; });
+            const added = Array.from(files).map(f => { const id=`fi${Date.now()}-${Math.random()}`; FILE_STORE.set(id,f); idbSave(id,f);
+              // Upload to Firebase Storage for cross-device access (background)
+              if (user?.uid) {
+                const ref = storageRef(storage, `users/${user.uid}/files/${id}_${f.name}`);
+                uploadBytes(ref, f).then(() => getDownloadURL(ref)).then(url => {
+                  // Update the file entry with downloadURL so other devices can access it
+                  applyAndSave(folders.map(fo => fo.id==="inbox" ? {...fo, files:(fo.files||[]).map(fi => fi.id===id ? {...fi, downloadURL:url} : fi)} : fo));
+                }).catch(e => console.warn("Cloud upload failed:", e));
+              }
+              return {id,name:f.name,type:f.type,size:f.size,colorIndex:0,notes:"",studyCards:[],uploadedAt:new Date().toLocaleDateString(),linkedFileIds:[],_fileObj:f}; });
             setFoldersSave([{...inbox,files:[...inbox.files,...added]}, ...folders.filter(f=>f.id!=="inbox")]);
             setShowUploadModal(false);
           }} />
@@ -5619,6 +5649,7 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate, act
         const isBlank = file._isBlank || (!file._fileObj && !FILE_STORE.get(file.id));
         const effectiveTab = (isBlank && tab === "view") ? "notes" : tab;
         if (effectiveTab === "view") return <ViewTab file={file} onUpdate={onUpdate} />;
+        if (effectiveTab === "notes") return <div key="notes" className="page-fade" style={{ height:"calc(100vh - 64px)", display:"flex", flexDirection:"column", overflow:"hidden" }}><NotesTab key={file.id} file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} onTabChange={setTab} /></div>;
         return (
           <div className="page-inner" style={{ maxWidth:900, margin:"0 auto", padding:"32px 24px" }}>
             {effectiveTab==="notes" && <div key="notes" className="page-fade"><NotesTab key={file.id} file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} onTabChange={setTab} /></div>}
@@ -5801,6 +5832,36 @@ ${text}`
     {id:"highlight",svgPath:"M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"},
     {id:"eraser",   svgPath:"M20 20H7L3 16l10-10 7 7-3.5 3.5M6.5 17.5l5-5"},
   ];
+
+  // Try to load from cloud downloadURL if no local file
+  const [cloudLoading, setCloudLoading] = useState(false);
+  useEffect(() => {
+    if (!fileObj && file.downloadURL && !cloudLoading) {
+      setCloudLoading(true);
+      fetch(file.downloadURL)
+        .then(r => r.blob())
+        .then(blob => {
+          const f = new File([blob], file.name, { type: file.type || blob.type });
+          FILE_STORE.set(file.id, f);
+          idbSave(file.id, f);
+          onUpdate({ ...file, _fileObj: f });
+          setCloudLoading(false);
+        })
+        .catch(() => setCloudLoading(false));
+    }
+  }, [file.id, file.downloadURL]);
+
+  if (!fileObj && cloudLoading) return (
+    <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 112px)" }}>
+      <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, height:50, flexShrink:0 }}/>
+      <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", background:C.isDark?"#111110":"#2a2a26" }}>
+        <div style={{ textAlign:"center" }}>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#7C5CFC" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{animation:"spin 1s linear infinite",marginBottom:16}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+          <p style={{ color:C.muted, fontSize:14 }}>Loading file from cloud…</p>
+        </div>
+      </div>
+    </div>
+  );
 
   if (!fileObj) return (
     <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 112px)" }}>
@@ -7200,10 +7261,9 @@ Otherwise respond normally with formatted text.`;
   };
 
   return (
-    <div style={{ width:360, minWidth:300, flexShrink:0, display:"flex", flexDirection:"column",
-      background:T.surface, borderLeft:`1px solid ${T.border}`, marginLeft:6,
-      borderRadius:16, overflow:"hidden", border:`1px solid ${T.border}`,
-      position:"sticky", top:16, maxHeight:"calc(100vh - 140px)" }}>
+    <div className="notes-ai-panel" style={{ width:360, minWidth:300, flexShrink:0, display:"flex", flexDirection:"column",
+      background:T.surface, borderLeft:`1px solid ${T.border}`,
+      overflow:"hidden", height:"100%" }}>
 
       {/* Quizzes + Flashcards cards — always visible at top */}
       <div style={{ padding:"16px 14px 0", flexShrink:0 }}>
@@ -7835,11 +7895,11 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
   const isRTL = lang.startsWith("ar");
 
   return (
-    <div dir={isRTL ? "rtl" : "ltr"}>
+    <div dir={isRTL ? "rtl" : "ltr"} style={{ display:"flex", flexDirection:"column", height:"100%", overflow:"hidden" }}>
 
-      {/* ── Top toolbar — Turbo style ─────────────────────────────────────── */}
-      <div className="notes-toolbar" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:10 }}>
-        <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:isMobile?20:24, fontWeight:800, color:C.text, margin:0 }}>Notes</h2>
+      {/* ── Top toolbar — fixed header like ViewTab ─────────────────────────── */}
+      <div className="notes-toolbar" style={{ flexShrink:0, background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"10px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8, overflowX:"auto" }}>
+        <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:isMobile?18:20, fontWeight:800, color:C.text, margin:0 }}>Notes</h2>
 
         <div className="notes-toolbar-right" style={{ display:"flex", gap:7, flexWrap:"wrap", alignItems:"center" }}>
 
@@ -7940,8 +8000,8 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
       )}
 
       {/* ── Note style pills — inline compact row like Turbo AI ── */}
-      <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:"10px 14px", marginBottom:14 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+      <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"10px 24px", flexShrink:0 }}>
+        <div className="note-style-row" style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
           <span style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:.8, textTransform:"uppercase", flexShrink:0 }}>NOTE STYLE</span>
           {!useCustomStyle && NOTE_STYLES.map(s => (
             <button key={s.id} onClick={() => setNoteStyle(s.id)} title={s.desc}
@@ -7990,10 +8050,10 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
       )}
 
       {/* ── Turbo AI split pane: notes left, AI panel right ── */}
-      <div className="notes-split" style={{ display:"flex", gap:20, alignItems:"flex-start", minHeight:"calc(100vh - 320px)" }}>
+      <div className="notes-split" style={{ flex:1, display:"flex", gap:0, alignItems:"stretch", overflow:"hidden" }}>
 
-        {/* Left — notes area */}
-        <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:10 }}>
+        {/* Left — notes area: scrollable */}
+        <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:10, overflowY:"auto", padding:"24px 24px 24px 24px" }}>
           {notes.trim() ? (
             <NotesViewer
               notes={notes}
@@ -8007,7 +8067,7 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
             <textarea value={notes} onChange={e => { setNotes(e.target.value); setUnsaved(true); }}
               dir={isRTL ? "rtl" : "ltr"}
               placeholder="Click AI Generate to create notes. Tables will appear inline inside your notes."
-              style={{ width:"100%", flex:1, minHeight:480, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"20px 22px", fontSize:15, lineHeight:1.9, outline:"none", resize:"none", color:C.text, background:C.surface, fontFamily:"'DM Sans',sans-serif", direction:isRTL?"rtl":"ltr", boxSizing:"border-box" }}/>
+              style={{ width:"100%", minHeight:520, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"20px 22px", fontSize:15, lineHeight:1.9, outline:"none", resize:"none", color:C.text, background:C.surface, fontFamily:"'DM Sans',sans-serif", direction:isRTL?"rtl":"ltr", boxSizing:"border-box" }}/>
           )}
           {notes.trim() && (
             <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
@@ -10103,13 +10163,16 @@ async function aiCheckAnswer(question, correct, userAnswer) {
 function PresentationTab({ file, onUpdate }) {
   const T = useTheme();
   const [topic, setTopic] = useState("");
+  const [stylePrompt, setStylePrompt] = useState("");
   const [slides, setSlides] = useState(file.presentation || []);
   const [generating, setGenerating] = useState(false);
   const [slideCount, setSlideCount] = useState(8);
+  const [customSlideCount, setCustomSlideCount] = useState("");
   const [theme, setTheme] = useState("modern");
   const [editIdx, setEditIdx] = useState(null);
   const [editVal, setEditVal] = useState({});
   const [exporting, setExporting] = useState(false);
+  const [showStyleInput, setShowStyleInput] = useState(false);
 
   const THEMES = [
     { id:"modern",    label:"Modern",    bg:"#1e1b4b", accent:"#818cf8", text:"#f8fafc", sub:"#cbd5e1" },
@@ -10130,45 +10193,30 @@ function PresentationTab({ file, onUpdate }) {
       const context = fileText ? `File content:\n${fileText.slice(0, 10000)}` : "";
       const topicStr = topic.trim() || file.name;
 
+      const finalCount = customSlideCount ? (parseInt(customSlideCount)||slideCount) : slideCount;
+      const styleGuide = stylePrompt.trim() ? `STYLE: ${stylePrompt.trim()}` : "Professional, educational, clear structure.";
       const raw = await callClaude(
-        `You are an expert presentation designer. Create a professional, engaging presentation.
-Return ONLY valid JSON — no markdown, no explanation.
-Format:
+        `You are an expert presentation designer. Return ONLY valid JSON, no markdown.
+${styleGuide}
+JSON format:
 {
   "title": "Presentation Title",
   "slides": [
-    {
-      "type": "title",
-      "title": "Main Title",
-      "subtitle": "Subtitle or tagline"
-    },
-    {
-      "type": "content",
-      "title": "Slide Title",
-      "bullets": ["Key point 1", "Key point 2", "Key point 3"],
-      "note": "Optional speaker note"
-    },
-    {
-      "type": "two-col",
-      "title": "Comparison",
-      "left": { "heading": "Left Side", "bullets": ["Point A", "Point B"] },
-      "right": { "heading": "Right Side", "bullets": ["Point X", "Point Y"] }
-    },
-    {
-      "type": "quote",
-      "quote": "An inspiring or key quote from the content",
-      "author": "Source or attribution"
-    },
-    {
-      "type": "summary",
-      "title": "Key Takeaways",
-      "bullets": ["Takeaway 1", "Takeaway 2", "Takeaway 3"]
-    }
+    { "type": "title", "title": "Main Title", "subtitle": "Subtitle", "imageSearch": "relevant search term" },
+    { "type": "content", "title": "Slide Title", "bullets": ["Point 1", "Point 2", "Point 3"], "imageSearch": "search term", "note": "Speaker note" },
+    { "type": "two-col", "title": "Comparison", "left": { "heading": "Left", "bullets": ["A","B"] }, "right": { "heading": "Right", "bullets": ["X","Y"] }, "imageSearch": "term" },
+    { "type": "quote", "quote": "Key quote", "author": "Source", "imageSearch": "term" },
+    { "type": "image", "title": "Visual Title", "imageSearch": "very specific descriptive term", "caption": "Caption" },
+    { "type": "summary", "title": "Key Takeaways", "bullets": ["T1","T2","T3"], "imageSearch": "term" }
   ]
 }
-Slide types to use: title (1 slide), content (most slides), two-col (for comparisons), quote (1-2 slides), summary (last slide).
-Make exactly ${slideCount} slides total. Be comprehensive and educational.`,
-        `Topic: "${topicStr}"\n${context}\n\nCreate a ${slideCount}-slide presentation covering all key concepts thoroughly.`,
+Slide types: title(1), content(most), two-col(comparisons), quote(1-2), image(1-2), summary(last).
+imageSearch: specific terms like "nuclear fission diagram", "DNA helix structure", "solar system planets".
+Make EXACTLY ${finalCount} slides. Comprehensive and educational.`,
+        `Topic: "${topicStr}"
+${context}
+${stylePrompt.trim() ? `Style: "${stylePrompt.trim()}"` : ""}
+Create a ${finalCount}-slide presentation.`,
         4000
       );
       const clean = raw.replace(/```json|```/g, "").trim();
@@ -10285,6 +10333,26 @@ Make exactly ${slideCount} slides total. Be comprehensive and educational.`,
     setExporting(false);
   };
 
+
+  // Fetch image from Wikipedia for a slide
+  const [slideImages, setSlideImages] = useState({});
+  useEffect(() => {
+    slides.forEach((s, idx) => {
+      if (s.imageSearch && !slideImages[idx]) {
+        const term = encodeURIComponent(s.imageSearch.slice(0, 60));
+        fetch(`https://en.wikipedia.org/w/api.php?action=query&prop=pageimages&format=json&piprop=thumbnail&pithumbsize=400&titles=${term}&origin=*`)
+          .then(r => r.json())
+          .then(data => {
+            const pages = data?.query?.pages || {};
+            const page = Object.values(pages)[0];
+            const url = page?.thumbnail?.source;
+            if (url) setSlideImages(prev => ({...prev, [idx]: url}));
+          })
+          .catch(() => {});
+      }
+    });
+  }, [slides]);
+
   return (
     <div style={{ fontFamily:"'DM Sans',sans-serif" }}>
       {/* Header */}
@@ -10311,22 +10379,51 @@ Make exactly ${slideCount} slides total. Be comprehensive and educational.`,
 
       {/* Generator controls */}
       <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:16, padding:"20px 22px", marginBottom:20 }}>
-        <div style={{ display:"flex", gap:12, marginBottom:16, flexWrap:"wrap" }}>
+        {/* Row 1: topic + generate */}
+        <div style={{ display:"flex", gap:10, marginBottom:10, flexWrap:"wrap" }}>
           <input value={topic} onChange={e=>setTopic(e.target.value)}
             onKeyDown={e=>{ if(e.key==="Enter") generate(); }}
             placeholder="Topic or title (leave blank to use file content)…"
-            style={{ flex:1, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 14px", fontSize:14, outline:"none", color:C.text, background:C.bg, fontFamily:"'DM Sans',sans-serif", minWidth:200 }}
+            style={{ flex:1, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 14px", fontSize:14, outline:"none", color:C.text, background:C.bg, fontFamily:"'DM Sans',sans-serif", minWidth:180 }}
             onFocus={e=>e.target.style.borderColor=C.accent}
             onBlur={e=>e.target.style.borderColor=C.border}/>
-          <select value={slideCount} onChange={e=>setSlideCount(+e.target.value)}
-            style={{ border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 12px", fontSize:13, color:C.text, background:C.bg, outline:"none", cursor:"pointer" }}>
-            {[5,8,10,12,15,20].map(n=><option key={n} value={n}>{n} slides</option>)}
-          </select>
           <button onClick={generate} disabled={generating}
             style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 22px", borderRadius:10, border:"none", background:generating?"#ccc":"linear-gradient(135deg,#7C5CFC,#3D8EF8)", color:"#fff", fontSize:14, fontWeight:700, cursor:generating?"not-allowed":"pointer", boxShadow:generating?"none":"0 3px 12px rgba(124,92,252,.3)", whiteSpace:"nowrap" }}>
             {generating ? <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Generating…</> : <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Generate</>}
           </button>
         </div>
+        {/* Row 2: slide count + style */}
+        <div style={{ display:"flex", gap:10, marginBottom:10, flexWrap:"wrap", alignItems:"center" }}>
+          <span style={{ fontSize:11, fontWeight:700, color:C.muted, letterSpacing:.7, textTransform:"uppercase", flexShrink:0 }}>Slides</span>
+          <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+            {[5,8,10,12,15,20].map(n=>(
+              <button key={n} onClick={()=>{setSlideCount(n);setCustomSlideCount("");}}
+                style={{ padding:"5px 12px", borderRadius:20, fontSize:12, fontWeight:700, cursor:"pointer",
+                  background:(slideCount===n&&!customSlideCount)?C.accent:"transparent",
+                  color:(slideCount===n&&!customSlideCount)?"#fff":C.muted,
+                  border:`1.5px solid ${(slideCount===n&&!customSlideCount)?C.accent:C.border}` }}>
+                {n}
+              </button>
+            ))}
+            <input type="number" min="1" max="40" value={customSlideCount}
+              onChange={e=>{setCustomSlideCount(e.target.value);}}
+              placeholder="Custom"
+              style={{ width:72, border:`1.5px solid ${customSlideCount?C.accent:C.border}`, borderRadius:10, padding:"5px 8px", fontSize:12, outline:"none", color:C.text, background:C.bg, textAlign:"center" }}/>
+          </div>
+          <button onClick={()=>setShowStyleInput(s=>!s)}
+            style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 12px", borderRadius:20, fontSize:12, fontWeight:600, cursor:"pointer",
+              border:`1.5px solid ${showStyleInput||stylePrompt?C.accent:C.border}`,
+              background:showStyleInput||stylePrompt?C.accentL:"transparent",
+              color:showStyleInput||stylePrompt?C.accent:C.muted }}>
+            ✏️ {stylePrompt ? "Style (on)" : "Custom style"}
+          </button>
+        </div>
+        {showStyleInput && (
+          <textarea value={stylePrompt} onChange={e=>setStylePrompt(e.target.value)}
+            placeholder="Describe the style, tone, or format you want — e.g. 'Dark tech theme, minimal text, use diagrams', 'Formal academic style', 'Fun and colourful for kids'…"
+            rows={2}
+            style={{ width:"100%", border:`1.5px solid ${C.accentS}`, borderRadius:10, padding:"9px 12px", fontSize:13, outline:"none", resize:"vertical", color:C.text, background:C.bg, fontFamily:"'DM Sans',sans-serif", marginBottom:6, boxSizing:"border-box" }}/>
+        )}
         {/* Theme picker */}
         <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
           <span style={{ fontSize:11, fontWeight:700, color:C.muted, letterSpacing:.8, textTransform:"uppercase", flexShrink:0 }}>Theme</span>
@@ -10350,7 +10447,7 @@ Make exactly ${slideCount} slides total. Be comprehensive and educational.`,
       )}
 
       {slides.length > 0 && (
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))", gap:16 }}>
+        <div className="pres-grid" style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))", gap:16 }}>
           {slides.map((s, idx) => {
             const thm = currentTheme;
             const isEditing = editIdx === idx;
@@ -10361,10 +10458,25 @@ Make exactly ${slideCount} slides total. Be comprehensive and educational.`,
                 <div style={{ background:thm.bg, padding:"20px 22px", minHeight:180, position:"relative", fontFamily:"'DM Sans',sans-serif" }}>
                   <div style={{ position:"absolute", bottom:0, left:0, right:0, height:3, background:thm.accent }}/>
                   <span style={{ position:"absolute", top:10, right:12, fontSize:10, color:thm.sub, opacity:.6 }}>{idx+1}/{slides.length}</span>
+                  {/* Slide image thumbnail */}
+                  {slideImages[idx] && s.type !== "title" && (
+                    <div style={{ position:"absolute", top:8, right:8, width:56, height:40, borderRadius:6, overflow:"hidden", border:`1px solid ${thm.accent}44` }}>
+                      <img src={slideImages[idx]} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={e=>{e.target.style.display="none";}}/>
+                    </div>
+                  )}
                   {s.type === "title" ? (
+                    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:160, textAlign:"center", position:"relative" }}>
+                      {slideImages[idx] && <div style={{ position:"absolute", inset:0, backgroundImage:`url(${slideImages[idx]})`, backgroundSize:"cover", backgroundPosition:"center", opacity:.15, borderRadius:4 }}/>}
+                      <p style={{ fontSize:20, fontWeight:900, color:thm.text, margin:"0 0 8px", lineHeight:1.2, position:"relative" }}>{s.title}</p>
+                      {s.subtitle && <p style={{ fontSize:13, color:thm.sub, margin:0, position:"relative" }}>{s.subtitle}</p>}
+                    </div>
+                  ) : s.type === "image" ? (
                     <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:160, textAlign:"center" }}>
-                      <p style={{ fontSize:20, fontWeight:900, color:thm.text, margin:"0 0 8px", lineHeight:1.2 }}>{s.title}</p>
-                      {s.subtitle && <p style={{ fontSize:13, color:thm.sub, margin:0 }}>{s.subtitle}</p>}
+                      {slideImages[idx]
+                        ? <img src={slideImages[idx]} alt={s.imageSearch} style={{ maxHeight:120, maxWidth:"100%", objectFit:"contain", borderRadius:6 }} onError={e=>{e.target.style.display="none";}}/>
+                        : <div style={{ width:80, height:60, background:thm.accent+"33", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center" }}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={thm.accent} strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div>
+                      }
+                      {s.title && <p style={{ fontSize:11, fontWeight:700, color:thm.text, margin:"6px 0 0" }}>{s.title}</p>}
                     </div>
                   ) : s.type === "quote" ? (
                     <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:160, textAlign:"center", padding:"0 8px" }}>
@@ -10373,7 +10485,7 @@ Make exactly ${slideCount} slides total. Be comprehensive and educational.`,
                     </div>
                   ) : s.type === "two-col" ? (
                     <>
-                      <p style={{ fontSize:15, fontWeight:800, color:thm.text, margin:"0 0 10px", borderBottom:`2px solid ${thm.accent}`, paddingBottom:6 }}>{s.title}</p>
+                      <p style={{ fontSize:15, fontWeight:800, color:thm.text, margin:"0 0 10px", borderBottom:`2px solid ${thm.accent}`, paddingBottom:6, paddingRight:slideImages[idx]?64:0 }}>{s.title}</p>
                       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
                         <div><p style={{ fontSize:11, fontWeight:700, color:thm.accent, margin:"0 0 4px" }}>{s.left?.heading}</p>{(s.left?.bullets||[]).slice(0,3).map((b,bi)=><p key={bi} style={{ fontSize:10, color:thm.sub, margin:"2px 0" }}>• {b}</p>)}</div>
                         <div><p style={{ fontSize:11, fontWeight:700, color:thm.accent, margin:"0 0 4px" }}>{s.right?.heading}</p>{(s.right?.bullets||[]).slice(0,3).map((b,bi)=><p key={bi} style={{ fontSize:10, color:thm.sub, margin:"2px 0" }}>• {b}</p>)}</div>
@@ -10381,7 +10493,7 @@ Make exactly ${slideCount} slides total. Be comprehensive and educational.`,
                     </>
                   ) : (
                     <>
-                      <p style={{ fontSize:15, fontWeight:800, color:thm.text, margin:"0 0 10px", borderBottom:`2px solid ${thm.accent}`, paddingBottom:6 }}>{s.title}</p>
+                      <p style={{ fontSize:15, fontWeight:800, color:thm.text, margin:"0 0 10px", borderBottom:`2px solid ${thm.accent}`, paddingBottom:6, paddingRight:slideImages[idx]?64:0 }}>{s.title}</p>
                       {(s.bullets||[]).slice(0,4).map((b,bi)=><p key={bi} style={{ fontSize:11, color:thm.sub, margin:"4px 0" }}>• {b}</p>)}
                     </>
                   )}
