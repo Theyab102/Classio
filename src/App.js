@@ -1049,7 +1049,7 @@ const Fmt = ({ text }) => {
 const GS = `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Fraunces:wght@400;600;700&display=swap');
 *{box-sizing:border-box;margin:0;padding:0} input,textarea,button{font-family:inherit}
 ::-webkit-scrollbar{width:6px} ::-webkit-scrollbar-thumb{background:#D8D4CF;border-radius:3px}
-.hov:hover{opacity:0.82} .card-hov:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.10)!important}
+.hov:hover{opacity:0.82} .card-hov:hover{box-shadow:0 8px 24px rgba(0,0,0,.10)!important}
 @keyframes sg-fadein{from{opacity:0;transform:translateX(-50%) translateY(-8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 .card-hov{transition:all .2s} .tab:hover{background:#F0EDE9!important} .row:hover{background:#F7F5F2!important} .row{transition:background .15s}
 
@@ -1145,29 +1145,22 @@ const GS = `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@3
 /* ── Tablet portrait ── */
 @media(min-width:601px) and (max-width:900px) and (orientation:portrait){
   .notes-split{flex-direction:column!important}
-  .notes-ai-panel{width:100%!important;min-width:unset!important;max-height:320px!important;position:relative!important;top:auto!important}
+  .notes-ai-panel{width:100%!important;min-width:unset!important;max-height:340px}
   .cards-grid{grid-template-columns:1fr 1fr!important}
   .game-grid{grid-template-columns:1fr 1fr 1fr!important}
   .quick-actions{grid-template-columns:1fr 1fr!important}
   .view-split{flex-direction:column!important}
-  .view-ai-panel{width:100%!important;height:280px!important;border-left:none!important;border-top:1px solid var(--border)}
+  .view-ai-panel{width:100%!important;height:300px!important;border-left:none!important;border-top:1px solid var(--border)}
   .file-list-actions{flex-wrap:wrap}
-  /* Presentation grid 2 cols on tablet portrait */
-  .pres-grid{grid-template-columns:1fr 1fr!important}
-  /* Notes toolbar wraps */
-  .notes-toolbar{gap:8px!important}
-  .notes-toolbar-right{gap:6px!important;flex-wrap:wrap!important}
 }
 
 /* ── Tablet landscape ── */
 @media(min-width:601px) and (max-width:1024px) and (orientation:landscape){
-  .notes-split{gap:0!important}
-  .notes-ai-panel{width:280px!important;min-width:240px!important;position:relative!important;top:auto!important}
+  .notes-split{gap:12px!important}
+  .notes-ai-panel{width:260px!important;min-width:240px!important}
   .cards-grid{grid-template-columns:1fr 1fr 1fr!important}
   .sidebar-desktop{width:52px!important}
   .main-content{margin-left:52px!important}
-  /* Presentation grid 2 cols */
-  .pres-grid{grid-template-columns:1fr 1fr!important}
 }
 
 /* ── Phone portrait ── */
@@ -1184,24 +1177,10 @@ const GS = `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@3
   .folder-file-row{flex-wrap:wrap!important}
   .folder-file-actions{width:100%!important;justify-content:flex-end!important;margin-top:4px}
   .view-split{flex-direction:column!important}
-  .view-ai-panel{width:100%!important;max-height:240px;border-left:none!important;border-top:1px solid rgba(255,255,255,.1)}
+  .view-ai-panel{width:100%!important;max-height:260px;border-left:none!important;border-top:1px solid rgba(255,255,255,.1)}
   .modal-inner{border-radius:18px 18px 0 0!important;position:fixed!important;bottom:0!important;left:0!important;right:0!important;width:100%!important;max-width:100%!important}
-  .notes-toolbar{flex-wrap:wrap!important;gap:6px!important;padding:8px 14px!important}
-  .notes-toolbar-right{flex-wrap:wrap!important;gap:5px!important}
-  /* Presentation single col on phone */
-  .pres-grid{grid-template-columns:1fr!important}
-  /* Presentation controls stack */
-  .pres-controls{flex-direction:column!important;gap:8px!important}
-  /* Fix header buttons off-screen on small phones */
-  .app-header{gap:6px!important;padding:0 10px!important}
-  .app-header button{font-size:11px!important;padding:4px 7px!important}
-  /* Quick actions 2 col */
-  .quick-action-grid{grid-template-columns:1fr 1fr!important}
-  /* Fix stretched cards */
-  .sq-card{min-height:unset!important}
-  /* Note style pills wrap properly */
-  .note-style-row{overflow-x:auto!important;flex-wrap:nowrap!important;-webkit-overflow-scrolling:touch!important;padding-bottom:4px!important}
-  .note-style-row::-webkit-scrollbar{display:none!important}
+  .notes-toolbar{flex-wrap:wrap!important;gap:6px!important}
+  .notes-toolbar-right{flex-wrap:wrap!important;gap:6px!important}
 }
 
 /* ── Phone landscape ── */
@@ -1863,9 +1842,9 @@ const DARK_CSS = `
     background:#fff; border-radius:20px;
     box-shadow:0 4px 24px rgba(108,92,231,.10);
     border:1px solid #EAE6E1;
-    transition:box-shadow .15s,transform .15s;
+    transition:box-shadow .15s;
   }
-  .sq-card:hover { box-shadow:0 8px 32px rgba(108,92,231,.16); transform:translateY(-1px); }
+  .sq-card:hover { box-shadow:0 8px 32px rgba(108,92,231,.16); }
   body.classio-dark .sq-card { background:#252520; border-color:#2E2E28; box-shadow:0 4px 20px rgba(0,0,0,.5); }
 
   /* ── Animations ── */
@@ -2010,7 +1989,7 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
     if (context === "document") {
       const mobileTabs = FILE_TABS.slice(0, 5); // View, Notes, Voice, Cards, AI
       return (
-        <div className="bottom-nav" style={{ position:"fixed", bottom:0, left:0, right:0, height:56, background:T.sidebar, borderTop:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"space-around", zIndex:300, overflowX:"auto" }}>
+        <div className="bottom-nav" style={{ position:"fixed", bottom:0, left:0, right:0, height:56, background:T.sidebar, borderTop:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"space-around", zIndex:250, overflowX:"auto" }}>
           <button onClick={() => onNavigate("home")} style={{ background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:T.muted, padding:"4px 6px", flexShrink:0 }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
             <span style={{ fontSize:8, fontWeight:600 }}>Back</span>
@@ -2036,7 +2015,7 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
 
     if (context === "folder") {
       return (
-        <div className="bottom-nav" style={{ position:"fixed", bottom:0, left:0, right:0, height:56, background:T.sidebar, borderTop:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"space-around", zIndex:300 }}>
+        <div className="bottom-nav" style={{ position:"fixed", bottom:0, left:0, right:0, height:56, background:T.sidebar, borderTop:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"space-around", zIndex:250 }}>
           <button onClick={() => onNavigate("home")} style={{ background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:T.muted, padding:"4px 8px" }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
             <span style={{ fontSize:8, fontWeight:600 }}>Back</span>
@@ -2061,7 +2040,7 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
 
     // Default mobile: dashboard nav
     return (
-      <div style={{ position:"fixed", bottom:0, left:0, right:0, height:56, background:T.sidebar, borderTop:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"space-around", zIndex:300 }}>
+      <div style={{ position:"fixed", bottom:0, left:0, right:0, height:56, background:T.sidebar, borderTop:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"space-around", zIndex:250 }}>
         {NAV.slice(0,3).map(n => {
           const active =
             (n.id==="home" && (screen==="home"||screen==="folder") && homeTab!=="about" && homeTab!=="settings") ||
@@ -2139,7 +2118,7 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
   };
 
   return (
-    <div style={{ width:sideW, minWidth:sideW, height:"100vh", background:T.sidebar, borderRight:`1px solid ${T.border}`, display:"flex", flexDirection:"column", position:"fixed", left:0, top:0, zIndex:200, transition:"width .2s ease", overflow:"hidden" }}>
+    <div style={{ width:sideW, minWidth:sideW, height:"100vh", background:T.sidebar, borderRight:`1px solid ${T.border}`, display:"flex", flexDirection:"column", position:"fixed", left:0, top:0, zIndex:150, transition:"width .2s ease", overflow:"hidden" }}>
       {/* Logo */}
       <div style={{ padding:"16px 0 12px", display:"flex", flexDirection:"column", alignItems:"center", borderBottom:`1px solid ${T.border}`, cursor:"pointer" }} onClick={()=>setExpanded(e=>!e)}>
         <div style={{ width:36, height:36, background:"linear-gradient(135deg,#7C5CFC,#3D5A80)", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center" }}>
@@ -2509,7 +2488,7 @@ RULES:
 function MoveFileDropdown({ file, folders, T, onMove }) {
   const [open, setOpen] = useState(false);
   return (
-    <div style={{ position:"relative" }}>
+    <div style={{ position:"relative", zIndex: open ? 1100 : "auto" }}>
       <button onClick={()=>setOpen(o=>!o)} title="Move to folder"
         style={{ display:"flex", alignItems:"center", gap:4, background:T.accentL, color:T.accent, border:`1px solid ${T.accentS}`, borderRadius:8, padding:"5px 10px", fontSize:11, fontWeight:600, cursor:"pointer" }}>
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
@@ -2568,7 +2547,7 @@ function FileActionsMenu({ file, folderId, folders, onMove, onDelete, onOpen }) 
   const targets = (folders||[]).filter(f => f.id !== folderId);
 
   return (
-    <div style={{ position:"relative" }} onClick={e=>e.stopPropagation()}>
+    <div style={{ position:"relative", zIndex: open ? 1100 : "auto" }} onClick={e=>e.stopPropagation()}>
       <button onClick={e=>{e.stopPropagation();setOpen(o=>!o);setShowMoveList(false);}}
         style={{ background:"none", border:`1px solid ${T.border}`, borderRadius:8, width:32, height:32,
           cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:T.muted }}
@@ -2581,7 +2560,7 @@ function FileActionsMenu({ file, folderId, folders, onMove, onDelete, onOpen }) 
       {open && (
         <div style={{ position:"absolute", right:0, top:"100%", marginTop:4, background:T.surface,
           border:`1px solid ${T.border}`, borderRadius:12, boxShadow:"0 8px 24px rgba(0,0,0,.15)",
-          zIndex:600, minWidth:160, overflow:"hidden", animation:"quickIn .12s ease" }}>
+          zIndex:1200, minWidth:160, overflow:"hidden", animation:"quickIn .12s ease" }}>
           {onOpen && <button onClick={()=>{onOpen();setOpen(false);}}
             style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"10px 14px", background:"none",
               border:"none", cursor:"pointer", textAlign:"left", fontSize:13, color:T.text, borderBottom:`1px solid ${T.border}` }}
@@ -3025,7 +3004,7 @@ export default function App() {
       />
       {showSearch && <CommandSearch folders={folders} onOpenFile={handleOpenFileFromSearch2} onClose={()=>setShowSearch(false)} />}
       {showCharacter && <CharacterModal character={character} onChange={c => { setCharacter(c); localStorage.setItem("classio_char", JSON.stringify(c)); }} onClose={() => setShowCharacter(false)} />}
-      <div style={{ flex:1, marginLeft:isMobile?0:(sidebarExpanded?220:60), marginBottom:isMobile?56:0 }}>
+      <div style={{ flex:1, marginLeft:isMobile?0:(sidebarExpanded?220:60), marginBottom:isMobile?56:0, minWidth:0, overflow:"visible" }}>
         {children}
       </div>
     </div>
@@ -3090,7 +3069,7 @@ export default function App() {
   };
 
   return (
-    <div style={{ minHeight:"100vh", background:T.bg, fontFamily:"'DM Sans',sans-serif", display:"flex", width:"100%", boxSizing:"border-box" }}>
+    <div style={{ minHeight:"100vh", background:T.bg, fontFamily:"'DM Sans',sans-serif", display:"flex", width:"100%", boxSizing:"border-box", overflow:"visible" }}>
       <style>{GS}</style>
       <style>{DARK_CSS}</style>
       {/* Sidebar */}
@@ -3365,16 +3344,7 @@ export default function App() {
           <p style={{ fontSize:13, color:C.muted, marginBottom:16 }}>Drop your file — it appears on your dashboard instantly. Move to a folder anytime.</p>
           <DashboardDropZone onFilesAdded={(files) => {
             const inbox = folders.find(f=>f.id==="inbox") || {id:"inbox",name:"Inbox",color:"#6B4E8A",files:[]};
-            const added = Array.from(files).map(f => { const id=`fi${Date.now()}-${Math.random()}`; FILE_STORE.set(id,f); idbSave(id,f);
-              // Upload to Firebase Storage for cross-device access (background)
-              if (user?.uid) {
-                const ref = storageRef(storage, `users/${user.uid}/files/${id}_${f.name}`);
-                uploadBytes(ref, f).then(() => getDownloadURL(ref)).then(url => {
-                  // Update the file entry with downloadURL so other devices can access it
-                  applyAndSave(folders.map(fo => fo.id==="inbox" ? {...fo, files:(fo.files||[]).map(fi => fi.id===id ? {...fi, downloadURL:url} : fi)} : fo));
-                }).catch(e => console.warn("Cloud upload failed:", e));
-              }
-              return {id,name:f.name,type:f.type,size:f.size,colorIndex:0,notes:"",studyCards:[],uploadedAt:new Date().toLocaleDateString(),linkedFileIds:[],_fileObj:f}; });
+            const added = Array.from(files).map(f => { const id=`fi${Date.now()}-${Math.random()}`; FILE_STORE.set(id,f); idbSave(id,f); return {id,name:f.name,type:f.type,size:f.size,colorIndex:0,notes:"",studyCards:[],uploadedAt:new Date().toLocaleDateString(),linkedFileIds:[],_fileObj:f}; });
             setFoldersSave([{...inbox,files:[...inbox.files,...added]}, ...folders.filter(f=>f.id!=="inbox")]);
             setShowUploadModal(false);
           }} />
@@ -3533,7 +3503,7 @@ function AdBanner({ sideW = 60 }) {
   // Only show ad banner on mobile phones — desktop has more screen space
   return (
     <div className="ad-banner-wrap" style={{
-      position:"fixed", bottom:0, left: window.innerWidth > 600 ? sideW : 0, right:0, zIndex:999, transition:"left .2s ease",
+      position:"fixed", bottom:0, left: window.innerWidth > 600 ? sideW : 0, right:0, zIndex:240, transition:"left .2s ease",
       height:isMobileAd ? 44 : 50, maxHeight:isMobileAd ? 44 : 50, overflow:"hidden",
       background:C.surface, borderTop:`1px solid ${C.border}`,
       display:"flex", alignItems:"center", justifyContent:"center",
@@ -3554,7 +3524,7 @@ function AdBanner({ sideW = 60 }) {
 function Header({ user, saveStatus, isGuest, onSignOut, character, onOpenCharacter, homeTab, onSetHomeTab, onOpenAI }) {
   const { isMobile } = useResponsive();
   return (
-    <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:isMobile?"0 10px":"0 16px", height:isMobile?48:56, display:"flex", alignItems:"center", gap:isMobile?6:12, width:"100%", boxSizing:"border-box", overflow:"hidden" }}>
+    <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:isMobile?"0 10px":"0 16px", height:isMobile?48:56, display:"flex", alignItems:"center", gap:isMobile?6:12, width:"100%", boxSizing:"border-box", overflow:"visible", position:"relative", zIndex:100 }}>
       {/* Logo */}
       <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
         <div style={{ width:isMobile?26:30, height:isMobile?26:30, background:C.accent, borderRadius:9, display:"flex", alignItems:"center", justifyContent:"center" }}>
@@ -5051,14 +5021,30 @@ function CharacterModal({ character, onChange, onClose }) {
   // ─────────────────────────────────────────────────────────────────────────
   // RENDER
   // ─────────────────────────────────────────────────────────────────────────
+  // Lock body scroll when modal is open and prevent click-through to sidebar
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  // Lock body scroll while open and prevent clicks falling through to sidebar
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   return (
     <div
-      onClick={onClose}
+      onMouseDown={e => { if (e.target === e.currentTarget) { e.stopPropagation(); onClose(); } }}
+      onClick={e => e.stopPropagation()}
       style={{
         position:"fixed", inset:0, zIndex:3000,
         background:"rgba(0,0,0,.6)",
         display:"flex", alignItems:"center", justifyContent:"center",
         padding:16,
+        willChange:"transform",
       }}
     >
       <div
@@ -5395,7 +5381,7 @@ function FileColorPicker({ file, onPick }) {
   const curAccent = getFileColor(file).accent;
 
   return (
-    <div style={{ position:"relative" }}>
+    <div style={{ position:"relative", zIndex: open ? 1100 : "auto" }}>
       {/* Trigger: shows current file colour */}
       <button title="Change file colour" onClick={() => setOpen(o=>!o)}
         style={{ width:26, height:26, borderRadius:"50%", background:curAccent,
@@ -5407,7 +5393,7 @@ function FileColorPicker({ file, onPick }) {
       {/* Popover */}
       {open && (
         <div onClick={e=>e.stopPropagation()}
-          style={{ position:"absolute", right:0, top:34, zIndex:800,
+          style={{ position:"absolute", right:0, top:34, zIndex:1200,
             background:"#18182a", borderRadius:18, padding:"12px",
             boxShadow:"0 12px 48px rgba(0,0,0,.55)", width:220 }}>
           {/* Preset dots */}
@@ -5515,7 +5501,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFi
       {/* Tabs */}
       {/* Tabs controlled by sidebar */}
 
-      <div className="page-inner" style={{ maxWidth:860, margin:"0 auto", padding:"32px 24px" }}>
+      <div className="page-inner" style={{ maxWidth:860, margin:"0 auto", padding:"32px 24px", overflow:"visible" }}>
         {tab === "files" && (
           <>
             <div onDragOver={e=>{e.preventDefault();setDragging(true);}} onDragLeave={()=>setDragging(false)}
@@ -5649,9 +5635,8 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate, act
         const isBlank = file._isBlank || (!file._fileObj && !FILE_STORE.get(file.id));
         const effectiveTab = (isBlank && tab === "view") ? "notes" : tab;
         if (effectiveTab === "view") return <ViewTab file={file} onUpdate={onUpdate} />;
-        if (effectiveTab === "notes") return <div key="notes" className="page-fade" style={{ height:"calc(100vh - 64px)", display:"flex", flexDirection:"column", overflow:"hidden" }}><NotesTab key={file.id} file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} onTabChange={setTab} /></div>;
         return (
-          <div className="page-inner" style={{ maxWidth:900, margin:"0 auto", padding:"32px 24px" }}>
+          <div className="page-inner" style={{ maxWidth:900, margin:"0 auto", padding:"32px 24px", overflow:"visible" }}>
             {effectiveTab==="notes" && <div key="notes" className="page-fade"><NotesTab key={file.id} file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} onTabChange={setTab} /></div>}
             {effectiveTab==="voice" && <div key="voice" className="page-fade"><VoicePodcastTab file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} /></div>}
             {effectiveTab==="cards" && <div key="cards" className="page-fade"><CardsTab file={file} onUpdate={onUpdate} /></div>}
@@ -5832,36 +5817,6 @@ ${text}`
     {id:"highlight",svgPath:"M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"},
     {id:"eraser",   svgPath:"M20 20H7L3 16l10-10 7 7-3.5 3.5M6.5 17.5l5-5"},
   ];
-
-  // Try to load from cloud downloadURL if no local file
-  const [cloudLoading, setCloudLoading] = useState(false);
-  useEffect(() => {
-    if (!fileObj && file.downloadURL && !cloudLoading) {
-      setCloudLoading(true);
-      fetch(file.downloadURL)
-        .then(r => r.blob())
-        .then(blob => {
-          const f = new File([blob], file.name, { type: file.type || blob.type });
-          FILE_STORE.set(file.id, f);
-          idbSave(file.id, f);
-          onUpdate({ ...file, _fileObj: f });
-          setCloudLoading(false);
-        })
-        .catch(() => setCloudLoading(false));
-    }
-  }, [file.id, file.downloadURL]);
-
-  if (!fileObj && cloudLoading) return (
-    <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 112px)" }}>
-      <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, height:50, flexShrink:0 }}/>
-      <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", background:C.isDark?"#111110":"#2a2a26" }}>
-        <div style={{ textAlign:"center" }}>
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#7C5CFC" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{animation:"spin 1s linear infinite",marginBottom:16}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-          <p style={{ color:C.muted, fontSize:14 }}>Loading file from cloud…</p>
-        </div>
-      </div>
-    </div>
-  );
 
   if (!fileObj) return (
     <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 112px)" }}>
@@ -6644,7 +6599,7 @@ function LangPicker({ value, onChange }) {
         </svg>
       </button>
       {open && (
-        <div style={{ position:"absolute", right:0, top:"calc(100% + 6px)", zIndex:300,
+        <div style={{ position:"absolute", right:0, top:"calc(100% + 6px)", zIndex:1200,
           background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:12,
           minWidth:180, maxHeight:260, overflowY:"auto", boxShadow:"0 8px 28px rgba(0,0,0,.12)",
           padding:"4px 0",
@@ -7261,27 +7216,31 @@ Otherwise respond normally with formatted text.`;
   };
 
   return (
-    <div className="notes-ai-panel" style={{ width:360, minWidth:300, flexShrink:0, display:"flex", flexDirection:"column",
-      background:T.surface, borderLeft:`1px solid ${T.border}`,
-      overflow:"hidden", height:"100%" }}>
+    <div style={{ width:340, minWidth:280, flexShrink:0, display:"flex", flexDirection:"column",
+      background:T.surface, borderLeft:`1px solid ${T.border}`, marginLeft:8,
+      borderRadius:18, overflow:"hidden", border:`1px solid ${T.border}`,
+      position:"sticky", top:16, maxHeight:"calc(100vh - 140px)",
+      boxShadow:"0 4px 24px rgba(0,0,0,.06)" }}>
 
       {/* Quizzes + Flashcards cards — always visible at top */}
-      <div style={{ padding:"16px 14px 0", flexShrink:0 }}>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:0 }}>
+      <div style={{ padding:"14px 12px 10px", flexShrink:0, borderBottom:`1px solid ${T.border}` }}>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
           {[
-            {label:"Quizzes",icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,badge:"Popular",desc:"Test your knowledge",tab:"game"},
-            {label:"Flashcards",icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>,badge:null,desc:"Study with active recall",tab:"cards"}
+            {label:"Quizzes",icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,badge:"Popular",desc:"Test your knowledge",tab:"game"},
+            {label:"Flashcards",icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>,badge:null,desc:"Study with active recall",tab:"cards"}
           ].map(q=>(
             <button key={q.label} onClick={()=>onTabChange&&onTabChange(q.tab)}
-              style={{ display:"flex", flexDirection:"column", gap:4, padding:"14px 12px", borderRadius:14,
+              style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 10px", borderRadius:12,
                 border:`1px solid ${T.border}`, background:T.bg, cursor:"pointer", textAlign:"left",
                 position:"relative", transition:"border-color .15s" }}
               onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent}
               onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-              {q.badge && <span style={{ position:"absolute", top:7, right:7, background:"#10b981", color:"#fff", fontSize:9, fontWeight:700, padding:"2px 7px", borderRadius:20 }}>{q.badge}</span>}
-              <span style={{ display:"flex" }}>{q.icon}</span>
-              <span style={{ fontSize:13, fontWeight:700, color:T.text, marginTop:4 }}>{q.label}</span>
-              <span style={{ fontSize:11, color:T.muted }}>{q.desc}</span>
+              {q.badge && <span style={{ position:"absolute", top:5, right:5, background:"#10b981", color:"#fff", fontSize:8, fontWeight:700, padding:"1px 5px", borderRadius:20 }}>{q.badge}</span>}
+              <span style={{ display:"flex", flexShrink:0 }}>{q.icon}</span>
+              <div>
+                <div style={{ fontSize:12, fontWeight:700, color:T.text }}>{q.label}</div>
+                <div style={{ fontSize:10, color:T.muted }}>{q.desc}</div>
+              </div>
             </button>
           ))}
         </div>
@@ -7289,15 +7248,15 @@ Otherwise respond normally with formatted text.`;
 
       {/* Messages or greeting */}
       {msgs.length === 0 ? (
-        <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"24px 20px 0", textAlign:"center" }}>
-          <p style={{ fontSize:28, fontWeight:800, color:T.text, margin:"0 0 8px", fontFamily:"'Fraunces',serif", lineHeight:1.2 }}>Hey, I'm<br/>your AI</p>
-          <p style={{ fontSize:14, color:T.muted, margin:0, lineHeight:1.5 }}>I can work with you on your notes and answer any questions!</p>
+        <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"20px 16px", textAlign:"center" }}>
+          <p style={{ fontSize:26, fontWeight:800, color:T.text, margin:"0 0 8px", fontFamily:"'Fraunces',serif", lineHeight:1.2 }}>Hey, I'm<br/>your AI</p>
+          <p style={{ fontSize:13, color:T.muted, margin:0, lineHeight:1.5 }}>I can work with you on your notes and answer any questions!</p>
         </div>
       ) : (
-        <div style={{ flex:1, overflowY:"auto", padding:"14px 14px 0", display:"flex", flexDirection:"column", gap:10 }}>
+        <div style={{ flex:1, overflowY:"auto", padding:"12px 12px 0", display:"flex", flexDirection:"column", gap:8 }}>
           {msgs.map((m,i)=>(
             <div key={i} style={{ display:"flex", justifyContent:m.role==="user"?"flex-end":"flex-start" }}>
-              <div style={{ maxWidth:"92%", padding:m.role==="user"?"9px 14px":"10px 14px", borderRadius:m.role==="user"?14:14, fontSize:13, lineHeight:1.6,
+              <div style={{ maxWidth:"90%", padding:"8px 12px", borderRadius:12, fontSize:13, lineHeight:1.6,
                 background:m.role==="user"?T.accent:T.bg, color:m.role==="user"?"#fff":T.text,
                 border:m.role==="user"?"none":`1px solid ${T.border}` }}>
                 {m.content === "__TABLE__" && m.tableData
@@ -7316,33 +7275,30 @@ Otherwise respond normally with formatted text.`;
         </div>
       )}
 
-      {/* Input — Turbo AI style with mic + clip + send */}
-      <div style={{ padding:"14px 14px 16px", flexShrink:0 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:8, background:T.bg, border:`1.5px solid ${T.border}`, borderRadius:14, padding:"10px 12px", transition:"border-color .15s" }}
+      {/* Input row */}
+      <div style={{ padding:"10px 12px 14px", flexShrink:0, borderTop:`1px solid ${T.border}` }}>
+        <div style={{ display:"flex", alignItems:"center", gap:6, background:T.bg, border:`1.5px solid ${T.border}`, borderRadius:12, padding:"8px 10px", transition:"border-color .15s" }}
           onFocusCapture={e=>e.currentTarget.style.borderColor=T.accent}
           onBlurCapture={e=>e.currentTarget.style.borderColor=T.border}>
-          {/* Mic icon */}
           <button className="no-min-h" title="Voice input"
             style={{ background:"none", border:"none", cursor:"pointer", color:T.muted, padding:0, display:"flex", flexShrink:0 }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
           </button>
           <input value={inp} onChange={e=>setInp(e.target.value)}
             onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); }}}
-            placeholder="Type a question here or type '@' to reference documents..."
-            style={{ flex:1, border:"none", outline:"none", fontSize:13, color:T.text, background:"transparent", fontFamily:"'DM Sans',sans-serif" }}/>
-          {/* Attachment icon */}
+            placeholder="Type a question here or type '@' to re..."
+            style={{ flex:1, border:"none", outline:"none", fontSize:12, color:T.text, background:"transparent", fontFamily:"'DM Sans',sans-serif" }}/>
           <button className="no-min-h" title="Attach"
             style={{ background:"none", border:"none", cursor:"pointer", color:T.muted, padding:0, display:"flex", flexShrink:0 }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
           </button>
-          {/* Send arrow */}
           <button onClick={send} disabled={loading||!inp.trim()} className="no-min-h"
-            style={{ width:30, height:30, borderRadius:8, border:"none",
+            style={{ width:28, height:28, borderRadius:8, border:"none",
               background:inp.trim()&&!loading?T.accent:T.border,
               cursor:inp.trim()&&!loading?"pointer":"not-allowed",
               display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
               transition:"background .15s" }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           </button>
         </div>
       </div>
@@ -7656,7 +7612,7 @@ function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
   };
 
   return (
-    <div style={{ background:C.surface, borderRadius:14, padding:"28px 32px", minHeight:480, border:`1.5px solid ${C.border}`, boxShadow:"0 2px 12px rgba(0,0,0,.06)", flex:1 }}
+    <div style={{ background:C.surface, borderRadius:14, padding:"24px 28px", minHeight:400, border:`1.5px solid ${C.border}`, boxShadow:"0 2px 12px rgba(0,0,0,.06)", flex:1, overflow:"hidden", wordBreak:"break-word", overflowWrap:"break-word" }}
       dir={isRTL?"rtl":"ltr"}>
       {renderNotesWithTable()}
     </div>
@@ -7726,19 +7682,26 @@ function InlineChart({ data }) {
 function InlineClassioTable({ data }) {
   if (!data?.table?.columns) return null;
   const { columns, rows } = data.table;
+  const colCount = columns.length;
+  // Compact font for wide tables
+  const fontSize = colCount > 6 ? 11 : colCount > 4 ? 12 : 13;
+  const cellPad = colCount > 6 ? "6px 8px" : "8px 10px";
   return (
-    <div style={{ margin:"16px 0", border:`1.5px solid ${C.accentS}`, borderRadius:12, overflow:"hidden" }}>
-      <div style={{ background:C.accentL, padding:"6px 14px", display:"flex", alignItems:"center", gap:6 }}>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg>
-        <span style={{ fontSize:11, fontWeight:800, color:C.accent, letterSpacing:.6 }}>AI TABLE</span>
+    <div style={{ margin:"14px 0", border:`1.5px solid ${C.accentS}`, borderRadius:12, overflow:"hidden", width:"100%" }}>
+      <div style={{ background:C.accentL, padding:"5px 12px", display:"flex", alignItems:"center", gap:6 }}>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg>
+        <span style={{ fontSize:10, fontWeight:800, color:C.accent, letterSpacing:.6 }}>AI TABLE</span>
       </div>
-      {data.explanation && <p style={{ fontSize:12, color:C.muted, padding:"6px 14px 0", margin:0 }}>{data.explanation}</p>}
-      <div style={{ overflowX:"auto" }}>
-        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+      {data.explanation && <p style={{ fontSize:11, color:C.muted, padding:"5px 12px 0", margin:0, lineHeight:1.4 }}>{data.explanation}</p>}
+      <div style={{ width:"100%", overflowX:"auto" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize, tableLayout:"fixed" }}>
+          <colgroup>
+            {columns.map((_,ci) => <col key={ci} style={{ width:`${100/colCount}%` }} />)}
+          </colgroup>
           <thead>
             <tr style={{ background:C.accentL }}>
               {columns.map((col,ci)=>(
-                <th key={ci} style={{ padding:"8px 12px", textAlign:"left", fontWeight:700, color:C.accent, borderBottom:`2px solid ${C.accentS}`, whiteSpace:"nowrap", fontSize:12 }}>{col}</th>
+                <th key={ci} style={{ padding:cellPad, textAlign:"left", fontWeight:700, color:C.accent, borderBottom:`2px solid ${C.accentS}`, fontSize:fontSize-1, wordBreak:"break-word", verticalAlign:"top" }}>{col}</th>
               ))}
             </tr>
           </thead>
@@ -7746,7 +7709,9 @@ function InlineClassioTable({ data }) {
             {rows.map((row,ri)=>(
               <tr key={ri} style={{ background:ri%2===0?C.surface:"transparent", borderBottom:`1px solid ${C.border}` }}>
                 {row.map((cell,ci)=>(
-                  <td key={ci} style={{ padding:"8px 12px", color:C.text, lineHeight:1.5, fontSize:13 }}>{cell}</td>
+                  <td key={ci} style={{ padding:cellPad, color:C.text, lineHeight:1.45, fontSize, wordBreak:"break-word", verticalAlign:"top" }}>
+                    {String(cell||"")}
+                  </td>
                 ))}
               </tr>
             ))}
@@ -7895,13 +7860,13 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
   const isRTL = lang.startsWith("ar");
 
   return (
-    <div dir={isRTL ? "rtl" : "ltr"} style={{ display:"flex", flexDirection:"column", height:"100%", overflow:"hidden" }}>
+    <div dir={isRTL ? "rtl" : "ltr"}>
 
-      {/* ── Top toolbar — fixed header like ViewTab ─────────────────────────── */}
-      <div className="notes-toolbar" style={{ flexShrink:0, background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"10px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8, overflowX:"auto" }}>
-        <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:isMobile?18:20, fontWeight:800, color:C.text, margin:0 }}>Notes</h2>
+      {/* ── Top toolbar — Turbo style ─────────────────────────────────────── */}
+      <div className="notes-toolbar" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:10, position:"relative", zIndex:50 }}>
+        <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:isMobile?20:24, fontWeight:800, color:C.text, margin:0 }}>Notes</h2>
 
-        <div className="notes-toolbar-right" style={{ display:"flex", gap:7, flexWrap:"wrap", alignItems:"center" }}>
+        <div className="notes-toolbar-right" style={{ display:"flex", gap:7, flexWrap:"wrap", alignItems:"center", position:"relative" }}>
 
           {/* Language */}
           <LangPicker value={lang} onChange={setLang} />
@@ -7932,7 +7897,7 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
                 Saved ({savedNotes.length}) ▾
               </button>
               {showDropdown && (
-                <div style={{ position:"absolute", top:"110%", right:0, zIndex:300, background:"#fff", border:`1.5px solid ${C.border}`, borderRadius:14, width:290, boxShadow:"0 10px 36px rgba(0,0,0,.17)", overflow:"hidden" }}>
+                <div style={{ position:"absolute", top:"110%", right:0, zIndex:1200, background:"#fff", border:`1.5px solid ${C.border}`, borderRadius:14, width:290, boxShadow:"0 10px 36px rgba(0,0,0,.17)", overflow:"hidden" }}>
                   <div style={{ padding:"10px 12px", borderBottom:`1px solid ${C.border}` }}>
                     <input value={dropSearch} onChange={e => setDropSearch(e.target.value)} placeholder="Search saved notes…"
                       style={{ width:"100%", border:`1px solid ${C.border}`, borderRadius:8, padding:"6px 10px", fontSize:12, outline:"none", color:C.text }}/>
@@ -7982,7 +7947,7 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
 
       {/* Save-as modal */}
       {showSaveModal && (
-        <div onClick={() => setShowSaveModal(false)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.4)", zIndex:600, display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
+        <div onClick={() => setShowSaveModal(false)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.4)", zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
           <div onClick={e => e.stopPropagation()} style={{ background:"#fff", borderRadius:18, padding:"26px 28px", width:"100%", maxWidth:380, boxShadow:"0 16px 50px rgba(0,0,0,.22)" }}>
             <p style={{ fontSize:16, fontWeight:700, color:C.text, marginBottom:16 }}>Save Note As…</p>
             <input autoFocus value={newNoteName} onChange={e => setNewNoteName(e.target.value)}
@@ -8000,8 +7965,8 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
       )}
 
       {/* ── Note style pills — inline compact row like Turbo AI ── */}
-      <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"10px 24px", flexShrink:0 }}>
-        <div className="note-style-row" style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+      <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:"10px 14px", marginBottom:14, overflow:"visible" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
           <span style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:.8, textTransform:"uppercase", flexShrink:0 }}>NOTE STYLE</span>
           {!useCustomStyle && NOTE_STYLES.map(s => (
             <button key={s.id} onClick={() => setNoteStyle(s.id)} title={s.desc}
@@ -8050,10 +8015,10 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
       )}
 
       {/* ── Turbo AI split pane: notes left, AI panel right ── */}
-      <div className="notes-split" style={{ flex:1, display:"flex", gap:0, alignItems:"stretch", overflow:"hidden" }}>
+      <div className="notes-split" style={{ display:"flex", gap:20, alignItems:"flex-start", minHeight:"calc(100vh - 320px)", overflow:"visible" }}>
 
-        {/* Left — notes area: scrollable */}
-        <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:10, overflowY:"auto", padding:"24px 24px 24px 24px" }}>
+        {/* Left — notes area */}
+        <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:10 }}>
           {notes.trim() ? (
             <NotesViewer
               notes={notes}
@@ -8067,16 +8032,16 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
             <textarea value={notes} onChange={e => { setNotes(e.target.value); setUnsaved(true); }}
               dir={isRTL ? "rtl" : "ltr"}
               placeholder="Click AI Generate to create notes. Tables will appear inline inside your notes."
-              style={{ width:"100%", minHeight:520, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"20px 22px", fontSize:15, lineHeight:1.9, outline:"none", resize:"none", color:C.text, background:C.surface, fontFamily:"'DM Sans',sans-serif", direction:isRTL?"rtl":"ltr", boxSizing:"border-box" }}/>
+              style={{ width:"100%", flex:1, minHeight:480, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"20px 22px", fontSize:15, lineHeight:1.9, outline:"none", resize:"none", color:C.text, background:C.surface, fontFamily:"'DM Sans',sans-serif", direction:isRTL?"rtl":"ltr", boxSizing:"border-box" }}/>
           )}
           {notes.trim() && (
-            <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center", padding:"8px 0 2px", borderTop:`1px solid ${C.border}`, marginTop:4 }}>
               <NotesSimplifyBtn notes={notes} onResult={s => { setNotes(s); setUnsaved(true); }} lang={lang} />
               <NotesExpandBtn notes={notes} onResult={e => { setNotes(e); setUnsaved(true); }} />
               <NotesImageInsert file={file} onInsert={(desc) => { setNotes(n => n + "\n\n[Image: " + desc + "]"); setUnsaved(true); }} />
               <button onClick={() => navigator.clipboard?.writeText(notes)}
-                style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:8, border:`1.5px solid ${C.border}`, background:"none", color:C.muted, fontSize:12, fontWeight:600, cursor:"pointer" }}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 10px", borderRadius:8, border:`1.5px solid ${C.border}`, background:C.surface, color:C.muted, fontSize:11, fontWeight:600, cursor:"pointer" }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                 Copy
               </button>
               <RawEditModal notes={notes} onChange={v=>{setNotes(v); setUnsaved(true);}} />
@@ -8102,14 +8067,14 @@ function MobileAIButton({ file, notes, lang, onTabChange }) {
   return (
     <>
       <button onClick={() => setOpen(true)}
-        style={{ position:"fixed", bottom:72, right:16, zIndex:400, width:52, height:52, borderRadius:"50%",
+        style={{ position:"fixed", bottom:72, right:16, zIndex:600, width:52, height:52, borderRadius:"50%",
           background:"linear-gradient(135deg,#7C5CFC,#3D8EF8)", border:"none", cursor:"pointer",
           display:"flex", alignItems:"center", justifyContent:"center",
           boxShadow:"0 4px 20px rgba(124,92,252,.45)" }}>
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
       </button>
       {open && (
-        <div style={{ position:"fixed", inset:0, zIndex:700, background:"rgba(0,0,0,.5)", display:"flex", flexDirection:"column", justifyContent:"flex-end" }}
+        <div style={{ position:"fixed", inset:0, zIndex:800, background:"rgba(0,0,0,.5)", display:"flex", flexDirection:"column", justifyContent:"flex-end" }}
           onClick={e=>{ if(e.target===e.currentTarget) setOpen(false); }}>
           <div style={{ background:T.surface, borderRadius:"20px 20px 0 0", maxHeight:"80vh", display:"flex", flexDirection:"column", overflow:"hidden",
             paddingBottom:"env(safe-area-inset-bottom,0px)" }}>
@@ -8202,7 +8167,7 @@ function NotesQASidebar({ file, notes, lang }) {
   if (isMobile && !open) {
     return (
       <button onClick={() => setOpen(true)}
-        style={{ position:"fixed", bottom:80, right:16, zIndex:200, width:52, height:52,
+        style={{ position:"fixed", bottom:80, right:16, zIndex:601, width:52, height:52,
           borderRadius:"50%", background:C.accent, color:"#fff", border:"none",
           cursor:"pointer", boxShadow:"0 4px 20px rgba(61,90,128,.45)",
           display:"flex", alignItems:"center", justifyContent:"center", fontSize:20 }}>
@@ -8753,7 +8718,7 @@ function CardsTab({ file, onUpdate }) {
         const isKnown   = !!known[card?.id];
         const pct = Math.round(((studyIdx + 1) / displayCards.length) * 100);
         return (
-          <div style={{ position:"fixed", inset:0, zIndex:500, background:C.bg, display:"flex", flexDirection:"column", fontFamily:"'DM Sans',sans-serif" }}>
+          <div style={{ position:"fixed", inset:0, zIndex:1000, background:C.bg, display:"flex", flexDirection:"column", fontFamily:"'DM Sans',sans-serif" }}>
             <style>{`
               .ql-wrap{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .5s cubic-bezier(.4,0,.2,1)}
               .ql-wrap.flipped{transform:rotateY(180deg)}
@@ -9642,7 +9607,7 @@ RULES:
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity:.5 }}><path d="M6 9l6 6 6-6"/></svg>
             </button>
             {showVoicePicker && (
-              <div style={{ position:"absolute", right:0, top:"calc(100% + 6px)", zIndex:200,
+              <div style={{ position:"absolute", right:0, top:"calc(100% + 6px)", zIndex:1200,
                 background:"#fff", border:`1.5px solid ${C.border}`, borderRadius:14,
                 padding:"8px 6px", minWidth:220, maxHeight:380, overflowY:"auto",
                 boxShadow:"0 8px 28px rgba(0,0,0,.12)" }}>
@@ -10163,16 +10128,13 @@ async function aiCheckAnswer(question, correct, userAnswer) {
 function PresentationTab({ file, onUpdate }) {
   const T = useTheme();
   const [topic, setTopic] = useState("");
-  const [stylePrompt, setStylePrompt] = useState("");
   const [slides, setSlides] = useState(file.presentation || []);
   const [generating, setGenerating] = useState(false);
   const [slideCount, setSlideCount] = useState(8);
-  const [customSlideCount, setCustomSlideCount] = useState("");
   const [theme, setTheme] = useState("modern");
   const [editIdx, setEditIdx] = useState(null);
   const [editVal, setEditVal] = useState({});
   const [exporting, setExporting] = useState(false);
-  const [showStyleInput, setShowStyleInput] = useState(false);
 
   const THEMES = [
     { id:"modern",    label:"Modern",    bg:"#1e1b4b", accent:"#818cf8", text:"#f8fafc", sub:"#cbd5e1" },
@@ -10181,6 +10143,10 @@ function PresentationTab({ file, onUpdate }) {
     { id:"sunset",    label:"Sunset",    bg:"#7c2d12", accent:"#fb923c", text:"#fff7ed", sub:"#fed7aa" },
     { id:"minimal",   label:"Minimal",   bg:"#ffffff", accent:"#7C5CFC", text:"#1e1b4b", sub:"#6b7280" },
     { id:"dark",      label:"Dark",      bg:"#0f172a", accent:"#7C5CFC", text:"#f8fafc", sub:"#94a3b8" },
+    { id:"rose",      label:"Rose",      bg:"#4c0519", accent:"#fb7185", text:"#fff1f2", sub:"#fecdd3" },
+    { id:"slate",     label:"Slate",     bg:"#1e293b", accent:"#94a3b8", text:"#f8fafc", sub:"#64748b" },
+    { id:"amber",     label:"Amber",     bg:"#451a03", accent:"#fbbf24", text:"#fffbeb", sub:"#fde68a" },
+    { id:"teal",      label:"Teal",      bg:"#042f2e", accent:"#2dd4bf", text:"#f0fdfa", sub:"#99f6e4" },
   ];
   const currentTheme = THEMES.find(t => t.id === theme) || THEMES[0];
 
@@ -10193,30 +10159,45 @@ function PresentationTab({ file, onUpdate }) {
       const context = fileText ? `File content:\n${fileText.slice(0, 10000)}` : "";
       const topicStr = topic.trim() || file.name;
 
-      const finalCount = customSlideCount ? (parseInt(customSlideCount)||slideCount) : slideCount;
-      const styleGuide = stylePrompt.trim() ? `STYLE: ${stylePrompt.trim()}` : "Professional, educational, clear structure.";
       const raw = await callClaude(
-        `You are an expert presentation designer. Return ONLY valid JSON, no markdown.
-${styleGuide}
-JSON format:
+        `You are an expert presentation designer. Create a professional, engaging presentation.
+Return ONLY valid JSON — no markdown, no explanation.
+Format:
 {
   "title": "Presentation Title",
   "slides": [
-    { "type": "title", "title": "Main Title", "subtitle": "Subtitle", "imageSearch": "relevant search term" },
-    { "type": "content", "title": "Slide Title", "bullets": ["Point 1", "Point 2", "Point 3"], "imageSearch": "search term", "note": "Speaker note" },
-    { "type": "two-col", "title": "Comparison", "left": { "heading": "Left", "bullets": ["A","B"] }, "right": { "heading": "Right", "bullets": ["X","Y"] }, "imageSearch": "term" },
-    { "type": "quote", "quote": "Key quote", "author": "Source", "imageSearch": "term" },
-    { "type": "image", "title": "Visual Title", "imageSearch": "very specific descriptive term", "caption": "Caption" },
-    { "type": "summary", "title": "Key Takeaways", "bullets": ["T1","T2","T3"], "imageSearch": "term" }
+    {
+      "type": "title",
+      "title": "Main Title",
+      "subtitle": "Subtitle or tagline"
+    },
+    {
+      "type": "content",
+      "title": "Slide Title",
+      "bullets": ["Key point 1", "Key point 2", "Key point 3"],
+      "note": "Optional speaker note"
+    },
+    {
+      "type": "two-col",
+      "title": "Comparison",
+      "left": { "heading": "Left Side", "bullets": ["Point A", "Point B"] },
+      "right": { "heading": "Right Side", "bullets": ["Point X", "Point Y"] }
+    },
+    {
+      "type": "quote",
+      "quote": "An inspiring or key quote from the content",
+      "author": "Source or attribution"
+    },
+    {
+      "type": "summary",
+      "title": "Key Takeaways",
+      "bullets": ["Takeaway 1", "Takeaway 2", "Takeaway 3"]
+    }
   ]
 }
-Slide types: title(1), content(most), two-col(comparisons), quote(1-2), image(1-2), summary(last).
-imageSearch: specific terms like "nuclear fission diagram", "DNA helix structure", "solar system planets".
-Make EXACTLY ${finalCount} slides. Comprehensive and educational.`,
-        `Topic: "${topicStr}"
-${context}
-${stylePrompt.trim() ? `Style: "${stylePrompt.trim()}"` : ""}
-Create a ${finalCount}-slide presentation.`,
+Slide types to use: title (1 slide), content (most slides), two-col (for comparisons), quote (1-2 slides), summary (last slide).
+Make exactly ${slideCount} slides total. Be comprehensive and educational.`,
+        `Topic: "${topicStr}"\n${context}\n\nCreate a ${slideCount}-slide presentation covering all key concepts thoroughly.`,
         4000
       );
       const clean = raw.replace(/```json|```/g, "").trim();
@@ -10333,188 +10314,305 @@ Create a ${finalCount}-slide presentation.`,
     setExporting(false);
   };
 
+  // ── Add slide helper ──────────────────────────────────────────────────────
+  const addSlide = (type="content") => {
+    const blank = type==="title"?{type:"title",title:"New Slide",subtitle:""}
+      : type==="quote"?{type:"quote",quote:"A key insight",author:""}
+      : type==="two-col"?{type:"two-col",title:"Comparison",left:{heading:"Left",bullets:["Point A"]},right:{heading:"Right",bullets:["Point B"]}}
+      : {type:"content",title:"New Slide",bullets:["Key point 1","Key point 2","Key point 3"]};
+    const ns=[...slides,blank]; setSlides(ns); onUpdate({...file,presentation:ns});
+    setEditIdx(ns.length-1); setEditVal({...blank});
+  };
 
-  // Fetch image from Wikipedia for a slide
-  const [slideImages, setSlideImages] = useState({});
-  useEffect(() => {
-    slides.forEach((s, idx) => {
-      if (s.imageSearch && !slideImages[idx]) {
-        const term = encodeURIComponent(s.imageSearch.slice(0, 60));
-        fetch(`https://en.wikipedia.org/w/api.php?action=query&prop=pageimages&format=json&piprop=thumbnail&pithumbsize=400&titles=${term}&origin=*`)
-          .then(r => r.json())
-          .then(data => {
-            const pages = data?.query?.pages || {};
-            const page = Object.values(pages)[0];
-            const url = page?.thumbnail?.source;
-            if (url) setSlideImages(prev => ({...prev, [idx]: url}));
-          })
-          .catch(() => {});
-      }
-    });
-  }, [slides]);
+  const moveSlide = (idx, dir) => {
+    const ns=[...slides];
+    const target=idx+dir;
+    if(target<0||target>=ns.length) return;
+    [ns[idx],ns[target]]=[ns[target],ns[idx]];
+    setSlides(ns); onUpdate({...file,presentation:ns});
+    setEditIdx(target);
+  };
+
+  const duplicateSlide = (idx) => {
+    const ns=[...slides];
+    ns.splice(idx+1,0,{...slides[idx]});
+    setSlides(ns); onUpdate({...file,presentation:ns});
+  };
+
+  const thm = currentTheme;
+
+  // Slide preview renderer
+  const SlidePreview = ({s, idx, mini=false}) => {
+    const fs = mini ? 0.45 : 1;
+    const pad = mini ? "10px 12px" : "20px 22px";
+    const minH = mini ? 90 : 180;
+    return (
+      <div style={{ background:thm.bg, padding:pad, minHeight:minH, position:"relative", fontFamily:"'DM Sans',sans-serif", height:"100%", overflow:"hidden" }}>
+        <div style={{ position:"absolute", bottom:0, left:0, right:0, height:mini?2:3, background:thm.accent }}/>
+        <span style={{ position:"absolute", top:mini?5:10, right:mini?6:12, fontSize:mini?8:10, color:thm.sub, opacity:.6 }}>{idx+1}/{slides.length}</span>
+        {s.type==="title" ? (
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:mini?74:160, textAlign:"center" }}>
+            <p style={{ fontSize:mini?11:20, fontWeight:900, color:thm.text, margin:"0 0 4px", lineHeight:1.2 }}>{s.title}</p>
+            {s.subtitle && <p style={{ fontSize:mini?8:13, color:thm.sub, margin:0 }}>{s.subtitle}</p>}
+          </div>
+        ) : s.type==="quote" ? (
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:mini?74:160, textAlign:"center", padding:"0 6px" }}>
+            <p style={{ fontSize:mini?9:14, fontStyle:"italic", color:thm.accent, margin:"0 0 6px", lineHeight:1.4 }}>"{s.quote}"</p>
+            {s.author && <p style={{ fontSize:mini?7:11, color:thm.sub }}>— {s.author}</p>}
+          </div>
+        ) : s.type==="two-col" ? (
+          <>
+            <p style={{ fontSize:mini?9:15, fontWeight:800, color:thm.text, margin:"0 0 6px", borderBottom:`${mini?1:2}px solid ${thm.accent}`, paddingBottom:4 }}>{s.title}</p>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:mini?6:12 }}>
+              <div><p style={{ fontSize:mini?7:11, fontWeight:700, color:thm.accent, margin:"0 0 3px" }}>{s.left?.heading}</p>{(s.left?.bullets||[]).slice(0,mini?2:3).map((b,bi)=><p key={bi} style={{ fontSize:mini?6:10, color:thm.sub, margin:"1px 0" }}>• {b}</p>)}</div>
+              <div><p style={{ fontSize:mini?7:11, fontWeight:700, color:thm.accent, margin:"0 0 3px" }}>{s.right?.heading}</p>{(s.right?.bullets||[]).slice(0,mini?2:3).map((b,bi)=><p key={bi} style={{ fontSize:mini?6:10, color:thm.sub, margin:"1px 0" }}>• {b}</p>)}</div>
+            </div>
+          </>
+        ) : (
+          <>
+            <p style={{ fontSize:mini?9:15, fontWeight:800, color:thm.text, margin:"0 0 6px", borderBottom:`${mini?1:2}px solid ${thm.accent}`, paddingBottom:4 }}>{s.title}</p>
+            {s.image && <div style={{ fontSize:mini?7:11, color:thm.accent, marginBottom:4 }}>🖼 {s.image.slice(0,30)}</div>}
+            {(s.bullets||[]).slice(0,mini?3:4).map((b,bi)=><p key={bi} style={{ fontSize:mini?7:11, color:thm.sub, margin:"2px 0" }}>• {b}</p>)}
+          </>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div style={{ fontFamily:"'DM Sans',sans-serif" }}>
       {/* Header */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, flexWrap:"wrap", gap:12 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18, flexWrap:"wrap", gap:10 }}>
         <div>
           <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:24, fontWeight:800, color:C.text, margin:0 }}>AI Presentation</h2>
-          <p style={{ margin:"4px 0 0", fontSize:13, color:C.muted }}>Generate a beautiful slide deck from any topic or file</p>
+          <p style={{ margin:"3px 0 0", fontSize:13, color:C.muted }}>Create beautiful slides from any topic — no file needed</p>
         </div>
-        {slides.length > 0 && (
-          <div style={{ display:"flex", gap:8 }}>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+          {slides.length > 0 && <>
+            <button onClick={()=>addSlide("content")}
+              style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px", borderRadius:10, border:`1.5px solid ${C.border}`, background:C.surface, color:C.text, fontSize:12, fontWeight:600, cursor:"pointer" }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Add Slide
+            </button>
             <button onClick={exportPDF} disabled={exporting}
-              style={{ display:"flex", alignItems:"center", gap:6, padding:"9px 18px", borderRadius:10, border:`1.5px solid ${C.border}`, background:C.surface, color:C.text, fontSize:13, fontWeight:600, cursor:"pointer" }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              Export PDF
+              style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px", borderRadius:10, border:`1.5px solid ${C.border}`, background:C.surface, color:C.text, fontSize:12, fontWeight:600, cursor:"pointer" }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              PDF
             </button>
             <button onClick={exportPPTX} disabled={exporting}
-              style={{ display:"flex", alignItems:"center", gap:6, padding:"9px 18px", borderRadius:10, border:"none", background:"linear-gradient(135deg,#7C5CFC,#3D8EF8)", color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer", boxShadow:"0 3px 10px rgba(124,92,252,.3)" }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              {exporting ? "Exporting…" : "Export PPTX"}
+              style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 16px", borderRadius:10, border:"none", background:"linear-gradient(135deg,#7C5CFC,#3D8EF8)", color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", boxShadow:"0 3px 10px rgba(124,92,252,.3)" }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              {exporting ? "Exporting…" : "PPTX"}
             </button>
-          </div>
-        )}
+          </>}
+        </div>
       </div>
 
-      {/* Generator controls */}
-      <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:16, padding:"20px 22px", marginBottom:20 }}>
-        {/* Row 1: topic + generate */}
-        <div style={{ display:"flex", gap:10, marginBottom:10, flexWrap:"wrap" }}>
+      {/* Generator panel */}
+      <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:16, padding:"18px 20px", marginBottom:18 }}>
+        {/* Topic input + controls */}
+        <div style={{ display:"flex", gap:10, marginBottom:14, flexWrap:"wrap" }}>
           <input value={topic} onChange={e=>setTopic(e.target.value)}
             onKeyDown={e=>{ if(e.key==="Enter") generate(); }}
-            placeholder="Topic or title (leave blank to use file content)…"
-            style={{ flex:1, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 14px", fontSize:14, outline:"none", color:C.text, background:C.bg, fontFamily:"'DM Sans',sans-serif", minWidth:180 }}
+            placeholder="Enter any topic (e.g. 'Radioactivity', 'World War II', 'Climate Change')…"
+            style={{ flex:1, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 14px", fontSize:14, outline:"none", color:C.text, background:C.bg, fontFamily:"'DM Sans',sans-serif", minWidth:220 }}
             onFocus={e=>e.target.style.borderColor=C.accent}
             onBlur={e=>e.target.style.borderColor=C.border}/>
+          <select value={slideCount} onChange={e=>setSlideCount(+e.target.value)}
+            style={{ border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 12px", fontSize:13, color:C.text, background:C.bg, outline:"none", cursor:"pointer" }}>
+            {[5,8,10,12,15,20].map(n=><option key={n} value={n}>{n} slides</option>)}
+          </select>
           <button onClick={generate} disabled={generating}
-            style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 22px", borderRadius:10, border:"none", background:generating?"#ccc":"linear-gradient(135deg,#7C5CFC,#3D8EF8)", color:"#fff", fontSize:14, fontWeight:700, cursor:generating?"not-allowed":"pointer", boxShadow:generating?"none":"0 3px 12px rgba(124,92,252,.3)", whiteSpace:"nowrap" }}>
-            {generating ? <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Generating…</> : <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Generate</>}
+            style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 20px", borderRadius:10, border:"none", background:generating?"#ccc":"linear-gradient(135deg,#7C5CFC,#3D8EF8)", color:"#fff", fontSize:14, fontWeight:700, cursor:generating?"not-allowed":"pointer", boxShadow:generating?"none":"0 3px 12px rgba(124,92,252,.3)", whiteSpace:"nowrap" }}>
+            {generating ? <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Generating…</> : <>✨ Generate</>}
           </button>
         </div>
-        {/* Row 2: slide count + style */}
-        <div style={{ display:"flex", gap:10, marginBottom:10, flexWrap:"wrap", alignItems:"center" }}>
-          <span style={{ fontSize:11, fontWeight:700, color:C.muted, letterSpacing:.7, textTransform:"uppercase", flexShrink:0 }}>Slides</span>
-          <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-            {[5,8,10,12,15,20].map(n=>(
-              <button key={n} onClick={()=>{setSlideCount(n);setCustomSlideCount("");}}
-                style={{ padding:"5px 12px", borderRadius:20, fontSize:12, fontWeight:700, cursor:"pointer",
-                  background:(slideCount===n&&!customSlideCount)?C.accent:"transparent",
-                  color:(slideCount===n&&!customSlideCount)?"#fff":C.muted,
-                  border:`1.5px solid ${(slideCount===n&&!customSlideCount)?C.accent:C.border}` }}>
-                {n}
-              </button>
-            ))}
-            <input type="number" min="1" max="40" value={customSlideCount}
-              onChange={e=>{setCustomSlideCount(e.target.value);}}
-              placeholder="Custom"
-              style={{ width:72, border:`1.5px solid ${customSlideCount?C.accent:C.border}`, borderRadius:10, padding:"5px 8px", fontSize:12, outline:"none", color:C.text, background:C.bg, textAlign:"center" }}/>
+
+        {/* Theme + layout options */}
+        <div style={{ display:"flex", flexWrap:"wrap", gap:16, alignItems:"flex-start" }}>
+          <div>
+            <p style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:.8, textTransform:"uppercase", margin:"0 0 6px" }}>Theme</p>
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+              {THEMES.map(t=>(
+                <button key={t.id} onClick={()=>setTheme(t.id)} title={t.label}
+                  style={{ width:28, height:28, borderRadius:"50%", background:t.bg, border:`3px solid ${theme===t.id?"#7C5CFC":"transparent"}`, cursor:"pointer", boxShadow:"0 2px 6px rgba(0,0,0,.2)", transition:"border .12s", flexShrink:0, position:"relative" }}>
+                  {theme===t.id && <div style={{ position:"absolute", inset:-5, borderRadius:"50%", border:"2px solid #7C5CFC44" }}/>}
+                </button>
+              ))}
+            </div>
           </div>
-          <button onClick={()=>setShowStyleInput(s=>!s)}
-            style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 12px", borderRadius:20, fontSize:12, fontWeight:600, cursor:"pointer",
-              border:`1.5px solid ${showStyleInput||stylePrompt?C.accent:C.border}`,
-              background:showStyleInput||stylePrompt?C.accentL:"transparent",
-              color:showStyleInput||stylePrompt?C.accent:C.muted }}>
-            ✏️ {stylePrompt ? "Style (on)" : "Custom style"}
-          </button>
-        </div>
-        {showStyleInput && (
-          <textarea value={stylePrompt} onChange={e=>setStylePrompt(e.target.value)}
-            placeholder="Describe the style, tone, or format you want — e.g. 'Dark tech theme, minimal text, use diagrams', 'Formal academic style', 'Fun and colourful for kids'…"
-            rows={2}
-            style={{ width:"100%", border:`1.5px solid ${C.accentS}`, borderRadius:10, padding:"9px 12px", fontSize:13, outline:"none", resize:"vertical", color:C.text, background:C.bg, fontFamily:"'DM Sans',sans-serif", marginBottom:6, boxSizing:"border-box" }}/>
-        )}
-        {/* Theme picker */}
-        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
-          <span style={{ fontSize:11, fontWeight:700, color:C.muted, letterSpacing:.8, textTransform:"uppercase", flexShrink:0 }}>Theme</span>
-          {THEMES.map(t=>(
-            <button key={t.id} onClick={()=>setTheme(t.id)}
-              style={{ display:"flex", alignItems:"center", gap:6, padding:"5px 12px", borderRadius:20, border:`2px solid ${theme===t.id?C.accent:C.border}`, background:theme===t.id?C.accentL:"transparent", cursor:"pointer", fontSize:12, fontWeight:600, color:theme===t.id?C.accent:C.muted, transition:"all .12s" }}>
-              <span style={{ width:12, height:12, borderRadius:"50%", background:t.bg, border:"1.5px solid rgba(255,255,255,.3)", flexShrink:0, display:"inline-block" }}/>
-              {t.label}
-            </button>
-          ))}
+          {slides.length>0 && (
+            <div>
+              <p style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:.8, textTransform:"uppercase", margin:"0 0 6px" }}>Add Slide Type</p>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                {[["content","📝 Content"],["two-col","⬛ Two Column"],["quote","💬 Quote"],["title","🎯 Title"]].map(([type,label])=>(
+                  <button key={type} onClick={()=>addSlide(type)}
+                    style={{ padding:"4px 10px", borderRadius:20, border:`1.5px solid ${C.border}`, background:"transparent", color:C.muted, fontSize:11, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap" }}
+                    onMouseEnter={e=>{e.currentTarget.style.borderColor=C.accent;e.currentTarget.style.color=C.accent;}}
+                    onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.muted;}}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Slide preview grid */}
+      {/* Empty state */}
       {slides.length === 0 && !generating && (
-        <div style={{ textAlign:"center", padding:"60px 24px", color:C.muted }}>
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={C.border} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{marginBottom:16}}><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-          <p style={{ fontSize:16, fontWeight:600, color:C.text, marginBottom:6 }}>No slides yet</p>
-          <p style={{ fontSize:13, color:C.muted }}>Enter a topic above and click Generate to create your presentation</p>
+        <div style={{ textAlign:"center", padding:"50px 24px", color:C.muted, background:C.surface, borderRadius:16, border:`1.5px dashed ${C.border}` }}>
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={C.border} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{marginBottom:14}}><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          <p style={{ fontSize:16, fontWeight:600, color:C.text, marginBottom:6 }}>Start with any topic</p>
+          <p style={{ fontSize:13, color:C.muted, marginBottom:16 }}>Type a topic above or use your file — no file needed</p>
+          <div style={{ display:"flex", gap:8, justifyContent:"center", flexWrap:"wrap" }}>
+            {["Photosynthesis","The Solar System","World War II","Climate Change","Algebra Basics"].map(s=>(
+              <button key={s} onClick={()=>setTopic(s)}
+                style={{ padding:"6px 14px", borderRadius:20, border:`1.5px solid ${C.border}`, background:C.bg, color:C.text, fontSize:12, fontWeight:600, cursor:"pointer" }}>
+                {s}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
+      {/* Slide grid — Canva-style */}
       {slides.length > 0 && (
-        <div className="pres-grid" style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))", gap:16 }}>
+        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
           {slides.map((s, idx) => {
-            const thm = currentTheme;
             const isEditing = editIdx === idx;
             return (
-              <div key={idx} style={{ borderRadius:14, overflow:"hidden", boxShadow:"0 4px 20px rgba(0,0,0,.12)", cursor:"pointer", border:`2px solid ${isEditing?C.accent:"transparent"}`, transition:"border-color .15s" }}
-                onClick={()=>{ setEditIdx(isEditing?null:idx); setEditVal({...s}); }}>
-                {/* Slide preview */}
-                <div style={{ background:thm.bg, padding:"20px 22px", minHeight:180, position:"relative", fontFamily:"'DM Sans',sans-serif" }}>
-                  <div style={{ position:"absolute", bottom:0, left:0, right:0, height:3, background:thm.accent }}/>
-                  <span style={{ position:"absolute", top:10, right:12, fontSize:10, color:thm.sub, opacity:.6 }}>{idx+1}/{slides.length}</span>
-                  {/* Slide image thumbnail */}
-                  {slideImages[idx] && s.type !== "title" && (
-                    <div style={{ position:"absolute", top:8, right:8, width:56, height:40, borderRadius:6, overflow:"hidden", border:`1px solid ${thm.accent}44` }}>
-                      <img src={slideImages[idx]} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={e=>{e.target.style.display="none";}}/>
-                    </div>
-                  )}
-                  {s.type === "title" ? (
-                    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:160, textAlign:"center", position:"relative" }}>
-                      {slideImages[idx] && <div style={{ position:"absolute", inset:0, backgroundImage:`url(${slideImages[idx]})`, backgroundSize:"cover", backgroundPosition:"center", opacity:.15, borderRadius:4 }}/>}
-                      <p style={{ fontSize:20, fontWeight:900, color:thm.text, margin:"0 0 8px", lineHeight:1.2, position:"relative" }}>{s.title}</p>
-                      {s.subtitle && <p style={{ fontSize:13, color:thm.sub, margin:0, position:"relative" }}>{s.subtitle}</p>}
-                    </div>
-                  ) : s.type === "image" ? (
-                    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:160, textAlign:"center" }}>
-                      {slideImages[idx]
-                        ? <img src={slideImages[idx]} alt={s.imageSearch} style={{ maxHeight:120, maxWidth:"100%", objectFit:"contain", borderRadius:6 }} onError={e=>{e.target.style.display="none";}}/>
-                        : <div style={{ width:80, height:60, background:thm.accent+"33", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center" }}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={thm.accent} strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div>
-                      }
-                      {s.title && <p style={{ fontSize:11, fontWeight:700, color:thm.text, margin:"6px 0 0" }}>{s.title}</p>}
-                    </div>
-                  ) : s.type === "quote" ? (
-                    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:160, textAlign:"center", padding:"0 8px" }}>
-                      <p style={{ fontSize:14, fontStyle:"italic", color:thm.accent, margin:"0 0 10px", lineHeight:1.4 }}>"{s.quote}"</p>
-                      {s.author && <p style={{ fontSize:11, color:thm.sub }}>— {s.author}</p>}
-                    </div>
-                  ) : s.type === "two-col" ? (
-                    <>
-                      <p style={{ fontSize:15, fontWeight:800, color:thm.text, margin:"0 0 10px", borderBottom:`2px solid ${thm.accent}`, paddingBottom:6, paddingRight:slideImages[idx]?64:0 }}>{s.title}</p>
-                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-                        <div><p style={{ fontSize:11, fontWeight:700, color:thm.accent, margin:"0 0 4px" }}>{s.left?.heading}</p>{(s.left?.bullets||[]).slice(0,3).map((b,bi)=><p key={bi} style={{ fontSize:10, color:thm.sub, margin:"2px 0" }}>• {b}</p>)}</div>
-                        <div><p style={{ fontSize:11, fontWeight:700, color:thm.accent, margin:"0 0 4px" }}>{s.right?.heading}</p>{(s.right?.bullets||[]).slice(0,3).map((b,bi)=><p key={bi} style={{ fontSize:10, color:thm.sub, margin:"2px 0" }}>• {b}</p>)}</div>
+              <div key={idx} style={{ borderRadius:16, overflow:"visible", border:`2px solid ${isEditing?C.accent:C.border}`, transition:"border-color .15s", background:C.surface }}>
+                <div style={{ display:"flex", gap:0 }}>
+                  {/* Thumbnail strip */}
+                  <div style={{ width:160, flexShrink:0, cursor:"pointer", borderRadius:"14px 0 0 0", overflow:"hidden" }}
+                    onClick={()=>{ setEditIdx(isEditing?null:idx); setEditVal({...s}); }}>
+                    <SlidePreview s={s} idx={idx} mini={true}/>
+                  </div>
+                  {/* Slide info + actions */}
+                  <div style={{ flex:1, padding:"12px 14px", display:"flex", flexDirection:"column", justifyContent:"space-between", minWidth:0 }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8 }}>
+                      <div style={{ minWidth:0 }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}>
+                          <span style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:.6, textTransform:"uppercase", background:C.accentL, color:C.accent, padding:"2px 8px", borderRadius:20 }}>{s.type}</span>
+                          <span style={{ fontSize:11, color:C.muted }}>Slide {idx+1}</span>
+                        </div>
+                        <p style={{ fontSize:14, fontWeight:700, color:C.text, margin:"0 0 4px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.title||s.quote||"Slide"}</p>
+                        {s.bullets && <p style={{ fontSize:12, color:C.muted, margin:0 }}>{s.bullets.length} bullet{s.bullets.length!==1?"s":""}</p>}
                       </div>
-                    </>
-                  ) : (
-                    <>
-                      <p style={{ fontSize:15, fontWeight:800, color:thm.text, margin:"0 0 10px", borderBottom:`2px solid ${thm.accent}`, paddingBottom:6, paddingRight:slideImages[idx]?64:0 }}>{s.title}</p>
-                      {(s.bullets||[]).slice(0,4).map((b,bi)=><p key={bi} style={{ fontSize:11, color:thm.sub, margin:"4px 0" }}>• {b}</p>)}
-                    </>
-                  )}
+                      {/* Action buttons */}
+                      <div style={{ display:"flex", gap:4, flexShrink:0 }}>
+                        <button onClick={()=>moveSlide(idx,-1)} disabled={idx===0} className="no-min-h"
+                          style={{ width:28, height:28, borderRadius:7, border:`1px solid ${C.border}`, background:C.bg, cursor:idx===0?"not-allowed":"pointer", color:C.muted, display:"flex", alignItems:"center", justifyContent:"center", opacity:idx===0?.3:1 }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 15l-6-6-6 6"/></svg>
+                        </button>
+                        <button onClick={()=>moveSlide(idx,1)} disabled={idx===slides.length-1} className="no-min-h"
+                          style={{ width:28, height:28, borderRadius:7, border:`1px solid ${C.border}`, background:C.bg, cursor:idx===slides.length-1?"not-allowed":"pointer", color:C.muted, display:"flex", alignItems:"center", justifyContent:"center", opacity:idx===slides.length-1?.3:1 }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6"/></svg>
+                        </button>
+                        <button onClick={()=>duplicateSlide(idx)} className="no-min-h" title="Duplicate"
+                          style={{ width:28, height:28, borderRadius:7, border:`1px solid ${C.border}`, background:C.bg, cursor:"pointer", color:C.muted, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        </button>
+                        <button onClick={()=>{ setEditIdx(isEditing?null:idx); setEditVal({...s}); }} className="no-min-h"
+                          style={{ padding:"0 10px", height:28, borderRadius:7, border:`1.5px solid ${isEditing?C.accent:C.border}`, background:isEditing?C.accentL:C.bg, cursor:"pointer", color:isEditing?C.accent:C.muted, fontSize:11, fontWeight:700, display:"flex", alignItems:"center", gap:4 }}>
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                          {isEditing?"Close":"Edit"}
+                        </button>
+                        <button onClick={()=>{ const ns=slides.filter((_,i)=>i!==idx); setSlides(ns); onUpdate({...file,presentation:ns}); setEditIdx(null); }} className="no-min-h"
+                          style={{ width:28, height:28, borderRadius:7, border:`1px solid ${C.red}44`, background:C.redL, cursor:"pointer", color:C.red, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                {/* Edit panel */}
+
+                {/* Expanded edit panel */}
                 {isEditing && (
-                  <div style={{ background:C.surface, padding:"14px 16px", borderTop:`1px solid ${C.border}` }} onClick={e=>e.stopPropagation()}>
-                    <input value={editVal.title||""} onChange={e=>setEditVal(v=>({...v,title:e.target.value}))}
-                      placeholder="Slide title"
-                      style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:8, padding:"7px 10px", fontSize:13, outline:"none", color:C.text, background:C.bg, marginBottom:8, boxSizing:"border-box" }}/>
+                  <div style={{ padding:"14px 16px", borderTop:`1px solid ${C.border}`, background:C.bg, borderRadius:"0 0 14px 14px" }} onClick={e=>e.stopPropagation()}>
+                    <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+                      {/* Title field */}
+                      <div style={{ flex:1, minWidth:200 }}>
+                        <p style={{ fontSize:10, fontWeight:700, color:C.muted, margin:"0 0 4px", textTransform:"uppercase", letterSpacing:.5 }}>Title</p>
+                        <input value={editVal.title||""} onChange={e=>setEditVal(v=>({...v,title:e.target.value}))}
+                          placeholder="Slide title"
+                          style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:8, padding:"7px 10px", fontSize:13, outline:"none", color:C.text, background:C.surface, boxSizing:"border-box" }}/>
+                      </div>
+                      {/* Subtitle for title slides */}
+                      {editVal.type==="title" && (
+                        <div style={{ flex:1, minWidth:200 }}>
+                          <p style={{ fontSize:10, fontWeight:700, color:C.muted, margin:"0 0 4px", textTransform:"uppercase", letterSpacing:.5 }}>Subtitle</p>
+                          <input value={editVal.subtitle||""} onChange={e=>setEditVal(v=>({...v,subtitle:e.target.value}))}
+                            placeholder="Subtitle or tagline"
+                            style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:8, padding:"7px 10px", fontSize:13, outline:"none", color:C.text, background:C.surface, boxSizing:"border-box" }}/>
+                        </div>
+                      )}
+                    </div>
+                    {/* Bullets for content/summary */}
                     {(editVal.type==="content"||editVal.type==="summary") && (
-                      <textarea value={(editVal.bullets||[]).join("\n")} onChange={e=>setEditVal(v=>({...v,bullets:e.target.value.split("\n")}))}
-                        placeholder="One bullet per line"
-                        rows={4}
-                        style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:8, padding:"7px 10px", fontSize:12, outline:"none", color:C.text, background:C.bg, resize:"vertical", marginBottom:8, boxSizing:"border-box" }}/>
+                      <div style={{ marginTop:10 }}>
+                        <p style={{ fontSize:10, fontWeight:700, color:C.muted, margin:"0 0 4px", textTransform:"uppercase", letterSpacing:.5 }}>Bullet Points (one per line)</p>
+                        <textarea value={(editVal.bullets||[]).join("\n")} onChange={e=>setEditVal(v=>({...v,bullets:e.target.value.split("\n")}))}
+                          placeholder="One bullet per line"
+                          rows={4}
+                          style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:8, padding:"7px 10px", fontSize:12, outline:"none", color:C.text, background:C.surface, resize:"vertical", boxSizing:"border-box", fontFamily:"'DM Sans',sans-serif" }}/>
+                        {/* Image for content slide */}
+                        <div style={{ marginTop:8, display:"flex", alignItems:"center", gap:8 }}>
+                          <label style={{ fontSize:11, fontWeight:600, color:C.muted, flexShrink:0 }}>🖼 Image URL (optional):</label>
+                          <input value={editVal.image||""} onChange={e=>setEditVal(v=>({...v,image:e.target.value}))}
+                            placeholder="Paste image URL here…"
+                            style={{ flex:1, border:`1px solid ${C.border}`, borderRadius:6, padding:"5px 8px", fontSize:11, outline:"none", color:C.text, background:C.surface }}/>
+                        </div>
+                      </div>
                     )}
-                    <div style={{ display:"flex", gap:6 }}>
+                    {/* Two-col edit */}
+                    {editVal.type==="two-col" && (
+                      <div style={{ marginTop:10, display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                        <div>
+                          <p style={{ fontSize:10, fontWeight:700, color:C.muted, margin:"0 0 4px", textTransform:"uppercase", letterSpacing:.5 }}>Left heading</p>
+                          <input value={editVal.left?.heading||""} onChange={e=>setEditVal(v=>({...v,left:{...v.left,heading:e.target.value}}))}
+                            style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:8, padding:"6px 9px", fontSize:12, outline:"none", color:C.text, background:C.surface, boxSizing:"border-box", marginBottom:6 }}/>
+                          <textarea value={(editVal.left?.bullets||[]).join("\n")} onChange={e=>setEditVal(v=>({...v,left:{...v.left,bullets:e.target.value.split("\n")}}))}
+                            rows={3} placeholder="Left bullets"
+                            style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:8, padding:"6px 9px", fontSize:11, outline:"none", color:C.text, background:C.surface, resize:"vertical", boxSizing:"border-box", fontFamily:"'DM Sans',sans-serif" }}/>
+                        </div>
+                        <div>
+                          <p style={{ fontSize:10, fontWeight:700, color:C.muted, margin:"0 0 4px", textTransform:"uppercase", letterSpacing:.5 }}>Right heading</p>
+                          <input value={editVal.right?.heading||""} onChange={e=>setEditVal(v=>({...v,right:{...v.right,heading:e.target.value}}))}
+                            style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:8, padding:"6px 9px", fontSize:12, outline:"none", color:C.text, background:C.surface, boxSizing:"border-box", marginBottom:6 }}/>
+                          <textarea value={(editVal.right?.bullets||[]).join("\n")} onChange={e=>setEditVal(v=>({...v,right:{...v.right,bullets:e.target.value.split("\n")}}))}
+                            rows={3} placeholder="Right bullets"
+                            style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:8, padding:"6px 9px", fontSize:11, outline:"none", color:C.text, background:C.surface, resize:"vertical", boxSizing:"border-box", fontFamily:"'DM Sans',sans-serif" }}/>
+                        </div>
+                      </div>
+                    )}
+                    {/* Quote edit */}
+                    {editVal.type==="quote" && (
+                      <div style={{ marginTop:10, display:"flex", gap:10 }}>
+                        <div style={{ flex:2 }}>
+                          <p style={{ fontSize:10, fontWeight:700, color:C.muted, margin:"0 0 4px", textTransform:"uppercase", letterSpacing:.5 }}>Quote</p>
+                          <textarea value={editVal.quote||""} onChange={e=>setEditVal(v=>({...v,quote:e.target.value}))}
+                            rows={3} placeholder="The quote text"
+                            style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:8, padding:"7px 10px", fontSize:12, outline:"none", color:C.text, background:C.surface, resize:"vertical", boxSizing:"border-box", fontFamily:"'DM Sans',sans-serif" }}/>
+                        </div>
+                        <div style={{ flex:1 }}>
+                          <p style={{ fontSize:10, fontWeight:700, color:C.muted, margin:"0 0 4px", textTransform:"uppercase", letterSpacing:.5 }}>Author</p>
+                          <input value={editVal.author||""} onChange={e=>setEditVal(v=>({...v,author:e.target.value}))}
+                            placeholder="Source or attribution"
+                            style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:8, padding:"7px 10px", fontSize:12, outline:"none", color:C.text, background:C.surface, boxSizing:"border-box" }}/>
+                        </div>
+                      </div>
+                    )}
+                    <div style={{ display:"flex", gap:6, marginTop:12 }}>
                       <button onClick={()=>{ const ns=[...slides]; ns[idx]=editVal; setSlides(ns); onUpdate({...file,presentation:ns}); setEditIdx(null); }}
-                        style={{ flex:2, padding:"7px", background:C.accent, color:"#fff", border:"none", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>Save</button>
-                      <button onClick={()=>{ const ns=slides.filter((_,i)=>i!==idx); setSlides(ns); onUpdate({...file,presentation:ns}); setEditIdx(null); }}
-                        style={{ flex:1, padding:"7px", background:"transparent", color:C.muted, border:`1px solid ${C.border}`, borderRadius:8, fontSize:12, cursor:"pointer" }}>Delete</button>
+                        style={{ flex:2, padding:"8px", background:"linear-gradient(135deg,#7C5CFC,#3D8EF8)", color:"#fff", border:"none", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                        ✓ Save Changes
+                      </button>
+                      <button onClick={()=>setEditIdx(null)}
+                        style={{ flex:1, padding:"8px", background:"transparent", color:C.muted, border:`1px solid ${C.border}`, borderRadius:8, fontSize:12, cursor:"pointer" }}>
+                        Cancel
+                      </button>
                     </div>
                   </div>
                 )}
