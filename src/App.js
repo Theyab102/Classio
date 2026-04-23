@@ -1967,8 +1967,9 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
   ];
 
   // ── Context tabs defined early — used by both mobile and desktop ─────────
+  const isBlankDoc = file?._isBlank || file?.isBlankDoc || (!file?._fileObj && !FILE_STORE?.get?.(file?.id));
   const FILE_TABS = [
-    { id:"view",    label:"View File",       icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> },
+    ...(!isBlankDoc ? [{ id:"view", label:"View File", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> }] : []),
     { id:"notes",   label:"Notes",           icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> },
     { id:"voice",   label:"Voice & Podcast", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg> },
     { id:"cards",   label:"Study Cards",     icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/></svg> },
@@ -5959,9 +5960,25 @@ function ViewAIPanel({ file, explaining, explanation, showExplain, onHideExplain
       const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
       const fileText = fileObj ? await extractFileText(fileObj).catch(()=>"") : "";
       const sys = `You are a knowledgeable study assistant. ${fileText ? "Document content: " + fileText.slice(0,8000) : ""}
-Format responses with markdown: # headings, **bold** key terms, - bullet points, > for formulas/quotes, | tables | for comparisons.`;
+Format responses with markdown: # headings, **bold** key terms, - bullet points, > for formulas/quotes.
+For comparisons/tables respond ONLY with JSON: {"TABLE":{"explanation":"...","columns":["A","B"],"rows":[["x","y"]]}}
+NEVER use pipe-table markdown (| col | col |).`;
       const reply = await callClaudeChat(sys, newMsgs.map(m=>({role:m.role,content:m.content})));
-      setMsgs(m => [...m, { role:"assistant", content:reply }]);
+      // Parse TABLE/GRAPH JSON from AI reply
+      let specialMsg = null;
+      try {
+        const cleanReply = reply.replace(/```json|```/g,"").trim();
+        const tMatch = cleanReply.match(/\{"TABLE":\{[\s\S]*?\}\}/);
+        if (tMatch) {
+          const parsed = JSON.parse(tMatch[0]);
+          if (parsed.TABLE?.columns) specialMsg = { role:"assistant", content:"__TABLE__", tableData:{ table:{columns:parsed.TABLE.columns,rows:parsed.TABLE.rows}, explanation:parsed.TABLE.explanation } };
+        }
+        if (!specialMsg) {
+          const gMatch = cleanReply.match(/\{"GRAPH":\{[\s\S]*?\}\}/);
+          if (gMatch) { const parsed = JSON.parse(gMatch[0]); if (parsed.GRAPH?.labels) specialMsg = { role:"assistant", content:"__GRAPH__", graphData:parsed.GRAPH }; }
+        }
+      } catch {}
+      setMsgs(m => [...m, specialMsg || { role:"assistant", content:reply }]);
     } catch(e) { setMsgs(m => [...m, { role:"assistant", content:"Error: "+e.message }]); }
     setLoading(false);
   };
@@ -6012,7 +6029,13 @@ Format responses with markdown: # headings, **bold** key terms, - bullet points,
                 color:m.role==="user"?"#fff":"#ddd",
                 borderBottomRightRadius:m.role==="user"?2:14,
                 borderBottomLeftRadius:m.role==="user"?14:2 }}>
-                {m.role==="assistant" ? <RichText text={m.content}/> : m.content}
+                {m.role==="assistant" && m.tableData
+                ? <InlineClassioTable data={m.tableData} />
+                : m.role==="assistant" && m.graphData
+                ? <InlineChart data={m.graphData} />
+                : m.role==="assistant"
+                ? <RichText text={m.content}/>
+                : m.content}
               </div>
             </div>
           ))}
@@ -7178,14 +7201,17 @@ function NotesTurboPanel({ file, notes, lang, onTabChange }) {
       const sys = `You are a study AI assistant. ${fileText ? "File context: " + fileText.slice(0,6000) : ""} ${notes ? "Current notes: " + notes.slice(0,2000) : ""}
 
 FORMATTING: Use **bold** for key terms, > for important formulas/definitions, - for bullet points. Be clear and thorough.
-TABLES: If the user asks for a comparison, table, or list of items with properties, respond with ONLY valid JSON (no other text):
-{"TABLE":{"explanation":"...","columns":["Col1","Col2"],"rows":[["A","B"]]}}
+
+TABLES — CRITICAL: When the user asks for ANY comparison, table, properties list, or structured data:
+You MUST respond with ONLY this exact JSON format and nothing else — no markdown pipes, no text before or after:
+{"TABLE":{"explanation":"brief description","columns":["Col1","Col2","Col3"],"rows":[["A","B","C"],["D","E","F"]]}}
+Do NOT use markdown pipe tables (|col|col|) — ONLY use the JSON TABLE format above.
 
 GRAPHS/CHARTS: If the user asks for a graph, chart, plot, or visualization of data, respond with ONLY valid JSON (no other text):
 {"GRAPH":{"type":"bar","title":"...","labels":["A","B","C"],"datasets":[{"label":"Series 1","data":[10,20,30],"backgroundColor":["#7C5CFC","#3D8EF8","#06b6d4"]}]}}
 Supported graph types: bar, line, pie, doughnut.
 
-Otherwise respond normally with formatted text.`;
+Otherwise respond normally with formatted text. Never use pipe-table markdown (| col | col |) under any circumstances.`;
       const reply = await callClaudeChat(sys, newMsgs.map(m => ({ role:m.role, content:m.content })));
       // Check if reply is a table or graph JSON
       let specialAdded = false;
@@ -7612,9 +7638,12 @@ function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
   };
 
   return (
-    <div style={{ background:C.surface, borderRadius:14, padding:"24px 28px", minHeight:400, border:`1.5px solid ${C.border}`, boxShadow:"0 2px 12px rgba(0,0,0,.06)", flex:1, overflow:"hidden", wordBreak:"break-word", overflowWrap:"break-word" }}
+    <div style={{ background:C.surface, borderRadius:16, minHeight:400, border:`1px solid ${C.border}`, boxShadow:"0 2px 16px rgba(0,0,0,.06)", flex:1, overflow:"hidden", wordBreak:"break-word", overflowWrap:"break-word", display:"flex", flexDirection:"column" }}
       dir={isRTL?"rtl":"ltr"}>
-      {renderNotesWithTable()}
+      {/* Document-style content area */}
+      <div style={{ flex:1, padding:"28px 32px", overflowY:"auto" }}>
+        {renderNotesWithTable()}
+      </div>
     </div>
   );
 }
@@ -7748,7 +7777,27 @@ function NotesTab({ file, onUpdate, user, isGuest, onTabChange }) {
   const persistSaved = (arr) => {
     setSavedNotes(arr);
     try { localStorage.setItem(SAVED_KEY, JSON.stringify(arr)); } catch {}
+    // Also sync to Firebase so notes are available on other devices
+    if (user?.uid) {
+      try {
+        setDoc(doc(db, "users", user.uid, "savedNotes", file.id), { notes: arr }, { merge: false }).catch(() => {});
+      } catch {}
+    }
   };
+
+  // Load saved notes from Firebase on mount (cross-device sync)
+  useEffect(() => {
+    if (!user?.uid) return;
+    getDoc(doc(db, "users", user.uid, "savedNotes", file.id)).then(snap => {
+      if (snap.exists()) {
+        const remote = snap.data().notes || [];
+        if (remote.length > savedNotes.length) {
+          setSavedNotes(remote);
+          try { localStorage.setItem(SAVED_KEY, JSON.stringify(remote)); } catch {}
+        }
+      }
+    }).catch(() => {});
+  }, [user?.uid, file.id]);
   const doSave = () => {
     if (!newNoteName.trim()) return;
     const entry = {
@@ -8029,10 +8078,9 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
               onChange={v => { setNotes(v); setUnsaved(true); }}
             />
           ) : (
-            <textarea value={notes} onChange={e => { setNotes(e.target.value); setUnsaved(true); }}
-              dir={isRTL ? "rtl" : "ltr"}
-              placeholder="Click AI Generate to create notes. Tables will appear inline inside your notes."
-              style={{ width:"100%", flex:1, minHeight:480, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"20px 22px", fontSize:15, lineHeight:1.9, outline:"none", resize:"none", color:C.text, background:C.surface, fontFamily:"'DM Sans',sans-serif", direction:isRTL?"rtl":"ltr", boxSizing:"border-box" }}/>
+            <div style={{ background:C.surface, borderRadius:16, border:`1px solid ${C.border}`, minHeight:480, padding:"28px 32px", boxShadow:"0 2px 16px rgba(0,0,0,.06)" }}>
+              <p style={{ fontSize:14, color:C.muted, margin:0, lineHeight:1.7 }}>Click AI Generate to create notes. Tables will appear inline inside your notes.</p>
+            </div>
           )}
           {notes.trim() && (
             <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center", padding:"8px 0 2px", borderTop:`1px solid ${C.border}`, marginTop:4 }}>
@@ -9304,7 +9352,11 @@ function TypewriterText({ text, speed }) {
 // Merged Podcast + AI Explain: generates an explanation then speaks it chunk by
 // chunk. Pulsing audio indicator while speaking. Mic button to interrupt.
 function AIPodcastPanel({ file, lang }) {
-  const [notes] = useState(() => {
+  const [allSaved] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("saved_notes_" + file.id) || "[]"); } catch { return []; }
+  });
+  const [selectedNoteIdx, setSelectedNoteIdx] = useState(0);
+  const [notes, setNotes] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem("saved_notes_" + file.id) || "[]");
       const app = (() => { try { return JSON.parse(localStorage.getItem("classio_v2")||"{}"); } catch { return {}; } })();
@@ -9539,6 +9591,17 @@ RULES:
         <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:700, color:C.text, marginBottom:3 }}>AI Podcast</h2>
         <p style={{ fontSize:13, color:C.muted }}>AI teaches your notes out loud like a personal podcast. Tap mic to ask questions anytime.</p>
       </div>
+
+      {/* Saved notes selector — pick which note the podcast teaches */}
+      {allSaved.length > 1 && (
+        <div style={{ background:C.accentL, border:`1px solid ${C.accentS}`, borderRadius:12, padding:"10px 14px", marginBottom:12, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+          <span style={{ fontSize:12, fontWeight:700, color:C.accent, flexShrink:0 }}>📄 Podcast from:</span>
+          <select value={selectedNoteIdx} onChange={e => { setSelectedNoteIdx(+e.target.value); setNotes(allSaved[+e.target.value]?.text || ""); }}
+            style={{ flex:1, border:`1.5px solid ${C.accentS}`, borderRadius:8, padding:"5px 10px", fontSize:12, color:C.text, background:C.surface, outline:"none", cursor:"pointer", minWidth:120 }}>
+            {allSaved.map((n, i) => <option key={i} value={i}>{n.name}</option>)}
+          </select>
+        </div>
+      )}
 
       {/* Controls bar */}
       <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"12px 16px", marginBottom:14 }}>
@@ -10169,12 +10232,14 @@ Format:
     {
       "type": "title",
       "title": "Main Title",
-      "subtitle": "Subtitle or tagline"
+      "subtitle": "Subtitle or tagline",
+      "imageSearch": "search query for a relevant background image"
     },
     {
       "type": "content",
       "title": "Slide Title",
       "bullets": ["Key point 1", "Key point 2", "Key point 3"],
+      "imageSearch": "1-3 word search term for a relevant image to show on this slide",
       "note": "Optional speaker note"
     },
     {
@@ -10196,7 +10261,8 @@ Format:
   ]
 }
 Slide types to use: title (1 slide), content (most slides), two-col (for comparisons), quote (1-2 slides), summary (last slide).
-Make exactly ${slideCount} slides total. Be comprehensive and educational.`,
+Make exactly ${slideCount} slides total. Be comprehensive and educational.
+For content and title slides, include an "imageSearch" field with a 1-3 word search query that would find a relevant educational image (e.g. "nuclear atom diagram", "cell mitosis", "french revolution painting"). Keep imageSearch queries simple and specific.`,
         `Topic: "${topicStr}"\n${context}\n\nCreate a ${slideCount}-slide presentation covering all key concepts thoroughly.`,
         4000
       );
@@ -10341,9 +10407,31 @@ Make exactly ${slideCount} slides total. Be comprehensive and educational.`,
 
   const thm = currentTheme;
 
+  // Fetch a Wikipedia image for a slide's imageSearch query
+  const SlideImage = ({ query, manualUrl }) => {
+    const [url, setUrl] = useState(manualUrl || null);
+    const [failed, setFailed] = useState(false);
+    useEffect(() => {
+      if (manualUrl) { setUrl(manualUrl); return; }
+      if (!query) return;
+      const term = encodeURIComponent(query.trim().slice(0, 80));
+      fetch(`https://en.wikipedia.org/w/api.php?action=query&prop=pageimages&format=json&piprop=original&titles=${term}&origin=*`)
+        .then(r => r.json())
+        .then(d => {
+          const pages = d?.query?.pages || {};
+          const page = Object.values(pages)[0];
+          const src = page?.original?.source;
+          if (src && /\.(jpg|jpeg|png|gif|webp|svg)(\?|$)/i.test(src)) setUrl(src);
+          else setFailed(true);
+        }).catch(() => setFailed(true));
+    }, [query, manualUrl]);
+    if (failed || (!url && !query)) return null;
+    if (!url) return <div style={{ width:80, height:56, background:"rgba(255,255,255,.08)", borderRadius:6, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div>;
+    return <img src={url} alt={query} onError={()=>setFailed(true)} style={{ width:80, height:56, objectFit:"cover", borderRadius:6, flexShrink:0, border:"1px solid rgba(255,255,255,.15)" }}/>;
+  };
+
   // Slide preview renderer
   const SlidePreview = ({s, idx, mini=false}) => {
-    const fs = mini ? 0.45 : 1;
     const pad = mini ? "10px 12px" : "20px 22px";
     const minH = mini ? 90 : 180;
     return (
@@ -10352,7 +10440,8 @@ Make exactly ${slideCount} slides total. Be comprehensive and educational.`,
         <span style={{ position:"absolute", top:mini?5:10, right:mini?6:12, fontSize:mini?8:10, color:thm.sub, opacity:.6 }}>{idx+1}/{slides.length}</span>
         {s.type==="title" ? (
           <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:mini?74:160, textAlign:"center" }}>
-            <p style={{ fontSize:mini?11:20, fontWeight:900, color:thm.text, margin:"0 0 4px", lineHeight:1.2 }}>{s.title}</p>
+            {!mini && (s.imageSearch||s.image) && <SlideImage query={s.imageSearch} manualUrl={s.image} />}
+            <p style={{ fontSize:mini?11:20, fontWeight:900, color:thm.text, margin:mini?"0 0 4px":"8px 0 4px", lineHeight:1.2 }}>{s.title}</p>
             {s.subtitle && <p style={{ fontSize:mini?8:13, color:thm.sub, margin:0 }}>{s.subtitle}</p>}
           </div>
         ) : s.type==="quote" ? (
@@ -10370,9 +10459,15 @@ Make exactly ${slideCount} slides total. Be comprehensive and educational.`,
           </>
         ) : (
           <>
-            <p style={{ fontSize:mini?9:15, fontWeight:800, color:thm.text, margin:"0 0 6px", borderBottom:`${mini?1:2}px solid ${thm.accent}`, paddingBottom:4 }}>{s.title}</p>
-            {s.image && <div style={{ fontSize:mini?7:11, color:thm.accent, marginBottom:4 }}>🖼 {s.image.slice(0,30)}</div>}
-            {(s.bullets||[]).slice(0,mini?3:4).map((b,bi)=><p key={bi} style={{ fontSize:mini?7:11, color:thm.sub, margin:"2px 0" }}>• {b}</p>)}
+            <div style={{ display:"flex", gap:10, alignItems:"flex-start" }}>
+              <div style={{ flex:1, minWidth:0 }}>
+                <p style={{ fontSize:mini?9:15, fontWeight:800, color:thm.text, margin:"0 0 6px", borderBottom:`${mini?1:2}px solid ${thm.accent}`, paddingBottom:4 }}>{s.title}</p>
+                {(s.bullets||[]).slice(0,mini?3:4).map((b,bi)=><p key={bi} style={{ fontSize:mini?7:11, color:thm.sub, margin:"2px 0" }}>• {b}</p>)}
+              </div>
+              {!mini && (s.imageSearch||s.image) && (
+                <SlideImage query={s.imageSearch} manualUrl={s.image} />
+              )}
+            </div>
           </>
         )}
       </div>
