@@ -5134,14 +5134,7 @@ function CharacterModal({ character, onChange, onClose }) {
   // ─────────────────────────────────────────────────────────────────────────
   // RENDER
   // ─────────────────────────────────────────────────────────────────────────
-  // Lock body scroll when modal is open and prevent click-through to sidebar
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
-  }, []);
-
-  // Lock body scroll while open and prevent clicks falling through to sidebar
+  // Lock body scroll when modal is open
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -5150,25 +5143,26 @@ function CharacterModal({ character, onChange, onClose }) {
 
   return (
     <div
-      onMouseDown={e => { if (e.target === e.currentTarget) { e.stopPropagation(); onClose(); } }}
-      onClick={e => e.stopPropagation()}
+      onClick={onClose}
       style={{
         position:"fixed", inset:0, zIndex:3000,
-        background:"rgba(0,0,0,.6)",
+        background:"rgba(0,0,0,.55)",
         display:"flex", alignItems:"center", justifyContent:"center",
         padding:16,
-        willChange:"transform",
       }}
     >
       <div
         onClick={e => e.stopPropagation()}
+        onMouseDown={e => e.stopPropagation()}
         style={{
           width:"100%", maxWidth:520,
-          height:`min(650px, calc(100dvh - 32px))`,
+          height:`min(680px, calc(100dvh - 32px))`,
           display:"flex", flexDirection:"column",
           background:"#fff", borderRadius:22,
           boxShadow:"0 24px 80px rgba(0,0,0,.38)",
           overflow:"hidden",
+          position:"relative",
+          zIndex:1,
         }}
       >
         {/* ── Header ── */}
@@ -5352,7 +5346,7 @@ function CharacterModal({ character, onChange, onClose }) {
           paddingBottom:"max(12px, env(safe-area-inset-bottom, 12px))",
           borderTop:"1px solid #f0f0f0", background:"#fff",
         }}>
-          <button onClick={onClose} style={{
+          <button onClick={e => { e.stopPropagation(); onClose(); }} style={{
             width:"100%", background:"#111", color:"#fff",
             border:"none", borderRadius:14, padding:"13px",
             fontSize:14, fontWeight:900, cursor:"pointer", letterSpacing:.4,
