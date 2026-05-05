@@ -5678,6 +5678,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFi
                     );
                   })}
                 </div>
+            }
           </>
         )}
         {tab === "youtube" && <YouTubeTab file={{ id: folder.id + "_yt", name: folder.name, notes:"" }} onUpdate={() => {}} />}
