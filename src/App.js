@@ -5557,6 +5557,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFi
   const TABS = [{ id:"files", label:"Files", icon:I.file },{ id:"youtube", label:"YouTube", icon:I.link },{ id:"ai", label:"AI Assistant", icon:I.ai }];
 
   return (
+    <>
     <div className="page-with-ad page-enter screen-enter" style={{ minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans',sans-serif" }}>
       <style>{GS}</style>
       {/* Top bar */}
@@ -5697,6 +5698,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFi
         onCancel={() => setFolderFileRenaming(null)}
       />
     )}
+    </>
   );
 }
 
