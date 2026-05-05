@@ -2513,6 +2513,60 @@ function MoveFileDropdown({ file, folders, T, onMove }) {
   );
 }
 
+// ── In-app ConfirmDialog (replaces window.confirm) ────────────────────────────
+function ConfirmDialog({ title, message, confirmLabel="Delete", danger=true, onConfirm, onCancel }) {
+  const T = useTheme();
+  useEffect(() => {
+    const h = e => { if(e.key==="Enter") onConfirm(); if(e.key==="Escape") onCancel(); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
+  return (
+    <div onClick={onCancel} style={{ position:"fixed", inset:0, zIndex:9500, background:"rgba(0,0,0,.5)", display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:T.surface, borderRadius:20, padding:"28px 28px 22px", maxWidth:380, width:"100%", boxShadow:"0 24px 64px rgba(0,0,0,.3)", textAlign:"center", border:`1px solid ${T.border}` }}>
+        <div style={{ width:52, height:52, borderRadius:"50%", background:danger?"#fee2e2":T.accentL, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 16px" }}>
+          {danger
+            ? <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4h6v2"/></svg>
+            : <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={T.accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          }
+        </div>
+        <p style={{ fontSize:17, fontWeight:800, color:T.text, margin:"0 0 8px", fontFamily:"'Fraunces',serif" }}>{title}</p>
+        <p style={{ fontSize:14, color:T.muted, margin:"0 0 24px", lineHeight:1.55 }}>{message}</p>
+        <div style={{ display:"flex", gap:10 }}>
+          <button onClick={onCancel} style={{ flex:1, padding:"11px", borderRadius:12, border:`1.5px solid ${T.border}`, background:"transparent", fontSize:14, fontWeight:700, cursor:"pointer", color:T.muted }}>Cancel</button>
+          <button onClick={onConfirm} style={{ flex:1, padding:"11px", borderRadius:12, border:"none", background:danger?"#ef4444":T.accent, color:"#fff", fontSize:14, fontWeight:700, cursor:"pointer" }}>{confirmLabel}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── In-app RenameDialog (replaces window.prompt) ──────────────────────────────
+function RenameDialog({ title, defaultValue="", placeholder="Enter name…", onConfirm, onCancel }) {
+  const [val, setVal] = useState(defaultValue);
+  const T = useTheme();
+  useEffect(() => {
+    const h = e => { if(e.key==="Escape") onCancel(); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
+  return (
+    <div onClick={onCancel} style={{ position:"fixed", inset:0, zIndex:9500, background:"rgba(0,0,0,.5)", display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:T.surface, borderRadius:20, padding:"26px 26px 20px", maxWidth:380, width:"100%", boxShadow:"0 24px 64px rgba(0,0,0,.3)", border:`1px solid ${T.border}` }}>
+        <p style={{ fontSize:17, fontWeight:800, color:T.text, margin:"0 0 16px", fontFamily:"'Fraunces',serif" }}>{title}</p>
+        <input autoFocus value={val} onChange={e=>setVal(e.target.value)}
+          onKeyDown={e=>{ if(e.key==="Enter"&&val.trim()) onConfirm(val.trim()); }}
+          placeholder={placeholder}
+          style={{ width:"100%", border:`1.5px solid ${T.border}`, borderRadius:12, padding:"11px 14px", fontSize:14, outline:"none", color:T.text, background:T.bg, boxSizing:"border-box", marginBottom:16, fontFamily:"'DM Sans',sans-serif" }}/>
+        <div style={{ display:"flex", gap:10 }}>
+          <button onClick={onCancel} style={{ flex:1, padding:"11px", borderRadius:12, border:`1.5px solid ${T.border}`, background:"transparent", fontSize:14, fontWeight:700, cursor:"pointer", color:T.muted }}>Cancel</button>
+          <button onClick={()=>{ if(val.trim()) onConfirm(val.trim()); }} style={{ flex:1, padding:"11px", borderRadius:12, border:"none", background:T.accent, color:"#fff", fontSize:14, fontWeight:700, cursor:"pointer" }}>Save</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DashboardDropZone({ onFilesAdded }) {
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef(null);
@@ -2541,9 +2595,11 @@ function DashboardDropZone({ onFilesAdded }) {
 }
 
 // ── Move File Button (three-dot dropdown with Move + Delete) ──────────────────
-function FileActionsMenu({ file, folderId, folders, onMove, onDelete, onOpen }) {
+function FileActionsMenu({ file, folderId, folders, onMove, onDelete, onOpen, onRename }) {
   const [open, setOpen] = useState(false);
   const [showMoveList, setShowMoveList] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const onDeleteConfirm = () => setDeleteConfirm(true);
   const T = useTheme();
   const targets = (folders||[]).filter(f => f.id !== folderId);
 
@@ -2602,14 +2658,29 @@ function FileActionsMenu({ file, folderId, folders, onMove, onDelete, onOpen }) 
               }
             </div>
           )}
-          <button onClick={()=>{onDelete();setOpen(false);}}
+          {onRename && (
+            <button onClick={()=>{onRename();setOpen(false);}}
+              style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"10px 14px", background:"none",
+                border:"none", cursor:"pointer", textAlign:"left", fontSize:13, color:T.text, borderTop:`1px solid ${T.border}` }}
+              onMouseEnter={e=>e.currentTarget.style.background=T.sidebarActive}
+              onMouseLeave={e=>e.currentTarget.style.background="none"}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              Rename
+            </button>
+          )}
+          <button onClick={()=>{if(onDelete){setOpen(false);onDeleteConfirm();} else setOpen(false);}}
             style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"10px 14px", background:"none",
-              border:"none", cursor:"pointer", textAlign:"left", fontSize:13, color:"#dc2626" }}
+              border:"none", cursor:"pointer", textAlign:"left", fontSize:13, color:"#dc2626", borderTop:`1px solid ${T.border}` }}
             onMouseEnter={e=>e.currentTarget.style.background="#fef2f2"}
             onMouseLeave={e=>e.currentTarget.style.background="none"}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
             Delete
           </button>
+          {deleteConfirm && (
+            <ConfirmDialog title={`Delete "${file.name}"?`} message="This cannot be undone."
+              onConfirm={()=>{onDelete();setDeleteConfirm(false);setOpen(false);}}
+              onCancel={()=>setDeleteConfirm(false)} />
+          )}
         </div>
       )}
     </div>
@@ -2810,6 +2881,8 @@ export default function App() {
     } catch { return 1; }
   });
   const [showRecordModal, setShowRecordModal] = useState(false);
+  const [confirmDelete, setConfirmDelete]     = useState(null); // {id,name,type:"file"|"folder",folderId?}
+  const [renamingItem,  setRenamingItem]       = useState(null); // {id,name,type:"file"|"folder"}
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showWebLinkModal, setShowWebLinkModal] = useState(false);
   const T = useTheme(); // reactive theme
@@ -3212,7 +3285,7 @@ export default function App() {
                             <p style={{ margin:0, fontSize:13, fontWeight:600, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{file.name}</p>
                             <p style={{ margin:0, fontSize:11, color:T.muted, marginTop:1 }}>{file.uploadedAt} · Click to open</p>
                           </div>
-                          {/* Actions: Move to folder + Delete */}
+                          {/* Actions: Move + Rename + Delete */}
                           <div style={{ display:"flex", gap:4, flexShrink:0 }} onClick={e=>e.stopPropagation()}>
                             {realFolders.length > 0 && (
                               <MoveFileDropdown
@@ -3227,11 +3300,13 @@ export default function App() {
                                 }}
                               />
                             )}
+                            {/* Rename */}
+                            <button onClick={()=>setRenamingItem({id:file.id,name:file.name,type:"file",scope:"inbox"})} title="Rename"
+                              style={{ display:"flex", alignItems:"center", justifyContent:"center", background:T.accentL, color:T.accent, border:`1px solid ${T.accent}33`, borderRadius:8, padding:"5px 8px", cursor:"pointer" }}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            </button>
                             {/* Delete */}
-                            <button onClick={()=>{ if(window.confirm(`Delete "${file.name}"?`)){
-                              idbDelete(file.id); FILE_STORE.delete(file.id);
-                              setFoldersSave(folders.map(fo=>fo.id==="inbox"?{...inbox,files:inbox.files.filter(fi=>fi.id!==file.id)}:fo));
-                            }}} title="Delete"
+                            <button onClick={()=>setConfirmDelete({id:file.id,name:file.name,type:"file"})} title="Delete"
                               style={{ display:"flex", alignItems:"center", justifyContent:"center", background:T.redL, color:T.red, border:`1px solid ${T.red}33`, borderRadius:8, padding:"5px 8px", cursor:"pointer" }}>
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4h6v2"/></svg>
                             </button>
@@ -3283,13 +3358,13 @@ export default function App() {
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="5" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="19" r="1" fill="currentColor"/></svg>
                     </button>
                     <div style={{ display:"none", position:"absolute", right:0, top:32, zIndex:400, background:T.surface, border:`1.5px solid ${T.border}`, borderRadius:14, boxShadow:T.cardShadow, minWidth:140, padding:6, overflow:"hidden" }}>
-                      <button onClick={()=>{ const n=window.prompt("Rename folder:",folder.name); if(n&&n.trim()) updateFolder({...folder,name:n.trim()}); }}
+                      <button onClick={()=>setRenamingItem({id:folder.id,name:folder.name,type:"folder"})}
                         style={{ display:"flex", alignItems:"center", gap:8, width:"100%", padding:"8px 12px", borderRadius:8, border:"none", background:"transparent", cursor:"pointer", fontSize:13, color:T.text }}
                         onMouseEnter={e=>e.currentTarget.style.background=T.bg}
                         onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                         <Icon d={I.edit} size={14} color={T.muted}/> Rename
                       </button>
-                      <button onClick={()=>{ if(window.confirm(`Delete "${folder.name}"?`)) deleteFolder(folder.id); }}
+                      <button onClick={()=>setConfirmDelete({id:folder.id,name:folder.name,type:"folder"})}
                         style={{ display:"flex", alignItems:"center", gap:8, width:"100%", padding:"8px 12px", borderRadius:8, border:"none", background:"transparent", cursor:"pointer", fontSize:13, color:T.red }}
                         onMouseEnter={e=>e.currentTarget.style.background=T.redL}
                         onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
@@ -3304,6 +3379,43 @@ export default function App() {
         )}
 
       {showHomeAI && <StandaloneAI onClose={() => setShowHomeAI(false)} />}
+
+      {confirmDelete && (
+        <ConfirmDialog
+          title={`Delete "${confirmDelete.name}"?`}
+          message={confirmDelete.type==="folder"
+            ? "This will permanently delete the folder and all its files. This cannot be undone."
+            : "This file will be permanently deleted and cannot be recovered."}
+          onConfirm={() => {
+            if (confirmDelete.type==="file") {
+              idbDelete(confirmDelete.id); FILE_STORE.delete(confirmDelete.id);
+              setFoldersSave(folders.map(fo=>({...fo,files:(fo.files||[]).filter(fi=>fi.id!==confirmDelete.id)})));
+            } else {
+              deleteFolder(confirmDelete.id);
+            }
+            setConfirmDelete(null);
+          }}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
+
+      {renamingItem && (
+        <RenameDialog
+          title={renamingItem.type==="folder" ? "Rename Folder" : "Rename File"}
+          defaultValue={renamingItem.name}
+          placeholder={renamingItem.type==="folder" ? "Folder name…" : "File name…"}
+          onConfirm={(newName) => {
+            if (renamingItem.type==="folder") {
+              const f = folders.find(x=>x.id===renamingItem.id);
+              if (f) updateFolder({...f, name:newName});
+            } else {
+              setFoldersSave(folders.map(fo=>({...fo,files:(fo.files||[]).map(fi=>fi.id===renamingItem.id?{...fi,name:newName}:fi)})));
+            }
+            setRenamingItem(null);
+          }}
+          onCancel={() => setRenamingItem(null)}
+        />
+      )}
 
       {/* ── Record Audio Modal ── */}
       {showRecordModal && (
@@ -5431,6 +5543,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFi
   const [editingName, setEditingName] = useState(false);
   const [folderName, setFolderName] = useState(folder.name);
   const [showFolderColorPicker, setShowFolderColorPicker] = useState(false);
+  const [folderFileRenaming, setFolderFileRenaming] = useState(null); // {id,name}
   const fileInput = useRef();
 
   const addFiles = (list) => {
@@ -5563,6 +5676,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFi
                               file={file} folderId={folder.id} folders={allFolders||[]}
                               onMove={(toFolderId) => { onUpdate({...folder,files:folder.files.filter(f=>f.id!==file.id)}); onMoveFile&&onMoveFile(file,toFolderId); }}
                               onDelete={() => { idbDelete(file.id); FILE_STORE.delete(file.id); onUpdate({...folder,files:folder.files.filter(f=>f.id!==file.id)}); }}
+                              onRename={() => setFolderFileRenaming({id:file.id,name:file.name})}
                             />
                           </div>
                         </div>
@@ -5577,6 +5691,18 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFi
         {tab === "ai" && <AITab file={null} allFiles={folder.files} folder={folder} onUpdate={()=>{}} />}
       </div>
     </div>
+    {folderFileRenaming && (
+      <RenameDialog
+        title="Rename File"
+        defaultValue={folderFileRenaming.name}
+        placeholder="File name…"
+        onConfirm={(newName) => {
+          onUpdate({...folder, files:folder.files.map(f=>f.id===folderFileRenaming.id?{...f,name:newName}:f)});
+          setFolderFileRenaming(null);
+        }}
+        onCancel={() => setFolderFileRenaming(null)}
+      />
+    )}
   );
 }
 
@@ -5667,6 +5793,7 @@ function ViewTab({ file, onUpdate }) {
   // PDF state
   const canvasRef  = useRef(null);
   const drawRef    = useRef(null);
+  const pdfContainerRef = useRef(null);
   const renderRef  = useRef(null);
   const pdfRef     = useRef(null);
   const { isMobile } = useResponsive();
@@ -5674,7 +5801,7 @@ function ViewTab({ file, onUpdate }) {
   const [pageNum,    setPageNum]    = useState(1);
   const [pdfReady,   setPdfReady]   = useState(false);
   const [annotations,setAnnotations]= useState({});
-  const [tool,      setTool]      = useState("pen");
+  const [tool,      setTool]      = useState("pan");
   const [penColor,  setPenColor]  = useState("#E53E3E");
   const [brushSize, setBrushSize] = useState(3);
   const [drawing,   setDrawing]   = useState(false);
@@ -5722,7 +5849,7 @@ function ViewTab({ file, onUpdate }) {
       const c = canvasRef.current; if (!c) return;
       try {
         const pdfPage = await pdf.getPage(pg);
-        const parentW = c.parentElement?.offsetWidth || 760;
+        const parentW = pdfContainerRef.current?.clientWidth || c.parentElement?.offsetWidth || 760;
         const base    = pdfPage.getViewport({ scale: 1 });
         const scale   = Math.min(2.5, (parentW - 32) / base.width);
         const vp      = pdfPage.getViewport({ scale });
@@ -5761,8 +5888,9 @@ function ViewTab({ file, onUpdate }) {
     const src = e.touches?.[0] || e;
     return { x: (src.clientX - r.left) * sx, y: (src.clientY - r.top) * sy };
   };
-  const startDraw = (e) => { e.preventDefault(); lastPosRef.current = getPos(e); setDrawing(true); };
+  const startDraw = (e) => { if (tool==="pan") return; e.preventDefault(); lastPosRef.current = getPos(e); setDrawing(true); };
   const doDraw = (e) => {
+    if (tool==="pan") return;
     e.preventDefault();
     if (!drawing || !lastPosRef.current || !drawRef.current) return;
     const ctx = drawRef.current.getContext("2d");
@@ -5813,10 +5941,15 @@ ${text}`
   };
 
   const COLORS = ["#E53E3E","#FF8C00","#ECC94B","#38A169","#3182CE","#805AD5","#1a1a1a","#ffffff"];
-  const TOOLS  = [
-    {id:"pen",      svgPath:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"},
-    {id:"highlight",svgPath:"M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"},
-    {id:"eraser",   svgPath:"M20 20H7L3 16l10-10 7 7-3.5 3.5M6.5 17.5l5-5"},
+  const TOOLS = [
+    { id:"pan",       label:"Pan (scroll)",  cursor:"grab",
+      icon:<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0v5M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8l-1.5-1.5a1.5 1.5 0 0 0-2.1 2.1L6 19a6 6 0 0 0 6 2h2a6 6 0 0 0 6-6V11a2 2 0 0 0-4 0"/></svg> },
+    { id:"pen",       label:"Pen",           cursor:"crosshair",
+      icon:<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> },
+    { id:"highlight", label:"Highlight",     cursor:"crosshair",
+      icon:<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> },
+    { id:"eraser",    label:"Eraser",        cursor:"cell",
+      icon:<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 20H7L3 16l10-10 7 7-3.5 3.5"/><path d="M6.5 17.5l5-5"/></svg> },
   ];
 
   if (!fileObj) return (
@@ -5851,8 +5984,11 @@ ${text}`
       <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"8px 16px", display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", minHeight:50 }}>
         {isPDF ? (<>
           {TOOLS.map(t => (
-            <button key={t.id} onClick={() => setTool(t.id)}
-              style={{ width:32, height:32, borderRadius:7, border:`1.5px solid ${tool===t.id?C.accent:C.border}`, background:tool===t.id?C.accentL:"#fff", cursor:"pointer", fontSize:14 }}>
+            <button key={t.id} onClick={() => setTool(t.id)} title={t.label}
+              style={{ width:32, height:32, borderRadius:7, border:`1.5px solid ${tool===t.id?C.accent:C.border}`,
+                background:tool===t.id?C.accentL:"transparent",
+                cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
+                color:tool===t.id?C.accent:C.muted, transition:"all .12s" }}>
               {t.icon}
             </button>
           ))}
@@ -5901,7 +6037,7 @@ ${text}`
       {/* Turbo split-pane: document left, AI chat right */}
       <div style={{ flex:1, display:"flex", overflow:"hidden" }}>
         {/* Left — document */}
-        <div style={{ flex:1, overflow:"auto", background:C.isDark?"#111110":"#2a2a26", padding:"24px", display:"flex", justifyContent:"center", alignItems:"flex-start", position:"relative" }}>
+        <div ref={pdfContainerRef} style={{ flex:1, overflow:"auto", background:C.isDark?"#111110":"#2a2a26", padding:"24px", display:"flex", justifyContent:"center", alignItems:"flex-start", position:"relative" }}>
           <div style={{ position:"absolute", top:10, left:10, fontSize:13, fontWeight:700, color:"#fff", opacity:.7, userSelect:"none" }}>
             {fileName}
           </div>
@@ -5910,7 +6046,10 @@ ${text}`
             <div style={{ position:"relative", display:"inline-block", lineHeight:0, boxShadow:"0 8px 40px rgba(0,0,0,.7)", borderRadius:2 }}>
               <canvas ref={canvasRef} style={{ display:"block", borderRadius:2 }} />
               <canvas ref={drawRef}
-                style={{ position:"absolute", top:0, left:0, width:"100%", height:"100%", cursor:tool==="eraser"?"cell":"crosshair", touchAction:"none" }}
+                style={{ position:"absolute", top:0, left:0, width:"100%", height:"100%",
+                  cursor: TOOLS.find(t=>t.id===tool)?.cursor || "crosshair",
+                  touchAction: tool==="pan" ? "auto" : "none",
+                  pointerEvents: tool==="pan" ? "none" : "auto" }}
                 onMouseDown={startDraw} onMouseMove={doDraw} onMouseUp={stopDraw} onMouseLeave={stopDraw}
                 onTouchStart={startDraw} onTouchMove={doDraw} onTouchEnd={stopDraw} />
             </div>
@@ -5984,7 +6123,8 @@ NEVER use pipe-table markdown (| col | col |).`;
   };
 
   return (
-    <div className="view-ai-panel-inner" style={{ width:340, flexShrink:0, background:T.isDark?"#111":"#1a1a1a", display:"flex", flexDirection:"column", borderLeft:"1px solid rgba(255,255,255,.1)" }}>
+    <div className="view-ai-panel-inner" style={{ width:340, flexShrink:0, background:"#1a1a1a", display:"flex", flexDirection:"column", borderLeft:"1px solid rgba(255,255,255,.1)", colorScheme:"dark" }}>
+      <style>{'.view-ai-panel-inner p,.view-ai-panel-inner span:not([style]),.view-ai-panel-inner div>p,.view-ai-panel-inner h2,.view-ai-panel-inner h3,.view-ai-panel-inner li{color:#e0e0e0!important}.view-ai-panel-inner strong{color:#fff!important}'}</style>
       {msgs.length === 0 && !explanation && (
         <>
           {/* Header prompt */}
@@ -7412,20 +7552,27 @@ function AutoFetchImage({ description }) {
     let cancelled = false;
     const fetchImg = async () => {
       try {
-        // Try Wikipedia search for an image matching the description
-        const searchTerm = encodeURIComponent(description.split(",")[0].trim().slice(0, 60));
-        const res = await fetch(`https://en.wikipedia.org/w/api.php?action=query&prop=pageimages&format=json&piprop=original&titles=${searchTerm}&origin=*`);
-        const data = await res.json();
-        const pages = data?.query?.pages || {};
+        const term = encodeURIComponent(description.split(",")[0].trim().slice(0, 70));
+        // 1st: Wikipedia page image
+        const r1 = await fetch(`https://en.wikipedia.org/w/api.php?action=query&prop=pageimages&format=json&piprop=original&titles=${term}&origin=*`);
+        const d1 = await r1.json();
+        const pages = d1?.query?.pages || {};
         const page = Object.values(pages)[0];
-        const url = page?.original?.source;
+        const url1 = page?.original?.source;
+        const validExt = /\.(jpe?g|png|gif|webp|svg)(\?|$)/i;
         if (!cancelled) {
-          if (url && (url.endsWith(".jpg") || url.endsWith(".png") || url.endsWith(".jpeg") || url.endsWith(".gif") || url.endsWith(".svg") || url.endsWith(".webp"))) {
-            setImgUrl(url);
+          if (url1 && validExt.test(url1)) {
+            setImgUrl(url1);
           } else {
-            setFailed(true);
+            // 2nd: Wikipedia search → first result image
+            const r2 = await fetch(`https://en.wikipedia.org/w/api.php?action=query&prop=pageimages&format=json&piprop=original&generator=search&gsrsearch=${term}&gsrlimit=3&origin=*`);
+            const d2 = await r2.json();
+            const pages2 = d2?.query?.pages || {};
+            const found = Object.values(pages2).find(p=>p?.original?.source && validExt.test(p.original.source));
+            if (found && !cancelled) setImgUrl(found.original.source);
+            else if (!cancelled) setFailed(true);
           }
-          setLoading(false);
+          if (!cancelled) setLoading(false);
         }
       } catch {
         if (!cancelled) { setFailed(true); setLoading(false); }
@@ -7436,77 +7583,115 @@ function AutoFetchImage({ description }) {
   }, [description]);
 
   if (loading) return (
-    <div style={{ margin:"12px 0", borderRadius:10, background:C.accentL, padding:"14px", display:"flex", alignItems:"center", gap:8, border:`1px solid ${C.border}` }}>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-      <span style={{ fontSize:12, color:C.muted }}>Loading image: {description}</span>
+    <div style={{ margin:"10px 0", borderRadius:10, background:C.accentL, padding:"10px 14px", display:"flex", alignItems:"center", gap:8, border:`1px solid ${C.border}` }}>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+      <span style={{ fontSize:12, color:C.muted }}>Loading image: {description}…</span>
     </div>
   );
 
-  if (failed || !imgUrl) return (
-    <div style={{ margin:"12px 0", borderRadius:10, overflow:"hidden", border:`1px solid ${C.border}` }}>
-      <div style={{ background:C.accentL, padding:"6px 12px", fontSize:11, fontWeight:700, color:C.accent, display:"flex", alignItems:"center", gap:6 }}>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-        Diagram / Image
-      </div>
-      <div style={{ padding:"10px 14px", fontSize:13, color:C.text, background:C.surface, fontStyle:"italic" }}>{description}</div>
-    </div>
-  );
+  if (failed || !imgUrl) return null; // silently hide if no image found
 
   return (
-    <div style={{ margin:"14px 0", borderRadius:12, overflow:"hidden", border:`1px solid ${C.border}`, boxShadow:"0 2px 8px rgba(0,0,0,.08)" }}>
+    <figure style={{ margin:"14px auto", borderRadius:12, overflow:"hidden", border:`1px solid ${C.border}`, boxShadow:"0 2px 12px rgba(0,0,0,.10)", maxWidth:520, display:"block" }}>
       <img src={imgUrl} alt={description} onError={()=>setFailed(true)}
-        style={{ width:"100%", maxHeight:320, objectFit:"contain", background:"#fff", display:"block" }}/>
-      <div style={{ padding:"7px 12px", background:C.accentL, fontSize:11, color:C.muted, fontStyle:"italic" }}>{description}</div>
-    </div>
+        style={{ width:"100%", maxHeight:300, objectFit:"contain", background:"#fff", display:"block" }}/>
+      <figcaption style={{ padding:"6px 12px", background:C.accentL, fontSize:11, color:C.muted, fontStyle:"italic", textAlign:"center" }}>
+        {description}
+      </figcaption>
+    </figure>
   );
 }
 
 function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
-  const [editing, setEditing] = useState(false);
-  const [editVal, setEditVal] = useState(notes);
-  useEffect(() => { setEditVal(notes); }, [notes]);
-
-  // Editing handled externally via RawEditModal
-
-  // ── Turbo-style rich notes renderer ─────────────────────────────────────
   const SECTION_EMOJIS = ["🔬","📡","⚛️","🧪","📐","🔭","🧬","📊","⚡","🌊","🔋","🧲","💡","🔑","📌"];
   let _sectionCount = 0;
 
-  const renderInlineMarkup = (text, keyPrefix) => {
-    // Handle **bold** inline
-    const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+  // Rich inline markup: **bold**, *italic*, `code`, ==highlight==
+  const renderInlineMarkup = (text) => {
+    if (!text) return null;
+    const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|==[^=]+==)/g);
     return parts.map((p, pi) => {
-      if (p.startsWith("**") && p.endsWith("**")) return <strong key={pi} style={{ color:C.text, fontWeight:700 }}>{p.slice(2,-2)}</strong>;
-      if (p.startsWith("`") && p.endsWith("`")) return <code key={pi} style={{ background:C.accentL, color:C.accent, borderRadius:4, padding:"1px 6px", fontSize:13, fontFamily:"monospace" }}>{p.slice(1,-1)}</code>;
+      if (p.startsWith("**") && p.endsWith("**")) return <strong key={pi} style={{ fontWeight:700, color:C.text }}>{p.slice(2,-2)}</strong>;
+      if (p.startsWith("*") && p.endsWith("*") && p.length>2) return <em key={pi} style={{ fontStyle:"italic", color:C.accent }}>{p.slice(1,-1)}</em>;
+      if (p.startsWith("`") && p.endsWith("`")) return <code key={pi} style={{ background:C.accentL, color:C.accent, borderRadius:4, padding:"1px 6px", fontSize:12, fontFamily:"monospace" }}>{p.slice(1,-1)}</code>;
+      if (p.startsWith("==") && p.endsWith("==")) return <mark key={pi} style={{ background:C.accentL, color:C.accent, padding:"0 3px", borderRadius:3 }}>{p.slice(2,-2)}</mark>;
       return p;
     });
   };
 
+  // Parse TABLE_START...TABLE_END blocks out of raw lines
+  const parseContent = (raw) => {
+    const lines = raw.split("\n");
+    const out = [];
+    let i = 0;
+    while (i < lines.length) {
+      if (lines[i].trim() === "TABLE_START") {
+        const headers = [], rows = [];
+        i++;
+        while (i < lines.length && lines[i].trim() !== "TABLE_END") {
+          const ln = lines[i].trim();
+          if (ln.startsWith("headers:")) headers.push(...ln.slice(8).split("|").map(s=>s.trim()));
+          else if (ln.startsWith("row:")) rows.push(ln.slice(4).split("|").map(s=>s.trim()));
+          i++;
+        }
+        if (headers.length) out.push({ _t:"TABLE", columns:headers, rows });
+        i++;
+      } else {
+        out.push({ _t:"LINE", text:lines[i] });
+        i++;
+      }
+    }
+    return out;
+  };
+
   const renderNotesWithTable = () => {
     if (!notes?.trim()) return null;
-    const lines = notes.split("\n");
+    const parsed = parseContent(notes);
     const elements = [];
     let key = 0;
-    let i = 0;
     let tableInserted = false;
     let firstSectionDone = false;
     _sectionCount = 0;
 
-    while (i < lines.length) {
-      const line = lines[i];
-      const trimmed = line.trim();
+    for (const item of parsed) {
 
-      // ── Turbo-style: # Heading or ## subheading
-      if (trimmed.startsWith("## ")) {
-        const text = trimmed.slice(3);
+      // ── Inline TABLE (TABLE_START block) ──────────────────────────────────
+      if (item._t === "TABLE") {
+        const cols = item.columns, rows = item.rows;
+        const n = cols.length;
+        const fs = n > 6 ? 11 : n > 4 ? 12 : 13;
+        const pad = n > 5 ? "6px 8px" : "8px 12px";
         elements.push(
-          <h3 key={key++} style={{ fontFamily:"'DM Sans',sans-serif", fontSize:17, fontWeight:700, color:C.text, margin:"20px 0 8px", display:"flex", alignItems:"center", gap:8 }}>
-            {text}
-          </h3>
+          <div key={key++} style={{ margin:"14px 0", borderRadius:10, overflow:"hidden", border:`1.5px solid ${C.accentS}`, width:"100%" }}>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:fs, tableLayout:"fixed" }}>
+              <colgroup>{cols.map((_,ci)=><col key={ci} style={{ width:`${100/n}%` }}/>)}</colgroup>
+              <thead>
+                <tr style={{ background:"linear-gradient(135deg,#4f46e5,#7C5CFC)" }}>
+                  {cols.map((col,ci)=>(
+                    <th key={ci} style={{ padding:pad, textAlign:"left", fontWeight:700, color:"#fff", fontSize:fs-1, wordBreak:"break-word", verticalAlign:"top", borderRight:ci<n-1?"1px solid rgba(255,255,255,.15)":"none" }}>{col}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row,ri)=>(
+                  <tr key={ri} style={{ borderBottom:`1px solid ${C.border}`, background:ri%2===0?C.surface:"transparent" }}>
+                    {row.map((cell,ci)=>(
+                      <td key={ci} style={{ padding:pad, color:ci===0?C.accent:C.text, fontWeight:ci===0?600:400, fontSize:fs, wordBreak:"break-word", verticalAlign:"top", lineHeight:1.5, borderRight:ci<n-1?`1px solid ${C.border}`:"none" }}>
+                        {renderInlineMarkup(cell)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         );
-        i++; continue;
+        continue;
       }
 
+      const trimmed = item.text.trim();
+
+      // ── # Main section heading ────────────────────────────────────────────
       if (trimmed.startsWith("# ")) {
         const text = trimmed.slice(2);
         const emoji = SECTION_EMOJIS[_sectionCount % SECTION_EMOJIS.length];
@@ -7515,138 +7700,147 @@ function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
           elements.push(<InlineClassioTable key={`tbl${key++}`} data={tableData} />);
           tableInserted = true;
         }
+        if (firstSectionDone) elements.push(<hr key={key++} style={{ border:"none", borderTop:`1px solid ${C.border}`, margin:"26px 0 18px" }}/>);
         firstSectionDone = true;
-        elements.push(<div key={key++} style={{ height:1, background:C.border, margin:"20px 0 16px" }}/>);
         elements.push(
-          <h2 key={key++} style={{ fontFamily:"'DM Sans',sans-serif", fontSize:22, fontWeight:700, color:C.text, margin:"0 0 12px", display:"flex", alignItems:"center", gap:10 }}>
-            <span style={{ fontSize:22 }}>{emoji}</span>{text}
+          <h2 key={key++} style={{ fontFamily:"'DM Sans',sans-serif", fontSize:20, fontWeight:800, color:C.text, margin:"0 0 10px", display:"flex", alignItems:"center", gap:9, letterSpacing:"-0.3px" }}>
+            <span style={{ fontSize:18 }}>{emoji}</span>{text}
           </h2>
         );
-        i++; continue;
+        continue;
       }
 
-      // ── ALL CAPS heading (legacy support)
-      if (/^[A-Z][A-Z\s\-\/&0-9:]{3,}$/.test(trimmed) && trimmed.length > 3 && !trimmed.includes(".")) {
+      // ── ## Sub-heading ────────────────────────────────────────────────────
+      if (trimmed.startsWith("## ")) {
+        elements.push(
+          <h3 key={key++} style={{ fontFamily:"'DM Sans',sans-serif", fontSize:16, fontWeight:700, color:C.text, margin:"16px 0 5px" }}>
+            {trimmed.slice(3)}
+          </h3>
+        );
+        continue;
+      }
+
+      // ── ### tertiary ──────────────────────────────────────────────────────
+      if (trimmed.startsWith("### ")) {
+        elements.push(<h4 key={key++} style={{ fontSize:14, fontWeight:700, color:C.accent, margin:"12px 0 4px" }}>{trimmed.slice(4)}</h4>);
+        continue;
+      }
+
+      // ── ALL CAPS legacy heading ───────────────────────────────────────────
+      if (/^[A-Z][A-Z\s\-\/&0-9:]{3,}$/.test(trimmed) && trimmed.length>3 && !trimmed.includes(".")) {
         const emoji = SECTION_EMOJIS[_sectionCount % SECTION_EMOJIS.length];
         _sectionCount++;
-        if (!tableInserted && tableData?.table?.columns && firstSectionDone) {
-          elements.push(<InlineClassioTable key={`tbl${key++}`} data={tableData} />);
-          tableInserted = true;
-        }
+        if (firstSectionDone) elements.push(<hr key={key++} style={{ border:"none", borderTop:`1px solid ${C.border}`, margin:"26px 0 18px" }}/>);
         firstSectionDone = true;
-        elements.push(<div key={key++} style={{ height:1, background:C.border, margin:"20px 0 14px" }}/>);
         elements.push(
-          <h2 key={key++} style={{ fontFamily:"'DM Sans',sans-serif", fontSize:20, fontWeight:700, color:C.text, margin:"0 0 10px", display:"flex", alignItems:"center", gap:10 }}>
-            <span>{emoji}</span>{trimmed.charAt(0) + trimmed.slice(1).toLowerCase()}
+          <h2 key={key++} style={{ fontFamily:"'DM Sans',sans-serif", fontSize:20, fontWeight:800, color:C.text, margin:"0 0 10px", display:"flex", alignItems:"center", gap:9 }}>
+            <span style={{ fontSize:18 }}>{emoji}</span>{trimmed.charAt(0)+trimmed.slice(1).toLowerCase()}
           </h2>
         );
-        i++; continue;
+        continue;
       }
 
-      // ── Blockquote / formula / definition line
+      // ── Blockquote > — italic accent color, left border ───────────────────
       if (trimmed.startsWith("> ") || trimmed.startsWith(">> ")) {
         const text = trimmed.replace(/^>+\s/, "");
         elements.push(
-          <div key={key++} style={{ borderLeft:`4px solid ${C.accent}`, paddingLeft:14, margin:"10px 0", fontFamily:"monospace", fontSize:14, color:C.text, background:C.accentL, borderRadius:"0 8px 8px 0", padding:"10px 14px" }}>
-            {text}
+          <div key={key++} style={{ borderLeft:`3px solid ${C.accent}`, margin:"10px 0", padding:"7px 14px", borderRadius:"0 6px 6px 0" }}>
+            <span style={{ fontSize:14, color:C.accent, fontStyle:"italic", lineHeight:1.7 }}>{renderInlineMarkup(text)}</span>
           </div>
         );
-        i++; continue;
+        continue;
       }
 
-      // ── Formula lines (contains = sign and math chars)
-      if (/[=\+\-×÷±≈≥≤≠∝∞√]/.test(trimmed) && trimmed.length < 120 && !trimmed.includes("http")) {
-        // Only treat as formula if it's a standalone equation-like line
-        if (/^[A-Za-z0-9\s=+\-×÷±≈≥≤≠∝∞√\(\)\[\]\.,:;α-ωΑ-Ω⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉⁻]+$/.test(trimmed)) {
+      // ── Formula line (standalone equation) ────────────────────────────────
+      if (/[=+\-×÷±≈≥≤≠∝∞√]/.test(trimmed) && trimmed.length < 120 && !trimmed.includes("http")) {
+        if (/^[A-Za-z0-9\s=+\-×÷±≈≥≤≠∝∞√()\[\].,;:α-ωΑ-Ω⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉⁻]+$/.test(trimmed)) {
           elements.push(
-            <div key={key++} style={{ background:C.isDark?"#1a1a2e":"#f8f7ff", border:`1px solid ${C.accentS}`, borderRadius:8, padding:"8px 16px", margin:"8px 0", fontFamily:"monospace", fontSize:14, color:C.text }}>
+            <div key={key++} style={{ background:C.accentL, border:`1px solid ${C.accentS}`, borderRadius:8, padding:"8px 16px", margin:"8px 0", fontFamily:"monospace", fontSize:14, color:C.accent }}>
               {trimmed}
             </div>
           );
-          i++; continue;
+          continue;
         }
       }
 
-      // ── Bullet point
-      if (trimmed.startsWith("- ") || trimmed.startsWith("• ") || trimmed.startsWith("· ") || trimmed.startsWith("* ")) {
-        const content = trimmed.slice(2);
+      // ── Bullet point ──────────────────────────────────────────────────────
+      if (trimmed.startsWith("- ")||trimmed.startsWith("• ")||trimmed.startsWith("· ")||trimmed.startsWith("* ")) {
         elements.push(
-          <div key={key++} style={{ display:"flex", gap:8, marginBottom:5, paddingLeft:4 }}>
-            <span style={{ color:C.accent, flexShrink:0, fontWeight:700, marginTop:1 }}>•</span>
-            <span style={{ fontSize:14, color:C.text, lineHeight:1.7 }}>{renderInlineMarkup(content, key)}</span>
+          <div key={key++} style={{ display:"flex", gap:9, marginBottom:4, alignItems:"flex-start" }}>
+            <span style={{ color:C.accent, flexShrink:0, fontWeight:900, marginTop:3, fontSize:14, lineHeight:1 }}>•</span>
+            <span style={{ fontSize:14, color:C.text, lineHeight:1.75 }}>{renderInlineMarkup(trimmed.slice(2))}</span>
           </div>
         );
-        i++; continue;
+        continue;
       }
 
-      // ── Numbered list
-      if (/^\d+[\.\)]\s/.test(trimmed)) {
-        const match = trimmed.match(/^(\d+)[\.\)]\s(.*)/);
-        if (match) {
-          elements.push(
-            <div key={key++} style={{ display:"flex", gap:8, marginBottom:5, paddingLeft:4 }}>
-              <span style={{ color:C.accent, flexShrink:0, fontWeight:700, minWidth:20 }}>{match[1]}.</span>
-              <span style={{ fontSize:14, color:C.text, lineHeight:1.7 }}>{renderInlineMarkup(match[2], key)}</span>
-            </div>
-          );
-          i++; continue;
-        }
+      // ── Numbered list ─────────────────────────────────────────────────────
+      const numM = trimmed.match(/^(\d+)[.)\s]\s(.*)/);
+      if (numM) {
+        elements.push(
+          <div key={key++} style={{ display:"flex", gap:9, marginBottom:4, alignItems:"flex-start" }}>
+            <span style={{ color:C.accent, flexShrink:0, fontWeight:700, minWidth:20, marginTop:3, fontSize:14 }}>{numM[1]}.</span>
+            <span style={{ fontSize:14, color:C.text, lineHeight:1.75 }}>{renderInlineMarkup(numM[2])}</span>
+          </div>
+        );
+        continue;
       }
 
-      // ── Image placeholder — auto-fetch from Wikipedia/Wikimedia
-      if (trimmed.startsWith("[Image:") && trimmed.endsWith("]")) {
-        const desc = trimmed.slice(7, -1).trim();
-        const imgKey = key++;
-        elements.push(<AutoFetchImage key={imgKey} description={desc} />);
-        i++; continue;
+      // ── [Image: description] ──────────────────────────────────────────────
+      if (trimmed.startsWith("[Image:")&&trimmed.endsWith("]")) {
+        elements.push(<AutoFetchImage key={key++} description={trimmed.slice(7,-1).trim()} />);
+        continue;
       }
 
-      // ── Web image [WebImage: url | caption]
-      if (trimmed.startsWith("[WebImage:") && trimmed.endsWith("]")) {
-        const inner = trimmed.slice(10, -1).trim();
-        const [url, caption] = inner.split("|").map(s => s.trim());
-        if (url) {
-          elements.push(
-            <div key={key++} style={{ margin:"12px 0" }}>
-              <img src={url} alt={caption||"image"} onError={e=>e.target.style.display="none"}
-                style={{ maxWidth:"100%", borderRadius:10, border:`1px solid ${C.border}` }}/>
-              {caption && <p style={{ fontSize:11, color:C.muted, textAlign:"center", margin:"4px 0 0" }}>{caption}</p>}
-            </div>
-          );
-          i++; continue;
-        }
+      // ── [WebImage: url | caption] ─────────────────────────────────────────
+      if (trimmed.startsWith("[WebImage:")&&trimmed.endsWith("]")) {
+        const inner=trimmed.slice(10,-1).trim();
+        const [url,cap]=inner.split("|").map(s=>s.trim());
+        if (url) elements.push(
+          <div key={key++} style={{ margin:"12px 0" }}>
+            <img src={url} alt={cap||""} onError={e=>e.target.style.display="none"} style={{ maxWidth:"100%", borderRadius:10, border:`1px solid ${C.border}` }}/>
+            {cap&&<p style={{ fontSize:11, color:C.muted, textAlign:"center", margin:"4px 0 0" }}>{cap}</p>}
+          </div>
+        );
+        continue;
       }
 
-      // ── Empty line
-      if (!trimmed) { elements.push(<div key={key++} style={{ height:6 }}/>); i++; continue; }
+      // ── Empty line ────────────────────────────────────────────────────────
+      if (!trimmed) { elements.push(<div key={key++} style={{ height:8 }}/>); continue; }
 
-      // ── Regular paragraph
+      // ── Regular paragraph ─────────────────────────────────────────────────
       elements.push(
         <p key={key++} style={{ fontSize:14, color:C.text, lineHeight:1.8, margin:"3px 0" }}>
-          {renderInlineMarkup(trimmed, key)}
+          {renderInlineMarkup(trimmed)}
         </p>
       );
-      i++;
     }
 
-    // Append table at end if not yet inserted
-    if (!tableInserted && tableData?.table?.columns) {
-      elements.push(<InlineClassioTable key="tbl_end" data={tableData} />);
-    }
-
+    if (!tableInserted && tableData?.table?.columns) elements.push(<InlineClassioTable key="tbl_end" data={tableData} />);
     return elements;
   };
 
   return (
-    <div style={{ background:C.surface, borderRadius:16, minHeight:400, border:`1px solid ${C.border}`, boxShadow:"0 2px 16px rgba(0,0,0,.06)", flex:1, overflow:"hidden", wordBreak:"break-word", overflowWrap:"break-word", display:"flex", flexDirection:"column" }}
-      dir={isRTL?"rtl":"ltr"}>
-      {/* Document-style content area */}
-      <div style={{ flex:1, padding:"28px 32px", overflowY:"auto" }}>
+    <div style={{
+      background: C.surface,
+      borderRadius: 16,
+      minHeight: 440,
+      border: `1px solid ${C.border}`,
+      boxShadow: C.isDark ? "0 2px 24px rgba(0,0,0,.45)" : "0 2px 16px rgba(0,0,0,.06)",
+      flex: 1,
+      overflow: "hidden",
+      wordBreak: "break-word",
+      overflowWrap: "break-word",
+      display: "flex",
+      flexDirection: "column",
+    }} dir={isRTL?"rtl":"ltr"}>
+      <div style={{ flex:1, padding:"28px 32px", overflowY:"auto", fontFamily:"'DM Sans',sans-serif" }}>
         {renderNotesWithTable()}
       </div>
     </div>
   );
 }
+
 
 
 // Inline chart component using Canvas (no external lib needed)
@@ -7844,12 +8038,28 @@ function NotesTab({ file, onUpdate, user, isGuest, onTabChange }) {
         : `Create comprehensive study notes for: "${file.name}". Make them detailed and useful for exam revision. Cover all key topics, definitions, formulas, and concepts.`;
 
       const styleGuide = {
-        detailed: "Write detailed notes split into sections using # for main headings and ## for subheadings. Include examples, formulas, and key definitions.",
-        bullet:   "Write ONLY bullet points grouped under # headings. One fact per line with - bullets.",
-        simple:   "Write very simple short notes in plain language. Short sentences. No jargon. Use # for section headings.",
-        exam:     "Write exam revision notes. Use # headings for topics. Include key terms, definitions, and > blockquotes for important formulas.",
-        quick:    "Write an ULTRA SHORT 1-minute summary. Only the 5 most critical key points as numbered bullets under one # heading. Extremely concise.",
-        expert:   "Write graduate-level expert notes with deep technical detail. Use # headings, ## subheadings, > for key equations, and **bold** for terms.",
+        detailed: `Write DETAILED COMPREHENSIVE study notes covering EVERY section.
+Use # for main headings, ## for sub-headings.
+Bold ALL key terms inline with **term**.
+Use > for key definitions and formulas on their own line.
+Use - for bullet points inside sections.
+After each major concept, device, or phenomenon add an image tag on its own line: [Image: specific 2-4 word search term]
+For any comparison, properties table, or data with 2+ columns, use EXACTLY this block format (not markdown pipes):
+TABLE_START
+headers: Col1 | Col2 | Col3
+row: data | data | data
+row: data | data | data
+TABLE_END`,
+        bullet: `Write bullet-point notes grouped under # headings. **Bold** key terms. One fact per - bullet.
+For comparisons use TABLE_START / headers: / row: / TABLE_END format. Add [Image: term] for key visuals.`,
+        simple: `Very simple short notes. Short sentences. No jargon. Use # headings. **Bold** most important words.
+Add [Image: term] for key visuals.`,
+        exam: `Exam revision notes. Use # headings. **Bold** all key terms.
+Use > for definitions and formulas. [Image: term] for diagrams.
+For comparisons use TABLE_START / headers: / row: / TABLE_END.`,
+        quick: `ULTRA SHORT 1-minute summary. Only the 5 most critical points as - bullets under one # heading.`,
+        expert: `Graduate-level notes with deep technical detail. # headings, ## subheadings, > equations, **bold** terms.
+[Image: term] for key diagrams. TABLE_START/TABLE_END for data tables.`,
       };
       const effectiveStyle = useCustomStyle && customStyle.trim()
         ? `You are a study notes writer. The student's style instruction: "${customStyle.trim()}". Follow exactly.`
@@ -7859,17 +8069,21 @@ function NotesTab({ file, onUpdate, user, isGuest, onTabChange }) {
         `${effectiveStyle}
 ${getLangInstruction(lang)}
 
-FORMATTING RULES — follow exactly:
-1. Use # for main section headings (e.g., # Background Radiation)
-2. Use ## for sub-headings (e.g., ## Natural Sources)
-3. Use - for bullet points
-4. Use **term** for bold key terms inline
-5. Use > for important formulas or definitions (e.g., > E = mc²)
-6. Use numbered lists (1. 2. 3.) for steps or ordered items
-7. For images/diagrams from the document, add: [Image: description of what the image shows]
-8. Math: use proper symbols — α, β, γ, ×, ÷, ≈, ±, π, Δ, μ, superscripts like m², m/s²
-9. ONLY use content from the provided file — do not invent facts
-10. Be comprehensive — cover EVERY section of the document`,
+STRICT FORMATTING RULES:
+1. # Main Section Heading  (e.g., # Background Radiation)
+2. ## Sub-heading  (e.g., ## Natural Sources)
+3. - bullet point for each fact
+4. **key term** — bold ALL important terms inline in sentences
+5. > definition or formula on its own line (e.g., > Count rate = decays per second)
+6. [Image: 2-4 word search term] — add after each section with a visual concept (e.g., [Image: Geiger Muller tube diagram])
+7. TABLE — for ANY comparison or structured data, use EXACTLY:
+TABLE_START
+headers: Column1 | Column2 | Column3
+row: value | value | value
+TABLE_END
+8. Math symbols: α β γ × ÷ ≈ ± π Δ m² m/s² — never spell them out
+9. Cover EVERY section of the document. Do not skip anything.
+10. Do not invent content not in the file.`,
         userMsg,
         4000
       );
@@ -8576,14 +8790,15 @@ function CardsTab({ file, onUpdate }) {
   const { isMobile } = useResponsive();
   const [cards, setCards] = useState(file.studyCards||[]);
   const [flipped,  setFlipped]  = useState({});
-  const [starred,  setStarred]  = useState({});   // starred = needs review
-  const [known,    setKnown]    = useState({});    // known = mastered
+  const [starred,  setStarred]  = useState({});
+  const [known,    setKnown]    = useState({});
+  const [editingCard, setEditingCard] = useState(null); // {id, question}
   const [gen, setGen] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [showCountPicker, setShowCountPicker] = useState(false);
   const [cardCount, setCardCount] = useState(8);
   const [nQ, setNQ] = useState(""); const [nA, setNA] = useState("");
-  const [filter, setFilter] = useState("all");   // all | starred | known | unknown
+  const [filter, setFilter] = useState("all");
   const [shuffled, setShuffled] = useState(false);
   const [displayCards, setDisplayCards] = useState(cards);
   const [viewMode, setViewMode] = useState("grid"); // grid | list | study
@@ -8801,7 +9016,7 @@ function CardsTab({ file, onUpdate }) {
                 style={{ width:"100%", maxWidth:760, height:"min(340px, calc(100vh - 280px))", cursor:"pointer", userSelect:"none" }}>
                 <div className="ql-side" style={{ background:isKnown?C.greenL:C.surface, border:`2px solid ${isKnown?C.green:isStarred?"#f59e0b":C.border}`, boxShadow:C.cardShadow }}>
                   <div style={{ position:"absolute", top:16, left:16, cursor:"pointer", opacity:.4 }}
-                    onClick={e=>{e.stopPropagation();const q=window.prompt("Edit question:",card.question);if(q&&q.trim()){const u=cards.map(c=>c.id===card.id?{...c,question:q.trim()}:c);setCards(u);onUpdate({...file,studyCards:u});}}}>
+                    onClick={e=>{e.stopPropagation();setEditingCard({id:card.id,question:card.question});}}>
                     <Icon d={I.edit} size={16} color={C.muted}/>
                   </div>
                   <button onClick={e=>toggleStar(card.id,e)} className="no-min-h"
@@ -8977,6 +9192,19 @@ function CardsTab({ file, onUpdate }) {
       )}
 
     </div>
+    {editingCard && (
+      <RenameDialog
+        title="Edit Question"
+        defaultValue={editingCard.question}
+        placeholder="Enter question…"
+        onConfirm={(newQ) => {
+          const u = cards.map(c=>c.id===editingCard.id?{...c,question:newQ}:c);
+          setCards(u); onUpdate({...file,studyCards:u});
+          setEditingCard(null);
+        }}
+        onCancel={() => setEditingCard(null)}
+      />
+    )}
   );
 }
 
@@ -9351,7 +9579,29 @@ function TypewriterText({ text, speed }) {
 // ─── AI PODCAST PANEL ─────────────────────────────────────────────────────────
 // Merged Podcast + AI Explain: generates an explanation then speaks it chunk by
 // chunk. Pulsing audio indicator while speaking. Mic button to interrupt.
+// ── Mic text input overlay (fallback when SpeechRecognition unavailable) ──────
+function MicPromptOverlay({ onSubmit, onCancel }) {
+  const [val, setVal] = useState("");
+  const T = useTheme();
+  return (
+    <div onClick={onCancel} style={{ position:"fixed", inset:0, zIndex:8000, background:"rgba(0,0,0,.55)", display:"flex", alignItems:"flex-end", justifyContent:"center", padding:"0 0 40px" }}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:T.surface, borderRadius:16, padding:"16px 18px", width:"min(440px, 90vw)", boxShadow:"0 16px 48px rgba(0,0,0,.3)", border:`1px solid ${T.border}` }}>
+        <p style={{ fontSize:14, fontWeight:700, color:T.text, margin:"0 0 10px" }}>Ask a question</p>
+        <input autoFocus value={val} onChange={e=>setVal(e.target.value)}
+          onKeyDown={e=>{ if(e.key==="Enter"&&val.trim()) onSubmit(val.trim()); if(e.key==="Escape") onCancel(); }}
+          placeholder="Type your question…"
+          style={{ width:"100%", border:`1.5px solid ${T.border}`, borderRadius:10, padding:"10px 13px", fontSize:14, outline:"none", color:T.text, background:T.bg, boxSizing:"border-box", marginBottom:10, fontFamily:"'DM Sans',sans-serif" }}/>
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={onCancel} style={{ flex:1, padding:"9px", borderRadius:10, border:`1px solid ${T.border}`, background:"transparent", fontSize:13, fontWeight:600, cursor:"pointer", color:T.muted }}>Cancel</button>
+          <button onClick={()=>{ if(val.trim()) onSubmit(val.trim()); }} style={{ flex:2, padding:"9px", borderRadius:10, border:"none", background:T.accent, color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer" }}>Ask</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AIPodcastPanel({ file, lang }) {
+  const [micPromptActive, setMicPromptActive] = useState(false);
   const [allSaved] = useState(() => {
     try { return JSON.parse(localStorage.getItem("saved_notes_" + file.id) || "[]"); } catch { return []; }
   });
@@ -9547,7 +9797,8 @@ RULES:
   const startMic = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
-      const q = window.prompt("Ask your question:");
+      // Mic not available — show inline prompt via setMicText
+      const q = prompt("Ask your question:");
       if (q?.trim()) { pausedRef.current = true; cancelSpeech(); setTimeout(() => askQuestion(q.trim()), 150); }
       return;
     }
@@ -9601,6 +9852,13 @@ RULES:
             {allSaved.map((n, i) => <option key={i} value={i}>{n.name}</option>)}
           </select>
         </div>
+      )}
+
+      {micPromptActive && (
+        <MicPromptOverlay
+          onSubmit={(q) => { setMicPromptActive(false); pausedRef.current = true; cancelSpeech(); setTimeout(() => askQuestion(q), 150); }}
+          onCancel={() => setMicPromptActive(false)}
+        />
       )}
 
       {/* Controls bar */}
@@ -9971,11 +10229,11 @@ Simple language, give an example, under 100 words. No markdown.`,
     setSpeaking(false);
   };
 
+  const [micPromptOpen, setMicPromptOpen] = useState(false);
   const startMic = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
-      const q = window.prompt("Ask your question:");
-      if (q?.trim()) askQuestion(q.trim());
+      setMicPromptOpen(true);
       return;
     }
     pausedRef.current = true;
@@ -13162,12 +13420,11 @@ Be conversational. Under 120 words. No markdown, no asterisks.`,
     onResume?.();
   };
 
+  const [micPromptOpen2, setMicPromptOpen2] = useState(false);
   const startListening = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      // Fallback: show text input briefly
-      const q = window.prompt("Ask your question:");
-      if (q?.trim()) askQuestion(q.trim());
+      setMicPromptOpen2(true);
       return;
     }
     if (isPlaying) onPause?.();
