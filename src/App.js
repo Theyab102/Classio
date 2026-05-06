@@ -8872,6 +8872,7 @@ function CardsTab({ file, onUpdate }) {
   const [previewIdx, setPreviewIdx] = useState(0);
 
   return (
+    <>
     <div>
       {/* ── Turbo-style header with icon + count ── */}
       <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20 }}>
@@ -9184,10 +9185,8 @@ function CardsTab({ file, onUpdate }) {
               </div>
             ));
           })()}
-        </>
-      )}
-
-    </div>
+      </div>
+    </>
     {editingCard && (
       <RenameDialog
         title="Edit Question"
@@ -9201,6 +9200,7 @@ function CardsTab({ file, onUpdate }) {
         onCancel={() => setEditingCard(null)}
       />
     )}
+  </>
   );
 }
 
