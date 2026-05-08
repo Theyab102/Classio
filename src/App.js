@@ -1897,7 +1897,7 @@ input,textarea,select { font-size:16px; }
 }
 
 /* View split pane */
-.view-split { display:flex; overflow:hidden; }
+.view-split { display:flex; overflow:visible; }
 
 /* Notes split defaults */
 .notes-split { display:flex; gap:20px; }
@@ -8274,7 +8274,7 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
       )}
 
       {/* ── Turbo AI split pane: notes left, AI panel right ── */}
-      <div className="notes-split" style={{ display:"flex", gap:20, alignItems:"flex-start", minHeight:"calc(100vh - 320px)", overflow:"visible" }}>
+      <div className="notes-split" style={{ display:"flex", gap:20, alignItems:"flex-start", minHeight:0, overflow:"visible" }}>
 
         {/* Left — notes area */}
         <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:10 }}>
@@ -9185,8 +9185,8 @@ function CardsTab({ file, onUpdate }) {
               </div>
             ));
           })()}
+        </>
       </div>
-    </>
     {editingCard && (
       <RenameDialog
         title="Edit Question"
@@ -9206,20 +9206,70 @@ function CardsTab({ file, onUpdate }) {
 
 // ─── YOUTUBE VIDEO ANALYSIS TAB ──────────────────────────────────────────────
 function YouTubeTab({ file, onUpdate }) {
-  const [url,     setUrl]     = useState("");
-  const [mode,    setMode]    = useState("detailed");
-  const [loading, setLoading] = useState(false);
-  const [result,  setResult]  = useState("");
-  const [error,   setError]   = useState("");
-  const [saved,   setSaved]   = useState(false);
-  const [status,  setStatus]  = useState(""); // progress message
-  const [ytCards, setYtCards] = useState([]);
+  const [url,          setUrl]          = useState("");
+  const [mode,         setMode]         = useState("detailed");
+  const [loading,      setLoading]      = useState(false);
+  const [result,       setResult]       = useState("");
+  const [error,        setError]        = useState("");
+  const [saved,        setSaved]        = useState(false);
+  const [status,       setStatus]       = useState("");
+  const [ytCards,      setYtCards]      = useState([]);
   const [cardsLoading, setCardsLoading] = useState(false);
-  const [ytTableData, setYtTableData] = useState(null);
+  const [ytTableData,  setYtTableData]  = useState(null);
+  const [urlType,      setUrlType]      = useState(""); // "youtube"|"wikipedia"|"web"
 
   const extractVideoId = (u) => {
     const m = u.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([A-Za-z0-9_-]{11})/);
     return m ? m[1] : null;
+  };
+
+  const detectUrlType = (u) => {
+    if (/youtube\.com|youtu\.be/.test(u)) return "youtube";
+    if (/wikipedia\.org/.test(u)) return "wikipedia";
+    return "web";
+  };
+
+  // Fetch any webpage content via CORS proxy
+  const fetchPageContent = async (targetUrl) => {
+    const proxies = [
+      `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
+      `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`,
+    ];
+    for (const proxy of proxies) {
+      try {
+        const r = await fetch(proxy, { signal: AbortSignal.timeout(12000) });
+        if (!r.ok) continue;
+        const data = await r.json().catch(() => null);
+        const html = data?.contents || await r.text();
+        // Strip HTML tags to get readable text
+        const text = html
+          .replace(/<script[\s\S]*?<\/script>/gi, "")
+          .replace(/<style[\s\S]*?<\/style>/gi, "")
+          .replace(/<[^>]+>/g, " ")
+          .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+          .replace(/\s+/g, " ").trim();
+        if (text.length > 200) return text.slice(0, 20000);
+      } catch { continue; }
+    }
+    return null;
+  };
+
+  // Fetch Wikipedia article text directly via API
+  const fetchWikipedia = async (targetUrl) => {
+    const titleMatch = targetUrl.match(/wikipedia\.org\/wiki\/([^#?]+)/);
+    if (!titleMatch) return null;
+    const title = decodeURIComponent(titleMatch[1].replace(/_/g, " "));
+    try {
+      const r = await fetch(
+        \`https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=false&format=json&titles=\${encodeURIComponent(title)}&origin=*\`
+      );
+      const d = await r.json();
+      const pages = d?.query?.pages || {};
+      const page = Object.values(pages)[0];
+      const html = page?.extract || "";
+      const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      return { text: text.slice(0, 20000), title: page?.title || title };
+    } catch { return null; }
   };
 
   // Fetch transcript using multiple free methods
@@ -9295,66 +9345,86 @@ function YouTubeTab({ file, onUpdate }) {
   };
 
   const analyze = async () => {
-    const vid = extractVideoId(url.trim());
-    if (!vid) { setError("Please enter a valid YouTube URL."); return; }
+    const trimmedUrl = url.trim();
+    if (!trimmedUrl) { setError("Please enter a URL."); return; }
     setLoading(true); setError(""); setResult(""); setSaved(false);
 
-    try {
-      // 1. Try to get real transcript + title
-      setStatus("Fetching video transcript…");
-      let { transcript, title } = await fetchTranscript(vid);
+    const type = detectUrlType(trimmedUrl);
+    setUrlType(type);
 
-      // 2. If CORS blocked, try oEmbed for title at minimum
-      if (!title) {
-        setStatus("Getting video info…");
-        title = await fetchTitle(vid);
+    try {
+      let content = "", title = "", sourceLabel = "";
+
+      if (type === "youtube") {
+        const vid = extractVideoId(trimmedUrl);
+        if (!vid) { setError("Invalid YouTube URL."); setLoading(false); return; }
+        setStatus("Fetching transcript…");
+        let { transcript, title: ytTitle } = await fetchTranscript(vid);
+        if (!ytTitle) { setStatus("Getting video info…"); ytTitle = await fetchTitle(vid); }
+        title = ytTitle || "YouTube Video";
+        if (transcript && transcript.length > 200) {
+          content = transcript.slice(0, 16000);
+          sourceLabel = "video transcript";
+        } else {
+          content = null;
+          sourceLabel = "video title";
+          setStatus("No transcript — generating topic notes from title…");
+        }
+      } else if (type === "wikipedia") {
+        setStatus("Fetching Wikipedia article…");
+        const wiki = await fetchWikipedia(trimmedUrl);
+        if (wiki?.text) {
+          content = wiki.text; title = wiki.title; sourceLabel = "Wikipedia article";
+        } else {
+          const raw = await fetchPageContent(trimmedUrl);
+          content = raw; title = "Wikipedia Article"; sourceLabel = "page content";
+        }
+      } else {
+        setStatus("Fetching page content…");
+        const raw = await fetchPageContent(trimmedUrl);
+        if (!raw) {
+          setError("Could not read that page. Try pasting the text manually below.");
+          setLoading(false); setStatus(""); return;
+        }
+        content = raw;
+        try { title = new URL(trimmedUrl).hostname.replace("www.", ""); } catch { title = "Web Page"; }
+        sourceLabel = "webpage content";
       }
 
       setStatus("Generating notes…");
 
-      let notes;
-      if (transcript && transcript.length > 200) {
-        // We have real transcript — generate notes from it like a PDF
-        notes = await callClaude(
-          `You are an expert note-taker. You have the actual transcript of a YouTube video.
-Your job is to produce clean, structured study notes FROM THE TRANSCRIPT — exactly like notes from a lecture or PDF.
+      const modeGuide = mode === "simple"
+        ? "Use very simple, clear language. Short sentences. Explain all jargon."
+        : mode === "quick" ? "Only the 5 most important key points. Ultra concise."
+        : mode === "expert" ? "Graduate-level depth and technical detail."
+        : "Detailed and comprehensive. Cover everything important.";
 
-RULES:
-1. Only include content that actually appears in the transcript — no guessing or inventing
-2. ALL CAPS for section headings (e.g. INTRODUCTION, MAIN CONCEPTS, EXAMPLES)
-3. Dash (-) for bullet points
-4. ${mode === "simple" ? "Use simple, plain language. Short sentences. Explain any jargon." : "Be detailed and thorough. Cover every important point."}
-5. Include: key definitions, explained concepts, examples given, any formulas or data mentioned
-6. NEVER use asterisks (*) or pound signs (#)
-7. If the speaker gives an example, include it — examples are the most useful part`,
-          `Video title: "${title || "Unknown"}"\n\nFULL TRANSCRIPT:\n${transcript.slice(0, 16000)}\n\nCreate structured study notes from this transcript.`,
+      let notes;
+      if (content) {
+        notes = await callClaude(
+          `You are an expert note-taker. Generate structured study notes from the provided ${sourceLabel}.
+${modeGuide}
+FORMAT: # Main Heading, ## Sub-heading, **bold** key terms, > definitions/formulas, - bullets.
+Add [Image: search term] after sections with visual concepts.
+For comparisons use: TABLE_START / headers: Col1|Col2 / row: val|val / TABLE_END
+Cover EVERY section. Only use content from the source.`,
+          `Title: "${title}"\n\nSource (${sourceLabel}):\n${content}\n\nGenerate structured study notes.`,
           4000
         );
       } else {
-        // No transcript available — tell user clearly and offer title-based notes if we have a title
-        if (title) {
-          notes = await callClaude(
-            `You are an expert note-taker. You could NOT access the video transcript, but you have the title.
-Based on the title, generate study notes covering what this topic actually involves.
-Be clear these are general topic notes, not specific video notes.
-
-RULES:
-1. Start with: "Note: Video transcript unavailable. These notes cover the topic based on the title: '${title}'"
-2. ALL CAPS headings, dash bullets, no asterisks, no pound signs
-3. ${mode === "simple" ? "Simple language, short sentences." : "Detailed and comprehensive."}
-4. Cover the topic genuinely — definitions, key concepts, how it works, examples`,
-            `Video title: "${title}"\n\nGenerate study notes on this topic.`,
-            3000
-          );
-        } else {
-          setError("Could not access this video's transcript or info. Try a video with captions enabled, or paste the transcript manually below.");
-          setLoading(false); setStatus(""); return;
-        }
+        notes = await callClaude(
+          `You are an expert note-taker. Generate comprehensive study notes on the topic "${title}".
+Start with: "> Note: These notes cover the topic '${title}' — live video transcript was unavailable."
+Then cover the topic with # headings, **bold** key terms, - bullets, > definitions, [Image: term] tags.
+${modeGuide}`,
+          `Topic: "${title}". Generate detailed study notes from your knowledge.`,
+          3000
+        );
       }
 
       setResult(notes);
     } catch(e) {
-      setError("Analysis failed: " + e.message);
+      setError("Failed: " + (e.message || "Unknown error"));
     }
     setLoading(false); setStatus("");
   };
@@ -9383,8 +9453,8 @@ RULES:
   return (
     <div>
       <div style={{ marginBottom:20 }}>
-        <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:700, color:C.text, marginBottom:4 }}>YouTube Video Notes</h2>
-        <p style={{ fontSize:13, color:C.muted }}>Paste a YouTube link — AI reads the video transcript and generates study notes, just like a PDF.</p>
+        <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:20, fontWeight:700, color:C.text, marginBottom:4 }}>Link Notes</h2>
+        <p style={{ fontSize:13, color:C.muted }}>Paste any link — YouTube, Wikipedia, or any webpage — and AI generates study notes from it.</p>
       </div>
 
       <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:16, padding:"18px 20px", marginBottom:20 }}>
@@ -9410,7 +9480,7 @@ RULES:
           <input
             value={url} onChange={e => { setUrl(e.target.value); setError(""); }}
             onKeyDown={e => { if (e.key==="Enter" && url.trim()) analyze(); }}
-            placeholder="https://youtube.com/watch?v=..."
+            placeholder="https://youtube.com/watch?v=…  or  https://en.wikipedia.org/wiki/…  or any URL"
             style={{ flex:1, border:`1.5px solid ${error?C.red:C.border}`, borderRadius:10, padding:"10px 14px",
               fontSize:14, outline:"none", color:C.text, background:C.bg }}
           />
@@ -9421,13 +9491,13 @@ RULES:
               boxShadow:loading||!url.trim()?"none":"0 4px 14px rgba(220,38,38,.3)" }}>
             {loading
               ? <><span style={{display:"flex",gap:3}}>{[0,1,2].map(i=><span key={i} style={{width:4,height:4,borderRadius:"50%",background:"#fff",animation:`bounce .9s ${i*0.15}s infinite`,display:"inline-block"}}/>)}</span>{status||"Working…"}</>
-              : <><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8z"/><polygon fill="#fff" points="9.75,15.5 15.5,12 9.75,8.5"/></svg>Get Notes</>
+              : <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Get Notes</>
             }
           </button>
         </div>
         {error && <p style={{ fontSize:13, color:C.red, marginTop:8 }}>{error}</p>}
         <p style={{ fontSize:11, color:C.muted, marginTop:10 }}>
-          AI reads the video transcript (captions) — not the video itself. Works with any captioned video.
+          Works with YouTube (any video, with or without transcript), Wikipedia articles, and any public webpage.
         </p>
       </div>
 
