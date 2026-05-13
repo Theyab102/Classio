@@ -9186,7 +9186,6 @@ function CardsTab({ file, onUpdate }) {
             ));
           })()}
         </>
-      </div>
     {editingCard && (
       <RenameDialog
         title="Edit Question"
@@ -9200,6 +9199,7 @@ function CardsTab({ file, onUpdate }) {
         onCancel={() => setEditingCard(null)}
       />
     )}
+    </div>
   </>
   );
 }
