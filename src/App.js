@@ -5143,7 +5143,8 @@ function CharacterModal({ character, onChange, onClose }) {
 
   return (
     <div
-      onClick={onClose}
+      onMouseDown={e => { if (e.target === e.currentTarget) { e.stopPropagation(); e.preventDefault(); onClose(); } }}
+      onClick={e => { e.stopPropagation(); e.preventDefault(); }}
       style={{
         position:"fixed", inset:0, zIndex:3000,
         background:"rgba(0,0,0,.55)",
@@ -8872,7 +8873,6 @@ function CardsTab({ file, onUpdate }) {
   const [previewIdx, setPreviewIdx] = useState(0);
 
   return (
-    <>
     <div>
       {/* ── Turbo-style header with icon + count ── */}
       <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20 }}>
@@ -9185,7 +9185,8 @@ function CardsTab({ file, onUpdate }) {
               </div>
             ));
           })()}
-        </>
+      </>
+      )}
     {editingCard && (
       <RenameDialog
         title="Edit Question"
@@ -9199,8 +9200,7 @@ function CardsTab({ file, onUpdate }) {
         onCancel={() => setEditingCard(null)}
       />
     )}
-    </div>
-  </>
+  </div>
   );
 }
 
@@ -9261,7 +9261,7 @@ function YouTubeTab({ file, onUpdate }) {
     const title = decodeURIComponent(titleMatch[1].replace(/_/g, " "));
     try {
       const r = await fetch(
-        \`https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=false&format=json&titles=\${encodeURIComponent(title)}&origin=*\`
+        `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=false&format=json&titles=${encodeURIComponent(title)}&origin=*`
       );
       const d = await r.json();
       const pages = d?.query?.pages || {};
