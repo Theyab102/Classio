@@ -3285,31 +3285,21 @@ export default function App() {
                             <p style={{ margin:0, fontSize:13, fontWeight:600, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{file.name}</p>
                             <p style={{ margin:0, fontSize:11, color:T.muted, marginTop:1 }}>{file.uploadedAt} · Click to open</p>
                           </div>
-                          {/* Actions: Move + Rename + Delete */}
-                          <div style={{ display:"flex", gap:4, flexShrink:0 }} onClick={e=>e.stopPropagation()}>
-                            {realFolders.length > 0 && (
-                              <MoveFileDropdown
-                                file={file}
-                                folders={realFolders}
-                                T={T}
-                                onMove={(targetFolderId) => {
-                                  const updatedInbox = {...inbox, files:inbox.files.filter(fi=>fi.id!==file.id)};
-                                  const dest = folders.find(fo=>fo.id===targetFolderId);
-                                  const updatedDest = {...dest, files:[...dest.files, file]};
-                                  setFoldersSave(folders.map(fo=>fo.id==="inbox"?updatedInbox:fo.id===targetFolderId?updatedDest:fo));
-                                }}
-                              />
-                            )}
-                            {/* Rename */}
-                            <button onClick={()=>setRenamingItem({id:file.id,name:file.name,type:"file",scope:"inbox"})} title="Rename"
-                              style={{ display:"flex", alignItems:"center", justifyContent:"center", background:T.accentL, color:T.accent, border:`1px solid ${T.accent}33`, borderRadius:8, padding:"5px 8px", cursor:"pointer" }}>
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                            </button>
-                            {/* Delete */}
-                            <button onClick={()=>setConfirmDelete({id:file.id,name:file.name,type:"file"})} title="Delete"
-                              style={{ display:"flex", alignItems:"center", justifyContent:"center", background:T.redL, color:T.red, border:`1px solid ${T.red}33`, borderRadius:8, padding:"5px 8px", cursor:"pointer" }}>
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4h6v2"/></svg>
-                            </button>
+                          {/* Actions: single ⋯ menu with Move + Rename + Delete */}
+                          <div style={{ flexShrink:0 }} onClick={e=>e.stopPropagation()}>
+                            <FileActionsMenu
+                              file={file}
+                              folderId="inbox"
+                              folders={folders.filter(f=>f.id!=="inbox")}
+                              onMove={(targetFolderId) => {
+                                const updatedInbox = {...inbox, files:inbox.files.filter(fi=>fi.id!==file.id)};
+                                const dest = folders.find(fo=>fo.id===targetFolderId);
+                                const updatedDest = {...dest, files:[...dest.files, file]};
+                                setFoldersSave(folders.map(fo=>fo.id==="inbox"?updatedInbox:fo.id===targetFolderId?updatedDest:fo));
+                              }}
+                              onRename={() => setRenamingItem({id:file.id,name:file.name,type:"file",scope:"inbox"})}
+                              onDelete={() => setConfirmDelete({id:file.id,name:file.name,type:"file"})}
+                            />
                           </div>
                         </div>
                       );
@@ -7382,7 +7372,7 @@ Otherwise respond normally with formatted text. Never use pipe-table markdown (|
     <div style={{ width:340, minWidth:280, flexShrink:0, display:"flex", flexDirection:"column",
       background:T.surface, borderLeft:`1px solid ${T.border}`, marginLeft:8,
       borderRadius:18, overflow:"hidden", border:`1px solid ${T.border}`,
-      position:"sticky", top:16, maxHeight:"calc(100vh - 140px)",
+      position:"sticky", top:16, height:"calc(100vh - 180px)", maxHeight:680,
       boxShadow:"0 4px 24px rgba(0,0,0,.06)" }}>
 
       {/* Quizzes + Flashcards cards — always visible at top */}
@@ -8289,8 +8279,17 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
               onChange={v => { setNotes(v); setUnsaved(true); }}
             />
           ) : (
-            <div style={{ background:C.surface, borderRadius:16, border:`1px solid ${C.border}`, minHeight:480, padding:"28px 32px", boxShadow:"0 2px 16px rgba(0,0,0,.06)" }}>
-              <p style={{ fontSize:14, color:C.muted, margin:0, lineHeight:1.7 }}>Click AI Generate to create notes. Tables will appear inline inside your notes.</p>
+            <div style={{ background:C.surface, borderRadius:16, border:`1.5px dashed ${C.border}`, minHeight:460, boxShadow:"0 2px 16px rgba(0,0,0,.04)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", textAlign:"center", padding:"48px 32px" }}>
+              <div style={{ width:60, height:60, borderRadius:18, background:C.accentL, display:"flex", alignItems:"center", justifyContent:"center", marginBottom:18 }}>
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+              </div>
+              <p style={{ fontSize:18, fontWeight:700, color:C.text, margin:"0 0 8px", fontFamily:"'Fraunces',serif" }}>No notes yet</p>
+              <p style={{ fontSize:13, color:C.muted, margin:"0 0 22px", maxWidth:300, lineHeight:1.65 }}>Click <strong style={{color:C.accent}}>✨ AI Generate</strong> to create structured notes with tables, images, and highlights.</p>
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap", justifyContent:"center" }}>
+                {["Detailed","Bullets","Exam Focused","Quick"].map(s=>(
+                  <span key={s} style={{ padding:"5px 13px", borderRadius:20, background:C.accentL, color:C.accent, fontSize:12, fontWeight:600 }}>{s}</span>
+                ))}
+              </div>
             </div>
           )}
           {notes.trim() && (
