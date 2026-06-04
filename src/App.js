@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import ReactDOM from "react-dom";
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot, updateDoc, deleteDoc, serverTimestamp, query, orderBy, limit, getDocs, arrayUnion } from "firebase/firestore";
@@ -2599,25 +2600,48 @@ function FileActionsMenu({ file, folderId, folders, onMove, onDelete, onOpen, on
   const [open, setOpen] = useState(false);
   const [showMoveList, setShowMoveList] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [menuPos, setMenuPos] = useState({ top:0, right:0 });
+  const btnRef = useRef(null);
   const onDeleteConfirm = () => setDeleteConfirm(true);
   const T = useTheme();
   const targets = (folders||[]).filter(f => f.id !== folderId);
 
-  return (
-    <div style={{ position:"relative", zIndex: open ? 1100 : "auto" }} onClick={e=>e.stopPropagation()}>
-      <button onClick={e=>{e.stopPropagation();setOpen(o=>!o);setShowMoveList(false);}}
-        style={{ background:"none", border:`1px solid ${T.border}`, borderRadius:8, width:32, height:32,
-          cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:T.muted }}
-        onMouseEnter={e=>e.currentTarget.style.background=T.sidebarActive}
-        onMouseLeave={e=>e.currentTarget.style.background="none"}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
-        </svg>
-      </button>
-      {open && (
-        <div style={{ position:"absolute", right:0, top:"100%", marginTop:4, background:T.surface,
-          border:`1px solid ${T.border}`, borderRadius:12, boxShadow:"0 8px 24px rgba(0,0,0,.15)",
-          zIndex:1200, minWidth:160, overflow:"hidden", animation:"quickIn .12s ease" }}>
+  const openMenu = (e) => {
+    e.stopPropagation();
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setMenuPos({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+    }
+    setOpen(o=>!o);
+    setShowMoveList(false);
+  };
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const h = (e) => {
+      if (!btnRef.current?.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [open]);
+
+  // Close on scroll
+  useEffect(() => {
+    if (!open) return;
+    const h = () => setOpen(false);
+    window.addEventListener("scroll", h, true);
+    return () => window.removeEventListener("scroll", h, true);
+  }, [open]);
+
+  const menuContent = open && ReactDOM.createPortal(
+    <div onMouseDown={e=>e.stopPropagation()} style={{
+      position:"fixed", top:menuPos.top, right:menuPos.right,
+      background:T.surface, border:`1px solid ${T.border}`,
+      borderRadius:12, boxShadow:"0 12px 40px rgba(0,0,0,.2)",
+      zIndex:99999, minWidth:180, overflow:"hidden",
+      animation:"quickIn .12s ease",
+    }}>
           {onOpen && <button onClick={()=>{onOpen();setOpen(false);}}
             style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"10px 14px", background:"none",
               border:"none", cursor:"pointer", textAlign:"left", fontSize:13, color:T.text, borderBottom:`1px solid ${T.border}` }}
@@ -2681,8 +2705,22 @@ function FileActionsMenu({ file, folderId, folders, onMove, onDelete, onOpen, on
               onConfirm={()=>{onDelete();setDeleteConfirm(false);setOpen(false);}}
               onCancel={()=>setDeleteConfirm(false)} />
           )}
-        </div>
-      )}
+    </div>,
+    document.body
+  );
+
+  return (
+    <div style={{ position:"relative" }} onClick={e=>e.stopPropagation()}>
+      <button ref={btnRef} onClick={openMenu}
+        style={{ background:"none", border:`1px solid ${T.border}`, borderRadius:8, width:32, height:32,
+          cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:T.muted }}
+        onMouseEnter={e=>e.currentTarget.style.background=T.sidebarActive}
+        onMouseLeave={e=>e.currentTarget.style.background="none"}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
+        </svg>
+      </button>
+      {menuContent}
     </div>
   );
 }
@@ -3285,21 +3323,31 @@ export default function App() {
                             <p style={{ margin:0, fontSize:13, fontWeight:600, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{file.name}</p>
                             <p style={{ margin:0, fontSize:11, color:T.muted, marginTop:1 }}>{file.uploadedAt} · Click to open</p>
                           </div>
-                          {/* Actions: single ⋯ menu with Move + Rename + Delete */}
-                          <div style={{ flexShrink:0 }} onClick={e=>e.stopPropagation()}>
-                            <FileActionsMenu
-                              file={file}
-                              folderId="inbox"
-                              folders={folders.filter(f=>f.id!=="inbox")}
-                              onMove={(targetFolderId) => {
-                                const updatedInbox = {...inbox, files:inbox.files.filter(fi=>fi.id!==file.id)};
-                                const dest = folders.find(fo=>fo.id===targetFolderId);
-                                const updatedDest = {...dest, files:[...dest.files, file]};
-                                setFoldersSave(folders.map(fo=>fo.id==="inbox"?updatedInbox:fo.id===targetFolderId?updatedDest:fo));
-                              }}
-                              onRename={() => setRenamingItem({id:file.id,name:file.name,type:"file",scope:"inbox"})}
-                              onDelete={() => setConfirmDelete({id:file.id,name:file.name,type:"file"})}
-                            />
+                          {/* Actions: Move + Rename + Delete */}
+                          <div style={{ display:"flex", gap:4, flexShrink:0 }} onClick={e=>e.stopPropagation()}>
+                            {realFolders.length > 0 && (
+                              <MoveFileDropdown
+                                file={file}
+                                folders={realFolders}
+                                T={T}
+                                onMove={(targetFolderId) => {
+                                  const updatedInbox = {...inbox, files:inbox.files.filter(fi=>fi.id!==file.id)};
+                                  const dest = folders.find(fo=>fo.id===targetFolderId);
+                                  const updatedDest = {...dest, files:[...dest.files, file]};
+                                  setFoldersSave(folders.map(fo=>fo.id==="inbox"?updatedInbox:fo.id===targetFolderId?updatedDest:fo));
+                                }}
+                              />
+                            )}
+                            {/* Rename */}
+                            <button onClick={()=>setRenamingItem({id:file.id,name:file.name,type:"file",scope:"inbox"})} title="Rename"
+                              style={{ display:"flex", alignItems:"center", justifyContent:"center", background:T.accentL, color:T.accent, border:`1px solid ${T.accent}33`, borderRadius:8, padding:"5px 8px", cursor:"pointer" }}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            </button>
+                            {/* Delete */}
+                            <button onClick={()=>setConfirmDelete({id:file.id,name:file.name,type:"file"})} title="Delete"
+                              style={{ display:"flex", alignItems:"center", justifyContent:"center", background:T.redL, color:T.red, border:`1px solid ${T.red}33`, borderRadius:8, padding:"5px 8px", cursor:"pointer" }}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4h6v2"/></svg>
+                            </button>
                           </div>
                         </div>
                       );
@@ -5136,7 +5184,7 @@ function CharacterModal({ character, onChange, onClose }) {
       onMouseDown={e => { if (e.target === e.currentTarget) { e.stopPropagation(); e.preventDefault(); onClose(); } }}
       onClick={e => { e.stopPropagation(); e.preventDefault(); }}
       style={{
-        position:"fixed", inset:0, zIndex:3000,
+        position:"fixed", inset:0, zIndex:9999,
         background:"rgba(0,0,0,.55)",
         display:"flex", alignItems:"center", justifyContent:"center",
         padding:16,
@@ -7372,7 +7420,7 @@ Otherwise respond normally with formatted text. Never use pipe-table markdown (|
     <div style={{ width:340, minWidth:280, flexShrink:0, display:"flex", flexDirection:"column",
       background:T.surface, borderLeft:`1px solid ${T.border}`, marginLeft:8,
       borderRadius:18, overflow:"hidden", border:`1px solid ${T.border}`,
-      position:"sticky", top:16, height:"calc(100vh - 180px)", maxHeight:680,
+      position:"sticky", top:16, maxHeight:"calc(100vh - 140px)",
       boxShadow:"0 4px 24px rgba(0,0,0,.06)" }}>
 
       {/* Quizzes + Flashcards cards — always visible at top */}
@@ -7811,7 +7859,7 @@ function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
     <div style={{
       background: C.surface,
       borderRadius: 16,
-      minHeight: 440,
+      minHeight: 480,
       border: `1px solid ${C.border}`,
       boxShadow: C.isDark ? "0 2px 24px rgba(0,0,0,.45)" : "0 2px 16px rgba(0,0,0,.06)",
       flex: 1,
@@ -8063,6 +8111,7 @@ STRICT FORMATTING RULES:
 4. **key term** — bold ALL important terms inline in sentences
 5. > definition or formula on its own line (e.g., > Count rate = decays per second)
 6. [Image: 2-4 word search term] — add after each section with a visual concept (e.g., [Image: Geiger Muller tube diagram])
+   IMPORTANT: Every [Image:] tag must use a DIFFERENT, UNIQUE search term. Never repeat the same image tag. Each image must show something different from all other images in the same notes.
 7. TABLE — for ANY comparison or structured data, use EXACTLY:
 TABLE_START
 headers: Column1 | Column2 | Column3
@@ -8072,7 +8121,7 @@ TABLE_END
 9. Cover EVERY section of the document. Do not skip anything.
 10. Do not invent content not in the file.`,
         userMsg,
-        4000
+        6000
       );
       const fixedTxt = fixLanguage(fixMath(txt), lang);
       setNotes(fixedTxt); setUnsaved(true);
@@ -8279,17 +8328,8 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
               onChange={v => { setNotes(v); setUnsaved(true); }}
             />
           ) : (
-            <div style={{ background:C.surface, borderRadius:16, border:`1.5px dashed ${C.border}`, minHeight:460, boxShadow:"0 2px 16px rgba(0,0,0,.04)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", textAlign:"center", padding:"48px 32px" }}>
-              <div style={{ width:60, height:60, borderRadius:18, background:C.accentL, display:"flex", alignItems:"center", justifyContent:"center", marginBottom:18 }}>
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-              </div>
-              <p style={{ fontSize:18, fontWeight:700, color:C.text, margin:"0 0 8px", fontFamily:"'Fraunces',serif" }}>No notes yet</p>
-              <p style={{ fontSize:13, color:C.muted, margin:"0 0 22px", maxWidth:300, lineHeight:1.65 }}>Click <strong style={{color:C.accent}}>✨ AI Generate</strong> to create structured notes with tables, images, and highlights.</p>
-              <div style={{ display:"flex", gap:8, flexWrap:"wrap", justifyContent:"center" }}>
-                {["Detailed","Bullets","Exam Focused","Quick"].map(s=>(
-                  <span key={s} style={{ padding:"5px 13px", borderRadius:20, background:C.accentL, color:C.accent, fontSize:12, fontWeight:600 }}>{s}</span>
-                ))}
-              </div>
+            <div style={{ background:C.surface, borderRadius:16, border:`1px solid ${C.border}`, minHeight:480, padding:"28px 32px", boxShadow:"0 2px 16px rgba(0,0,0,.06)" }}>
+              <p style={{ fontSize:14, color:C.muted, margin:0, lineHeight:1.7 }}>Click AI Generate to create notes. Tables will appear inline inside your notes.</p>
             </div>
           )}
           {notes.trim() && (
