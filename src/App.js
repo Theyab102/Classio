@@ -7859,9 +7859,9 @@ function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
     <div style={{
       background: C.surface,
       borderRadius: 16,
-      minHeight: 480,
+      minHeight: 520,
       border: `1px solid ${C.border}`,
-      boxShadow: C.isDark ? "0 2px 24px rgba(0,0,0,.45)" : "0 2px 16px rgba(0,0,0,.06)",
+      boxShadow: C.isDark ? "0 4px 32px rgba(0,0,0,.5)" : "0 2px 16px rgba(0,0,0,.06)",
       flex: 1,
       overflow: "hidden",
       wordBreak: "break-word",
@@ -8266,7 +8266,7 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
       {/* ── Note style pills — inline compact row like Turbo AI ── */}
       <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:"10px 14px", marginBottom:14, overflow:"visible" }}>
         <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
-          <span style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:.8, textTransform:"uppercase", flexShrink:0 }}>NOTE STYLE</span>
+          <span style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:.8, textTransform:"uppercase", flexShrink:0, whiteSpace:"nowrap" }}>NOTE STYLE</span>
           {!useCustomStyle && NOTE_STYLES.map(s => (
             <button key={s.id} onClick={() => setNoteStyle(s.id)} title={s.desc}
               style={{ padding:"5px 13px", borderRadius:20,
@@ -8793,9 +8793,12 @@ function ELI5Panel({ card }) {
             </div>
 
             {/* Input */}
-            <div style={{ padding:"12px 20px 16px", borderTop:`1px solid ${T.border}`, display:"flex", gap:10, alignItems:"center", flexShrink:0 }}>
+            <div style={{ padding:"12px 20px 16px", borderTop:`1px solid ${T.border}`, display:"flex", gap:10, alignItems:"center", flexShrink:0 }}
+              onClick={e=>e.stopPropagation()} onMouseDown={e=>e.stopPropagation()}>
               <input ref={inputRef} value={askQ} onChange={e=>setAskQ(e.target.value)}
-                onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); sendAsk(); }}}
+                onKeyDown={e=>{ e.stopPropagation(); if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); sendAsk(); } }}
+                onKeyUp={e=>e.stopPropagation()}
+                onKeyPress={e=>e.stopPropagation()}
                 placeholder="Type a question here…"
                 style={{ flex:1, border:"none", outline:"none", fontSize:14, color:T.text, background:"transparent", fontFamily:"inherit" }}
                 autoFocus/>
@@ -8978,10 +8981,10 @@ function CardsTab({ file, onUpdate }) {
             <div style={{ display:"flex", alignItems:"center", gap:6, background:C.bg, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"6px 10px" }}>
               <span style={{ fontSize:12, color:C.muted, whiteSpace:"nowrap" }}>Custom</span>
               <input type="number" min="1" max="50" value={cardCount}
-                onChange={e=>setCardCount(Math.min(50,Math.max(1,parseInt(e.target.value)||1)))}
+                onChange={e=>{ const v=e.target.value; if(v==="")setCardCount(""); else setCardCount(Math.min(50,Math.max(0,parseInt(v)||0))); }}
                 style={{ width:52, border:"none", outline:"none", fontSize:14, fontWeight:700, color:C.text, background:"transparent", textAlign:"center" }}/>
             </div>
-            <button onClick={()=>generate(cardCount)} disabled={gen}
+            <button onClick={()=>generate(parseInt(cardCount)||8)} disabled={gen||!parseInt(cardCount)}
               style={{ flex:1, background:gen?"#ccc":GRAD, color:"#fff", border:"none", borderRadius:10, padding:"10px 0", fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer", boxShadow:gen?"none":"0 3px 12px rgba(124,92,252,.3)", display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
               {gen ? <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Generating…</> : <>✨ Generate {cardCount} Cards</>}
             </button>
@@ -10527,6 +10530,44 @@ Simple language, give an example, under 100 words. No markdown.`,
   );
 }
 
+// ── SlideImagePreview — live image preview in slide editor ────────────────────
+function SlideImagePreview({ query, manualUrl, onUrlFound }) {
+  const [url, setUrl] = useState(manualUrl || null);
+  const [loading, setLoading] = useState(!manualUrl && !!query);
+  useEffect(() => {
+    if (manualUrl) { setUrl(manualUrl); onUrlFound?.(manualUrl); return; }
+    if (!query?.trim()) { setLoading(false); return; }
+    setLoading(true);
+    const term = encodeURIComponent(query.trim().slice(0, 80));
+    const validExt = /\.(jpe?g|png|gif|webp)(\?|$)/i;
+    fetch(`https://en.wikipedia.org/w/api.php?action=query&prop=pageimages&format=json&piprop=original&titles=${term}&origin=*`)
+      .then(r=>r.json())
+      .then(d=>{
+        const page = Object.values(d?.query?.pages||{})[0];
+        const src = page?.original?.source;
+        if (src && validExt.test(src)) { setUrl(src); onUrlFound?.(src); setLoading(false); return; }
+        return fetch(`https://en.wikipedia.org/w/api.php?action=query&prop=pageimages&format=json&piprop=original&generator=search&gsrsearch=${term}&gsrlimit=5&origin=*`)
+          .then(r=>r.json())
+          .then(d2=>{
+            const found = Object.values(d2?.query?.pages||{}).find(p=>p?.original?.source&&validExt.test(p.original.source));
+            const foundUrl = found?.original?.source || null;
+            setUrl(foundUrl); onUrlFound?.(foundUrl); setLoading(false);
+          });
+      }).catch(()=>setLoading(false));
+  }, [query, manualUrl]);
+
+  if (loading) return (
+    <div style={{ width:80, height:56, borderRadius:8, background:"#f5f5f5", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, border:"1px solid #e5e5e5" }}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+    </div>
+  );
+  if (!url) return null;
+  return (
+    <img src={url} alt={query} onError={()=>setUrl(null)}
+      style={{ width:80, height:56, objectFit:"cover", borderRadius:8, flexShrink:0, border:"1px solid #e5e5e5" }}/>
+  );
+}
+
 // ─── GAME TAB ─────────────────────────────────────────────────────────────────
 // AI-powered answer checker — returns true/false
 // Falls back to fuzzy string match if API call fails
@@ -10773,24 +10814,39 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
   // Fetch a Wikipedia image for a slide's imageSearch query
   const SlideImage = ({ query, manualUrl }) => {
     const [url, setUrl] = useState(manualUrl || null);
-    const [failed, setFailed] = useState(false);
+    const [loading, setLoading] = useState(!manualUrl && !!query);
     useEffect(() => {
-      if (manualUrl) { setUrl(manualUrl); return; }
-      if (!query) return;
+      if (manualUrl) { setUrl(manualUrl); setLoading(false); return; }
+      if (!query?.trim()) { setLoading(false); return; }
+      setLoading(true);
       const term = encodeURIComponent(query.trim().slice(0, 80));
+      const validExt = /\.(jpe?g|png|gif|webp)(\?|$)/i;
       fetch(`https://en.wikipedia.org/w/api.php?action=query&prop=pageimages&format=json&piprop=original&titles=${term}&origin=*`)
-        .then(r => r.json())
-        .then(d => {
-          const pages = d?.query?.pages || {};
-          const page = Object.values(pages)[0];
+        .then(r=>r.json())
+        .then(d=>{
+          const page = Object.values(d?.query?.pages||{})[0];
           const src = page?.original?.source;
-          if (src && /\.(jpg|jpeg|png|gif|webp|svg)(\?|$)/i.test(src)) setUrl(src);
-          else setFailed(true);
-        }).catch(() => setFailed(true));
+          if (src && validExt.test(src)) { setUrl(src); setLoading(false); return; }
+          // Wikimedia search fallback
+          return fetch(`https://en.wikipedia.org/w/api.php?action=query&prop=pageimages&format=json&piprop=original&generator=search&gsrsearch=${term}&gsrlimit=5&origin=*`)
+            .then(r=>r.json())
+            .then(d2=>{
+              const found = Object.values(d2?.query?.pages||{}).find(p=>p?.original?.source&&validExt.test(p.original.source));
+              setUrl(found?.original?.source||null);
+              setLoading(false);
+            });
+        }).catch(()=>setLoading(false));
     }, [query, manualUrl]);
-    if (failed || (!url && !query)) return null;
-    if (!url) return <div style={{ width:80, height:56, background:"rgba(255,255,255,.08)", borderRadius:6, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div>;
-    return <img src={url} alt={query} onError={()=>setFailed(true)} style={{ width:80, height:56, objectFit:"cover", borderRadius:6, flexShrink:0, border:"1px solid rgba(255,255,255,.15)" }}/>;
+
+    if (loading) return (
+      <div style={{ width:90, height:63, background:"rgba(255,255,255,.06)", borderRadius:8, flexShrink:0,
+        display:"flex", alignItems:"center", justifyContent:"center", border:"1px solid rgba(255,255,255,.1)" }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.3)" strokeWidth="2" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+      </div>
+    );
+    if (!url) return null;
+    return <img src={url} alt={query||""} onError={()=>setUrl(null)}
+      style={{ width:90, height:63, objectFit:"cover", borderRadius:8, flexShrink:0, border:"1px solid rgba(255,255,255,.15)", display:"block" }}/>;
   };
 
   // Slide preview renderer
@@ -10876,10 +10932,16 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
             style={{ flex:1, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 14px", fontSize:14, outline:"none", color:C.text, background:C.bg, fontFamily:"'DM Sans',sans-serif", minWidth:220 }}
             onFocus={e=>e.target.style.borderColor=C.accent}
             onBlur={e=>e.target.style.borderColor=C.border}/>
-          <select value={slideCount} onChange={e=>setSlideCount(+e.target.value)}
-            style={{ border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 12px", fontSize:13, color:C.text, background:C.bg, outline:"none", cursor:"pointer" }}>
-            {[5,8,10,12,15,20].map(n=><option key={n} value={n}>{n} slides</option>)}
-          </select>
+          <div style={{ display:"flex", alignItems:"center", gap:6, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"8px 12px", background:C.bg }}>
+            <button onClick={()=>setSlideCount(n=>Math.max(1,n-1))} className="no-min-h"
+              style={{ width:24,height:24,borderRadius:6,border:`1px solid ${C.border}`,background:C.surface,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",color:C.text,flexShrink:0 }}>−</button>
+            <input type="number" min="1" max="50" value={slideCount}
+              onChange={e=>setSlideCount(Math.min(50,Math.max(1,parseInt(e.target.value)||1)))}
+              style={{ width:36,border:"none",outline:"none",fontSize:14,fontWeight:700,color:C.text,background:"transparent",textAlign:"center" }}/>
+            <span style={{ fontSize:12,color:C.muted,whiteSpace:"nowrap" }}>slides</span>
+            <button onClick={()=>setSlideCount(n=>Math.min(50,n+1))} className="no-min-h"
+              style={{ width:24,height:24,borderRadius:6,border:`1px solid ${C.border}`,background:C.surface,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",color:C.text,flexShrink:0 }}>+</button>
+          </div>
           <button onClick={generate} disabled={generating}
             style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 20px", borderRadius:10, border:"none", background:generating?"#ccc":"linear-gradient(135deg,#7C5CFC,#3D8EF8)", color:"#fff", fontSize:14, fontWeight:700, cursor:generating?"not-allowed":"pointer", boxShadow:generating?"none":"0 3px 12px rgba(124,92,252,.3)", whiteSpace:"nowrap" }}>
             {generating ? <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Generating…</> : <>✨ Generate</>}
@@ -11015,12 +11077,29 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
                           placeholder="One bullet per line"
                           rows={4}
                           style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:8, padding:"7px 10px", fontSize:12, outline:"none", color:C.text, background:C.surface, resize:"vertical", boxSizing:"border-box", fontFamily:"'DM Sans',sans-serif" }}/>
-                        {/* Image for content slide */}
-                        <div style={{ marginTop:8, display:"flex", alignItems:"center", gap:8 }}>
-                          <label style={{ fontSize:11, fontWeight:600, color:C.muted, flexShrink:0 }}>🖼 Image URL (optional):</label>
-                          <input value={editVal.image||""} onChange={e=>setEditVal(v=>({...v,image:e.target.value}))}
-                            placeholder="Paste image URL here…"
-                            style={{ flex:1, border:`1px solid ${C.border}`, borderRadius:6, padding:"5px 8px", fontSize:11, outline:"none", color:C.text, background:C.surface }}/>
+                        {/* Image search for content slide */}
+                        <div style={{ marginTop:10, borderTop:`1px solid ${C.border}`, paddingTop:10 }}>
+                          <p style={{ fontSize:10, fontWeight:700, color:C.muted, margin:"0 0 6px", textTransform:"uppercase", letterSpacing:.5 }}>Slide Image</p>
+                          <div style={{ display:"flex", gap:6, marginBottom:6 }}>
+                            <input value={editVal.imageSearch||""} onChange={e=>setEditVal(v=>({...v,imageSearch:e.target.value}))}
+                              placeholder="Search term (e.g. 'nuclear atom diagram')…"
+                              style={{ flex:1, border:`1px solid ${C.border}`, borderRadius:8, padding:"6px 10px", fontSize:12, outline:"none", color:C.text, background:C.surface }}/>
+                          </div>
+                          <div style={{ display:"flex", gap:6, alignItems:"flex-start" }}>
+                            {(editVal.imageSearch||editVal.image) && (
+                              <SlideImagePreview query={editVal.imageSearch} manualUrl={editVal.image}
+                                onUrlFound={url=>setEditVal(v=>({...v,image:url}))} />
+                            )}
+                            <div style={{ flex:1 }}>
+                              <input value={editVal.image||""} onChange={e=>setEditVal(v=>({...v,image:e.target.value}))}
+                                placeholder="Or paste a direct image URL…"
+                                style={{ width:"100%", border:`1px solid ${C.border}`, borderRadius:8, padding:"6px 10px", fontSize:11, outline:"none", color:C.text, background:C.surface, boxSizing:"border-box" }}/>
+                              {editVal.image && (
+                                <button onClick={()=>setEditVal(v=>({...v,image:"",imageSearch:""}))}
+                                  style={{ marginTop:4, fontSize:10, color:C.muted, background:"none", border:"none", cursor:"pointer", padding:0 }}>✕ Remove image</button>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     )}
