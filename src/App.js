@@ -5172,17 +5172,27 @@ function CharacterModal({ character, onChange, onClose }) {
   // ─────────────────────────────────────────────────────────────────────────
   // RENDER
   // ─────────────────────────────────────────────────────────────────────────
-  // Lock body scroll when modal is open
+  // Lock body scroll — use position:fixed trick to avoid jitter
   useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
+    const scrollY = window.scrollY;
+    const body = document.body;
+    const prev = { overflow: body.style.overflow, position: body.style.position, top: body.style.top, width: body.style.width };
+    body.style.overflow = "hidden";
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.width = "100%";
+    return () => {
+      body.style.overflow = prev.overflow;
+      body.style.position = prev.position;
+      body.style.top = prev.top;
+      body.style.width = prev.width;
+      window.scrollTo(0, scrollY);
+    };
   }, []);
 
   return (
     <div
-      onMouseDown={e => { if (e.target === e.currentTarget) { e.stopPropagation(); e.preventDefault(); onClose(); } }}
-      onClick={e => { e.stopPropagation(); e.preventDefault(); }}
+      onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
       style={{
         position:"fixed", inset:0, zIndex:9999,
         background:"rgba(0,0,0,.55)",
@@ -5191,8 +5201,8 @@ function CharacterModal({ character, onChange, onClose }) {
       }}
     >
       <div
-        onClick={e => e.stopPropagation()}
         onMouseDown={e => e.stopPropagation()}
+        onClick={e => e.stopPropagation()}
         style={{
           width:"100%", maxWidth:520,
           height:`min(680px, calc(100dvh - 32px))`,
@@ -7356,7 +7366,7 @@ function NotesImageInsert({ file, onInsert }) {
 }
 
 // ── Notes Turbo Panel ─────────────────────────────────────────────────────────
-function NotesTurboPanel({ file, notes, lang, onTabChange }) {
+function NotesTurboPanel({ file, notes, lang, onTabChange, embedded=false }) {
   const T = useTheme();
   const [msgs, setMsgs] = useState([]);
   const [inp, setInp] = useState("");
@@ -7417,11 +7427,17 @@ Otherwise respond normally with formatted text. Never use pipe-table markdown (|
   };
 
   return (
-    <div style={{ width:340, minWidth:280, flexShrink:0, display:"flex", flexDirection:"column",
+    <div style={ embedded ? {
+      // When embedded in the notes workspace split pane
+      display:"flex", flexDirection:"column", flex:1, minHeight:0, overflow:"hidden", background:T.surface
+    } : {
+      // Standalone floating panel
+      width:340, minWidth:280, flexShrink:0, display:"flex", flexDirection:"column",
       background:T.surface, borderLeft:`1px solid ${T.border}`, marginLeft:8,
       borderRadius:18, overflow:"hidden", border:`1px solid ${T.border}`,
-      position:"sticky", top:16, maxHeight:"calc(100vh - 140px)",
-      boxShadow:"0 4px 24px rgba(0,0,0,.06)" }}>
+      position:"sticky", top:16, height:"calc(100vh - 180px)", maxHeight:700,
+      boxShadow:"0 4px 24px rgba(0,0,0,.06)"
+    }}>
 
       {/* Quizzes + Flashcards cards — always visible at top */}
       <div style={{ padding:"14px 12px 10px", flexShrink:0, borderBottom:`1px solid ${T.border}` }}>
@@ -7857,13 +7873,13 @@ function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
 
   return (
     <div style={{
-      background: C.surface,
-      borderRadius: 16,
-      minHeight: 520,
-      border: `1px solid ${C.border}`,
-      boxShadow: C.isDark ? "0 4px 32px rgba(0,0,0,.5)" : "0 2px 16px rgba(0,0,0,.06)",
+      background: "transparent",
+      borderRadius: 0,
+      minHeight: 0,
+      border: "none",
+      boxShadow: "none",
       flex: 1,
-      overflow: "hidden",
+      overflow: "visible",
       wordBreak: "break-word",
       overflowWrap: "break-word",
       display: "flex",
@@ -8158,187 +8174,180 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
 
   const isRTL = lang.startsWith("ar");
 
+  // Height of the workspace (viewport minus the outer FileView header)
+  const workspaceH = "calc(100vh - 130px)";
+
   return (
-    <div dir={isRTL ? "rtl" : "ltr"}>
-
-      {/* ── Top toolbar — Turbo style ─────────────────────────────────────── */}
-      <div className="notes-toolbar" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:10, position:"relative", zIndex:50 }}>
-        <h2 style={{ fontFamily:"'Fraunces',serif", fontSize:isMobile?20:24, fontWeight:800, color:C.text, margin:0 }}>Notes</h2>
-
-        <div className="notes-toolbar-right" style={{ display:"flex", gap:7, flexWrap:"wrap", alignItems:"center", position:"relative" }}>
-
-          {/* Language */}
-          <LangPicker value={lang} onChange={setLang} />
-
-          {/* AI Generate — Turbo purple pill */}
-          <button onClick={generate} disabled={gen} className="hov"
-            style={{ display:"flex", alignItems:"center", gap:6,
-              background:gen?"#ccc":"linear-gradient(135deg,#7C5CFC,#5B47E0)",
-              color:"#fff", border:"none", borderRadius:24, padding:"9px 20px",
-              fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer",
-              boxShadow:gen?"none":"0 4px 14px rgba(124,92,252,.4)" }}>
-            {gen
-              ? <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Generating…</>
-              : <><Icon d={I.sparkle} size={14} color="#fff" sw={2}/> ✨ AI Generate</>}
-          </button>
-
-          {/* Topic */}
-          <button onClick={() => setShowTopicInput(t => !t)} disabled={gen} className="hov"
-            style={{ display:"flex", alignItems:"center", gap:6, background:C.surface, color:C.text, border:`1.5px solid ${C.border}`, borderRadius:24, padding:"9px 16px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
-            <Icon d={I.edit} size={13} color={C.text}/> Topic
-          </button>
-
-          {/* Saved notes dropdown */}
-          {savedNotes.length > 0 && (
-            <div style={{ position:"relative" }}>
-              <button onClick={() => setShowDropdown(d => !d)} className="hov"
-                style={{ display:"flex", alignItems:"center", gap:5, background:C.surface, color:C.text, border:`1.5px solid ${C.border}`, borderRadius:24, padding:"9px 14px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
-                Saved ({savedNotes.length}) ▾
-              </button>
-              {showDropdown && (
-                <div style={{ position:"absolute", top:"110%", right:0, zIndex:1200, background:"#fff", border:`1.5px solid ${C.border}`, borderRadius:14, width:290, boxShadow:"0 10px 36px rgba(0,0,0,.17)", overflow:"hidden" }}>
-                  <div style={{ padding:"10px 12px", borderBottom:`1px solid ${C.border}` }}>
-                    <input value={dropSearch} onChange={e => setDropSearch(e.target.value)} placeholder="Search saved notes…"
-                      style={{ width:"100%", border:`1px solid ${C.border}`, borderRadius:8, padding:"6px 10px", fontSize:12, outline:"none", color:C.text }}/>
-                  </div>
-                  <div style={{ maxHeight:280, overflowY:"auto" }}>
-                    {filtered.length === 0 && <p style={{ padding:"14px", fontSize:12, color:C.muted, textAlign:"center" }}>No matches</p>}
-                    {filtered.map(n => (
-                      <div key={n.name} style={{ display:"flex", alignItems:"center", padding:"10px 12px", borderBottom:`1px solid ${C.border}33`, cursor:"pointer" }}
-                        onMouseEnter={e => e.currentTarget.style.background="#f5f7fa"}
-                        onMouseLeave={e => e.currentTarget.style.background="transparent"}>
-                        <div onClick={() => loadNote(n)} style={{ flex:1, minWidth:0 }}>
-                          <p style={{ fontSize:13, fontWeight:600, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{n.name}</p>
-                          <p style={{ fontSize:11, color:C.muted }}>{n.date} · {n.text.trim().split(/\s+/).length} words</p>
-                        </div>
-                        <button onClick={e => { e.stopPropagation(); delSaved(n.name); }}
-                          style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", padding:"2px 5px", flexShrink:0, display:"flex", alignItems:"center" }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ padding:"7px 12px", borderTop:`1px solid ${C.border}`, fontSize:10, color:C.muted, fontStyle:"italic" }}>Click to load · tap trash to delete</div>
-                </div>
-              )}
-            </div>
-          )}
-
-
-
-          {/* Save */}
-          <button onClick={() => { if(notes.trim()) { setNewNoteName(""); setShowSaveModal(true); } }} disabled={!notes.trim()} className="hov"
-            style={{ display:"flex", alignItems:"center", gap:6,
-              background:notes.trim()?"transparent":"transparent",
-              color:notes.trim()?C.green:C.muted,
-              border:`1.5px solid ${notes.trim()?C.green:C.border}`,
-              borderRadius:24, padding:"9px 16px", fontSize:13, fontWeight:700,
-              cursor:notes.trim()?"pointer":"not-allowed", opacity:notes.trim()?1:0.5 }}>
-            {notes.trim() ? <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg> Save</> : "Save"}
-          </button>
-        </div>
-      </div>
-
-      {/* Save feedback toast */}
-      {savedFeedback && (
-        <div style={{ background:C.greenL, border:`1px solid ${C.green}44`, borderRadius:10, padding:"8px 14px", marginBottom:12, fontSize:13, color:C.green, fontWeight:600 }}>
-          {savedFeedback}
-        </div>
-      )}
+    <div dir={isRTL ? "rtl" : "ltr"} style={{ display:"flex", flexDirection:"column", height:workspaceH, overflow:"hidden", gap:0 }}>
 
       {/* Save-as modal */}
       {showSaveModal && (
         <div onClick={() => setShowSaveModal(false)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.4)", zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
-          <div onClick={e => e.stopPropagation()} style={{ background:"#fff", borderRadius:18, padding:"26px 28px", width:"100%", maxWidth:380, boxShadow:"0 16px 50px rgba(0,0,0,.22)" }}>
+          <div onClick={e => e.stopPropagation()} style={{ background:C.surface, borderRadius:18, padding:"26px 28px", width:"100%", maxWidth:380, boxShadow:"0 16px 50px rgba(0,0,0,.22)", border:`1px solid ${C.border}` }}>
             <p style={{ fontSize:16, fontWeight:700, color:C.text, marginBottom:16 }}>Save Note As…</p>
             <input autoFocus value={newNoteName} onChange={e => setNewNoteName(e.target.value)}
               onKeyDown={e => e.key==="Enter" && doSave()}
               placeholder="e.g. Atomic Structure, Chapter 3, Exam Prep…"
-              style={{ width:"100%", border:`1.5px solid ${C.accentS}`, borderRadius:10, padding:"10px 12px", fontSize:14, outline:"none", color:C.text, marginBottom:14 }}/>
+              style={{ width:"100%", border:`1.5px solid ${C.accentS}`, borderRadius:10, padding:"10px 12px", fontSize:14, outline:"none", color:C.text, background:C.bg, marginBottom:14, boxSizing:"border-box" }}/>
             <div style={{ display:"flex", gap:8 }}>
               <button onClick={doSave} disabled={!newNoteName.trim()}
                 style={{ flex:2, background:newNoteName.trim()?C.accent:"#ccc", color:"#fff", border:"none", borderRadius:10, padding:"11px", fontSize:14, fontWeight:700, cursor:newNoteName.trim()?"pointer":"not-allowed" }}>Save</button>
               <button onClick={() => setShowSaveModal(false)}
-                style={{ flex:1, background:"#eee", color:"#555", border:"none", borderRadius:10, padding:"11px", fontSize:14, fontWeight:600, cursor:"pointer" }}>Cancel</button>
+                style={{ flex:1, background:C.bg, color:C.muted, border:`1px solid ${C.border}`, borderRadius:10, padding:"11px", fontSize:14, fontWeight:600, cursor:"pointer" }}>Cancel</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Note style pills — inline compact row like Turbo AI ── */}
-      <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:"10px 14px", marginBottom:14, overflow:"visible" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+      {/* ══ TOOLBAR ══════════════════════════════════════════════════════════ */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, padding:"0 0 8px", flexShrink:0, flexWrap:"wrap" }}>
+
+        {/* Left: NOTE STYLE pills */}
+        <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", minWidth:0 }}>
           <span style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:.8, textTransform:"uppercase", flexShrink:0, whiteSpace:"nowrap" }}>NOTE STYLE</span>
           {!useCustomStyle && NOTE_STYLES.map(s => (
             <button key={s.id} onClick={() => setNoteStyle(s.id)} title={s.desc}
-              style={{ padding:"5px 13px", borderRadius:20,
-                border:`1.5px solid ${noteStyle===s.id?C.accent:C.border}`,
-                background:noteStyle===s.id?C.accentL:"transparent",
-                color:noteStyle===s.id?C.accent:C.muted,
-                cursor:"pointer", fontWeight:noteStyle===s.id?700:400, fontSize:12,
-                transition:"all .12s", whiteSpace:"nowrap" }}>
+              style={{ padding:"5px 11px", borderRadius:20, border:`1.5px solid ${noteStyle===s.id?C.accent:C.border}`,
+                background:noteStyle===s.id?C.accentL:"transparent", color:noteStyle===s.id?C.accent:C.muted,
+                cursor:"pointer", fontWeight:noteStyle===s.id?700:400, fontSize:12, transition:"all .12s", whiteSpace:"nowrap" }}>
               {s.label}
             </button>
           ))}
           {useCustomStyle && (
             <input value={customStyle} onChange={e => setCustomStyle(e.target.value)}
-              placeholder="Describe your style, e.g. 'Short bullets, focus on exam topics'…"
-              style={{ flex:1, border:`1px solid ${C.border}`, borderRadius:8, padding:"5px 10px", fontSize:12, outline:"none", color:C.text, background:C.bg, fontFamily:"'DM Sans',sans-serif", minWidth:180 }}/>
+              placeholder="Custom style…"
+              style={{ width:200, border:`1px solid ${C.border}`, borderRadius:8, padding:"4px 10px", fontSize:12, outline:"none", color:C.text, background:C.bg }}/>
           )}
           <button onClick={() => setUseCustomStyle(u => !u)}
-            style={{ fontSize:11, fontWeight:600, padding:"4px 12px", borderRadius:20, flexShrink:0,
-              border:`1px solid ${useCustomStyle?C.accent:C.border}`,
-              background:useCustomStyle?C.accentL:"transparent",
-              color:useCustomStyle?C.accent:C.muted, cursor:"pointer", whiteSpace:"nowrap" }}>
+            style={{ fontSize:11, padding:"4px 10px", borderRadius:20, border:`1px solid ${useCustomStyle?C.accent:C.border}`,
+              background:useCustomStyle?C.accentL:"transparent", color:useCustomStyle?C.accent:C.muted, cursor:"pointer", whiteSpace:"nowrap", fontWeight:600 }}>
             {useCustomStyle ? "✓ Custom" : "Custom style"}
+          </button>
+        </div>
+
+        {/* Right: action buttons */}
+        <div style={{ display:"flex", gap:6, alignItems:"center", flexShrink:0, flexWrap:"wrap" }}>
+          <LangPicker value={lang} onChange={setLang} />
+          <button onClick={generate} disabled={gen} className="hov"
+            style={{ display:"flex", alignItems:"center", gap:6, background:gen?"#ccc":"linear-gradient(135deg,#7C5CFC,#5B47E0)",
+              color:"#fff", border:"none", borderRadius:20, padding:"8px 16px", fontSize:13, fontWeight:700,
+              cursor:gen?"not-allowed":"pointer", boxShadow:gen?"none":"0 3px 12px rgba(124,92,252,.35)", whiteSpace:"nowrap" }}>
+            {gen ? <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Generating…</>
+                 : <><Icon d={I.sparkle} size={13} color="#fff" sw={2}/> ✨ AI Generate</>}
+          </button>
+          <button onClick={() => setShowTopicInput(t => !t)} disabled={gen}
+            style={{ display:"flex", alignItems:"center", gap:5, background:C.surface, color:C.text, border:`1.5px solid ${C.border}`, borderRadius:20, padding:"7px 13px", fontSize:12, fontWeight:600, cursor:"pointer" }}>
+            <Icon d={I.edit} size={12} color={C.text}/> Topic
+          </button>
+          {savedNotes.length > 0 && (
+            <div style={{ position:"relative" }}>
+              <button onClick={() => setShowDropdown(d => !d)}
+                style={{ display:"flex", alignItems:"center", gap:5, background:C.surface, color:C.text, border:`1.5px solid ${C.border}`, borderRadius:20, padding:"7px 12px", fontSize:12, fontWeight:600, cursor:"pointer" }}>
+                Saved ({savedNotes.length}) ▾
+              </button>
+              {showDropdown && (
+                <div style={{ position:"absolute", top:"110%", right:0, zIndex:1200, background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14, width:280, boxShadow:"0 10px 36px rgba(0,0,0,.17)", overflow:"hidden" }}>
+                  <div style={{ padding:"10px 12px", borderBottom:`1px solid ${C.border}` }}>
+                    <input value={dropSearch} onChange={e => setDropSearch(e.target.value)} placeholder="Search saved notes…"
+                      style={{ width:"100%", border:`1px solid ${C.border}`, borderRadius:8, padding:"6px 10px", fontSize:12, outline:"none", color:C.text, background:C.bg, boxSizing:"border-box" }}/>
+                  </div>
+                  <div style={{ maxHeight:240, overflowY:"auto" }}>
+                    {filtered.length === 0 && <p style={{ padding:"14px", fontSize:12, color:C.muted, textAlign:"center" }}>No matches</p>}
+                    {filtered.map(n => (
+                      <div key={n.name} style={{ display:"flex", alignItems:"center", padding:"9px 12px", borderBottom:`1px solid ${C.border}33`, cursor:"pointer" }}
+                        onMouseEnter={e => e.currentTarget.style.background=C.bg}
+                        onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+                        <div onClick={() => loadNote(n)} style={{ flex:1, minWidth:0 }}>
+                          <p style={{ fontSize:13, fontWeight:600, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", margin:0 }}>{n.name}</p>
+                          <p style={{ fontSize:11, color:C.muted, margin:0 }}>{n.date} · {n.text.trim().split(/\s+/).length} words</p>
+                        </div>
+                        <button onClick={e => { e.stopPropagation(); delSaved(n.name); }}
+                          style={{ background:"none", border:"none", color:C.muted, cursor:"pointer", padding:"2px 5px", flexShrink:0 }}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          <button onClick={() => { if(notes.trim()) { setNewNoteName(""); setShowSaveModal(true); } }} disabled={!notes.trim()}
+            style={{ display:"flex", alignItems:"center", gap:5, background:"transparent", color:notes.trim()?C.green:C.muted,
+              border:`1.5px solid ${notes.trim()?C.green:C.border}`, borderRadius:20, padding:"7px 13px", fontSize:12,
+              fontWeight:700, cursor:notes.trim()?"pointer":"not-allowed", opacity:notes.trim()?1:0.5 }}>
+            {notes.trim() ? <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg> Save</> : "Save"}
           </button>
         </div>
       </div>
 
-      {/* ── Custom topic input ─────────────────────────────────────────────── */}
+      {/* Topic input row */}
       {showTopicInput && (
-        <div style={{ background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:12, padding:14, marginBottom:14, display:"flex", gap:10, alignItems:"center" }}>
+        <div style={{ background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:10, padding:"10px 12px", marginBottom:8, display:"flex", gap:8, alignItems:"center", flexShrink:0 }}>
           <input autoFocus value={customTopic} onChange={e => setCustomTopic(e.target.value)}
             onKeyDown={e => { if(e.key==="Enter" && customTopic.trim()) generateWithTopic(customTopic.trim()); }}
-            placeholder="e.g. Photosynthesis, World War 2, Quadratic equations…"
-            style={{ flex:1, border:`1.5px solid ${C.accentS}`, borderRadius:8, padding:"9px 12px", fontSize:14, outline:"none", color:C.text, background:C.surface }}/>
+            placeholder="Topic to generate notes about…"
+            style={{ flex:1, border:`1.5px solid ${C.accentS}`, borderRadius:8, padding:"7px 12px", fontSize:13, outline:"none", color:C.text, background:C.surface }}/>
           <button onClick={() => customTopic.trim() && generateWithTopic(customTopic.trim())} disabled={!customTopic.trim()}
-            style={{ background:C.accent, color:"#fff", border:"none", borderRadius:8, padding:"9px 14px", fontSize:14, fontWeight:600, cursor:customTopic.trim()?"pointer":"not-allowed" }}>Go</button>
-          <button onClick={() => setShowTopicInput(false)} style={{ background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:18 }}>×</button>
+            style={{ background:C.accent, color:"#fff", border:"none", borderRadius:8, padding:"7px 14px", fontSize:13, fontWeight:600, cursor:customTopic.trim()?"pointer":"not-allowed" }}>Go</button>
+          <button onClick={() => setShowTopicInput(false)} style={{ background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:18, lineHeight:1 }}>×</button>
         </div>
       )}
 
-      {/* ── Notes area + sidebar layout ──────────────────────────────────────── */}
+      {/* Unsaved banner */}
       {unsaved && notes.trim() && (
-        <div style={{ background:"#fffbeb", border:"1px solid #f59e0b33", borderRadius:8, padding:"6px 12px", marginBottom:8, fontSize:12, color:"#b45309", fontWeight:600, display:"flex", alignItems:"center", gap:6 }}>
+        <div style={{ background:"#fffbeb", border:"1px solid #f59e0b33", borderRadius:8, padding:"5px 12px", marginBottom:6, fontSize:12, color:"#b45309", fontWeight:600, flexShrink:0 }}>
           Unsaved — click Save to keep these notes
         </div>
       )}
+      {savedFeedback && (
+        <div style={{ background:C.greenL, border:`1px solid ${C.green}44`, borderRadius:8, padding:"5px 12px", marginBottom:6, fontSize:12, color:C.green, fontWeight:600, flexShrink:0 }}>
+          {savedFeedback}
+        </div>
+      )}
 
-      {/* ── Turbo AI split pane: notes left, AI panel right ── */}
-      <div className="notes-split" style={{ display:"flex", gap:20, alignItems:"flex-start", minHeight:0, overflow:"visible" }}>
+      {/* ══ MAIN WORKSPACE: 63% notes | 37% AI panel ════════════════════════ */}
+      <div style={{ display:"flex", gap:0, flex:1, minHeight:0, overflow:"hidden", borderRadius:16, border:`1px solid ${C.border}`, boxShadow:C.isDark?"0 4px 32px rgba(0,0,0,.45)":"0 2px 16px rgba(0,0,0,.07)" }}>
 
-        {/* Left — notes area */}
-        <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:10 }}>
-          {notes.trim() ? (
-            <NotesViewer
-              notes={notes}
-              tableData={tableData}
-              isRTL={isRTL}
-              onEdit={() => {}}
-              unsaved={unsaved}
-              onChange={v => { setNotes(v); setUnsaved(true); }}
-            />
-          ) : (
-            <div style={{ background:C.surface, borderRadius:16, border:`1px solid ${C.border}`, minHeight:480, padding:"28px 32px", boxShadow:"0 2px 16px rgba(0,0,0,.06)" }}>
-              <p style={{ fontSize:14, color:C.muted, margin:0, lineHeight:1.7 }}>Click AI Generate to create notes. Tables will appear inline inside your notes.</p>
-            </div>
-          )}
+        {/* ── LEFT: Notes editor (63%) ── */}
+        <div style={{ flex:"0 0 63%", minWidth:0, display:"flex", flexDirection:"column", borderRight:`1px solid ${C.border}`, background:C.surface, overflow:"hidden" }}>
+
+          {/* Notes content */}
+          <div style={{ flex:1, overflowY:"auto", padding:"20px 28px", fontFamily:"'DM Sans',sans-serif", WebkitOverflowScrolling:"touch" }}>
+            {notes.trim() ? (
+              <NotesViewer
+                notes={notes}
+                tableData={tableData}
+                isRTL={isRTL}
+                onEdit={() => {}}
+                unsaved={unsaved}
+                onChange={v => { setNotes(v); setUnsaved(true); }}
+              />
+            ) : (
+              <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:"100%", textAlign:"center", padding:"40px 20px" }}>
+                <div style={{ width:56, height:56, borderRadius:18, background:C.accentL, display:"flex", alignItems:"center", justifyContent:"center", marginBottom:16 }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                </div>
+                <p style={{ fontSize:17, fontWeight:700, color:C.text, margin:"0 0 8px" }}>No notes yet</p>
+                <p style={{ fontSize:13, color:C.muted, margin:"0 0 20px", maxWidth:280, lineHeight:1.6 }}>Click <strong style={{color:C.accent}}>✨ AI Generate</strong> to create rich notes with tables and images.</p>
+                <div style={{ display:"flex", gap:8, flexWrap:"wrap", justifyContent:"center" }}>
+                  {NOTE_STYLES.map(s=>(
+                    <span key={s.id} onClick={()=>{setNoteStyle(s.id);generate();}}
+                      style={{ padding:"5px 12px", borderRadius:20, background:C.accentL, color:C.accent, fontSize:12, fontWeight:600, cursor:"pointer" }}>{s.label}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Bottom action bar */}
           {notes.trim() && (
-            <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center", padding:"8px 0 2px", borderTop:`1px solid ${C.border}`, marginTop:4 }}>
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center", padding:"8px 16px", borderTop:`1px solid ${C.border}`, flexShrink:0, background:C.surface }}>
               <NotesSimplifyBtn notes={notes} onResult={s => { setNotes(s); setUnsaved(true); }} lang={lang} />
               <NotesExpandBtn notes={notes} onResult={e => { setNotes(e); setUnsaved(true); }} />
               <NotesImageInsert file={file} onInsert={(desc) => { setNotes(n => n + "\n\n[Image: " + desc + "]"); setUnsaved(true); }} />
               <button onClick={() => navigator.clipboard?.writeText(notes)}
-                style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 10px", borderRadius:8, border:`1.5px solid ${C.border}`, background:C.surface, color:C.muted, fontSize:11, fontWeight:600, cursor:"pointer" }}>
+                style={{ display:"flex", alignItems:"center", gap:4, padding:"5px 10px", borderRadius:8, border:`1.5px solid ${C.border}`, background:"transparent", color:C.muted, fontSize:11, fontWeight:600, cursor:"pointer" }}>
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                 Copy
               </button>
@@ -8347,8 +8356,10 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
           )}
         </div>
 
-        {/* Right — AI panel — hidden on narrow screens via CSS */}
-        <NotesTurboPanel file={file} notes={notes} lang={lang} onTabChange={onTabChange} />
+        {/* ── RIGHT: AI Panel (37%) ── */}
+        <div style={{ flex:"0 0 37%", minWidth:0, display:"flex", flexDirection:"column", background:C.surface, overflow:"hidden" }}>
+          <NotesTurboPanel file={file} notes={notes} lang={lang} onTabChange={onTabChange} embedded />
+        </div>
       </div>
 
       {/* Mobile floating AI button */}
