@@ -7467,11 +7467,35 @@ function NotesImageInsert({ file, onInsert }) {
 // ── Notes Turbo Panel ─────────────────────────────────────────────────────────
 function NotesTurboPanel({ file, notes, lang, onTabChange, embedded=false }) {
   const T = useTheme();
-  const [msgs, setMsgs] = useState([]);
+  const CHAT_KEY = "classio_chat_" + (file?.id || "default");
+
+  // Load persisted chat on mount
+  const initMsgs = () => {
+    try {
+      const saved = localStorage.getItem(CHAT_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [];
+  };
+  const [msgs, setMsgs] = useState(initMsgs);
   const [inp, setInp] = useState("");
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef(null);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:"smooth" }); }, [msgs]);
+
+  // Persist chat whenever msgs change
+  useEffect(() => {
+    try {
+      // Store only last 50 messages, skip graph/table data to save space
+      const toStore = msgs.slice(-50).map(m => ({
+        role: m.role,
+        content: m.content,
+        tableData: m.content === "__TABLE__" ? m.tableData : undefined,
+        graphData: m.content === "__GRAPH__" ? m.graphData : undefined,
+      }));
+      localStorage.setItem(CHAT_KEY, JSON.stringify(toStore));
+    } catch {}
+  }, [msgs, CHAT_KEY]);
 
   const send = async () => {
     const text = inp.trim();
@@ -7565,11 +7589,18 @@ Otherwise respond normally with formatted text. Never use pipe-table markdown (|
       {/* Messages or greeting */}
       {msgs.length === 0 ? (
         <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"20px 16px", textAlign:"center" }}>
-          <p style={{ fontSize:26, fontWeight:800, color:T.text, margin:"0 0 8px", fontFamily:"'Fraunces',serif", lineHeight:1.2 }}>Hey, I'm<br/>your AI</p>
+          <p style={{ fontSize:26, fontWeight:800, color:T.text, margin:"0 0 8px", fontFamily:"'Fraunces',serif", lineHeight:1.2 }}>Hey, I'm Turbo</p>
           <p style={{ fontSize:13, color:T.muted, margin:0, lineHeight:1.5 }}>I can work with you on your notes and answer any questions!</p>
         </div>
       ) : (
-        <div style={{ flex:1, overflowY:"auto", padding:"12px 12px 0", display:"flex", flexDirection:"column", gap:8 }}>
+        <div style={{ flex:1, display:"flex", flexDirection:"column", minHeight:0 }}>
+        <div style={{ display:"flex", justifyContent:"flex-end", padding:"6px 12px 0", flexShrink:0 }}>
+          <button onClick={()=>{ setMsgs([]); try{localStorage.removeItem(CHAT_KEY);}catch{} }}
+            style={{ fontSize:11, color:T.muted, background:"none", border:"none", cursor:"pointer", padding:"2px 6px", borderRadius:6, textDecoration:"underline" }}>
+            Clear chat
+          </button>
+        </div>
+        <div style={{ flex:1, overflowY:"auto", padding:"8px 12px 0", display:"flex", flexDirection:"column", gap:8 }}>
           {msgs.map((m,i)=>(
             <div key={i} style={{ display:"flex", justifyContent:m.role==="user"?"flex-end":"flex-start" }}>
               <div style={{ maxWidth:"90%", padding:"8px 12px", borderRadius:12, fontSize:13, lineHeight:1.6,
@@ -7588,6 +7619,7 @@ Otherwise respond normally with formatted text. Never use pipe-table markdown (|
           ))}
           {loading && <div style={{ display:"flex", alignItems:"center", gap:6, color:T.muted, fontSize:12, padding:"4px 0" }}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Thinking…</div>}
           <div ref={bottomRef}/>
+        </div>
         </div>
       )}
 
@@ -8056,66 +8088,33 @@ function InlineClassioTable({ data }) {
   if (!data?.table?.columns) return null;
   const { columns, rows } = data.table;
   const colCount = columns.length;
-  // Minimum column width prevents crushing — content never wraps character by character
-  const minColW = colCount > 8 ? 90 : colCount > 6 ? 110 : colCount > 4 ? 130 : 150;
-  const fontSize = colCount > 6 ? 12 : 13;
-  const cellPad = colCount > 6 ? "8px 10px" : "9px 14px";
+  // Compact font for wide tables
+  const fontSize = colCount > 6 ? 11 : colCount > 4 ? 12 : 13;
+  const cellPad = colCount > 6 ? "6px 8px" : "8px 10px";
   return (
-    <div style={{ margin:"18px 0", border:`1px solid ${C.border}`, borderRadius:12, overflow:"hidden", background:C.surface, boxShadow:"0 1px 6px rgba(0,0,0,.05)" }}>
-      {/* Header bar */}
-      <div style={{ background:C.accentL, padding:"6px 14px", display:"flex", alignItems:"center", gap:6, borderBottom:`1px solid ${C.accentS}` }}>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg>
-        <span style={{ fontSize:11, fontWeight:700, color:C.accent, letterSpacing:.5 }}>TABLE</span>
+    <div style={{ margin:"14px 0", border:`1.5px solid ${C.accentS}`, borderRadius:12, overflow:"hidden", width:"100%" }}>
+      <div style={{ background:C.accentL, padding:"5px 12px", display:"flex", alignItems:"center", gap:6 }}>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg>
+        <span style={{ fontSize:10, fontWeight:800, color:C.accent, letterSpacing:.6 }}>AI TABLE</span>
       </div>
-      {data.explanation && (
-        <p style={{ fontSize:12, color:C.muted, padding:"7px 14px 4px", margin:0, lineHeight:1.5, borderBottom:`1px solid ${C.border}`, fontStyle:"italic" }}>
-          {data.explanation}
-        </p>
-      )}
-      {/* Scrollable container — only THIS scrolls, not the page */}
-      <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch", maxWidth:"100%" }}>
-        <table style={{
-          borderCollapse:"collapse",
-          fontSize,
-          tableLayout:"auto",          /* auto layout — columns size to content */
-          minWidth: colCount > 4 ? colCount * minColW : "100%",
-        }}>
+      {data.explanation && <p style={{ fontSize:11, color:C.muted, padding:"5px 12px 0", margin:0, lineHeight:1.4 }}>{data.explanation}</p>}
+      <div style={{ width:"100%", overflowX:"auto" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize, tableLayout:"fixed" }}>
+          <colgroup>
+            {columns.map((_,ci) => <col key={ci} style={{ width:`${100/colCount}%` }} />)}
+          </colgroup>
           <thead>
-            <tr style={{ background:C.accent }}>
+            <tr style={{ background:C.accentL }}>
               {columns.map((col,ci)=>(
-                <th key={ci} style={{
-                  padding:cellPad,
-                  textAlign:"left",
-                  fontWeight:700,
-                  color:"#fff",
-                  borderBottom:`2px solid ${C.accentS}`,
-                  whiteSpace:"nowrap",       /* headers never wrap */
-                  minWidth:minColW,
-                  position:"sticky",
-                  top:0,
-                }}>{col}</th>
+                <th key={ci} style={{ padding:cellPad, textAlign:"left", fontWeight:700, color:C.accent, borderBottom:`2px solid ${C.accentS}`, fontSize:fontSize-1, wordBreak:"break-word", verticalAlign:"top" }}>{col}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {rows.map((row,ri)=>(
-              <tr key={ri} style={{
-                background: ri%2===0 ? C.surface : (C.isDark?"#1a1a2200":"#f8f8fc88"),
-                borderBottom:`1px solid ${C.border}`
-              }}>
+              <tr key={ri} style={{ background:ri%2===0?C.surface:"transparent", borderBottom:`1px solid ${C.border}` }}>
                 {row.map((cell,ci)=>(
-                  <td key={ci} style={{
-                    padding:cellPad,
-                    color: ci===0 ? C.accent : C.text,
-                    fontWeight: ci===0 ? 600 : 400,
-                    lineHeight:1.55,
-                    fontSize,
-                    whiteSpace:"normal",     /* words wrap naturally */
-                    wordBreak:"normal",      /* NEVER break mid-word */
-                    overflowWrap:"break-word", /* only break if truly necessary */
-                    minWidth:minColW,
-                    verticalAlign:"top",
-                  }}>
+                  <td key={ci} style={{ padding:cellPad, color:C.text, lineHeight:1.45, fontSize, wordBreak:"break-word", verticalAlign:"top" }}>
                     {String(cell||"")}
                   </td>
                 ))}
@@ -8129,27 +8128,11 @@ function InlineClassioTable({ data }) {
 }
 
 function NotesTab({ file, onUpdate, user, isGuest, onTabChange }) {
-  const { isMobile, isTablet, isLandscape } = useResponsive();
-
-  // ── Auto-restore notes from localStorage or file.notes on mount ──────────
-  const SAVED_KEY_INIT = "saved_notes_" + file.id;
-  const initNotes = () => {
-    try {
-      // 1. Check localStorage for auto-saved notes first
-      const saved = JSON.parse(localStorage.getItem(SAVED_KEY_INIT) || "[]");
-      // Look for auto-save entry first, then any saved note
-      const auto = saved.find(n => n.name === "__auto__");
-      if (auto?.text) return auto.text;
-      // Named saved notes
-      const named = saved.find(n => n.name !== "__auto__");
-      if (named?.text) return named.text;
-    } catch {}
-    // 2. Fall back to file.notes (persisted in Firestore/state)
-    return file.notes || "";
-  };
-
-  const [notes,    setNotes]   = useState(initNotes);
-  const [unsaved,  setUnsaved]  = useState(false);
+  // Notes start empty — user must load a saved note or generate new ones
+  // (unsaved notes are NOT persisted when leaving the file)
+  const { isMobile } = useResponsive();
+  const [notes,    setNotes]   = useState("");
+  const [unsaved,  setUnsaved]  = useState(false);  // track unsaved changes
   const [gen,      setGen]     = useState(false);
   const [showTopicInput, setShowTopicInput] = useState(false);
   const [customTopic,    setCustomTopic]    = useState("");
@@ -8207,25 +8190,8 @@ function NotesTab({ file, onUpdate, user, isGuest, onTabChange }) {
   const delSaved  = (name)  => persistSaved(savedNotes.filter(n => n.name !== name));
   const filtered  = savedNotes.filter(n => n.name.toLowerCase().includes(dropSearch.toLowerCase()));
 
-  // Auto-save notes to file.notes whenever notes change (debounced)
+  // Also save to file object for immediate persistence
   const saveToFile = () => onUpdate({ ...file, notes });
-  useEffect(() => {
-    if (!notes) return;
-    const t = setTimeout(() => {
-      onUpdate({ ...file, notes });
-      // Also persist to localStorage as the "latest" entry
-      try {
-        const existing = JSON.parse(localStorage.getItem(SAVED_KEY) || "[]");
-        // Update the "auto-saved" entry or prepend it
-        const autoIdx = existing.findIndex(n => n.name === "__auto__");
-        const entry = { name:"__auto__", text:notes, date:"auto" };
-        if (autoIdx >= 0) existing[autoIdx] = entry;
-        else existing.unshift(entry);
-        localStorage.setItem(SAVED_KEY, JSON.stringify(existing.slice(0, 20)));
-      } catch {}
-    }, 1200);
-    return () => clearTimeout(t);
-  }, [notes]);
 
   // ── Note style ────────────────────────────────────────────────────────────
   const [noteStyle,      setNoteStyle]      = useState("detailed");
@@ -10777,9 +10743,25 @@ function PresentationTab({ file, onUpdate }) {
   const [generating, setGenerating] = useState(false);
   const [slideCount, setSlideCount] = useState(8);
   const [theme, setTheme] = useState("modern");
+  const [presStyle, setPresStyle] = useState("auto");
   const [editIdx, setEditIdx] = useState(null);
   const [editVal, setEditVal] = useState({});
   const [exporting, setExporting] = useState(false);
+  const [customSlideCount, setCustomSlideCount] = useState("");
+  const [showStyleInput, setShowStyleInput] = useState(false);
+  const [stylePrompt, setStylePrompt] = useState("");
+
+  // Presentation Styles — layout/content personality
+  const PRES_STYLES = [
+    { id:"auto",       label:"🤖 Auto",       desc:"AI picks best style for topic" },
+    { id:"education",  label:"📚 Education",  desc:"Clear, diagrams, student-friendly" },
+    { id:"corporate",  label:"💼 Corporate",  desc:"Executive, data-driven, professional" },
+    { id:"startup",    label:"🚀 Startup",    desc:"Bold, investor-ready, visual story" },
+    { id:"technology", label:"⚡ Technology", desc:"SaaS-inspired, modern, minimal" },
+    { id:"academic",   label:"🔬 Academic",   desc:"Research, data, structured" },
+    { id:"creative",   label:"🎨 Creative",   desc:"Bold visuals, dynamic layouts" },
+    { id:"minimal",    label:"✦ Minimal",     desc:"Clean, elegant, lots of space" },
+  ];
 
   const THEMES = [
     { id:"modern", label:"Modern", bg:"#1e1b4b", accent:"#818cf8", text:"#f8fafc", sub:"#c4c4e0", header:"#2d2a6e", card:"rgba(255,255,255,.07)" },
@@ -10803,57 +10785,60 @@ function PresentationTab({ file, onUpdate }) {
       const fileText = fileObj ? await extractFileText(fileObj).catch(()=>"") : "";
       const context = fileText ? `File content:\n${fileText.slice(0, 10000)}` : "";
       const topicStr = topic.trim() || file.name;
+      const finalCount = customSlideCount ? (parseInt(customSlideCount)||slideCount) : slideCount;
+
+      // Determine effective style
+      const effectiveStyle = presStyle === "auto" ? "education" : presStyle;
+      const styleGuides = {
+        education:  "Educational style: Clear explanations, diagrams, step-by-step breakdowns. Use content, two-col, and image slides liberally. Student-friendly language.",
+        corporate:  "Corporate style: Data-driven, executive-level. Use statistics, comparison slides, professional tone. Include quote slides with key insights.",
+        startup:    "Startup pitch style: Bold statements, minimal text per slide, strong visual story. Hero slides, big numbers, problem/solution structure.",
+        technology: "Technology style: Modern SaaS-inspired. Technical diagrams, feature breakdowns, architecture slides. Clean and minimal.",
+        academic:   "Academic/Research style: Structured, data-focused. Include tables, methodology slides, evidence-based. Formal language.",
+        creative:   "Creative style: Bold, visual-first. Strong imagery, dynamic compositions, expressive language. Gallery and image slides encouraged.",
+        minimal:    "Minimal style: Clean, elegant. Maximum 3 bullet points per slide. Lots of white space. Simple, direct language.",
+      };
+      const styleInstruction = styleGuides[effectiveStyle] || styleGuides.education;
+      const userStyleNote = stylePrompt.trim() ? `\nAdditional style instruction: "${stylePrompt.trim()}"` : "";
 
       const raw = await callClaude(
-        `You are an expert presentation designer. Create a professional, engaging presentation.
-Return ONLY valid JSON — no markdown, no explanation.
-Format:
+        `You are a world-class presentation designer. Create a professional, visually stunning presentation.
+Return ONLY valid JSON — no markdown, no explanation, no text before or after.
+Style: ${styleInstruction}${userStyleNote}
+
+JSON format — use VARIED slide types for visual interest:
 {
   "title": "Presentation Title",
   "slides": [
-    {
-      "type": "title",
-      "title": "Main Title",
-      "subtitle": "Subtitle or tagline",
-      "imageSearch": "search query for a relevant background image"
-    },
-    {
-      "type": "content",
-      "title": "Slide Title",
-      "bullets": ["Key point 1", "Key point 2", "Key point 3"],
-      "imageSearch": "1-3 word search term for a relevant image to show on this slide",
-      "note": "Optional speaker note"
-    },
-    {
-      "type": "two-col",
-      "title": "Comparison",
-      "left": { "heading": "Left Side", "bullets": ["Point A", "Point B"] },
-      "right": { "heading": "Right Side", "bullets": ["Point X", "Point Y"] }
-    },
-    {
-      "type": "quote",
-      "quote": "An inspiring or key quote from the content",
-      "author": "Source or attribution"
-    },
-    {
-      "type": "summary",
-      "title": "Key Takeaways",
-      "bullets": ["Takeaway 1", "Takeaway 2", "Takeaway 3"]
-    }
+    { "type": "title", "title": "Main Title", "subtitle": "Subtitle tagline", "imageSearch": "relevant 2-4 word image query" },
+    { "type": "content", "title": "Slide Title", "bullets": ["Point 1", "Point 2", "Point 3", "Point 4"], "imageSearch": "specific image query", "note": "Speaker note" },
+    { "type": "two-col", "title": "Comparison Title", "left": { "heading": "Left", "bullets": ["A","B","C"] }, "right": { "heading": "Right", "bullets": ["X","Y","Z"] }, "imageSearch": "query" },
+    { "type": "quote", "quote": "A powerful quote or key insight", "author": "Source" },
+    { "type": "image", "title": "Visual Title", "imageSearch": "specific descriptive query", "caption": "Caption text" },
+    { "type": "stats", "title": "Key Numbers", "stats": [{"number":"85%","label":"Key metric"},{"number":"3x","label":"Growth"}], "imageSearch": "query" },
+    { "type": "summary", "title": "Key Takeaways", "bullets": ["T1","T2","T3"] }
   ]
 }
-Slide types to use: title (1 slide), content (most slides), two-col (for comparisons), quote (1-2 slides), summary (last slide).
-Make exactly ${slideCount} slides total. Be comprehensive and educational.
-For content and title slides, include an "imageSearch" field with a 1-3 word search query that would find a relevant educational image (e.g. "nuclear atom diagram", "cell mitosis", "french revolution painting"). Keep imageSearch queries simple and specific.`,
-        `Topic: "${topicStr}"\n${context}\n\nCreate a ${slideCount}-slide presentation covering all key concepts thoroughly.`,
-        4000
+
+SLIDE VARIETY RULES:
+- Slide 1: ALWAYS type "title"
+- Last slide: ALWAYS type "summary"
+- Mix slide types — never use the same type 3 times in a row
+- Include at least 1 "image" or "stats" slide if count >= 6
+- Include at least 1 "quote" slide if count >= 5
+- imageSearch: specific 2-4 words (e.g. "nuclear fission diagram", "DNA helix structure"). EVERY slide should have imageSearch.
+- Make EXACTLY ${finalCount} slides. Be comprehensive.`,
+        `Topic: "${topicStr}"\n${context}\n\nCreate a ${finalCount}-slide ${effectiveStyle} presentation.`,
+        5000
       );
-      const clean = raw.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(clean.match(/\{[\s\S]*\}/)[0]);
+      const clean = raw.replace(/\`\`\`json|\`\`\`/g, "").trim();
+      const jsonMatch = clean.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("No JSON in response");
+      const parsed = JSON.parse(jsonMatch[0]);
       const newSlides = parsed.slides || [];
       setSlides(newSlides);
       onUpdate({ ...file, presentation: newSlides, presentationTitle: parsed.title });
-    } catch(e) { console.error("Presentation gen error:", e); }
+    } catch(e) { console.error("Presentation gen error:", e); alert("Generation failed: " + e.message); }
     setGenerating(false);
   };
 
@@ -10967,6 +10952,8 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
     const blank = type==="title"?{type:"title",title:"New Slide",subtitle:""}
       : type==="quote"?{type:"quote",quote:"A key insight",author:""}
       : type==="two-col"?{type:"two-col",title:"Comparison",left:{heading:"Left",bullets:["Point A"]},right:{heading:"Right",bullets:["Point B"]}}
+      : type==="stats"?{type:"stats",title:"Key Numbers",stats:[{number:"85%",label:"First metric"},{number:"3x",label:"Growth"},{number:"1M+",label:"Users"}]}
+      : type==="image"?{type:"image",title:"Visual Insight",imageSearch:"relevant concept",caption:"Image caption"}
       : {type:"content",title:"New Slide",bullets:["Key point 1","Key point 2","Key point 3"]};
     const ns=[...slides,blank]; setSlides(ns); onUpdate({...file,presentation:ns});
     setEditIdx(ns.length-1); setEditVal({...blank});
@@ -11057,6 +11044,29 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
               <div><p style={{ fontSize:mini?7:11, fontWeight:700, color:thm.accent, margin:"0 0 3px" }}>{s.right?.heading}</p>{(s.right?.bullets||[]).slice(0,mini?2:3).map((b,bi)=><p key={bi} style={{ fontSize:mini?6:10, color:thm.sub, margin:"1px 0" }}>• {b}</p>)}</div>
             </div>
           </>
+        ) : s.type==="stats" ? (
+          <>
+            <p style={{ fontSize:mini?9:15, fontWeight:800, color:thm.text, margin:"0 0 8px", borderBottom:`${mini?1:2}px solid ${thm.accent}`, paddingBottom:4 }}>{s.title}</p>
+            <div style={{ display:"grid", gridTemplateColumns:`repeat(${Math.min(s.stats?.length||3,3)},1fr)`, gap:mini?4:10, marginTop:mini?4:10 }}>
+              {(s.stats||[]).map((st,si)=>(
+                <div key={si} style={{ background:thm.card||"rgba(255,255,255,.07)", borderRadius:mini?4:8, padding:mini?"4px 6px":"10px 12px", textAlign:"center", border:`1px solid ${thm.accent}33` }}>
+                  <p style={{ fontSize:mini?11:22, fontWeight:900, color:thm.accent, margin:0, lineHeight:1 }}>{st.number}</p>
+                  <p style={{ fontSize:mini?6:10, color:thm.sub, margin:mini?"1px 0 0":"4px 0 0" }}>{st.label}</p>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : s.type==="image" ? (
+          <>
+            <p style={{ fontSize:mini?9:15, fontWeight:800, color:thm.text, margin:"0 0 6px" }}>{s.title}</p>
+            <div style={{ display:"flex", justifyContent:"center", alignItems:"center", flex:1, minHeight:mini?50:100 }}>
+              {!mini && (s.imageSearch||s.image) && <SlideImage query={s.imageSearch} manualUrl={s.image} style={{ maxHeight:100, maxWidth:"100%", objectFit:"contain", borderRadius:8 }}/>}
+              {mini && <div style={{ width:40, height:30, background:thm.accent+"33", borderRadius:4, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={thm.accent} strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              </div>}
+            </div>
+            {s.caption && <p style={{ fontSize:mini?6:10, color:thm.sub, margin:"4px 0 0", textAlign:"center", fontStyle:"italic" }}>{s.caption}</p>}
+          </>
         ) : (
           <>
             <div style={{ display:"flex", gap:10, alignItems:"flex-start" }}>
@@ -11129,40 +11139,65 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
           </button>
         </div>
 
-        {/* Theme + layout options */}
-        <div style={{ display:"flex", flexWrap:"wrap", gap:16, alignItems:"flex-start" }}>
-          <div>
-            <p style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:.8, textTransform:"uppercase", margin:"0 0 6px" }}>Theme</p>
-            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-              {THEMES.map(t=>(
-                <button key={t.id} onClick={()=>setTheme(t.id)} title={t.label}
-                  style={{ width:32, height:32, borderRadius:"50%",
-                    background:`linear-gradient(135deg, ${t.bg} 50%, ${t.accent} 50%)`,
-                    border:`3px solid ${theme===t.id?"#7C5CFC":"transparent"}`,
-                    cursor:"pointer", boxShadow:"0 2px 8px rgba(0,0,0,.25)",
-                    transition:"all .15s", flexShrink:0, position:"relative",
-                    transform:theme===t.id?"scale(1.15)":"scale(1)" }}>
-                  {theme===t.id && <div style={{ position:"absolute", inset:-4, borderRadius:"50%", border:"2px solid #7C5CFC66" }}/>}
+        {/* Row 2: Style + Theme */}
+        <div style={{ display:"flex", flexWrap:"wrap", gap:14, alignItems:"flex-start", paddingTop:12, borderTop:`1px solid ${C.border}` }}>
+          {/* Presentation Style */}
+          <div style={{ flex:1, minWidth:220 }}>
+            <p style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:.8, textTransform:"uppercase", margin:"0 0 7px" }}>Presentation Style</p>
+            <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
+              {PRES_STYLES.map(s=>(
+                <button key={s.id} onClick={()=>setPresStyle(s.id)} title={s.desc}
+                  style={{ padding:"5px 11px", borderRadius:20, fontSize:11, fontWeight:600, cursor:"pointer", transition:"all .12s", whiteSpace:"nowrap",
+                    background:presStyle===s.id?C.accent:"transparent",
+                    color:presStyle===s.id?"#fff":C.muted,
+                    border:`1.5px solid ${presStyle===s.id?C.accent:C.border}` }}>
+                  {s.label}
                 </button>
               ))}
             </div>
           </div>
-          {slides.length>0 && (
-            <div>
-              <p style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:.8, textTransform:"uppercase", margin:"0 0 6px" }}>Add Slide Type</p>
-              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                {[["content","📝 Content"],["two-col","⬛ Two Column"],["quote","💬 Quote"],["title","🎯 Title"]].map(([type,label])=>(
-                  <button key={type} onClick={()=>addSlide(type)}
-                    style={{ padding:"4px 10px", borderRadius:20, border:`1.5px solid ${C.border}`, background:"transparent", color:C.muted, fontSize:11, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap" }}
-                    onMouseEnter={e=>{e.currentTarget.style.borderColor=C.accent;e.currentTarget.style.color=C.accent;}}
-                    onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.muted;}}>
-                    {label}
-                  </button>
-                ))}
-              </div>
+          {/* Theme colour */}
+          <div>
+            <p style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:.8, textTransform:"uppercase", margin:"0 0 7px" }}>Colour Theme</p>
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+              {THEMES.map(t=>(
+                <button key={t.id} onClick={()=>setTheme(t.id)} title={t.label}
+                  style={{ width:28, height:28, borderRadius:"50%",
+                    background:`linear-gradient(135deg, ${t.bg} 50%, ${t.accent} 50%)`,
+                    border:`3px solid ${theme===t.id?"#7C5CFC":"transparent"}`,
+                    cursor:"pointer", boxShadow:"0 2px 6px rgba(0,0,0,.2)",
+                    transition:"all .15s", flexShrink:0,
+                    transform:theme===t.id?"scale(1.15)":"scale(1)" }}/>
+              ))}
             </div>
+          </div>
+        </div>
+        {/* Custom style note */}
+        <div style={{ marginTop:10 }}>
+          <button onClick={()=>setShowStyleInput(s=>!s)}
+            style={{ fontSize:11, color:C.muted, background:"none", border:"none", cursor:"pointer", textDecoration:"underline", padding:0 }}>
+            {showStyleInput ? "▲ Hide custom style" : "✏️ Add custom style instructions"}
+          </button>
+          {showStyleInput && (
+            <textarea value={stylePrompt} onChange={e=>setStylePrompt(e.target.value)}
+              placeholder="e.g. 'Use formal academic language', 'Dark tech startup feel', 'Fun and colourful for kids'…"
+              rows={2} style={{ width:"100%", marginTop:6, border:`1.5px solid ${C.accentS}`, borderRadius:8, padding:"8px 10px", fontSize:12, outline:"none", resize:"vertical", color:C.text, background:C.bg, fontFamily:"'DM Sans',sans-serif", boxSizing:"border-box" }}/>
           )}
         </div>
+        {/* Add slide type buttons (when slides exist) */}
+        {slides.length > 0 && (
+          <div style={{ marginTop:10, paddingTop:10, borderTop:`1px solid ${C.border}`, display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
+            <span style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:.8, textTransform:"uppercase" }}>Add slide</span>
+            {[["content","📝 Content"],["two-col","⬛ Two Column"],["quote","💬 Quote"],["title","🎯 Title"],["stats","📊 Stats"],["image","🖼️ Image"]].map(([type,label])=>(
+              <button key={type} onClick={()=>addSlide(type)}
+                style={{ padding:"4px 10px", borderRadius:20, border:`1.5px solid ${C.border}`, background:"transparent", color:C.muted, fontSize:11, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap" }}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor=C.accent;e.currentTarget.style.color=C.accent;}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.muted;}}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Empty state */}
