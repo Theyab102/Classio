@@ -690,15 +690,27 @@ function useResponsive() {
     const w = window.innerWidth;
     const h = window.innerHeight;
     const isLandscape = w > h;
-    // On rotation, browser may briefly report wrong values — use both axes
     const shortEdge = Math.min(w, h);
     const longEdge  = Math.max(w, h);
-    // Phone: short edge ≤ 480px (covers portrait & landscape phone)
-    const isPhone  = shortEdge <= 480;
-    // Tablet: short edge 481–800px
-    const isTabletDevice = shortEdge > 480 && shortEdge <= 800;
+
+    // ── Device type detection ──────────────────────────────────────────────
+    // Uses UA + screen dimensions for accurate classification
+    const ua = navigator.userAgent || "";
+    const isIOS     = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const isAndroid = /Android/.test(ua);
+    const isTouchUA = isIOS || isAndroid || /Mobi|Tablet/.test(ua);
+
+    // Phone: short edge ≤ 480 OR (small screen + touch UA)
+    const isPhone = shortEdge <= 480 || (shortEdge <= 600 && isTouchUA && longEdge <= 900);
+    // iPad / Android tablet: short edge 481–1024
+    const isTabletDevice = !isPhone && (shortEdge <= 1024) &&
+      (isTouchUA || (shortEdge <= 900 && longEdge <= 1400));
+    // iPad Pro / large tablet (12.9" iPad = 1024px short edge)
+    const isLargeTablet = isTabletDevice && shortEdge >= 900;
+
     const size = isPhone ? "phone" : isTabletDevice ? "tablet" : "desktop";
-    return { size, isLandscape, w, h, shortEdge, longEdge };
+
+    return { size, isLandscape, w, h, shortEdge, longEdge, isIOS, isAndroid, isTouchUA, isLargeTablet };
   };
 
   const [state, setState] = useState(getState);
@@ -706,13 +718,11 @@ function useResponsive() {
   useEffect(() => {
     let raf;
     const fn = () => {
-      // Use rAF to wait for browser to finish rotation reflow
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => setState(getState()));
     };
     window.addEventListener("resize", fn, { passive: true });
     window.addEventListener("orientationchange", fn, { passive: true });
-    // Also listen to screen.orientation if available
     window.screen?.orientation?.addEventListener("change", fn);
     return () => {
       window.removeEventListener("resize", fn);
@@ -722,19 +732,37 @@ function useResponsive() {
     };
   }, []);
 
-  const { size, isLandscape, w, h } = state;
+  const { size, isLandscape, w, h, isIOS, isAndroid, isTouchUA, isLargeTablet } = state;
   const isMobile   = size === "phone";
   const isTablet   = size === "tablet";
   const isDesktop  = size === "desktop";
-  // Landscape phone = small screen rotated horizontally
-  const isPhoneLandscape = isMobile && isLandscape;
-  // Tablet landscape = common reading/study mode
+  const isPhoneLandscape  = isMobile && isLandscape;
   const isTabletLandscape = isTablet && isLandscape;
-  // Any touch-first device
-  const isTouchDevice = isMobile || isTablet;
+  const isTouchDevice     = isMobile || isTablet || isTouchUA;
 
-  return { isMobile, isTablet, isDesktop, size, isLandscape,
-           isPhoneLandscape, isTabletLandscape, isTouchDevice, w, h };
+  // ── Layout helpers ─────────────────────────────────────────────────────
+  // Sidebar width: collapsed icon bar on tablet, full on desktop
+  const sidebarW      = isMobile ? 0 : isTablet ? 60 : 220;
+  // Content horizontal padding
+  const contentPadX   = isMobile ? 12 : isTablet ? 20 : 32;
+  const contentPadY   = isMobile ? 12 : isTablet ? 16 : 24;
+  // Font scale
+  const fontScale     = isMobile ? 0.88 : isTablet ? 0.94 : 1;
+  // Notes split ratio (left notes / right AI)
+  const notesSplit    = isMobile ? "100%" : isTablet ? (isLandscape ? "60%" : "100%") : "63%";
+  const showAIPanel   = !isMobile && !(isTablet && !isLandscape);
+  // Grid columns for dashboard quick actions
+  const quickActCols  = isMobile ? "1fr 1fr" : isTablet ? "1fr 1fr" : "repeat(4,1fr)";
+
+  return {
+    isMobile, isTablet, isDesktop, size, isLandscape,
+    isPhoneLandscape, isTabletLandscape, isTouchDevice,
+    isIOS, isAndroid, isLargeTablet,
+    w, h,
+    // Layout helpers
+    sidebarW, contentPadX, contentPadY, fontScale,
+    notesSplit, showAIPanel, quickActCols,
+  };
 }
 
 // ─── COLORS ───────────────────────────────────────────────────────────────────
@@ -1903,6 +1931,37 @@ input,textarea,select { font-size:16px; }
 /* Notes split defaults */
 .notes-split { display:flex; gap:20px; }
 .notes-ai-panel { width:320px; min-width:280px; flex-shrink:0; }
+
+/* ── Global overflow guard ───────────────────────────────────────── */
+html { max-width:100vw; overflow-x:hidden; }
+body { max-width:100vw; overflow-x:hidden; box-sizing:border-box; }
+*, *::before, *::after { box-sizing:inherit; min-width:0; }
+
+/* ── Tablet portrait: stack notes + hide AI panel ───────────────── */
+@media (min-width:601px) and (max-width:1024px) and (pointer:coarse) and (orientation:portrait) {
+  .notes-workspace { flex-direction:column !important; }
+  .notes-ai-col { display:none !important; }
+  .notes-editor-col { flex:1 1 100% !important; max-width:100% !important; }
+}
+/* ── Tablet landscape: narrower AI panel ────────────────────────── */
+@media (min-width:601px) and (max-width:1366px) and (pointer:coarse) and (orientation:landscape) {
+  .notes-ai-col { flex:0 0 36% !important; }
+  .notes-editor-col { flex:0 0 64% !important; }
+}
+/* ── iOS font-size fix (prevent auto-zoom on focus) ─────────────── */
+@media (pointer:coarse) {
+  input, select, textarea { font-size:max(16px,1em) !important; }
+  body { -webkit-text-size-adjust:100% !important; }
+}
+/* ── Safe area for iPhone notch / iPad home indicator ───────────── */
+@supports (padding:max(0px)) {
+  .bottom-nav {
+    padding-bottom: max(8px, env(safe-area-inset-bottom)) !important;
+    height: calc(56px + env(safe-area-inset-bottom)) !important;
+  }
+}
+/* ── sq-card: remove transform hover (creates stacking context) ─── */
+.sq-card:hover { box-shadow:0 8px 32px rgba(108,92,231,.16) !important; transform:none !important; }
 
 /* ── Phone portrait ── */
 @media(max-width:480px) and (orientation:portrait){
@@ -3095,9 +3154,36 @@ export default function App() {
 
   // ── Persistent sidebar wrapper for sub-screens ──────────────────────────
   const SidebarWrapper = ({ children }) => (
-    <div style={{ minHeight:"100vh", background:T.bg, fontFamily:"'DM Sans',sans-serif", display:"flex", width:"100%" }}>
+    <div style={{ minHeight:"100vh", background:T.bg, fontFamily:"'DM Sans',sans-serif", display:"flex", width:"100%", overflowX:"hidden" }}>
       <style>{GS}</style>
       <style>{DARK_CSS}</style>
+      <style>{`
+        /* ── Device-adaptive global overrides ── */
+        @media (max-width:1024px) and (pointer:coarse) {
+          /* iPad / Android tablet — increase tap targets */
+          button { min-height: 36px !important; }
+          input, select { font-size: 16px !important; } /* prevent iOS zoom */
+        }
+        @media (max-width:768px) and (pointer:coarse) and (orientation:portrait) {
+          /* iPad portrait — single column */
+          .notes-split { flex-direction: column !important; }
+          .notes-ai-panel { display: none !important; }
+        }
+        @media (max-width:1024px) and (pointer:coarse) and (orientation:landscape) {
+          /* iPad landscape — slightly narrower AI panel */
+          .notes-ai-panel { flex: 0 0 36% !important; }
+        }
+        /* Prevent horizontal overflow on all touch devices */
+        @media (pointer:coarse) {
+          body { overflow-x: hidden !important; max-width: 100vw !important; }
+          .page-inner { padding-left: max(16px, env(safe-area-inset-left)) !important;
+                        padding-right: max(16px, env(safe-area-inset-right)) !important; }
+        }
+        /* iOS safe area support */
+        @supports (padding: max(0px)) {
+          .bottom-nav { padding-bottom: max(8px, env(safe-area-inset-bottom)) !important; }
+        }
+      `}</style>
       <ClassioSidebar
         screen={screen} homeTab={homeTab}
         onNavigate={handleNavigate2}
@@ -3116,7 +3202,15 @@ export default function App() {
       />
       {showSearch && <CommandSearch folders={folders} onOpenFile={handleOpenFileFromSearch2} onClose={()=>setShowSearch(false)} />}
       {showCharacter && <CharacterModal character={character} onChange={c => { setCharacter(c); localStorage.setItem("classio_char", JSON.stringify(c)); }} onClose={() => setShowCharacter(false)} />}
-      <div style={{ flex:1, marginLeft:isMobile?0:(sidebarExpanded?220:60), marginBottom:isMobile?56:0, minWidth:0, overflow:"visible" }}>
+      <div style={{
+        flex: 1,
+        marginLeft: isMobile ? 0 : isTablet ? 60 : (sidebarExpanded ? 220 : 60),
+        marginBottom: isMobile ? 56 : 0,
+        minWidth: 0,
+        overflow: "visible",
+        maxWidth: isMobile ? "100vw" : `calc(100vw - ${isMobile ? 0 : isTablet ? 60 : (sidebarExpanded ? 220 : 60)}px)`,
+        boxSizing: "border-box",
+      }}>
         {children}
       </div>
     </div>
@@ -3213,7 +3307,7 @@ export default function App() {
       {/* Main content area — offset by sidebar */}
       <div style={{ flex:1, marginLeft:isMobile?0:(sidebarExpanded?220:60), marginBottom:isMobile?56:0, minHeight:"100vh", display:"flex", flexDirection:"column", background:T.bg }}>
       <AdBanner sideW={sidebarExpanded ? 220 : 60} />
-      <div style={{ maxWidth:960, margin:"0 auto", padding:isMobile?"12px 14px":isTablet?"20px 24px":"32px 36px", width:"100%", boxSizing:"border-box" }}>
+      <div style={{ maxWidth:960, margin:"0 auto", padding:isMobile?"12px 14px":isTablet?"16px 20px":"32px 36px", width:"100%", boxSizing:"border-box" }}>
 
         {/* ── Dashboard Header ── */}
         {homeTab==="folders" && (
@@ -3242,7 +3336,7 @@ export default function App() {
 
         {/* ── Quick Action Cards (Turbo-style) ── */}
         {homeTab==="folders" && (
-          <div className="quick-actions" style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":isTablet?"1fr 1fr":"repeat(4,1fr)", gap:12, marginBottom:32 }}>
+          <div className="quick-actions" style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":isTablet?"1fr 1fr 1fr":"repeat(4,1fr)", gap:12, marginBottom:32 }}>
             {[
               { grad:"linear-gradient(135deg,#7C5CFC22,#7C5CFC11)", ic:"#7C5CFC", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C5CFC" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>, label:"Blank Document", sub:"Start fresh notebook", action:()=>{ const blankId=`blank_${Date.now()}`; const blankFile={id:blankId,name:"Untitled Document",type:"text/plain",_fileObj:null,notes:"",studyCards:[],_isBlank:true}; const inboxExists=folders.find(f=>f.id==="inbox"); const newFolders=inboxExists?folders.map(f=>f.id==="inbox"?{...f,files:[blankFile,...(f.files||[])]}:f):[...folders,{id:"inbox",name:"Inbox",color:"#7C5CFC",files:[blankFile]}]; setFoldersSave(newFolders); const newInbox=newFolders.find(f=>f.id==="inbox"); setActiveFile(blankFile); setActiveFolder(newInbox); setScreen("file"); setFileTab("notes"); } },
               { grad:"linear-gradient(135deg,#3D8EF822,#3D8EF811)", ic:"#3D8EF8", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3D8EF8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>, label:"Record audio", sub:"Upload an audio file", action:()=>setShowRecordModal(true) },
@@ -4970,6 +5064,7 @@ function AvatarSkinSection({
   ch, skinBase, setSkinBase, customColors,
   onApply, onApplyCustom, onRemoveCustom,
 }) {
+  // SKINS: single source of truth — swatches AND avatar use exactly these hex values
   const SKINS = ["#FDDBB4","#F5C89A","#FFCBA4","#E8A87C","#D4956A","#C68642","#A0693A","#8D5524","#6B3A1F","#F4D6C8"];
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerSeed, setPickerSeed] = useState(() => ensureHex(ch.skin || "#FDDBB4"));
@@ -5129,6 +5224,7 @@ function CharacterModal({ character, onChange, onClose }) {
   });
 
   // ── skinBase ───────────────────────────────────────────────────────────────
+  // SKINS: single source of truth — swatches AND avatar use exactly these hex values
   const SKINS = ["#FDDBB4","#F5C89A","#FFCBA4","#E8A87C","#D4956A","#C68642","#A0693A","#8D5524","#6B3A1F","#F4D6C8"];
   const [skinBase, setSkinBase] = useState(() => {
     const cur = hexToHsv(ensureHex(ch.skin || "#FDDBB4"));
@@ -5172,21 +5268,24 @@ function CharacterModal({ character, onChange, onClose }) {
   // ─────────────────────────────────────────────────────────────────────────
   // RENDER
   // ─────────────────────────────────────────────────────────────────────────
-  // Lock body scroll — use position:fixed trick to avoid jitter
+  // Lock scroll without ANY layout shift or jitter
+  // Strategy: pad body right by scrollbar width so removing scrollbar doesn't shift content
   useEffect(() => {
-    const scrollY = window.scrollY;
+    const html = document.documentElement;
     const body = document.body;
-    const prev = { overflow: body.style.overflow, position: body.style.position, top: body.style.top, width: body.style.width };
-    body.style.overflow = "hidden";
-    body.style.position = "fixed";
-    body.style.top = `-${scrollY}px`;
-    body.style.width = "100%";
+    // Measure scrollbar width BEFORE locking
+    const sbW = window.innerWidth - html.clientWidth;
+    const prevBodyPR  = body.style.paddingRight;
+    const prevHtmlOF  = html.style.overflow;
+    const prevBodyOF  = body.style.overflow;
+    // Apply: compensate for scrollbar removal + lock
+    body.style.paddingRight  = `${sbW}px`;
+    html.style.overflow      = "hidden";
+    body.style.overflow      = "hidden";
     return () => {
-      body.style.overflow = prev.overflow;
-      body.style.position = prev.position;
-      body.style.top = prev.top;
-      body.style.width = prev.width;
-      window.scrollTo(0, scrollY);
+      body.style.paddingRight  = prevBodyPR;
+      html.style.overflow      = prevHtmlOF;
+      body.style.overflow      = prevBodyOF;
     };
   }, []);
 
@@ -8200,7 +8299,7 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
       )}
 
       {/* ══ TOOLBAR ══════════════════════════════════════════════════════════ */}
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, padding:"0 0 8px", flexShrink:0, flexWrap:"wrap" }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:6, padding:"0 0 6px", flexShrink:0, flexWrap:"wrap", minHeight:40 }}>
 
         {/* Left: NOTE STYLE pills */}
         <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", minWidth:0 }}>
@@ -8307,10 +8406,10 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
       )}
 
       {/* ══ MAIN WORKSPACE: 63% notes | 37% AI panel ════════════════════════ */}
-      <div style={{ display:"flex", gap:0, flex:1, minHeight:0, overflow:"hidden", borderRadius:16, border:`1px solid ${C.border}`, boxShadow:C.isDark?"0 4px 32px rgba(0,0,0,.45)":"0 2px 16px rgba(0,0,0,.07)" }}>
+      <div className="notes-workspace" style={{ display:"flex", gap:0, flex:1, minHeight:0, overflow:"hidden", borderRadius:16, border:`1px solid ${C.border}`, boxShadow:C.isDark?"0 4px 32px rgba(0,0,0,.45)":"0 2px 16px rgba(0,0,0,.07)" }}>
 
-        {/* ── LEFT: Notes editor (63%) ── */}
-        <div style={{ flex:"0 0 63%", minWidth:0, display:"flex", flexDirection:"column", borderRight:`1px solid ${C.border}`, background:C.surface, overflow:"hidden" }}>
+        {/* ── LEFT: Notes editor ── */}
+        <div className="notes-editor-col" style={{ flex: isMobile ? "1 1 100%" : isTablet && !isLandscape ? "1 1 100%" : "0 0 63%", minWidth:0, display:"flex", flexDirection:"column", borderRight: (!isMobile && !(isTablet && !isLandscape)) ? `1px solid ${C.border}` : "none", background:C.surface, overflow:"hidden" }}>
 
           {/* Notes content */}
           <div style={{ flex:1, overflowY:"auto", padding:"20px 28px", fontFamily:"'DM Sans',sans-serif", WebkitOverflowScrolling:"touch" }}>
@@ -8356,10 +8455,12 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
           )}
         </div>
 
-        {/* ── RIGHT: AI Panel (37%) ── */}
-        <div style={{ flex:"0 0 37%", minWidth:0, display:"flex", flexDirection:"column", background:C.surface, overflow:"hidden" }}>
+        {/* ── RIGHT: AI Panel ── */}
+        {(!isMobile && !(isTablet && !isLandscape)) && (
+        <div className="notes-ai-col" style={{ flex: isTablet ? "0 0 40%" : "0 0 37%", minWidth:0, display:"flex", flexDirection:"column", background:C.surface, overflow:"hidden" }}>
           <NotesTurboPanel file={file} notes={notes} lang={lang} onTabChange={onTabChange} embedded />
         </div>
+        )}
       </div>
 
       {/* Mobile floating AI button */}
@@ -10615,16 +10716,16 @@ function PresentationTab({ file, onUpdate }) {
   const [exporting, setExporting] = useState(false);
 
   const THEMES = [
-    { id:"modern",    label:"Modern",    bg:"#1e1b4b", accent:"#818cf8", text:"#f8fafc", sub:"#cbd5e1" },
-    { id:"ocean",     label:"Ocean",     bg:"#0c4a6e", accent:"#38bdf8", text:"#f0f9ff", sub:"#bae6fd" },
-    { id:"forest",    label:"Forest",    bg:"#14532d", accent:"#4ade80", text:"#f0fdf4", sub:"#bbf7d0" },
-    { id:"sunset",    label:"Sunset",    bg:"#7c2d12", accent:"#fb923c", text:"#fff7ed", sub:"#fed7aa" },
-    { id:"minimal",   label:"Minimal",   bg:"#ffffff", accent:"#7C5CFC", text:"#1e1b4b", sub:"#6b7280" },
-    { id:"dark",      label:"Dark",      bg:"#0f172a", accent:"#7C5CFC", text:"#f8fafc", sub:"#94a3b8" },
-    { id:"rose",      label:"Rose",      bg:"#4c0519", accent:"#fb7185", text:"#fff1f2", sub:"#fecdd3" },
-    { id:"slate",     label:"Slate",     bg:"#1e293b", accent:"#94a3b8", text:"#f8fafc", sub:"#64748b" },
-    { id:"amber",     label:"Amber",     bg:"#451a03", accent:"#fbbf24", text:"#fffbeb", sub:"#fde68a" },
-    { id:"teal",      label:"Teal",      bg:"#042f2e", accent:"#2dd4bf", text:"#f0fdfa", sub:"#99f6e4" },
+    { id:"modern", label:"Modern", bg:"#1e1b4b", accent:"#818cf8", text:"#f8fafc", sub:"#c4c4e0", header:"#2d2a6e", card:"rgba(255,255,255,.07)" },
+    { id:"ocean",  label:"Ocean",  bg:"#0c4a6e", accent:"#38bdf8", text:"#f0f9ff", sub:"#bae6fd", header:"#0e5a84", card:"rgba(255,255,255,.07)" },
+    { id:"forest", label:"Forest", bg:"#14532d", accent:"#4ade80", text:"#f0fdf4", sub:"#bbf7d0", header:"#166534", card:"rgba(255,255,255,.07)" },
+    { id:"sunset", label:"Sunset", bg:"#431407", accent:"#fb923c", text:"#fff7ed", sub:"#fed7aa", header:"#7c2d12", card:"rgba(255,255,255,.07)" },
+    { id:"minimal",label:"Minimal",bg:"#f8f9fa", accent:"#7C5CFC", text:"#111827", sub:"#6b7280", header:"#7C5CFC",  card:"rgba(0,0,0,.04)" },
+    { id:"dark",   label:"Dark",   bg:"#0f172a", accent:"#7C5CFC", text:"#f1f5f9", sub:"#94a3b8", header:"#1e293b", card:"rgba(255,255,255,.05)" },
+    { id:"rose",   label:"Rose",   bg:"#1c0010", accent:"#fb7185", text:"#fff1f2", sub:"#fecdd3", header:"#4c0519", card:"rgba(255,255,255,.07)" },
+    { id:"slate",  label:"Slate",  bg:"#0f172a", accent:"#38bdf8", text:"#e2e8f0", sub:"#94a3b8", header:"#1e293b", card:"rgba(255,255,255,.06)" },
+    { id:"amber",  label:"Amber",  bg:"#1c0a00", accent:"#f59e0b", text:"#fffbeb", sub:"#fde68a", header:"#451a03", card:"rgba(255,255,255,.07)" },
+    { id:"teal",   label:"Teal",   bg:"#022c22", accent:"#2dd4bf", text:"#f0fdfa", sub:"#99f6e4", header:"#064e3b", card:"rgba(255,255,255,.07)" },
   ];
   const currentTheme = THEMES.find(t => t.id === theme) || THEMES[0];
 
@@ -10860,14 +10961,17 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
       style={{ width:90, height:63, objectFit:"cover", borderRadius:8, flexShrink:0, border:"1px solid rgba(255,255,255,.15)", display:"block" }}/>;
   };
 
-  // Slide preview renderer
+  // Slide preview renderer — fully themed
   const SlidePreview = ({s, idx, mini=false}) => {
-    const pad = mini ? "10px 12px" : "20px 22px";
-    const minH = mini ? 90 : 180;
+    const pad = mini ? "10px 12px" : "22px 24px";
+    const minH = mini ? 90 : 190;
     return (
       <div style={{ background:thm.bg, padding:pad, minHeight:minH, position:"relative", fontFamily:"'DM Sans',sans-serif", height:"100%", overflow:"hidden" }}>
-        <div style={{ position:"absolute", bottom:0, left:0, right:0, height:mini?2:3, background:thm.accent }}/>
-        <span style={{ position:"absolute", top:mini?5:10, right:mini?6:12, fontSize:mini?8:10, color:thm.sub, opacity:.6 }}>{idx+1}/{slides.length}</span>
+        {/* Theme accent stripe at bottom */}
+        <div style={{ position:"absolute", bottom:0, left:0, right:0, height:mini?2:4, background:thm.accent }}/>
+        {/* Subtle header bar */}
+        {!mini && <div style={{ position:"absolute", top:0, left:0, right:0, height:6, background:thm.header||thm.accent, opacity:.6 }}/>}
+        <span style={{ position:"absolute", top:mini?5:14, right:mini?6:14, fontSize:mini?8:10, color:thm.sub, opacity:.5, fontWeight:600 }}>{idx+1}/{slides.length}</span>
         {s.type==="title" ? (
           <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:mini?74:160, textAlign:"center" }}>
             {!mini && (s.imageSearch||s.image) && <SlideImage query={s.imageSearch} manualUrl={s.image} />}
@@ -10966,8 +11070,13 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
             <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
               {THEMES.map(t=>(
                 <button key={t.id} onClick={()=>setTheme(t.id)} title={t.label}
-                  style={{ width:28, height:28, borderRadius:"50%", background:t.bg, border:`3px solid ${theme===t.id?"#7C5CFC":"transparent"}`, cursor:"pointer", boxShadow:"0 2px 6px rgba(0,0,0,.2)", transition:"border .12s", flexShrink:0, position:"relative" }}>
-                  {theme===t.id && <div style={{ position:"absolute", inset:-5, borderRadius:"50%", border:"2px solid #7C5CFC44" }}/>}
+                  style={{ width:32, height:32, borderRadius:"50%",
+                    background:`linear-gradient(135deg, ${t.bg} 50%, ${t.accent} 50%)`,
+                    border:`3px solid ${theme===t.id?"#7C5CFC":"transparent"}`,
+                    cursor:"pointer", boxShadow:"0 2px 8px rgba(0,0,0,.25)",
+                    transition:"all .15s", flexShrink:0, position:"relative",
+                    transform:theme===t.id?"scale(1.15)":"scale(1)" }}>
+                  {theme===t.id && <div style={{ position:"absolute", inset:-4, borderRadius:"50%", border:"2px solid #7C5CFC66" }}/>}
                 </button>
               ))}
             </div>
