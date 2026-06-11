@@ -8056,33 +8056,66 @@ function InlineClassioTable({ data }) {
   if (!data?.table?.columns) return null;
   const { columns, rows } = data.table;
   const colCount = columns.length;
-  // Compact font for wide tables
-  const fontSize = colCount > 6 ? 11 : colCount > 4 ? 12 : 13;
-  const cellPad = colCount > 6 ? "6px 8px" : "8px 10px";
+  // Minimum column width prevents crushing — content never wraps character by character
+  const minColW = colCount > 8 ? 90 : colCount > 6 ? 110 : colCount > 4 ? 130 : 150;
+  const fontSize = colCount > 6 ? 12 : 13;
+  const cellPad = colCount > 6 ? "8px 10px" : "9px 14px";
   return (
-    <div style={{ margin:"14px 0", border:`1.5px solid ${C.accentS}`, borderRadius:12, overflow:"hidden", width:"100%" }}>
-      <div style={{ background:C.accentL, padding:"5px 12px", display:"flex", alignItems:"center", gap:6 }}>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg>
-        <span style={{ fontSize:10, fontWeight:800, color:C.accent, letterSpacing:.6 }}>AI TABLE</span>
+    <div style={{ margin:"18px 0", border:`1px solid ${C.border}`, borderRadius:12, overflow:"hidden", background:C.surface, boxShadow:"0 1px 6px rgba(0,0,0,.05)" }}>
+      {/* Header bar */}
+      <div style={{ background:C.accentL, padding:"6px 14px", display:"flex", alignItems:"center", gap:6, borderBottom:`1px solid ${C.accentS}` }}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg>
+        <span style={{ fontSize:11, fontWeight:700, color:C.accent, letterSpacing:.5 }}>TABLE</span>
       </div>
-      {data.explanation && <p style={{ fontSize:11, color:C.muted, padding:"5px 12px 0", margin:0, lineHeight:1.4 }}>{data.explanation}</p>}
-      <div style={{ width:"100%", overflowX:"auto" }}>
-        <table style={{ width:"100%", borderCollapse:"collapse", fontSize, tableLayout:"fixed" }}>
-          <colgroup>
-            {columns.map((_,ci) => <col key={ci} style={{ width:`${100/colCount}%` }} />)}
-          </colgroup>
+      {data.explanation && (
+        <p style={{ fontSize:12, color:C.muted, padding:"7px 14px 4px", margin:0, lineHeight:1.5, borderBottom:`1px solid ${C.border}`, fontStyle:"italic" }}>
+          {data.explanation}
+        </p>
+      )}
+      {/* Scrollable container — only THIS scrolls, not the page */}
+      <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch", maxWidth:"100%" }}>
+        <table style={{
+          borderCollapse:"collapse",
+          fontSize,
+          tableLayout:"auto",          /* auto layout — columns size to content */
+          minWidth: colCount > 4 ? colCount * minColW : "100%",
+        }}>
           <thead>
-            <tr style={{ background:C.accentL }}>
+            <tr style={{ background:C.accent }}>
               {columns.map((col,ci)=>(
-                <th key={ci} style={{ padding:cellPad, textAlign:"left", fontWeight:700, color:C.accent, borderBottom:`2px solid ${C.accentS}`, fontSize:fontSize-1, wordBreak:"break-word", verticalAlign:"top" }}>{col}</th>
+                <th key={ci} style={{
+                  padding:cellPad,
+                  textAlign:"left",
+                  fontWeight:700,
+                  color:"#fff",
+                  borderBottom:`2px solid ${C.accentS}`,
+                  whiteSpace:"nowrap",       /* headers never wrap */
+                  minWidth:minColW,
+                  position:"sticky",
+                  top:0,
+                }}>{col}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {rows.map((row,ri)=>(
-              <tr key={ri} style={{ background:ri%2===0?C.surface:"transparent", borderBottom:`1px solid ${C.border}` }}>
+              <tr key={ri} style={{
+                background: ri%2===0 ? C.surface : (C.isDark?"#1a1a2200":"#f8f8fc88"),
+                borderBottom:`1px solid ${C.border}`
+              }}>
                 {row.map((cell,ci)=>(
-                  <td key={ci} style={{ padding:cellPad, color:C.text, lineHeight:1.45, fontSize, wordBreak:"break-word", verticalAlign:"top" }}>
+                  <td key={ci} style={{
+                    padding:cellPad,
+                    color: ci===0 ? C.accent : C.text,
+                    fontWeight: ci===0 ? 600 : 400,
+                    lineHeight:1.55,
+                    fontSize,
+                    whiteSpace:"normal",     /* words wrap naturally */
+                    wordBreak:"normal",      /* NEVER break mid-word */
+                    overflowWrap:"break-word", /* only break if truly necessary */
+                    minWidth:minColW,
+                    verticalAlign:"top",
+                  }}>
                     {String(cell||"")}
                   </td>
                 ))}
@@ -8096,11 +8129,27 @@ function InlineClassioTable({ data }) {
 }
 
 function NotesTab({ file, onUpdate, user, isGuest, onTabChange }) {
-  // Notes start empty — user must load a saved note or generate new ones
-  // (unsaved notes are NOT persisted when leaving the file)
   const { isMobile, isTablet, isLandscape } = useResponsive();
-  const [notes,    setNotes]   = useState("");
-  const [unsaved,  setUnsaved]  = useState(false);  // track unsaved changes
+
+  // ── Auto-restore notes from localStorage or file.notes on mount ──────────
+  const SAVED_KEY_INIT = "saved_notes_" + file.id;
+  const initNotes = () => {
+    try {
+      // 1. Check localStorage for auto-saved notes first
+      const saved = JSON.parse(localStorage.getItem(SAVED_KEY_INIT) || "[]");
+      // Look for auto-save entry first, then any saved note
+      const auto = saved.find(n => n.name === "__auto__");
+      if (auto?.text) return auto.text;
+      // Named saved notes
+      const named = saved.find(n => n.name !== "__auto__");
+      if (named?.text) return named.text;
+    } catch {}
+    // 2. Fall back to file.notes (persisted in Firestore/state)
+    return file.notes || "";
+  };
+
+  const [notes,    setNotes]   = useState(initNotes);
+  const [unsaved,  setUnsaved]  = useState(false);
   const [gen,      setGen]     = useState(false);
   const [showTopicInput, setShowTopicInput] = useState(false);
   const [customTopic,    setCustomTopic]    = useState("");
@@ -8158,8 +8207,25 @@ function NotesTab({ file, onUpdate, user, isGuest, onTabChange }) {
   const delSaved  = (name)  => persistSaved(savedNotes.filter(n => n.name !== name));
   const filtered  = savedNotes.filter(n => n.name.toLowerCase().includes(dropSearch.toLowerCase()));
 
-  // Also save to file object for immediate persistence
+  // Auto-save notes to file.notes whenever notes change (debounced)
   const saveToFile = () => onUpdate({ ...file, notes });
+  useEffect(() => {
+    if (!notes) return;
+    const t = setTimeout(() => {
+      onUpdate({ ...file, notes });
+      // Also persist to localStorage as the "latest" entry
+      try {
+        const existing = JSON.parse(localStorage.getItem(SAVED_KEY) || "[]");
+        // Update the "auto-saved" entry or prepend it
+        const autoIdx = existing.findIndex(n => n.name === "__auto__");
+        const entry = { name:"__auto__", text:notes, date:"auto" };
+        if (autoIdx >= 0) existing[autoIdx] = entry;
+        else existing.unshift(entry);
+        localStorage.setItem(SAVED_KEY, JSON.stringify(existing.slice(0, 20)));
+      } catch {}
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [notes]);
 
   // ── Note style ────────────────────────────────────────────────────────────
   const [noteStyle,      setNoteStyle]      = useState("detailed");
