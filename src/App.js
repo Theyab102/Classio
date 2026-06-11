@@ -8098,7 +8098,7 @@ function InlineClassioTable({ data }) {
 function NotesTab({ file, onUpdate, user, isGuest, onTabChange }) {
   // Notes start empty — user must load a saved note or generate new ones
   // (unsaved notes are NOT persisted when leaving the file)
-  const { isMobile } = useResponsive();
+  const { isMobile, isTablet, isLandscape } = useResponsive();
   const [notes,    setNotes]   = useState("");
   const [unsaved,  setUnsaved]  = useState(false);  // track unsaved changes
   const [gen,      setGen]     = useState(false);
