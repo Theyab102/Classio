@@ -7467,35 +7467,11 @@ function NotesImageInsert({ file, onInsert }) {
 // ── Notes Turbo Panel ─────────────────────────────────────────────────────────
 function NotesTurboPanel({ file, notes, lang, onTabChange, embedded=false }) {
   const T = useTheme();
-  const CHAT_KEY = "classio_chat_" + (file?.id || "default");
-
-  // Load persisted chat on mount
-  const initMsgs = () => {
-    try {
-      const saved = localStorage.getItem(CHAT_KEY);
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return [];
-  };
-  const [msgs, setMsgs] = useState(initMsgs);
+  const [msgs, setMsgs] = useState([]);
   const [inp, setInp] = useState("");
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef(null);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:"smooth" }); }, [msgs]);
-
-  // Persist chat whenever msgs change
-  useEffect(() => {
-    try {
-      // Store only last 50 messages, skip graph/table data to save space
-      const toStore = msgs.slice(-50).map(m => ({
-        role: m.role,
-        content: m.content,
-        tableData: m.content === "__TABLE__" ? m.tableData : undefined,
-        graphData: m.content === "__GRAPH__" ? m.graphData : undefined,
-      }));
-      localStorage.setItem(CHAT_KEY, JSON.stringify(toStore));
-    } catch {}
-  }, [msgs, CHAT_KEY]);
 
   const send = async () => {
     const text = inp.trim();
@@ -7562,24 +7538,24 @@ Otherwise respond normally with formatted text. Never use pipe-table markdown (|
       boxShadow:"0 4px 24px rgba(0,0,0,.06)"
     }}>
 
-      {/* Quizzes + Flashcards cards — always visible at top */}
-      <div style={{ padding:"14px 12px 10px", flexShrink:0, borderBottom:`1px solid ${T.border}` }}>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+      {/* Quizzes + Flashcards cards — match reference image exactly */}
+      <div style={{ padding:"14px 14px 12px", flexShrink:0, borderBottom:`1px solid ${T.border}` }}>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
           {[
-            {label:"Quizzes",icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,badge:"Popular",desc:"Test your knowledge",tab:"game"},
-            {label:"Flashcards",icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>,badge:null,desc:"Study with active recall",tab:"cards"}
+            {label:"Quizzes",icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,badge:"Popular",badgeColor:"#10b981",desc:"Test your knowledge",tab:"game"},
+            {label:"Flashcards",icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>,badge:null,desc:"Study with active recall",tab:"cards"}
           ].map(q=>(
             <button key={q.label} onClick={()=>onTabChange&&onTabChange(q.tab)}
-              style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 10px", borderRadius:12,
+              style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 12px", borderRadius:14,
                 border:`1px solid ${T.border}`, background:T.bg, cursor:"pointer", textAlign:"left",
-                position:"relative", transition:"border-color .15s" }}
-              onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent}
-              onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-              {q.badge && <span style={{ position:"absolute", top:5, right:5, background:"#10b981", color:"#fff", fontSize:8, fontWeight:700, padding:"1px 5px", borderRadius:20 }}>{q.badge}</span>}
+                position:"relative", transition:"all .15s", boxShadow:"none" }}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.boxShadow=`0 2px 10px rgba(124,92,252,.1)`;}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
+              {q.badge && <span style={{ position:"absolute", top:6, right:6, background:q.badgeColor, color:"#fff", fontSize:9, fontWeight:700, padding:"2px 7px", borderRadius:20 }}>{q.badge}</span>}
               <span style={{ display:"flex", flexShrink:0 }}>{q.icon}</span>
-              <div>
-                <div style={{ fontSize:12, fontWeight:700, color:T.text }}>{q.label}</div>
-                <div style={{ fontSize:10, color:T.muted }}>{q.desc}</div>
+              <div style={{ minWidth:0 }}>
+                <div style={{ fontSize:13, fontWeight:700, color:T.text, marginBottom:2 }}>{q.label}</div>
+                <div style={{ fontSize:11, color:T.muted, lineHeight:1.3 }}>{q.desc}</div>
               </div>
             </button>
           ))}
@@ -7588,19 +7564,12 @@ Otherwise respond normally with formatted text. Never use pipe-table markdown (|
 
       {/* Messages or greeting */}
       {msgs.length === 0 ? (
-        <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"20px 16px", textAlign:"center" }}>
-          <p style={{ fontSize:26, fontWeight:800, color:T.text, margin:"0 0 8px", fontFamily:"'Fraunces',serif", lineHeight:1.2 }}>Hey, I'm Turbo</p>
-          <p style={{ fontSize:13, color:T.muted, margin:0, lineHeight:1.5 }}>I can work with you on your notes and answer any questions!</p>
+        <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"24px 20px", textAlign:"center" }}>
+          <p style={{ fontSize:28, fontWeight:800, color:T.text, margin:"0 0 10px", fontFamily:"'Fraunces',serif", lineHeight:1.2 }}>Hey, I'm Turbo</p>
+          <p style={{ fontSize:13, color:T.muted, margin:0, lineHeight:1.6, maxWidth:220 }}>I can work with you on your notes and answer any questions.</p>
         </div>
       ) : (
-        <div style={{ flex:1, display:"flex", flexDirection:"column", minHeight:0 }}>
-        <div style={{ display:"flex", justifyContent:"flex-end", padding:"6px 12px 0", flexShrink:0 }}>
-          <button onClick={()=>{ setMsgs([]); try{localStorage.removeItem(CHAT_KEY);}catch{} }}
-            style={{ fontSize:11, color:T.muted, background:"none", border:"none", cursor:"pointer", padding:"2px 6px", borderRadius:6, textDecoration:"underline" }}>
-            Clear chat
-          </button>
-        </div>
-        <div style={{ flex:1, overflowY:"auto", padding:"8px 12px 0", display:"flex", flexDirection:"column", gap:8 }}>
+        <div style={{ flex:1, overflowY:"auto", padding:"12px 12px 0", display:"flex", flexDirection:"column", gap:8 }}>
           {msgs.map((m,i)=>(
             <div key={i} style={{ display:"flex", justifyContent:m.role==="user"?"flex-end":"flex-start" }}>
               <div style={{ maxWidth:"90%", padding:"8px 12px", borderRadius:12, fontSize:13, lineHeight:1.6,
@@ -7619,7 +7588,6 @@ Otherwise respond normally with formatted text. Never use pipe-table markdown (|
           ))}
           {loading && <div style={{ display:"flex", alignItems:"center", gap:6, color:T.muted, fontSize:12, padding:"4px 0" }}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Thinking…</div>}
           <div ref={bottomRef}/>
-        </div>
         </div>
       )}
 
@@ -8130,7 +8098,7 @@ function InlineClassioTable({ data }) {
 function NotesTab({ file, onUpdate, user, isGuest, onTabChange }) {
   // Notes start empty — user must load a saved note or generate new ones
   // (unsaved notes are NOT persisted when leaving the file)
-  const { isMobile } = useResponsive();
+  const { isMobile, isTablet, isLandscape } = useResponsive();
   const [notes,    setNotes]   = useState("");
   const [unsaved,  setUnsaved]  = useState(false);  // track unsaved changes
   const [gen,      setGen]     = useState(false);
@@ -8306,7 +8274,7 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
   const isRTL = lang.startsWith("ar");
 
   // Height of the workspace (viewport minus the outer FileView header)
-  const workspaceH = "calc(100vh - 130px)";
+  const workspaceH = "calc(100vh - 128px)";
 
   return (
     <div dir={isRTL ? "rtl" : "ltr"} style={{ display:"flex", flexDirection:"column", height:workspaceH, overflow:"hidden", gap:0 }}>
@@ -8330,46 +8298,91 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
         </div>
       )}
 
-      {/* ══ TOOLBAR ══════════════════════════════════════════════════════════ */}
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:6, padding:"0 0 6px", flexShrink:0, flexWrap:"wrap", minHeight:40 }}>
+      {/* ══ TOOLBAR ROW 1: Rich text formatting + actions ═════════════════════ */}
+      <div style={{ display:"flex", alignItems:"center", background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"6px 12px", gap:4, flexShrink:0, flexWrap:"wrap", minHeight:44 }}>
 
-        {/* Left: NOTE STYLE pills */}
-        <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", minWidth:0 }}>
-          <span style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:.8, textTransform:"uppercase", flexShrink:0, whiteSpace:"nowrap" }}>NOTE STYLE</span>
-          {!useCustomStyle && NOTE_STYLES.map(s => (
-            <button key={s.id} onClick={() => setNoteStyle(s.id)} title={s.desc}
-              style={{ padding:"5px 11px", borderRadius:20, border:`1.5px solid ${noteStyle===s.id?C.accent:C.border}`,
-                background:noteStyle===s.id?C.accentL:"transparent", color:noteStyle===s.id?C.accent:C.muted,
-                cursor:"pointer", fontWeight:noteStyle===s.id?700:400, fontSize:12, transition:"all .12s", whiteSpace:"nowrap" }}>
-              {s.label}
-            </button>
-          ))}
-          {useCustomStyle && (
-            <input value={customStyle} onChange={e => setCustomStyle(e.target.value)}
-              placeholder="Custom style…"
-              style={{ width:200, border:`1px solid ${C.border}`, borderRadius:8, padding:"4px 10px", fontSize:12, outline:"none", color:C.text, background:C.bg }}/>
-          )}
-          <button onClick={() => setUseCustomStyle(u => !u)}
-            style={{ fontSize:11, padding:"4px 10px", borderRadius:20, border:`1px solid ${useCustomStyle?C.accent:C.border}`,
-              background:useCustomStyle?C.accentL:"transparent", color:useCustomStyle?C.accent:C.muted, cursor:"pointer", whiteSpace:"nowrap", fontWeight:600 }}>
-            {useCustomStyle ? "✓ Custom" : "Custom style"}
-          </button>
-        </div>
+        {/* Font family */}
+        <select style={{ border:`1px solid ${C.border}`, borderRadius:6, padding:"3px 6px", fontSize:13, color:C.text, background:C.bg, cursor:"pointer", outline:"none", maxWidth:90 }}
+          onChange={e=>{}}>
+          {["Inter","DM Sans","Clarika","Georgia","Mono"].map(f=><option key={f}>{f}</option>)}
+        </select>
 
-        {/* Right: action buttons */}
-        <div style={{ display:"flex", gap:6, alignItems:"center", flexShrink:0, flexWrap:"wrap" }}>
-          <LangPicker value={lang} onChange={setLang} />
-          <button onClick={generate} disabled={gen} className="hov"
-            style={{ display:"flex", alignItems:"center", gap:6, background:gen?"#ccc":"linear-gradient(135deg,#7C5CFC,#5B47E0)",
-              color:"#fff", border:"none", borderRadius:20, padding:"8px 16px", fontSize:13, fontWeight:700,
-              cursor:gen?"not-allowed":"pointer", boxShadow:gen?"none":"0 3px 12px rgba(124,92,252,.35)", whiteSpace:"nowrap" }}>
-            {gen ? <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Generating…</>
-                 : <><Icon d={I.sparkle} size={13} color="#fff" sw={2}/> ✨ AI Generate</>}
+        {/* Divider */}
+        <div style={{ width:1, height:18, background:C.border, margin:"0 4px" }}/>
+
+        {/* Font size controls */}
+        <button className="no-min-h" style={{ width:22, height:22, border:`1px solid ${C.border}`, borderRadius:5, background:C.bg, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:C.text, fontSize:14, fontWeight:700 }}>−</button>
+        <span style={{ fontSize:13, color:C.text, minWidth:22, textAlign:"center", fontWeight:600 }}>14</span>
+        <button className="no-min-h" style={{ width:22, height:22, border:`1px solid ${C.border}`, borderRadius:5, background:C.bg, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:C.text, fontSize:14, fontWeight:700 }}>+</button>
+
+        <div style={{ width:1, height:18, background:C.border, margin:"0 4px" }}/>
+
+        {/* Bold / Italic / Underline */}
+        {[
+          { label:"B", title:"Bold", style:{fontWeight:900} },
+          { label:"I", title:"Italic", style:{fontStyle:"italic"} },
+          { label:"U", title:"Underline", style:{textDecoration:"underline"} },
+        ].map(btn=>(
+          <button key={btn.label} title={btn.title} className="no-min-h"
+            style={{ width:26, height:26, border:`1px solid ${C.border}`, borderRadius:6, background:C.bg, cursor:"pointer", fontSize:13, color:C.text, display:"flex", alignItems:"center", justifyContent:"center", ...btn.style }}>
+            {btn.label}
           </button>
-          <button onClick={() => setShowTopicInput(t => !t)} disabled={gen}
-            style={{ display:"flex", alignItems:"center", gap:5, background:C.surface, color:C.text, border:`1.5px solid ${C.border}`, borderRadius:20, padding:"7px 13px", fontSize:12, fontWeight:600, cursor:"pointer" }}>
-            <Icon d={I.edit} size={12} color={C.text}/> Topic
-          </button>
+        ))}
+
+        {/* Color / Highlight */}
+        <button className="no-min-h" title="Text colour" style={{ width:26, height:26, border:`1px solid ${C.border}`, borderRadius:6, background:C.bg, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C.text} strokeWidth="2"><path d="M9 3l-6 18h3l1.5-4.5h9L18 21h3L15 3z"/><line x1="6.75" y1="13.5" x2="17.25" y2="13.5"/></svg>
+        </button>
+        <button className="no-min-h" title="Highlight" style={{ width:26, height:26, border:`1px solid ${C.border}`, borderRadius:6, background:C.bg, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C.text} strokeWidth="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        </button>
+
+        {/* Σ formula */}
+        <button onClick={()=>document.getElementById?.("math-editor-btn")?.click()} className="no-min-h" title="Math formula"
+          style={{ width:26, height:26, border:`1px solid ${C.border}`, borderRadius:6, background:C.bg, cursor:"pointer", fontSize:13, color:C.text, fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          Σ
+        </button>
+
+        {/* Image */}
+        <button className="no-min-h" title="Insert image" style={{ width:26, height:26, border:`1px solid ${C.border}`, borderRadius:6, background:C.bg, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C.text} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        </button>
+
+        {/* Table */}
+        <button className="no-min-h" title="Insert table" style={{ width:26, height:26, border:`1px solid ${C.border}`, borderRadius:6, background:C.bg, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C.text} strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>
+        </button>
+
+        {/* Align */}
+        <button className="no-min-h" title="Align" style={{ width:26, height:26, border:`1px solid ${C.border}`, borderRadius:6, background:C.bg, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C.text} strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>
+        </button>
+
+        {/* List */}
+        <button className="no-min-h" title="List" style={{ width:26, height:26, border:`1px solid ${C.border}`, borderRadius:6, background:C.bg, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C.text} strokeWidth="2" strokeLinecap="round"><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>
+        </button>
+
+        {/* Eye / preview */}
+        <button className="no-min-h" title="Toggle preview" style={{ width:26, height:26, border:`1px solid ${C.border}`, borderRadius:6, background:C.bg, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C.text} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+
+        <div style={{ flex:1 }}/>
+
+        {/* Right side: AI Generate + Topic + Saved + Save */}
+        <LangPicker value={lang} onChange={setLang} />
+        <button onClick={generate} disabled={gen} className="hov"
+          style={{ display:"flex", alignItems:"center", gap:6, background:gen?"#ccc":"linear-gradient(135deg,#7C5CFC,#5B47E0)",
+            color:"#fff", border:"none", borderRadius:20, padding:"7px 14px", fontSize:13, fontWeight:700,
+            cursor:gen?"not-allowed":"pointer", boxShadow:gen?"none":"0 2px 10px rgba(124,92,252,.35)", whiteSpace:"nowrap" }}>
+          {gen ? <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Generating…</>
+               : <><Icon d={I.sparkle} size={12} color="#fff" sw={2}/> ✨ AI Generate</>}
+        </button>
+        <button onClick={() => setShowTopicInput(t => !t)} disabled={gen}
+          style={{ display:"flex", alignItems:"center", gap:5, background:C.surface, color:C.text, border:`1.5px solid ${C.border}`, borderRadius:20, padding:"6px 12px", fontSize:12, fontWeight:600, cursor:"pointer" }}>
+          <Icon d={I.edit} size={11} color={C.text}/> Topic
+        </button>
           {savedNotes.length > 0 && (
             <div style={{ position:"relative" }}>
               <button onClick={() => setShowDropdown(d => !d)}
@@ -8410,6 +8423,30 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
             {notes.trim() ? <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg> Save</> : "Save"}
           </button>
         </div>
+      </div>
+
+      {/* ══ TOOLBAR ROW 2: Note Style pills ══════════════════════════════════ */}
+      <div style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 12px", background:C.bg, borderBottom:`1px solid ${C.border}`, flexShrink:0, flexWrap:"wrap", overflowX:"auto" }}>
+        <span style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:.7, textTransform:"uppercase", flexShrink:0 }}>NOTE STYLE</span>
+        {!useCustomStyle && NOTE_STYLES.map(s => (
+          <button key={s.id} onClick={() => setNoteStyle(s.id)} title={s.desc}
+            style={{ padding:"4px 12px", borderRadius:20, border:`1.5px solid ${noteStyle===s.id?C.accent:C.border}`,
+              background:noteStyle===s.id?C.accentL:"transparent", color:noteStyle===s.id?C.accent:C.muted,
+              cursor:"pointer", fontWeight:noteStyle===s.id?700:500, fontSize:12, transition:"all .12s", whiteSpace:"nowrap", flexShrink:0 }}>
+            {s.label}
+          </button>
+        ))}
+        {useCustomStyle && (
+          <input value={customStyle} onChange={e => setCustomStyle(e.target.value)}
+            placeholder="Describe your style…"
+            style={{ flex:1, minWidth:180, border:`1px solid ${C.border}`, borderRadius:8, padding:"4px 10px", fontSize:12, outline:"none", color:C.text, background:C.surface }}/>
+        )}
+        <button onClick={() => setUseCustomStyle(u => !u)}
+          style={{ padding:"4px 11px", borderRadius:20, border:`1px solid ${useCustomStyle?C.accent:C.border}`,
+            background:useCustomStyle?C.accentL:"transparent", color:useCustomStyle?C.accent:C.muted,
+            cursor:"pointer", fontSize:12, fontWeight:600, whiteSpace:"nowrap", flexShrink:0 }}>
+          {useCustomStyle ? "✓ Custom" : "Custom style"}
+        </button>
       </div>
 
       {/* Topic input row */}
@@ -10743,25 +10780,9 @@ function PresentationTab({ file, onUpdate }) {
   const [generating, setGenerating] = useState(false);
   const [slideCount, setSlideCount] = useState(8);
   const [theme, setTheme] = useState("modern");
-  const [presStyle, setPresStyle] = useState("auto");
   const [editIdx, setEditIdx] = useState(null);
   const [editVal, setEditVal] = useState({});
   const [exporting, setExporting] = useState(false);
-  const [customSlideCount, setCustomSlideCount] = useState("");
-  const [showStyleInput, setShowStyleInput] = useState(false);
-  const [stylePrompt, setStylePrompt] = useState("");
-
-  // Presentation Styles — layout/content personality
-  const PRES_STYLES = [
-    { id:"auto",       label:"🤖 Auto",       desc:"AI picks best style for topic" },
-    { id:"education",  label:"📚 Education",  desc:"Clear, diagrams, student-friendly" },
-    { id:"corporate",  label:"💼 Corporate",  desc:"Executive, data-driven, professional" },
-    { id:"startup",    label:"🚀 Startup",    desc:"Bold, investor-ready, visual story" },
-    { id:"technology", label:"⚡ Technology", desc:"SaaS-inspired, modern, minimal" },
-    { id:"academic",   label:"🔬 Academic",   desc:"Research, data, structured" },
-    { id:"creative",   label:"🎨 Creative",   desc:"Bold visuals, dynamic layouts" },
-    { id:"minimal",    label:"✦ Minimal",     desc:"Clean, elegant, lots of space" },
-  ];
 
   const THEMES = [
     { id:"modern", label:"Modern", bg:"#1e1b4b", accent:"#818cf8", text:"#f8fafc", sub:"#c4c4e0", header:"#2d2a6e", card:"rgba(255,255,255,.07)" },
@@ -10785,60 +10806,57 @@ function PresentationTab({ file, onUpdate }) {
       const fileText = fileObj ? await extractFileText(fileObj).catch(()=>"") : "";
       const context = fileText ? `File content:\n${fileText.slice(0, 10000)}` : "";
       const topicStr = topic.trim() || file.name;
-      const finalCount = customSlideCount ? (parseInt(customSlideCount)||slideCount) : slideCount;
-
-      // Determine effective style
-      const effectiveStyle = presStyle === "auto" ? "education" : presStyle;
-      const styleGuides = {
-        education:  "Educational style: Clear explanations, diagrams, step-by-step breakdowns. Use content, two-col, and image slides liberally. Student-friendly language.",
-        corporate:  "Corporate style: Data-driven, executive-level. Use statistics, comparison slides, professional tone. Include quote slides with key insights.",
-        startup:    "Startup pitch style: Bold statements, minimal text per slide, strong visual story. Hero slides, big numbers, problem/solution structure.",
-        technology: "Technology style: Modern SaaS-inspired. Technical diagrams, feature breakdowns, architecture slides. Clean and minimal.",
-        academic:   "Academic/Research style: Structured, data-focused. Include tables, methodology slides, evidence-based. Formal language.",
-        creative:   "Creative style: Bold, visual-first. Strong imagery, dynamic compositions, expressive language. Gallery and image slides encouraged.",
-        minimal:    "Minimal style: Clean, elegant. Maximum 3 bullet points per slide. Lots of white space. Simple, direct language.",
-      };
-      const styleInstruction = styleGuides[effectiveStyle] || styleGuides.education;
-      const userStyleNote = stylePrompt.trim() ? `\nAdditional style instruction: "${stylePrompt.trim()}"` : "";
 
       const raw = await callClaude(
-        `You are a world-class presentation designer. Create a professional, visually stunning presentation.
-Return ONLY valid JSON — no markdown, no explanation, no text before or after.
-Style: ${styleInstruction}${userStyleNote}
-
-JSON format — use VARIED slide types for visual interest:
+        `You are an expert presentation designer. Create a professional, engaging presentation.
+Return ONLY valid JSON — no markdown, no explanation.
+Format:
 {
   "title": "Presentation Title",
   "slides": [
-    { "type": "title", "title": "Main Title", "subtitle": "Subtitle tagline", "imageSearch": "relevant 2-4 word image query" },
-    { "type": "content", "title": "Slide Title", "bullets": ["Point 1", "Point 2", "Point 3", "Point 4"], "imageSearch": "specific image query", "note": "Speaker note" },
-    { "type": "two-col", "title": "Comparison Title", "left": { "heading": "Left", "bullets": ["A","B","C"] }, "right": { "heading": "Right", "bullets": ["X","Y","Z"] }, "imageSearch": "query" },
-    { "type": "quote", "quote": "A powerful quote or key insight", "author": "Source" },
-    { "type": "image", "title": "Visual Title", "imageSearch": "specific descriptive query", "caption": "Caption text" },
-    { "type": "stats", "title": "Key Numbers", "stats": [{"number":"85%","label":"Key metric"},{"number":"3x","label":"Growth"}], "imageSearch": "query" },
-    { "type": "summary", "title": "Key Takeaways", "bullets": ["T1","T2","T3"] }
+    {
+      "type": "title",
+      "title": "Main Title",
+      "subtitle": "Subtitle or tagline",
+      "imageSearch": "search query for a relevant background image"
+    },
+    {
+      "type": "content",
+      "title": "Slide Title",
+      "bullets": ["Key point 1", "Key point 2", "Key point 3"],
+      "imageSearch": "1-3 word search term for a relevant image to show on this slide",
+      "note": "Optional speaker note"
+    },
+    {
+      "type": "two-col",
+      "title": "Comparison",
+      "left": { "heading": "Left Side", "bullets": ["Point A", "Point B"] },
+      "right": { "heading": "Right Side", "bullets": ["Point X", "Point Y"] }
+    },
+    {
+      "type": "quote",
+      "quote": "An inspiring or key quote from the content",
+      "author": "Source or attribution"
+    },
+    {
+      "type": "summary",
+      "title": "Key Takeaways",
+      "bullets": ["Takeaway 1", "Takeaway 2", "Takeaway 3"]
+    }
   ]
 }
-
-SLIDE VARIETY RULES:
-- Slide 1: ALWAYS type "title"
-- Last slide: ALWAYS type "summary"
-- Mix slide types — never use the same type 3 times in a row
-- Include at least 1 "image" or "stats" slide if count >= 6
-- Include at least 1 "quote" slide if count >= 5
-- imageSearch: specific 2-4 words (e.g. "nuclear fission diagram", "DNA helix structure"). EVERY slide should have imageSearch.
-- Make EXACTLY ${finalCount} slides. Be comprehensive.`,
-        `Topic: "${topicStr}"\n${context}\n\nCreate a ${finalCount}-slide ${effectiveStyle} presentation.`,
-        5000
+Slide types to use: title (1 slide), content (most slides), two-col (for comparisons), quote (1-2 slides), summary (last slide).
+Make exactly ${slideCount} slides total. Be comprehensive and educational.
+For content and title slides, include an "imageSearch" field with a 1-3 word search query that would find a relevant educational image (e.g. "nuclear atom diagram", "cell mitosis", "french revolution painting"). Keep imageSearch queries simple and specific.`,
+        `Topic: "${topicStr}"\n${context}\n\nCreate a ${slideCount}-slide presentation covering all key concepts thoroughly.`,
+        4000
       );
-      const clean = raw.replace(/\`\`\`json|\`\`\`/g, "").trim();
-      const jsonMatch = clean.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error("No JSON in response");
-      const parsed = JSON.parse(jsonMatch[0]);
+      const clean = raw.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(clean.match(/\{[\s\S]*\}/)[0]);
       const newSlides = parsed.slides || [];
       setSlides(newSlides);
       onUpdate({ ...file, presentation: newSlides, presentationTitle: parsed.title });
-    } catch(e) { console.error("Presentation gen error:", e); alert("Generation failed: " + e.message); }
+    } catch(e) { console.error("Presentation gen error:", e); }
     setGenerating(false);
   };
 
@@ -10952,8 +10970,6 @@ SLIDE VARIETY RULES:
     const blank = type==="title"?{type:"title",title:"New Slide",subtitle:""}
       : type==="quote"?{type:"quote",quote:"A key insight",author:""}
       : type==="two-col"?{type:"two-col",title:"Comparison",left:{heading:"Left",bullets:["Point A"]},right:{heading:"Right",bullets:["Point B"]}}
-      : type==="stats"?{type:"stats",title:"Key Numbers",stats:[{number:"85%",label:"First metric"},{number:"3x",label:"Growth"},{number:"1M+",label:"Users"}]}
-      : type==="image"?{type:"image",title:"Visual Insight",imageSearch:"relevant concept",caption:"Image caption"}
       : {type:"content",title:"New Slide",bullets:["Key point 1","Key point 2","Key point 3"]};
     const ns=[...slides,blank]; setSlides(ns); onUpdate({...file,presentation:ns});
     setEditIdx(ns.length-1); setEditVal({...blank});
@@ -11044,29 +11060,6 @@ SLIDE VARIETY RULES:
               <div><p style={{ fontSize:mini?7:11, fontWeight:700, color:thm.accent, margin:"0 0 3px" }}>{s.right?.heading}</p>{(s.right?.bullets||[]).slice(0,mini?2:3).map((b,bi)=><p key={bi} style={{ fontSize:mini?6:10, color:thm.sub, margin:"1px 0" }}>• {b}</p>)}</div>
             </div>
           </>
-        ) : s.type==="stats" ? (
-          <>
-            <p style={{ fontSize:mini?9:15, fontWeight:800, color:thm.text, margin:"0 0 8px", borderBottom:`${mini?1:2}px solid ${thm.accent}`, paddingBottom:4 }}>{s.title}</p>
-            <div style={{ display:"grid", gridTemplateColumns:`repeat(${Math.min(s.stats?.length||3,3)},1fr)`, gap:mini?4:10, marginTop:mini?4:10 }}>
-              {(s.stats||[]).map((st,si)=>(
-                <div key={si} style={{ background:thm.card||"rgba(255,255,255,.07)", borderRadius:mini?4:8, padding:mini?"4px 6px":"10px 12px", textAlign:"center", border:`1px solid ${thm.accent}33` }}>
-                  <p style={{ fontSize:mini?11:22, fontWeight:900, color:thm.accent, margin:0, lineHeight:1 }}>{st.number}</p>
-                  <p style={{ fontSize:mini?6:10, color:thm.sub, margin:mini?"1px 0 0":"4px 0 0" }}>{st.label}</p>
-                </div>
-              ))}
-            </div>
-          </>
-        ) : s.type==="image" ? (
-          <>
-            <p style={{ fontSize:mini?9:15, fontWeight:800, color:thm.text, margin:"0 0 6px" }}>{s.title}</p>
-            <div style={{ display:"flex", justifyContent:"center", alignItems:"center", flex:1, minHeight:mini?50:100 }}>
-              {!mini && (s.imageSearch||s.image) && <SlideImage query={s.imageSearch} manualUrl={s.image} style={{ maxHeight:100, maxWidth:"100%", objectFit:"contain", borderRadius:8 }}/>}
-              {mini && <div style={{ width:40, height:30, background:thm.accent+"33", borderRadius:4, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={thm.accent} strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-              </div>}
-            </div>
-            {s.caption && <p style={{ fontSize:mini?6:10, color:thm.sub, margin:"4px 0 0", textAlign:"center", fontStyle:"italic" }}>{s.caption}</p>}
-          </>
         ) : (
           <>
             <div style={{ display:"flex", gap:10, alignItems:"flex-start" }}>
@@ -11139,65 +11132,40 @@ SLIDE VARIETY RULES:
           </button>
         </div>
 
-        {/* Row 2: Style + Theme */}
-        <div style={{ display:"flex", flexWrap:"wrap", gap:14, alignItems:"flex-start", paddingTop:12, borderTop:`1px solid ${C.border}` }}>
-          {/* Presentation Style */}
-          <div style={{ flex:1, minWidth:220 }}>
-            <p style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:.8, textTransform:"uppercase", margin:"0 0 7px" }}>Presentation Style</p>
-            <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
-              {PRES_STYLES.map(s=>(
-                <button key={s.id} onClick={()=>setPresStyle(s.id)} title={s.desc}
-                  style={{ padding:"5px 11px", borderRadius:20, fontSize:11, fontWeight:600, cursor:"pointer", transition:"all .12s", whiteSpace:"nowrap",
-                    background:presStyle===s.id?C.accent:"transparent",
-                    color:presStyle===s.id?"#fff":C.muted,
-                    border:`1.5px solid ${presStyle===s.id?C.accent:C.border}` }}>
-                  {s.label}
+        {/* Theme + layout options */}
+        <div style={{ display:"flex", flexWrap:"wrap", gap:16, alignItems:"flex-start" }}>
+          <div>
+            <p style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:.8, textTransform:"uppercase", margin:"0 0 6px" }}>Theme</p>
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+              {THEMES.map(t=>(
+                <button key={t.id} onClick={()=>setTheme(t.id)} title={t.label}
+                  style={{ width:32, height:32, borderRadius:"50%",
+                    background:`linear-gradient(135deg, ${t.bg} 50%, ${t.accent} 50%)`,
+                    border:`3px solid ${theme===t.id?"#7C5CFC":"transparent"}`,
+                    cursor:"pointer", boxShadow:"0 2px 8px rgba(0,0,0,.25)",
+                    transition:"all .15s", flexShrink:0, position:"relative",
+                    transform:theme===t.id?"scale(1.15)":"scale(1)" }}>
+                  {theme===t.id && <div style={{ position:"absolute", inset:-4, borderRadius:"50%", border:"2px solid #7C5CFC66" }}/>}
                 </button>
               ))}
             </div>
           </div>
-          {/* Theme colour */}
-          <div>
-            <p style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:.8, textTransform:"uppercase", margin:"0 0 7px" }}>Colour Theme</p>
-            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-              {THEMES.map(t=>(
-                <button key={t.id} onClick={()=>setTheme(t.id)} title={t.label}
-                  style={{ width:28, height:28, borderRadius:"50%",
-                    background:`linear-gradient(135deg, ${t.bg} 50%, ${t.accent} 50%)`,
-                    border:`3px solid ${theme===t.id?"#7C5CFC":"transparent"}`,
-                    cursor:"pointer", boxShadow:"0 2px 6px rgba(0,0,0,.2)",
-                    transition:"all .15s", flexShrink:0,
-                    transform:theme===t.id?"scale(1.15)":"scale(1)" }}/>
-              ))}
+          {slides.length>0 && (
+            <div>
+              <p style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:.8, textTransform:"uppercase", margin:"0 0 6px" }}>Add Slide Type</p>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                {[["content","📝 Content"],["two-col","⬛ Two Column"],["quote","💬 Quote"],["title","🎯 Title"]].map(([type,label])=>(
+                  <button key={type} onClick={()=>addSlide(type)}
+                    style={{ padding:"4px 10px", borderRadius:20, border:`1.5px solid ${C.border}`, background:"transparent", color:C.muted, fontSize:11, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap" }}
+                    onMouseEnter={e=>{e.currentTarget.style.borderColor=C.accent;e.currentTarget.style.color=C.accent;}}
+                    onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.muted;}}>
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        </div>
-        {/* Custom style note */}
-        <div style={{ marginTop:10 }}>
-          <button onClick={()=>setShowStyleInput(s=>!s)}
-            style={{ fontSize:11, color:C.muted, background:"none", border:"none", cursor:"pointer", textDecoration:"underline", padding:0 }}>
-            {showStyleInput ? "▲ Hide custom style" : "✏️ Add custom style instructions"}
-          </button>
-          {showStyleInput && (
-            <textarea value={stylePrompt} onChange={e=>setStylePrompt(e.target.value)}
-              placeholder="e.g. 'Use formal academic language', 'Dark tech startup feel', 'Fun and colourful for kids'…"
-              rows={2} style={{ width:"100%", marginTop:6, border:`1.5px solid ${C.accentS}`, borderRadius:8, padding:"8px 10px", fontSize:12, outline:"none", resize:"vertical", color:C.text, background:C.bg, fontFamily:"'DM Sans',sans-serif", boxSizing:"border-box" }}/>
           )}
         </div>
-        {/* Add slide type buttons (when slides exist) */}
-        {slides.length > 0 && (
-          <div style={{ marginTop:10, paddingTop:10, borderTop:`1px solid ${C.border}`, display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
-            <span style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:.8, textTransform:"uppercase" }}>Add slide</span>
-            {[["content","📝 Content"],["two-col","⬛ Two Column"],["quote","💬 Quote"],["title","🎯 Title"],["stats","📊 Stats"],["image","🖼️ Image"]].map(([type,label])=>(
-              <button key={type} onClick={()=>addSlide(type)}
-                style={{ padding:"4px 10px", borderRadius:20, border:`1.5px solid ${C.border}`, background:"transparent", color:C.muted, fontSize:11, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap" }}
-                onMouseEnter={e=>{e.currentTarget.style.borderColor=C.accent;e.currentTarget.style.color=C.accent;}}
-                onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.muted;}}>
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Empty state */}
