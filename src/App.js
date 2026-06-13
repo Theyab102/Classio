@@ -968,6 +968,33 @@ const I = {
   podcast: "M8.56 2.9A7 7 0 0 1 19 9v4M2 9a10 10 0 0 1 20 0v5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2zM6 9v1a6 6 0 0 0 12 0V9M12 16v6M8 22h8",
   info: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 8h.01M11 12h1v4h1",
   regenerate: "M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15",
+  // Science / study section icons (replace SECTION_EMOJIS)
+  atom: "M12 12m-1 0a1 1 0 1 0 2 0 1 1 0 1 0-2 0M20.2 20.2c2.04-2.03.02-7.36-4.5-11.9-4.54-4.52-9.87-6.54-11.9-4.5-2.04 2.03-.02 7.36 4.5 11.9 4.54 4.52 9.87 6.54 11.9 4.5zM15.7 15.7c4.52-4.54 6.54-9.87 4.5-11.9-2.03-2.04-7.36-.02-11.9 4.5-4.52 4.54-6.54 9.87-4.5 11.9 2.03 2.04 7.36.02 11.9-4.5z",
+  satellite: "M13 7l4 4L9 19l-4-4 8-8zM5 16l-2 2 4 4 2-2M14 6l3-3 5 5-3 3M9 9l1 1M19 14l1 1",
+  flask: "M9 2h6M10 2v6.5L4.5 18A2 2 0 0 0 6 21h12a2 2 0 0 0 1.5-3L14 8.5V2M8.5 14h7",
+  ruler: "M16 3l5 5L7 22l-5-5zM14.5 4.5l3 3M12 7l1.5 1.5M9 10l1.5 1.5M6 13l1.5 1.5",
+  telescope: "M10.5 9L3 14l1.5 2.5L12 12M10.5 9L21 6l-3 9-7.5-3.5M10.5 9l1.5 4.5M6 22l3-7M14 13l4 7",
+  dna: "M9 2c0 4-6 4-6 8s6 4 6 8M15 2c0 4 6 4 6 8s-6 4-6 8M5 7h14M5 17h14",
+  chart: "M3 3v18h18M7 17V10M12 17V7M17 17v-5",
+  bolt: "M13 2L3 14h9l-1 8 10-12h-9l1-8z",
+  wave: "M2 12c2-4 4-4 6 0s4 4 6 0 4-4 6 0 4 4 6 0",
+  battery: "M2 7h16v10H2zM18 10h2v4h-2zM6 10v4M10 10v4M14 10v4",
+  magnet: "M6 15v-3a6 6 0 0 1 12 0v3M6 15H2v4a2 2 0 0 0 2 2h2zM18 15h4v4a2 2 0 0 1-2 2h-2zM6 15v6M18 15v6",
+  lightbulb: "M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z",
+  key: "M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4",
+  pin: "M12 17v5M9 10.76a2 2 0 0 1-.76 1.69l-.95.81A2 2 0 0 0 6.5 15h11a2 2 0 0 0-.79-1.74l-.95-.81A2 2 0 0 1 15 10.76V7h1V5H8v2h1z",
+  microscope: "M6 18h8M3 22h18M14 22a7 7 0 1 0 0-14h-1M9 14h2M9 12a2 2 0 0 1-2-2V8a2 2 0 0 1 4 0v4a2 2 0 0 1-2 2zM12 6.5V4h2",
+  bookOpen: "M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 0 3-3h7z",
+  gradCap: "M22 10v6M2 10l10-5 10 5-10 5z M6 12v5c0 1.1 2.7 2 6 2s6-.9 6-2v-5",
+  // File-type icons (replace file emoji map)
+  video: "M23 7l-7 5 7 5V7zM14 5H3a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z",
+  fileText: ["M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z","M14 2v6h6","M16 13H8","M16 17H8","M10 9H8"],
+  presentation: "M3 3h18M9 21l3-6 3 6M3 3v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V3",
+  imageFile: "M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM21 15l-5-5L5 19",
+  audioFile: "M9 18V5l12-2v13M9 18a3 3 0 1 0 0 0zM21 16a3 3 0 1 0 0 0z",
+  fileGeneric: ["M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z","M14 2v6h6"],
+  trophy: "M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M6 4h12v6a6 6 0 0 1-12 0V4zM10 16v2M14 16v2M8 22h8M9 18h6v2a1 1 0 0 1-1 1H10a1 1 0 0 1-1-1v-2z",
+  messageCircle: "M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z",
 };
 
 // ─── TEXT FORMATTER ───────────────────────────────────────────────────────────
@@ -1651,7 +1678,7 @@ function SettingsTab({ onToggleTheme }) {
         </p>
         <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
           {[
-            { v:"auto",    label:"🔍 Auto detect" },
+            { v:"auto",    label:"Auto detect" },
             { v:"English", label:"🇬🇧 English" },
             { v:"Arabic",  label:"🇦🇪 العربية" },
             { v:"French",  label:"🇫🇷 Français" },
@@ -1721,9 +1748,9 @@ function SettingsTab({ onToggleTheme }) {
           const daysActive = (() => { try { return parseInt(localStorage.getItem("classio_days_active")||"1"); } catch { return 1; } })();
 
           const stats = [
-            { label:"🔥 Current Streak", value:`${streak} day${streak!==1?"s":""}`, color:"#FF6B35" },
-            { label:"🎯 Cards Mastered", value:`${totalMastered} cards`, color:"#4A7C59" },
-            { label:"📅 Days Active", value:`${daysActive} days`, color:"#7C5CFC" },
+            { label:"Current Streak", value:`${streak} day${streak!==1?"s":""}`, color:"#FF6B35" },
+            { label:"Cards Mastered", value:`${totalMastered} cards`, color:"#4A7C59" },
+            { label:"Days Active", value:`${daysActive} days`, color:"#7C5CFC" },
           ];
           return (
             <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
@@ -1735,7 +1762,7 @@ function SettingsTab({ onToggleTheme }) {
               ))}
               {streak >= 3 && (
                 <div style={{ background:"linear-gradient(135deg,#FF6B3522,#FF450011)", border:"1.5px solid #FF6B3533", borderRadius:12, padding:"10px 14px", display:"flex", alignItems:"center", gap:8 }}>
-                  <span style={{ fontSize:20 }}>🏆</span>
+                  <Icon d={I.trophy} size={20} color="#FF6B35" sw={2}/>
                   <p style={{ margin:0, fontSize:13, fontWeight:600, color:"#FF6B35" }}>
                     {streak >= 30 ? "Legendary 30-day streak!" : streak >= 14 ? "Two weeks strong!" : streak >= 7 ? "One week streak!" : `${streak} day streak — keep going!`}
                   </p>
@@ -1913,7 +1940,7 @@ function OnboardingTutorial({ onDone }) {
         {/* Tip */}
         <div style={{ background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:12,
           padding:"10px 14px", marginBottom:22, display:"flex", alignItems:"flex-start", gap:8 }}>
-          <span style={{ fontSize:16, flexShrink:0 }}>💡</span>
+          <span style={{flexShrink:0, display:"flex"}}><Icon d={I.lightbulb} size={16} color={C.accent} sw={2}/></span>
           <p style={{ fontSize:13, color:C.accent, fontWeight:600, margin:0, lineHeight:1.5 }}>{s.tip}</p>
         </div>
 
@@ -1930,7 +1957,7 @@ function OnboardingTutorial({ onDone }) {
           <button onClick={next} style={{ flex:1, padding:"11px", borderRadius:10,
             border:"none", background:GRAD, color:"#fff", cursor:"pointer",
             fontSize:14, fontWeight:700, boxShadow:"0 4px 14px rgba(124,92,252,.3)" }}>
-            {isLast ? "Get Started 🚀" : "Next →"}
+            {isLast ? "Get Started" : "Next"}
           </button>
         </div>
 
@@ -2629,7 +2656,7 @@ RULES:
               style={{ flex:2, padding:"10px", background:GRAD, color:"#fff", border:"none",
                 borderRadius:10, cursor:"pointer", fontSize:13, fontWeight:700,
                 boxShadow:"0 3px 10px rgba(124,92,252,.3)" }}>
-              ✨ Save as Notes
+              Save as Notes
             </button>
           </div>
         </div>
@@ -2903,13 +2930,13 @@ function CommandSearch({ folders, onOpenFile, onClose }) {
 
   const getIcon = (name="", type="") => {
     const e = (name||"").split(".").pop().toLowerCase();
-    if (type==="text/youtube" || type?.includes("youtube")) return {bg:"#FEE2E2",c:"#DC2626",t:"YT",emoji:"🎬"};
-    if (e==="pdf")   return {bg:"#E8EFF5",c:"#3D5A80",t:"PDF",emoji:"📄"};
-    if (["doc","docx"].includes(e)) return {bg:"#DBEAFE",c:"#2563EB",t:"DOC",emoji:"📝"};
-    if (["ppt","pptx"].includes(e)) return {bg:"#FEE2E2",c:"#DC2626",t:"PPT",emoji:"📊"};
-    if (["jpg","jpeg","png","gif","webp"].includes(e)) return {bg:"#F3E8FF",c:"#7C3AED",t:"IMG",emoji:"🖼️"};
-    if (["mp3","wav","m4a","ogg"].includes(e)) return {bg:"#E0F7FA",c:"#0694a2",t:"AUD",emoji:"🎵"};
-    return {bg:"#F3F4F6",c:"#6B7280",t:"FILE",emoji:"📁"};
+    if (type==="text/youtube" || type?.includes("youtube")) return {bg:"#FEE2E2",c:"#DC2626",t:"YT",icon:"video"};
+    if (e==="pdf")   return {bg:"#E8EFF5",c:"#3D5A80",t:"PDF",icon:"fileText"};
+    if (["doc","docx"].includes(e)) return {bg:"#DBEAFE",c:"#2563EB",t:"DOC",icon:"fileText"};
+    if (["ppt","pptx"].includes(e)) return {bg:"#FEE2E2",c:"#DC2626",t:"PPT",icon:"presentation"};
+    if (["jpg","jpeg","png","gif","webp"].includes(e)) return {bg:"#F3E8FF",c:"#7C3AED",t:"IMG",icon:"imageFile"};
+    if (["mp3","wav","m4a","ogg"].includes(e)) return {bg:"#E0F7FA",c:"#0694a2",t:"AUD",icon:"audioFile"};
+    return {bg:"#F3F4F6",c:"#6B7280",t:"FILE",icon:"fileGeneric"};
   };
 
   const hasResults = matchedFolders.length > 0 || matchedFiles.length > 0;
@@ -2962,8 +2989,8 @@ function CommandSearch({ folders, onOpenFile, onClose }) {
                 style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 22px", cursor:"pointer", transition:"background .1s" }}
                 onMouseEnter={e=>e.currentTarget.style.background=T.accentL}
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                <div style={{ width:38, height:38, borderRadius:11, background:ic.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, fontSize:16 }}>
-                  {ic.emoji}
+                <div style={{ width:38, height:38, borderRadius:11, background:ic.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                  <Icon d={I[ic.icon]} size={17} color={ic.c} sw={2}/>
                 </div>
                 <div style={{ flex:1, minWidth:0 }}>
                   <p style={{ margin:0, fontSize:14, fontWeight:600, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{fi.name}</p>
@@ -3411,7 +3438,7 @@ export default function App() {
                 <p style={{ fontSize:14, color:T.muted, margin:0 }}>Create new notes</p>
                 {studyStreak > 1 && (
                   <span style={{ display:"inline-flex", alignItems:"center", gap:4, background:"linear-gradient(135deg,#FF6B35,#FF4500)", color:"#fff", borderRadius:20, padding:"3px 10px", fontSize:12, fontWeight:700, boxShadow:"0 2px 8px rgba(255,107,53,.35)" }}>
-                    🔥 {studyStreak} day streak
+                    {studyStreak} day streak
                   </span>
                 )}
               </div>
@@ -3756,11 +3783,11 @@ export default function App() {
             <div style={{ display:"flex",flexWrap:"wrap",gap:6,marginBottom:18 }}>
               {[
                 {label:"📐 Physics",color:"#2563eb",name:"Physics"},
-                {label:"🔢 Math",color:"#7c3aed",name:"Math"},
+                {label:"Math",color:"#7c3aed",name:"Math"},
                 {label:"⚗️ Chemistry",color:"#16a34a",name:"Chemistry"},
                 {label:"🧬 Biology",color:"#059669",name:"Biology"},
                 {label:"🔭 STEM",color:"#0891b2",name:"STEM"},
-                {label:"📚 Other",color:"#9b9590",name:""},
+                {label:"Other",color:"#9b9590",name:""},
               ].map(s=>(
                 <button key={s.label} onClick={()=>{if(s.name)setNewName(n=>n||s.name);setNewColor(s.color);}}
                   style={{ padding:"7px 14px",borderRadius:20,border:`1.5px solid ${newColor===s.color?s.color:C.border}`,
@@ -6266,7 +6293,7 @@ ${text}`
           )}
           <button onClick={doExplain} disabled={explaining}
             style={{ display:"flex", alignItems:"center", gap:5, background:explaining?"#ccc":GRAD, color:"#fff", border:"none", borderRadius:7, padding:"6px 14px", fontSize:13, fontWeight:600, cursor:explaining?"default":"pointer", boxShadow:explaining?"none":"0 2px 8px rgba(124,92,252,.3)" }}>
-            <Icon d={I.sparkle} size={12} color="#fff" sw={2} />{explaining?"Explaining…":"✨ AI Explain"}
+            <Icon d={I.sparkle} size={12} color="#fff" sw={2} />{explaining?"Explaining…":"AI Explain"}
           </button>
         </>)}
       </div>
@@ -6338,6 +6365,9 @@ function ViewAIPanel({ file, explaining, explanation, showExplain, onHideExplain
       const sys = `You are a knowledgeable study assistant. ${fileText ? "Document content: " + fileText.slice(0,8000) : ""}
 Format responses with markdown: # headings, **bold** key terms, - bullet points, > for formulas/quotes.
 For comparisons/tables respond ONLY with JSON: {"TABLE":{"explanation":"...","columns":["A","B"],"rows":[["x","y"]]}}
+GRAPHS/CHARTS: If the user asks for a graph, chart, plot, scatter plot, or visualization of data, respond with ONLY valid JSON (no other text): {"GRAPH":{"type":"bar","title":"...","labels":["A","B","C"],"datasets":[{"label":"Series 1","data":[10,20,30],"backgroundColor":["#7C5CFC","#3D8EF8","#06b6d4"]}]}}
+Supported graph types: bar, line, pie, doughnut, scatter.
+If the user's request would clearly benefit from a visual (e.g. "show this as a graph", "compare these visually", "make a table"), proactively use the TABLE or GRAPH format even if not explicitly asked for JSON.
 NEVER use pipe-table markdown (| col | col |).`;
       const reply = await callClaudeChat(sys, newMsgs.map(m=>({role:m.role,content:m.content})));
       // Parse TABLE/GRAPH JSON from AI reply
@@ -6523,6 +6553,8 @@ function PPTViewer({ fileObj, page, onTotalPages, onSlidesLoaded }) {
   const [slides,  setSlides]  = useState([]);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState("");
+  const [fullscreen, setFullscreen] = useState(false);
+  const wrapRef = useRef(null);
 
   useEffect(() => {
     (async () => {
@@ -6548,15 +6580,49 @@ function PPTViewer({ fileObj, page, onTotalPages, onSlidesLoaded }) {
 
         if (slideKeys.length === 0) { setError("No slides found in this file."); setLoading(false); return; }
         onTotalPages && onTotalPages(slideKeys.length);
-        // We'll call onSlidesLoaded after parsing below
 
         const parsed = await Promise.all(slideKeys.map(async sk => {
           const xml  = await zip.files[sk].async("string");
-          // Extract all text nodes
-          const texts = [];
-          const re = /<a:t[^>]*>([^<]*)<\/a:t>/g;
-          let m;
-          while ((m = re.exec(xml)) !== null) if (m[1].trim()) texts.push(m[1].trim());
+
+          // Extract text per shape (<p:sp>...</p:sp>), detecting title placeholders
+          let title = null;
+          const body = [];
+          const spRe = /<p:sp>([\s\S]*?)<\/p:sp>/g;
+          let spm;
+          let sawAnySp = false;
+          while ((spm = spRe.exec(xml)) !== null) {
+            sawAnySp = true;
+            const spXml = spm[1];
+            const isTitlePh = /<p:ph[^>]*type="(title|ctrTitle)"/.test(spXml);
+            // collect text runs within this shape, grouped by paragraph
+            const paraRe = /<a:p>([\s\S]*?)<\/a:p>/g;
+            let pm;
+            const paras = [];
+            while ((pm = paraRe.exec(spXml)) !== null) {
+              const tRe = /<a:t[^>]*>([^<]*)<\/a:t>/g;
+              let tm; let line = "";
+              while ((tm = tRe.exec(pm[1])) !== null) line += tm[1];
+              if (line.trim()) paras.push(line.trim());
+            }
+            if (!paras.length) continue;
+            if (isTitlePh && !title) {
+              title = paras.join(" ");
+            } else {
+              body.push(...paras);
+            }
+          }
+          // Fallback: if no <p:sp> shapes matched (rare), grab all text nodes in order
+          if (!sawAnySp) {
+            const re = /<a:t[^>]*>([^<]*)<\/a:t>/g;
+            let m;
+            const texts = [];
+            while ((m = re.exec(xml)) !== null) if (m[1].trim()) texts.push(m[1].trim());
+            title = texts[0] || null;
+            body.push(...texts.slice(1));
+          }
+          // If nothing was flagged as title, promote the first body line
+          if (!title && body.length) title = body.shift();
+
           // Extract embedded images
           const relKey = sk.replace("slides/slide", "slides/_rels/slide").replace(".xml", ".xml.rels");
           const imgs = [];
@@ -6574,7 +6640,7 @@ function PPTViewer({ fileObj, page, onTotalPages, onSlidesLoaded }) {
               }
             }
           }
-          return { texts, imgs };
+          return { title, texts: body, imgs };
         }));
 
         setSlides(parsed);
@@ -6587,36 +6653,91 @@ function PPTViewer({ fileObj, page, onTotalPages, onSlidesLoaded }) {
     })();
   }, [fileObj]);
 
-  const slide = slides[Math.max(0, (page||1) - 1)] || { texts:[], imgs:[] };
+  // Escape key exits fullscreen
+  useEffect(() => {
+    if (!fullscreen) return;
+    const h = e => { if (e.key === "Escape") setFullscreen(false); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [fullscreen]);
+
+  const slide = slides[Math.max(0, (page||1) - 1)] || { title:null, texts:[], imgs:[] };
+  const hasContent = slide.title || slide.texts.length || slide.imgs.length;
+  const multiImg = slide.imgs.length > 1;
 
   if (loading) return <div style={{ color:"#fff", padding:40 }}>Loading presentation…</div>;
   if (error)   return <div style={{ color:"#fca5a5", padding:40, background:"#1e1e2e", borderRadius:8 }}>{error}</div>;
 
-  return (
-    <div style={{ background:"#fff", borderRadius:8, width:"100%", maxWidth:900, minHeight:480, boxShadow:"0 8px 32px rgba(0,0,0,.4)", overflow:"hidden" }}>
-      {/* Slide header */}
-      {slide.texts[0] && (
-        <div style={{ background:"linear-gradient(135deg, #1a1a2e, #16213e)", padding:"28px 36px" }}>
-          <p style={{ fontSize:24, fontWeight:800, color:"#fff", lineHeight:1.3 }}>{slide.texts[0]}</p>
+  const SlideCanvas = (
+    <div style={{
+      background:"#fff", borderRadius:fullscreen?0:8,
+      width:"100%", maxWidth:fullscreen?"none":900,
+      aspectRatio:"16/9",
+      boxShadow: fullscreen ? "none" : "0 8px 32px rgba(0,0,0,.4)",
+      overflow:"hidden", display:"flex", flexDirection:"column",
+      boxSizing:"border-box",
+    }}>
+      {/* Slide header / title */}
+      {slide.title && (
+        <div style={{ background:"linear-gradient(135deg, #1a1a2e, #16213e)", padding:"clamp(12px,3%,28px) clamp(16px,4%,36px)", flexShrink:0 }}>
+          <p style={{ fontSize:"clamp(14px, 3.2vw, 24px)", fontWeight:800, color:"#fff", lineHeight:1.3, margin:0,
+            display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden" }}>{slide.title}</p>
         </div>
       )}
-      {/* Images */}
-      {slide.imgs.length > 0 && (
-        <div style={{ padding:"20px 36px 0", display:"flex", gap:12, flexWrap:"wrap" }}>
-          {slide.imgs.map((img, i) => (
-            <img key={i} src={img.src} alt="" style={{ maxWidth:"100%", maxHeight:280, objectFit:"contain", borderRadius:6, border:"1px solid #e5e7eb" }} />
-          ))}
-        </div>
-      )}
-      {/* Body text */}
-      <div style={{ padding:"20px 36px 32px" }}>
-        {slide.texts.slice(1).map((t, i) => (
-          <p key={i} style={{ fontSize:15, color:"#374151", marginBottom:8, lineHeight:1.7 }}>• {t}</p>
-        ))}
-        {slide.texts.length === 0 && slide.imgs.length === 0 && (
-          <p style={{ color:"#9ca3af", fontStyle:"italic", marginTop:40, textAlign:"center" }}>No content on this slide.</p>
+      {/* Body — scales to fit remaining space, never overflows */}
+      <div style={{ flex:1, minHeight:0, display:"flex", flexDirection: multiImg ? "row" : "column",
+        gap:"2%", padding:"clamp(10px,2.5%,28px) clamp(16px,4%,36px)", overflow:"hidden", boxSizing:"border-box" }}>
+        {/* Images */}
+        {slide.imgs.length > 0 && (
+          <div style={{ display:"flex", flexDirection: multiImg ? "row" : "column", gap:"2%",
+            flexWrap:"wrap", alignItems:"center", justifyContent:"center",
+            flex: slide.texts.length ? "1 1 50%" : "1 1 100%", minWidth:0, minHeight:0, overflow:"hidden" }}>
+            {slide.imgs.map((img, i) => (
+              <img key={i} src={img.src} alt="" style={{
+                maxWidth:"100%", maxHeight:"100%", width:"auto", height:"auto",
+                objectFit:"contain", borderRadius:6, border:"1px solid #e5e7eb", flexShrink:1 }} />
+            ))}
+          </div>
+        )}
+        {/* Text */}
+        {slide.texts.length > 0 && (
+          <div style={{ flex: slide.imgs.length ? "1 1 50%" : "1 1 auto", minWidth:0, overflow:"auto" }}>
+            {slide.texts.map((t, i) => (
+              <p key={i} style={{ fontSize:"clamp(9px, 1.4vw, 15px)", color:"#374151", marginBottom:"0.6em", lineHeight:1.6 }}>• {t}</p>
+            ))}
+          </div>
+        )}
+        {!hasContent && (
+          <p style={{ color:"#9ca3af", fontStyle:"italic", margin:"auto", textAlign:"center" }}>No content on this slide.</p>
         )}
       </div>
+    </div>
+  );
+
+  return (
+    <div ref={wrapRef} style={{ width:"100%", maxWidth:fullscreen?"none":900, position:"relative" }}>
+      {/* Fit-to-screen toggle */}
+      <button onClick={()=>setFullscreen(f=>!f)} title={fullscreen?"Exit fullscreen":"Fullscreen presentation mode"}
+        style={{ position:"absolute", top:fullscreen?16:-36, right:fullscreen?16:0, zIndex:50,
+          display:"flex", alignItems:"center", gap:6, padding:"6px 12px", borderRadius:8,
+          border:"1px solid rgba(255,255,255,.2)", background:fullscreen?"rgba(0,0,0,.5)":"rgba(255,255,255,.08)",
+          color:"#fff", fontSize:12, fontWeight:600, cursor:"pointer" }}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          {fullscreen
+            ? <><path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3"/></>
+            : <><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></>}
+        </svg>
+        {fullscreen ? "Exit Fullscreen" : "Fullscreen"}
+      </button>
+
+      {fullscreen ? (
+        <div style={{ position:"fixed", inset:0, zIndex:9990, background:"#111", display:"flex", alignItems:"center", justifyContent:"center", padding:"4vh 4vw" }}
+          onClick={e=>{ if(e.target===e.currentTarget) setFullscreen(false); }}>
+          <div style={{ width:"min(100%, 100vh * 16 / 9)", maxHeight:"100%" }}>
+            {SlideCanvas}
+          </div>
+        </div>
+      ) : SlideCanvas}
     </div>
   );
 }
@@ -7474,7 +7595,7 @@ function ClassioTable({ data, onClose }) {
           {chart && (
             <button onClick={()=>setShowChart(s=>!s)}
               style={{ fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:20, border:`1.5px solid ${C.accent}`, background:showChart?C.accent:"transparent", color:showChart?"#fff":C.accent, cursor:"pointer" }}>
-              {showChart ? "Hide Chart" : "📈 Chart"}
+              {showChart ? "Hide Chart" : "Chart"}
             </button>
           )}
           {onClose && <button onClick={onClose} style={{ background:"none",border:"none",cursor:"pointer",color:C.muted,fontSize:16 }}>×</button>}
@@ -7522,9 +7643,58 @@ function ClassioTable({ data, onClose }) {
 // Prompt AI to return structured JSON table data
 
 // ── Notes Image Insert ────────────────────────────────────────────────────────
+// AI-generated image block for notes — [AIImage: prompt | style]
+function AIGeneratedImage({ prompt, style, onChangePrompt }) {
+  const [imgUrl, setImgUrl] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [genStyle, setGenStyle] = useState(style || "diagram");
+
+  const generate = (st) => {
+    setLoading(true); setFailed(false);
+    generateAIImage(prompt, st || genStyle)
+      .then(({url})=>{ setImgUrl(url); setLoading(false); })
+      .catch(()=>{ setFailed(true); setLoading(false); });
+  };
+
+  useEffect(() => { generate(genStyle); /* eslint-disable-next-line */ }, [prompt]);
+
+  if (loading) return (
+    <div style={{ margin:"10px 0", borderRadius:10, background:C.accentL, padding:"10px 14px", display:"flex", alignItems:"center", gap:8, border:`1px solid ${C.border}` }}>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+      <span style={{ fontSize:12, color:C.muted }}>Generating image: {prompt}…</span>
+    </div>
+  );
+
+  if (failed) return (
+    <div style={{ margin:"10px 0", borderRadius:10, background:C.redL||C.accentL, padding:"10px 14px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, border:`1px solid ${C.border}` }}>
+      <span style={{ fontSize:12, color:C.muted }}>Couldn't generate image: {prompt}</span>
+      <button onClick={()=>generate()} style={{ fontSize:11, fontWeight:700, color:C.accent, background:"none", border:"none", cursor:"pointer" }}>Retry</button>
+    </div>
+  );
+
+  return (
+    <figure style={{ margin:"14px auto", borderRadius:12, overflow:"hidden", border:`1px solid ${C.border}`, boxShadow:"0 2px 12px rgba(0,0,0,.10)", maxWidth:520, display:"block" }}>
+      <img src={imgUrl} alt={prompt} onError={()=>setFailed(true)}
+        style={{ width:"100%", maxHeight:340, objectFit:"contain", background:"#fff", display:"block" }}/>
+      <figcaption style={{ padding:"6px 12px", background:C.accentL, fontSize:11, color:C.muted, fontStyle:"italic", textAlign:"center", display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
+        <span style={{ flex:1, textAlign:"left", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{prompt} <span style={{opacity:.6}}>· AI generated</span></span>
+        <button onClick={()=>generate()} title="Regenerate"
+          style={{ flexShrink:0, display:"flex", alignItems:"center", gap:3, fontSize:10, fontWeight:700, color:C.accent, background:"none", border:"none", cursor:"pointer", padding:0 }}>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+          Regenerate
+        </button>
+      </figcaption>
+    </figure>
+  );
+}
+
 function NotesImageInsert({ file, onInsert }) {
   const inputRef = useRef(null);
   const [loading, setLoading] = useState(false);
+  const [showAI, setShowAI] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiStyle, setAiStyle] = useState("diagram");
   const T = useTheme();
   const handle = async (f) => {
     if (!f) return;
@@ -7536,23 +7706,52 @@ function NotesImageInsert({ file, onInsert }) {
           try {
             const desc = await callClaudeVision("Describe this image briefly for study notes. Include any text, diagrams, labels, or data visible.",
               [{ role:"user", content:"Describe this image for study notes." }], e.target.result);
-            onInsert(desc || f.name);
-          } catch { onInsert(f.name); }
+            onInsert(`[WebImage: ${e.target.result} | ${desc || f.name}]`);
+          } catch { onInsert(`[Image: ${f.name}]`); }
           setLoading(false);
         };
         reader.readAsDataURL(f);
-      } else { onInsert(f.name); setLoading(false); }
+      } else { onInsert(`[Image: ${f.name}]`); setLoading(false); }
     } catch { setLoading(false); }
   };
   return (
-    <div>
+    <div style={{ position:"relative", display:"flex", gap:6 }}>
       <input ref={inputRef} type="file" accept="image/*" style={{ display:"none" }}
         onChange={e=>{ if(e.target.files[0]) handle(e.target.files[0]); e.target.value=""; }} />
       <button onClick={()=>inputRef.current?.click()} disabled={loading}
         style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:8,
           border:`1.5px solid ${T.border}`, background:"none", color:T.muted, fontSize:12, fontWeight:600, cursor:"pointer" }}>
-        {loading ? "Analyzing…" : "🖼️ Insert Image"}
+        <Icon d={I.image} size={12} color={T.muted}/>
+        {loading ? "Analyzing…" : "Upload Image"}
       </button>
+      <button onClick={()=>setShowAI(s=>!s)}
+        style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:8,
+          border:`1.5px solid ${showAI?T.accent:T.border}`, background:showAI?T.accentL:"none", color:showAI?T.accent:T.muted, fontSize:12, fontWeight:600, cursor:"pointer" }}>
+        <Icon d={I.sparkle} size={12} color={showAI?T.accent:T.muted}/>
+        AI Generate
+      </button>
+      {showAI && (
+        <div onClick={e=>e.stopPropagation()} style={{ position:"absolute", bottom:"calc(100% + 8px)", left:0, zIndex:50,
+          background:T.surface, border:`1.5px solid ${T.border}`, borderRadius:12, padding:12, width:280, boxShadow:"0 10px 36px rgba(0,0,0,.17)" }}>
+          <p style={{ margin:"0 0 6px", fontSize:10, fontWeight:800, color:T.muted, letterSpacing:.6, textTransform:"uppercase" }}>AI Generate Image</p>
+          <input value={aiPrompt} onChange={e=>setAiPrompt(e.target.value)} autoFocus
+            placeholder="Describe the image (e.g. 'cell mitosis diagram')…"
+            onKeyDown={e=>{ if(e.key==="Enter" && aiPrompt.trim()){ onInsert(`[AIImage: ${aiPrompt.trim()} | ${aiStyle}]`); setAiPrompt(""); setShowAI(false); } }}
+            style={{ width:"100%", border:`1px solid ${T.border}`, borderRadius:8, padding:"6px 10px", fontSize:12, outline:"none", color:T.text, background:T.bg, boxSizing:"border-box", marginBottom:6 }}/>
+          <select value={aiStyle} onChange={e=>setAiStyle(e.target.value)}
+            style={{ width:"100%", border:`1px solid ${T.border}`, borderRadius:8, padding:"6px 8px", fontSize:12, color:T.text, background:T.bg, cursor:"pointer", outline:"none", marginBottom:8 }}>
+            {[["diagram","Educational Diagram"],["infographic","Infographic"],["illustration","Illustration"],["realistic","Realistic"],["flat","Flat Design"],["academic","Academic"],["minimal","Minimal"],["render3d","3D Render"]].map(([v,l])=>(
+              <option key={v} value={v}>{l}</option>
+            ))}
+          </select>
+          <button onClick={()=>{ if(aiPrompt.trim()){ onInsert(`[AIImage: ${aiPrompt.trim()} | ${aiStyle}]`); setAiPrompt(""); setShowAI(false); } }}
+            disabled={!aiPrompt.trim()}
+            style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"7px", borderRadius:8, border:"none",
+              background:aiPrompt.trim()?"linear-gradient(135deg,#7C5CFC,#3D8EF8)":"#ccc", color:"#fff", fontSize:12, fontWeight:700, cursor:aiPrompt.trim()?"pointer":"not-allowed" }}>
+            <Icon d={I.sparkle} size={11} color="#fff" sw={2}/> Insert
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -7790,6 +7989,7 @@ function AutoFetchImage({ description }) {
   const [imgUrl, setImgUrl] = useState(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  const [aiFallback, setAiFallback] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -7813,17 +8013,19 @@ function AutoFetchImage({ description }) {
             const pages2 = d2?.query?.pages || {};
             const found = Object.values(pages2).find(p=>p?.original?.source && validExt.test(p.original.source));
             if (found && !cancelled) setImgUrl(found.original.source);
-            else if (!cancelled) setFailed(true);
+            else if (!cancelled) setAiFallback(true);
           }
           if (!cancelled) setLoading(false);
         }
       } catch {
-        if (!cancelled) { setFailed(true); setLoading(false); }
+        if (!cancelled) { setAiFallback(true); setLoading(false); }
       }
     };
     fetchImg();
     return () => { cancelled = true; };
   }, [description]);
+
+  if (aiFallback) return <AIGeneratedImage prompt={description} style="diagram" />;
 
   if (loading) return (
     <div style={{ margin:"10px 0", borderRadius:10, background:C.accentL, padding:"10px 14px", display:"flex", alignItems:"center", gap:8, border:`1px solid ${C.border}` }}>
@@ -7846,7 +8048,7 @@ function AutoFetchImage({ description }) {
 }
 
 function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
-  const SECTION_EMOJIS = ["🔬","📡","⚛️","🧪","📐","🔭","🧬","📊","⚡","🌊","🔋","🧲","💡","🔑","📌"];
+  const SECTION_ICONS = ["microscope","satellite","atom","flask","ruler","telescope","dna","chart","bolt","wave","battery","magnet","lightbulb","key","pin"];
   let _sectionCount = 0;
 
   // Rich inline markup: **bold**, *italic*, `code`, ==highlight==
@@ -7937,7 +8139,7 @@ function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
       // ── # Main section heading ────────────────────────────────────────────
       if (trimmed.startsWith("# ")) {
         const text = trimmed.slice(2);
-        const emoji = SECTION_EMOJIS[_sectionCount % SECTION_EMOJIS.length];
+        const iconKey = SECTION_ICONS[_sectionCount % SECTION_ICONS.length];
         _sectionCount++;
         if (!tableInserted && tableData?.table?.columns && firstSectionDone) {
           elements.push(<InlineClassioTable key={`tbl${key++}`} data={tableData} />);
@@ -7947,7 +8149,7 @@ function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
         firstSectionDone = true;
         elements.push(
           <h2 key={key++} style={{ fontFamily:"'DM Sans',sans-serif", fontSize:20, fontWeight:800, color:C.text, margin:"0 0 10px", display:"flex", alignItems:"center", gap:9, letterSpacing:"-0.3px" }}>
-            <span style={{ fontSize:18 }}>{emoji}</span>{text}
+            <Icon d={I[iconKey]} size={18} color={C.accent} sw={2}/>{text}
           </h2>
         );
         continue;
@@ -7971,13 +8173,13 @@ function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
 
       // ── ALL CAPS legacy heading ───────────────────────────────────────────
       if (/^[A-Z][A-Z\s\-\/&0-9:]{3,}$/.test(trimmed) && trimmed.length>3 && !trimmed.includes(".")) {
-        const emoji = SECTION_EMOJIS[_sectionCount % SECTION_EMOJIS.length];
+        const iconKey = SECTION_ICONS[_sectionCount % SECTION_ICONS.length];
         _sectionCount++;
         if (firstSectionDone) elements.push(<hr key={key++} style={{ border:"none", borderTop:`1px solid ${C.border}`, margin:"26px 0 18px" }}/>);
         firstSectionDone = true;
         elements.push(
           <h2 key={key++} style={{ fontFamily:"'DM Sans',sans-serif", fontSize:20, fontWeight:800, color:C.text, margin:"0 0 10px", display:"flex", alignItems:"center", gap:9 }}>
-            <span style={{ fontSize:18 }}>{emoji}</span>{trimmed.charAt(0)+trimmed.slice(1).toLowerCase()}
+            <Icon d={I[iconKey]} size={18} color={C.accent} sw={2}/>{trimmed.charAt(0)+trimmed.slice(1).toLowerCase()}
           </h2>
         );
         continue;
@@ -8026,6 +8228,14 @@ function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
             <span style={{ fontSize:14, color:C.text, lineHeight:1.75 }}>{renderInlineMarkup(numM[2])}</span>
           </div>
         );
+        continue;
+      }
+
+      // ── [AIImage: prompt | style] ───────────────────────────────────────────
+      if (trimmed.startsWith("[AIImage:")&&trimmed.endsWith("]")) {
+        const inner = trimmed.slice(9,-1).trim();
+        const [prompt, st] = inner.split("|").map(s=>s?.trim());
+        if (prompt) elements.push(<AIGeneratedImage key={key++} prompt={prompt} style={st} />);
         continue;
       }
 
@@ -8263,8 +8473,8 @@ function NotesTab({ file, onUpdate, user, isGuest, onTabChange }) {
     { id:"bullet",   label:"• Bullets",      desc:"Bullet points only, grouped by topic" },
     { id:"simple",   label:"🧒 Simple",       desc:"Plain English, easy to understand" },
     { id:"exam",     label:"📝 Exam Focused", desc:"Key terms, questions & checklist" },
-    { id:"quick",    label:"⚡ 1-min Quick",  desc:"Ultra short — top 5 key points only" },
-    { id:"expert",   label:"🎓 Expert",       desc:"Graduate-level depth, technical language" },
+    { id:"quick",    label:"1-min Quick",  desc:"Ultra short — top 5 key points only" },
+    { id:"expert",   label:"Expert",       desc:"Graduate-level depth, technical language" },
   ];
 
   // ── AI generate ───────────────────────────────────────────────────────────
@@ -8470,7 +8680,7 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
             color:"#fff", border:"none", borderRadius:20, padding:"7px 14px", fontSize:13, fontWeight:700,
             cursor:gen?"not-allowed":"pointer", boxShadow:gen?"none":"0 2px 10px rgba(124,92,252,.35)", whiteSpace:"nowrap" }}>
           {gen ? <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Generating…</>
-               : <><Icon d={I.sparkle} size={12} color="#fff" sw={2}/> ✨ AI Generate</>}
+               : <><Icon d={I.sparkle} size={12} color="#fff" sw={2}/> AI Generate</>}
         </button>
         <button onClick={() => setShowTopicInput(t => !t)} disabled={gen}
           style={{ display:"flex", alignItems:"center", gap:5, background:C.surface, color:C.text, border:`1.5px solid ${C.border}`, borderRadius:20, padding:"6px 12px", fontSize:12, fontWeight:600, cursor:"pointer" }}>
@@ -8589,7 +8799,7 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                 </div>
                 <p style={{ fontSize:17, fontWeight:700, color:C.text, margin:"0 0 8px" }}>No notes yet</p>
-                <p style={{ fontSize:13, color:C.muted, margin:"0 0 20px", maxWidth:280, lineHeight:1.6 }}>Click <strong style={{color:C.accent}}>✨ AI Generate</strong> to create rich notes with tables and images.</p>
+                <p style={{ fontSize:13, color:C.muted, margin:"0 0 20px", maxWidth:280, lineHeight:1.6 }}>Click <strong style={{color:C.accent}}>AI Generate</strong> to create rich notes with tables and images.</p>
                 <div style={{ display:"flex", gap:8, flexWrap:"wrap", justifyContent:"center" }}>
                   {NOTE_STYLES.map(s=>(
                     <span key={s.id} onClick={()=>{setNoteStyle(s.id);generate();}}
@@ -8605,7 +8815,7 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
             <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center", padding:"8px 16px", borderTop:`1px solid ${C.border}`, flexShrink:0, background:C.surface }}>
               <NotesSimplifyBtn notes={notes} onResult={s => { setNotes(s); setUnsaved(true); }} lang={lang} />
               <NotesExpandBtn notes={notes} onResult={e => { setNotes(e); setUnsaved(true); }} />
-              <NotesImageInsert file={file} onInsert={(desc) => { setNotes(n => n + "\n\n[Image: " + desc + "]"); setUnsaved(true); }} />
+              <NotesImageInsert file={file} onInsert={(tag) => { setNotes(n => n + "\n\n" + tag); setUnsaved(true); }} />
               <button onClick={() => navigator.clipboard?.writeText(notes)}
                 style={{ display:"flex", alignItems:"center", gap:4, padding:"5px 10px", borderRadius:8, border:`1.5px solid ${C.border}`, background:"transparent", color:C.muted, fontSize:11, fontWeight:600, cursor:"pointer" }}>
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
@@ -8741,8 +8951,8 @@ function NotesQASidebar({ file, notes, lang }) {
         style={{ position:"fixed", bottom:80, right:16, zIndex:601, width:52, height:52,
           borderRadius:"50%", background:C.accent, color:"#fff", border:"none",
           cursor:"pointer", boxShadow:"0 4px 20px rgba(61,90,128,.45)",
-          display:"flex", alignItems:"center", justifyContent:"center", fontSize:20 }}>
-        💬
+          display:"flex", alignItems:"center", justifyContent:"center" }}>
+        <Icon d={I.messageCircle} size={22} color="#fff" sw={2}/>
       </button>
     );
   }
@@ -8771,14 +8981,14 @@ Formatting: plain text only — no LaTeX, no dollar signs, no markdown asterisks
       {/* Header */}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 12px",
         borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
-        <span style={{ fontSize:13, fontWeight:700, color:C.text }}>💬 Ask about Notes</span>
+        <span style={{ fontSize:13, fontWeight:700, color:C.text, display:"flex", alignItems:"center", gap:6 }}><Icon d={I.messageCircle} size={14} color={C.text} sw={2}/> Ask about Notes</span>
         {/* Always open on desktop — no close button */}
       </div>
       {/* Messages */}
       <div style={{ flex:1, overflowY:"auto", padding:"10px 10px", display:"flex", flexDirection:"column", gap:8, minHeight:0 }}>
         {messages.length === 0 && (
           <div style={{ padding:"20px 8px", textAlign:"center", color:C.muted }}>
-            <p style={{ fontSize:24, marginBottom:8 }}>💡</p>
+            <div style={{ display:"flex", justifyContent:"center", marginBottom:8 }}><Icon d={I.lightbulb} size={22} color={C.muted} sw={2}/></div>
             <p style={{ fontSize:12, fontWeight:600, marginBottom:4 }}>Ask anything about your notes</p>
             <p style={{ fontSize:11 }}>e.g. "Explain photosynthesis", "What is X?", "Give me an example of Y"</p>
           </div>
@@ -9180,7 +9390,7 @@ function CardsTab({ file, onUpdate }) {
   const FILTER_OPTS = [
     {id:"all",     label:`All (${cards.length})`},
     {id:"unknown", label:`To Learn (${cards.length - knownCount})`},
-    {id:"starred", label:`⭐ Starred (${starredCount})`},
+    {id:"starred", label:`Starred (${starredCount})`},
     {id:"known",   label:`✓ Known (${knownCount})`},
   ];
 
@@ -9205,7 +9415,7 @@ function CardsTab({ file, onUpdate }) {
           </button>
           <button onClick={()=>setShowCountPicker(p=>!p)} disabled={gen} className="hov"
             style={{ display:"flex", alignItems:"center", gap:7, background:gen?"#ccc":"linear-gradient(135deg,#7C5CFC,#3D8EF8)", color:"#fff", border:"none", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:gen?"not-allowed":"pointer", boxShadow:gen?"none":"0 3px 10px rgba(124,92,252,.3)" }}>
-            {gen ? <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Generating…</> : <><Icon d={I.sparkle} size={13} color="#fff"/>✨ AI Generate</>}
+            {gen ? <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Generating…</> : <><Icon d={I.sparkle} size={13} color="#fff"/>AI Generate</>}
           </button>
         </div>
       </div>
@@ -9259,7 +9469,7 @@ function CardsTab({ file, onUpdate }) {
             </div>
             <button onClick={()=>generate(parseInt(cardCount)||8)} disabled={gen||!parseInt(cardCount)}
               style={{ flex:1, background:gen?"#ccc":GRAD, color:"#fff", border:"none", borderRadius:10, padding:"10px 0", fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer", boxShadow:gen?"none":"0 3px 12px rgba(124,92,252,.3)", display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
-              {gen ? <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Generating…</> : <>✨ Generate {cardCount} Cards</>}
+              {gen ? <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Generating…</> : <><Icon d={I.sparkle} size={13} color="#fff"/> Generate {cardCount} Cards</>}
             </button>
           </div>
         </div>
@@ -9307,7 +9517,9 @@ function CardsTab({ file, onUpdate }) {
               </button>
               <span style={{ fontSize:15, fontWeight:700, color:C.text }}>{studyIdx+1} <span style={{ color:C.muted, fontWeight:400 }}>/ {displayCards.length}</span></span>
               <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                <button onClick={e=>toggleStar(card.id,e)} className="no-min-h" style={{ background:"none", border:"none", cursor:"pointer", fontSize:20, opacity:isStarred?1:.3 }}>⭐</button>
+                <button onClick={e=>toggleStar(card.id,e)} className="no-min-h" style={{ background:"none", border:"none", cursor:"pointer", display:"flex", opacity:isStarred?1:.3 }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill={isStarred?"#f59e0b":"none"} stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                </button>
                 <button onClick={()=>setShuffled(s=>!s)} className="no-min-h"
                   style={{ display:"flex", alignItems:"center", gap:5, background:shuffled?C.purpleL:"transparent", border:`1.5px solid ${shuffled?C.purple:C.border}`, borderRadius:20, padding:"5px 14px", cursor:"pointer", fontSize:12, fontWeight:700, color:shuffled?C.purple:C.muted }}>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>Shuffle
@@ -9478,7 +9690,9 @@ function CardsTab({ file, onUpdate }) {
                         <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:6, marginBottom:8 }}>
                           <span style={{ fontSize:9, fontWeight:800, color:C.muted, letterSpacing:1, textTransform:"uppercase" }}>QUESTION</span>
                           <div style={{ display:"flex", gap:3 }} onClick={e=>e.stopPropagation()}>
-                            <button onClick={e=>toggleStar(card.id,e)} className="no-min-h" style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, opacity:isS?1:.3, padding:"1px 2px" }}>⭐</button>
+                            <button onClick={e=>toggleStar(card.id,e)} className="no-min-h" style={{ background:"none", border:"none", cursor:"pointer", display:"flex", opacity:isS?1:.3, padding:"1px 2px" }}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill={isS?"#f59e0b":"none"} stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                            </button>
                             <button onClick={e=>toggleKnown(card.id,e)} className="no-min-h"
                               style={{ background:isK?C.greenL:"none", border:`1.5px solid ${isK?C.green:C.border}`, borderRadius:5, cursor:"pointer", padding:"1px 6px", fontSize:9, fontWeight:700, color:isK?C.green:C.muted }}>
                               {isK?"✓":"Got it"}
@@ -9778,8 +9992,8 @@ ${modeGuide}`,
           {[
             {id:"detailed",label:"📋 Detailed",desc:"Full notes"},
             {id:"simple",label:"🧒 Simple",desc:"Easy language"},
-            {id:"quick",label:"⚡ Quick",desc:"5 key points only"},
-            {id:"expert",label:"🎓 Expert",desc:"Deep technical"},
+            {id:"quick",label:"Quick",desc:"5 key points only"},
+            {id:"expert",label:"Expert",desc:"Deep technical"},
           ].map(m => (
             <button key={m.id} onClick={() => setMode(m.id)}
               style={{ flex:"1 1 0", padding:"9px 12px", borderRadius:10, border:`1.5px solid ${mode===m.id?C.accent:C.border}`,
@@ -9853,7 +10067,7 @@ Only include what's in the transcript.`,
                   border:"none", borderRadius:10, padding:"8px 16px",
                   fontSize:13, fontWeight:700, cursor:cardsLoading?"not-allowed":"pointer",
                   display:"flex", alignItems:"center", gap:6 }}>
-                {cardsLoading ? "Making cards…" : saved ? "✓ Saved + Cards" : "💾 Save + Flashcards"}
+                {cardsLoading ? "Making cards…" : saved ? "Saved + Cards" : "Save + Flashcards"}
               </button>
               <button onClick={() => { setResult(""); setUrl(""); setError(""); setSaved(false); setYtTableData(null); }}
                 style={{ background:"none", border:`1.5px solid ${C.border}`, borderRadius:10, padding:"8px 14px", fontSize:13, color:C.muted, cursor:"pointer" }}>
@@ -10879,6 +11093,35 @@ function PresentationTab({ file, onUpdate }) {
   const [aiImgStyle, setAiImgStyle] = useState("diagram");
   const [aiImgGenerating, setAiImgGenerating] = useState(false);
   const [aiImgError, setAiImgError] = useState("");
+  const slideImgInputRef = useRef(null);
+  const [bulkImgGenerating, setBulkImgGenerating] = useState(false);
+  const [bulkImgProgress, setBulkImgProgress] = useState(null);
+
+  const generateAllImages = async () => {
+    setBulkImgGenerating(true);
+    try {
+      const updated = [...slides];
+      for (let i=0; i<updated.length; i++) {
+        if (updated[i].type === "quote") continue;
+        setBulkImgProgress({ done:i, total:updated.length });
+        try {
+          const s = updated[i];
+          const suggestion = await suggestImagePrompt({
+            topic: topic || file.name,
+            slideTitle: s.title || s.subtitle || "",
+            slideContent: (s.bullets||[]).join(", ") || (s.left?.bullets||[]).concat(s.right?.bullets||[]).join(", "),
+          });
+          const { url } = await generateAIImage(suggestion.prompt, suggestion.style);
+          updated[i] = { ...s, image:url, imageSearch:"" };
+          setSlides([...updated]);
+        } catch(e) { console.error("Bulk image gen error for slide", i, e); }
+      }
+      onUpdate({ ...file, presentation: updated });
+    } finally {
+      setBulkImgGenerating(false);
+      setBulkImgProgress(null);
+    }
+  };
 
 
   const THEMES = [
@@ -11181,16 +11424,25 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
   const SlidePreview = ({s, idx, mini=false}) => {
     const pad = mini ? "10px 12px" : "22px 24px";
     const minH = mini ? 90 : 190;
+    const isBg = s.imageMode==="background" && s.image;
     return (
       <div style={{ background:thm.bg, padding:pad, minHeight:minH, position:"relative", fontFamily:"'DM Sans',sans-serif", height:"100%", overflow:"hidden" }}>
+        {/* Background image + overlay */}
+        {isBg && (
+          <>
+            <img src={s.image} alt="" style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", zIndex:0 }}/>
+            <div style={{ position:"absolute", inset:0, background:`linear-gradient(180deg, ${thm.bg}99, ${thm.bg}E6)`, zIndex:0 }}/>
+          </>
+        )}
         {/* Theme accent stripe at bottom */}
-        <div style={{ position:"absolute", bottom:0, left:0, right:0, height:mini?2:4, background:thm.accent }}/>
+        <div style={{ position:"absolute", bottom:0, left:0, right:0, height:mini?2:4, background:thm.accent, zIndex:1 }}/>
         {/* Subtle header bar */}
-        {!mini && <div style={{ position:"absolute", top:0, left:0, right:0, height:6, background:thm.header||thm.accent, opacity:.6 }}/>}
-        <span style={{ position:"absolute", top:mini?5:14, right:mini?6:14, fontSize:mini?8:10, color:thm.sub, opacity:.5, fontWeight:600 }}>{idx+1}/{slides.length}</span>
+        {!mini && !isBg && <div style={{ position:"absolute", top:0, left:0, right:0, height:6, background:thm.header||thm.accent, opacity:.6 }}/>}
+        <span style={{ position:"absolute", top:mini?5:14, right:mini?6:14, fontSize:mini?8:10, color:thm.sub, opacity:.5, fontWeight:600, zIndex:1 }}>{idx+1}/{slides.length}</span>
+        <div style={{ position:"relative", zIndex:1 }}>
         {s.type==="title" ? (
           <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:mini?74:160, textAlign:"center" }}>
-            {!mini && (s.imageSearch||s.image) && <SlideImage query={s.imageSearch} manualUrl={s.image} />}
+            {!mini && !isBg && (s.imageSearch||s.image) && <SlideImage query={s.imageSearch} manualUrl={s.image} />}
             <p style={{ fontSize:mini?11:20, fontWeight:900, color:thm.text, margin:mini?"0 0 4px":"8px 0 4px", lineHeight:1.2 }}>{s.title}</p>
             {s.subtitle && <p style={{ fontSize:mini?8:13, color:thm.sub, margin:0 }}>{s.subtitle}</p>}
           </div>
@@ -11214,12 +11466,13 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
                 <p style={{ fontSize:mini?9:15, fontWeight:800, color:thm.text, margin:"0 0 6px", borderBottom:`${mini?1:2}px solid ${thm.accent}`, paddingBottom:4 }}>{s.title}</p>
                 {(s.bullets||[]).slice(0,mini?3:4).map((b,bi)=><p key={bi} style={{ fontSize:mini?7:11, color:thm.sub, margin:"2px 0" }}>• {b}</p>)}
               </div>
-              {!mini && (s.imageSearch||s.image) && (
+              {!mini && !isBg && (s.imageSearch||s.image) && (
                 <SlideImage query={s.imageSearch} manualUrl={s.image} />
               )}
             </div>
           </>
         )}
+        </div>
       </div>
     );
   };
@@ -11238,6 +11491,10 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
               style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px", borderRadius:10, border:`1.5px solid ${C.border}`, background:C.surface, color:C.text, fontSize:12, fontWeight:600, cursor:"pointer" }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Add Slide
+            </button>
+            <button onClick={generateAllImages} disabled={bulkImgGenerating}
+              style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px", borderRadius:10, border:`1.5px solid ${C.border}`, background:C.surface, color:C.text, fontSize:12, fontWeight:600, cursor:bulkImgGenerating?"not-allowed":"pointer" }}>
+              {bulkImgGenerating ? <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> {bulkImgProgress ? `Generating ${bulkImgProgress.done+1}/${bulkImgProgress.total}…` : "Generating…"}</> : <><Icon d={I.sparkle} size={12} color={C.text} sw={2}/> Generate All Images</>}
             </button>
             <button onClick={exportPDF} disabled={exporting}
               style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px", borderRadius:10, border:`1.5px solid ${C.border}`, background:C.surface, color:C.text, fontSize:12, fontWeight:600, cursor:"pointer" }}>
@@ -11275,7 +11532,7 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
           </div>
           <button onClick={generate} disabled={generating}
             style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 20px", borderRadius:10, border:"none", background:generating?"#ccc":"linear-gradient(135deg,#7C5CFC,#3D8EF8)", color:"#fff", fontSize:14, fontWeight:700, cursor:generating?"not-allowed":"pointer", boxShadow:generating?"none":"0 3px 12px rgba(124,92,252,.3)", whiteSpace:"nowrap" }}>
-            {generating ? <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Generating…</> : <>✨ Generate</>}
+            {generating ? <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Generating…</> : <><Icon d={I.sparkle} size={12} color="#fff" sw={2}/> Generate</>}
           </button>
         </div>
 
@@ -11329,7 +11586,7 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
             <div>
               <p style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:.8, textTransform:"uppercase", margin:"0 0 6px" }}>Add Slide Type</p>
               <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                {[["content","📝 Content"],["two-col","⬛ Two Column"],["quote","💬 Quote"],["title","🎯 Title"]].map(([type,label])=>(
+                {[["content","Content"],["two-col","Two Column"],["quote","Quote"],["title","Title"]].map(([type,label])=>(
                   <button key={type} onClick={()=>addSlide(type)}
                     style={{ padding:"4px 10px", borderRadius:20, border:`1.5px solid ${C.border}`, background:"transparent", color:C.muted, fontSize:11, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap" }}
                     onMouseEnter={e=>{e.currentTarget.style.borderColor=C.accent;e.currentTarget.style.color=C.accent;}}
@@ -11444,10 +11701,22 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
                         {/* Image search for content slide */}
                         <div style={{ marginTop:10, borderTop:`1px solid ${C.border}`, paddingTop:10 }}>
                           <p style={{ fontSize:10, fontWeight:700, color:C.muted, margin:"0 0 6px", textTransform:"uppercase", letterSpacing:.5 }}>Slide Image</p>
-                          <div style={{ display:"flex", gap:6, marginBottom:6 }}>
+                          <div style={{ display:"flex", gap:6, marginBottom:6, flexWrap:"wrap" }}>
                             <input value={editVal.imageSearch||""} onChange={e=>setEditVal(v=>({...v,imageSearch:e.target.value}))}
                               placeholder="Search term (e.g. 'nuclear atom diagram')…"
-                              style={{ flex:1, border:`1px solid ${C.border}`, borderRadius:8, padding:"6px 10px", fontSize:12, outline:"none", color:C.text, background:C.surface }}/>
+                              style={{ flex:1, minWidth:140, border:`1px solid ${C.border}`, borderRadius:8, padding:"6px 10px", fontSize:12, outline:"none", color:C.text, background:C.surface }}/>
+                            <input ref={slideImgInputRef} type="file" accept="image/*" style={{ display:"none" }}
+                              onChange={e=>{
+                                const f = e.target.files[0]; e.target.value="";
+                                if (!f) return;
+                                const reader = new FileReader();
+                                reader.onload = ev => setEditVal(v=>({...v, image:ev.target.result, imageSearch:""}));
+                                reader.readAsDataURL(f);
+                              }} />
+                            <button onClick={()=>slideImgInputRef.current?.click()}
+                              style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:8, border:`1.5px solid ${C.border}`, background:"none", color:C.muted, fontSize:12, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap" }}>
+                              <Icon d={I.upload} size={12} color={C.muted}/> Upload
+                            </button>
                           </div>
                           <div style={{ display:"flex", gap:6, alignItems:"flex-start" }}>
                             {(editVal.imageSearch||editVal.image) && (
@@ -11459,8 +11728,16 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
                                 placeholder="Or paste a direct image URL…"
                                 style={{ width:"100%", border:`1px solid ${C.border}`, borderRadius:8, padding:"6px 10px", fontSize:11, outline:"none", color:C.text, background:C.surface, boxSizing:"border-box" }}/>
                               {editVal.image && (
-                                <button onClick={()=>setEditVal(v=>({...v,image:"",imageSearch:""}))}
+                                <button onClick={()=>setEditVal(v=>({...v,image:"",imageSearch:"",imageMode:undefined}))}
                                   style={{ marginTop:4, fontSize:10, color:C.muted, background:"none", border:"none", cursor:"pointer", padding:0 }}>✕ Remove image</button>
+                              )}
+                              {editVal.image && (
+                                <label style={{ marginTop:6, display:"flex", alignItems:"center", gap:5, fontSize:11, color:C.muted, cursor:"pointer" }}>
+                                  <input type="checkbox" checked={editVal.imageMode==="background"}
+                                    onChange={e=>setEditVal(v=>({...v, imageMode: e.target.checked ? "background" : undefined}))}
+                                    style={{ cursor:"pointer" }}/>
+                                  Use as slide background
+                                </label>
                               )}
                             </div>
                           </div>
@@ -11821,7 +12098,7 @@ Keep it under 150 words. Be encouraging.`,
               ) : (
                 <div>
                   <p style={{ fontSize:12, fontWeight:800, color:"#7c3aed", letterSpacing:.8, textTransform:"uppercase", marginBottom:8 }}>
-                    📚 What to Know
+                    What to Know
                   </p>
                   <p style={{ fontSize:13, color:C.text, lineHeight:1.7, margin:0 }}>
                     {learnMore}
@@ -15434,7 +15711,7 @@ function SGAIFlashcardGen({ groupId, db, user, groupFile, onClose }) {
                 display:"flex", alignItems:"center", justifyContent:"center", gap:8,
                 opacity:(!groupFile&&!topic.trim())?.5:1, boxShadow:"0 4px 14px rgba(124,92,252,.3)",
               }}>
-                {gen?<><SGSpinner color="#fff"/>Generating…</>:`✨ Generate ${cardCount} Cards`}
+                {gen?<><SGSpinner color="#fff"/>Generating…</>:<><Icon d={I.sparkle} size={13} color="#fff"/> Generate {cardCount} Cards</>}
               </button>
             </div>
           )}
@@ -15604,7 +15881,7 @@ Math: proper notation (1×10⁻¹⁰ not words, H₂O not words). Units: standar
             display:"flex", alignItems:"center", justifyContent:"center", gap:8,
             opacity:(!groupFile&&!topic.trim())?.5:1, boxShadow:"0 4px 14px rgba(124,92,252,.3)",
           }}>
-            {gen?<><SGSpinner color="#fff"/>Generating notes…</>:"✨ Generate Notes"}
+            {gen?<><SGSpinner color="#fff"/>Generating notes…</>:<><Icon d={I.sparkle} size={13} color="#fff"/> Generate Notes</>}
           </button>
           {notes && (
             <>
