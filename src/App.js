@@ -130,7 +130,100 @@ async function callClaude(system, userMessage, maxTok = 3000) {
   );
 }
 
+// ─── AI IMAGE GENERATION (provider-agnostic) ─────────────────────────────────
+// To add a new provider, implement a function with signature (prompt, style) => Promise<imageUrl>
+// and add it to IMAGE_PROVIDERS. Set REACT_APP_IMAGE_PROVIDER to switch.
+const IMAGE_STYLE_PROMPTS = {
+  realistic:   "photorealistic, high detail, natural lighting",
+  illustration:"digital illustration, clean lines, vibrant colors",
+  diagram:     "clean educational diagram, labeled, schematic, white background, vector style",
+  infographic: "modern infographic style, clean icons, data visualization, organized layout",
+  flat:        "flat design, simple shapes, minimal color palette, vector art",
+  corporate:   "corporate professional style, clean, modern office aesthetic, blue and gray tones",
+  modern:      "modern minimalist design, sleek, contemporary",
+  startup:     "modern startup aesthetic, gradient colors, energetic, tech style",
+  academic:    "academic textbook illustration style, precise, educational",
+  futuristic:  "futuristic sci-fi style, neon accents, high-tech",
+  minimal:     "minimalist, lots of negative space, simple shapes, muted colors",
+  creative:    "creative artistic style, bold colors, expressive",
+  render3d:    "3D render, soft shadows, studio lighting, CGI",
+};
+
+// Default provider: Pollinations (free, no API key required)
+async function _pollinationsGenerate(prompt, style) {
+  const styleHint = IMAGE_STYLE_PROMPTS[style] || "";
+  const fullPrompt = styleHint ? `${prompt}, ${styleHint}` : prompt;
+  const seed = Math.floor(Math.random() * 1e9);
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(fullPrompt)}?width=1280&height=720&seed=${seed}&nologo=true`;
+  // Verify the image actually loads before returning it
+  await new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = resolve;
+    img.onerror = () => reject(new Error("Image generation failed"));
+    img.src = url;
+  });
+  return url;
+}
+
+// Placeholder hooks for future providers — wire up when API keys are available
+async function _openaiImageGenerate(prompt, style) {
+  throw new Error("OpenAI image provider not configured");
+}
+async function _fluxGenerate(prompt, style) {
+  throw new Error("Flux image provider not configured");
+}
+async function _ideogramGenerate(prompt, style) {
+  throw new Error("Ideogram image provider not configured");
+}
+async function _recraftGenerate(prompt, style) {
+  throw new Error("Recraft image provider not configured");
+}
+
+const IMAGE_PROVIDERS = {
+  pollinations: _pollinationsGenerate,
+  openai: _openaiImageGenerate,
+  flux: _fluxGenerate,
+  ideogram: _ideogramGenerate,
+  recraft: _recraftGenerate,
+};
+
+// Generate an AI image. Returns { url } or throws.
+async function generateAIImage(prompt, style = "diagram") {
+  const providerName = process.env.REACT_APP_IMAGE_PROVIDER || "pollinations";
+  const provider = IMAGE_PROVIDERS[providerName] || _pollinationsGenerate;
+  try {
+    const url = await provider(prompt, style);
+    return { url, provider: providerName };
+  } catch (e) {
+    if (providerName !== "pollinations") {
+      // Fall back to the free provider if a configured one fails
+      const url = await _pollinationsGenerate(prompt, style);
+      return { url, provider: "pollinations" };
+    }
+    throw e;
+  }
+}
+
+// Ask the AI what kind of visual (and prompt) would best explain a slide's content
+async function suggestImagePrompt({ topic, slideTitle, slideContent, isEducational = true }) {
+  const raw = await callClaude(
+    `You are a presentation design assistant. Given a slide's content, decide the single best visual to accompany it.
+${isEducational ? "Prioritize diagrams, process visualizations, labeled illustrations, and infographics over generic photos — the image must help explain the concept, not just decorate." : ""}
+Return ONLY valid JSON, no markdown:
+{
+  "prompt": "a clear, specific image generation prompt (1-2 sentences)",
+  "style": "one of: realistic, illustration, diagram, infographic, flat, corporate, modern, startup, academic, futuristic, minimal, creative, render3d"
+}`,
+    `Presentation topic: "${topic}"\nSlide title: "${slideTitle}"\nSlide content: ${slideContent}\n\nSuggest the best image prompt and style for this slide.`,
+    300
+  );
+  const clean = raw.replace(/```json|```/g, "").trim();
+  const parsed = JSON.parse(clean.match(/\{[\s\S]*\}/)[0]);
+  return { prompt: parsed.prompt || slideTitle, style: parsed.style || "diagram" };
+}
+
 async function callClaudeChat(system, messages) {
+
   // Detect language from last user message; respect override
   const lastUser = [...messages].reverse().find(m=>m.role==="user");
   const raw = typeof lastUser?.content==="string" ? lastUser.content : "";
@@ -8423,7 +8516,6 @@ Math: use proper notation — 1 × 10⁻¹⁰ not words, × not "times", m not "
             {notes.trim() ? <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg> Save</> : "Save"}
           </button>
         </div>
-      </div>
 
       {/* ══ TOOLBAR ROW 2: Note Style pills ══════════════════════════════════ */}
       <div style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 12px", background:C.bg, borderBottom:`1px solid ${C.border}`, flexShrink:0, flexWrap:"wrap", overflowX:"auto" }}>
@@ -10783,6 +10875,11 @@ function PresentationTab({ file, onUpdate }) {
   const [editIdx, setEditIdx] = useState(null);
   const [editVal, setEditVal] = useState({});
   const [exporting, setExporting] = useState(false);
+  const [aiImgPrompt, setAiImgPrompt] = useState("");
+  const [aiImgStyle, setAiImgStyle] = useState("diagram");
+  const [aiImgGenerating, setAiImgGenerating] = useState(false);
+  const [aiImgError, setAiImgError] = useState("");
+
 
   const THEMES = [
     { id:"modern", label:"Modern", bg:"#1e1b4b", accent:"#818cf8", text:"#f8fafc", sub:"#c4c4e0", header:"#2d2a6e", card:"rgba(255,255,255,.07)" },
@@ -10796,7 +10893,57 @@ function PresentationTab({ file, onUpdate }) {
     { id:"amber",  label:"Amber",  bg:"#1c0a00", accent:"#f59e0b", text:"#fffbeb", sub:"#fde68a", header:"#451a03", card:"rgba(255,255,255,.07)" },
     { id:"teal",   label:"Teal",   bg:"#022c22", accent:"#2dd4bf", text:"#f0fdfa", sub:"#99f6e4", header:"#064e3b", card:"rgba(255,255,255,.07)" },
   ];
-  const currentTheme = THEMES.find(t => t.id === theme) || THEMES[0];
+  const [customTheme, setCustomTheme] = useState(file.presentationCustomTheme || null);
+  const [themePrompt, setThemePrompt] = useState("");
+  const [themeGenerating, setThemeGenerating] = useState(false);
+  const allThemes = customTheme ? [...THEMES, customTheme] : THEMES;
+  const currentTheme = allThemes.find(t => t.id === theme) || THEMES[0];
+
+  const generateTheme = async () => {
+    if (!themePrompt.trim()) return;
+    setThemeGenerating(true);
+    try {
+      const raw = await callClaude(
+        `You are a UI design assistant that creates color themes for presentation slides.
+Return ONLY valid JSON, no markdown, no explanation, matching EXACTLY this shape:
+{
+  "label": "Short Theme Name (2-3 words)",
+  "bg": "#hexcolor",
+  "accent": "#hexcolor",
+  "text": "#hexcolor",
+  "sub": "#hexcolor",
+  "header": "#hexcolor",
+  "card": "rgba(r,g,b,alpha)"
+}
+Guidelines:
+- bg is the main slide background color.
+- accent is used for highlights, headings, and the bottom accent bar — should contrast well with bg.
+- text is the main heading/body text color — must have strong contrast against bg.
+- sub is secondary/body text color — slightly muted, still readable on bg.
+- header is used for header bars/sections — usually a slightly different shade of bg.
+- card is a semi-transparent overlay color (rgba) for card backgrounds on top of bg.
+Ensure accessible contrast between text/sub and bg.`,
+        `Create a presentation color theme based on this description: "${themePrompt.trim()}"`,
+        500
+      );
+      const clean = raw.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(clean.match(/\{[\s\S]*\}/)[0]);
+      const newTheme = {
+        id: "custom",
+        label: parsed.label || "Custom",
+        bg: parsed.bg || "#1e1b4b",
+        accent: parsed.accent || "#818cf8",
+        text: parsed.text || "#f8fafc",
+        sub: parsed.sub || "#c4c4e0",
+        header: parsed.header || parsed.bg || "#2d2a6e",
+        card: parsed.card || "rgba(255,255,255,.07)",
+      };
+      setCustomTheme(newTheme);
+      setTheme("custom");
+      onUpdate({ ...file, presentationCustomTheme: newTheme });
+    } catch(e) { console.error("Theme gen error:", e); }
+    setThemeGenerating(false);
+  };
 
   const generate = async () => {
     if (!topic.trim() && !file._fileObj && !FILE_STORE.get(file.id)) return;
@@ -11148,8 +11295,36 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
                   {theme===t.id && <div style={{ position:"absolute", inset:-4, borderRadius:"50%", border:"2px solid #7C5CFC66" }}/>}
                 </button>
               ))}
+              {customTheme && (
+                <button key="custom" onClick={()=>setTheme("custom")} title={customTheme.label}
+                  style={{ width:32, height:32, borderRadius:"50%",
+                    background:`linear-gradient(135deg, ${customTheme.bg} 50%, ${customTheme.accent} 50%)`,
+                    border:`3px solid ${theme==="custom"?"#7C5CFC":"transparent"}`,
+                    cursor:"pointer", boxShadow:"0 2px 8px rgba(0,0,0,.25)",
+                    transition:"all .15s", flexShrink:0, position:"relative",
+                    transform:theme==="custom"?"scale(1.15)":"scale(1)" }}>
+                  {theme==="custom" && <div style={{ position:"absolute", inset:-4, borderRadius:"50%", border:"2px solid #7C5CFC66" }}/>}
+                  <span style={{ position:"absolute", bottom:-2, right:-2, width:12, height:12, borderRadius:"50%", background:"#7C5CFC", color:"#fff", fontSize:8, fontWeight:900, display:"flex", alignItems:"center", justifyContent:"center", border:`1.5px solid ${C.surface}` }}>✦</span>
+                </button>
+              )}
+            </div>
+            {/* AI Theme Assistant */}
+            <div style={{ display:"flex", gap:6, marginTop:10, maxWidth:380 }}>
+              <input value={themePrompt} onChange={e=>setThemePrompt(e.target.value)}
+                onKeyDown={e=>{ if(e.key==="Enter") generateTheme(); }}
+                placeholder="Describe a theme… e.g. 'dark cyberpunk' or 'Apple website style'"
+                style={{ flex:1, border:`1.5px solid ${C.border}`, borderRadius:8, padding:"7px 10px", fontSize:12, outline:"none", color:C.text, background:C.bg, fontFamily:"'DM Sans',sans-serif" }}
+                onFocus={e=>e.target.style.borderColor=C.accent}
+                onBlur={e=>e.target.style.borderColor=C.border}/>
+              <button onClick={generateTheme} disabled={themeGenerating || !themePrompt.trim()}
+                style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 12px", borderRadius:8, border:"none",
+                  background:themeGenerating||!themePrompt.trim()?"#ccc":"linear-gradient(135deg,#7C5CFC,#3D8EF8)",
+                  color:"#fff", fontSize:12, fontWeight:700, cursor:themeGenerating||!themePrompt.trim()?"not-allowed":"pointer", whiteSpace:"nowrap" }}>
+                {themeGenerating ? <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Generating…</> : <><Icon d={I.sparkle} size={11} color="#fff" sw={2}/> Generate Theme</>}
+              </button>
             </div>
           </div>
+
           {slides.length>0 && (
             <div>
               <p style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:.8, textTransform:"uppercase", margin:"0 0 6px" }}>Add Slide Type</p>
@@ -11288,6 +11463,51 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
                                   style={{ marginTop:4, fontSize:10, color:C.muted, background:"none", border:"none", cursor:"pointer", padding:0 }}>✕ Remove image</button>
                               )}
                             </div>
+                          </div>
+                        </div>
+
+                        {/* AI Image Generation */}
+                        <div style={{ marginTop:10, borderTop:`1px solid ${C.border}`, paddingTop:10 }}>
+                          <p style={{ fontSize:10, fontWeight:700, color:C.muted, margin:"0 0 6px", textTransform:"uppercase", letterSpacing:.5 }}>AI Generate Image</p>
+                          <div style={{ display:"flex", gap:6, marginBottom:6, flexWrap:"wrap" }}>
+                            <input value={aiImgPrompt} onChange={e=>setAiImgPrompt(e.target.value)}
+                              placeholder="Describe the image… or leave blank to auto-suggest from slide content"
+                              style={{ flex:1, minWidth:160, border:`1px solid ${C.border}`, borderRadius:8, padding:"6px 10px", fontSize:12, outline:"none", color:C.text, background:C.surface }}/>
+                            <select value={aiImgStyle} onChange={e=>setAiImgStyle(e.target.value)}
+                              style={{ border:`1px solid ${C.border}`, borderRadius:8, padding:"6px 8px", fontSize:12, color:C.text, background:C.surface, cursor:"pointer", outline:"none" }}>
+                              {[["realistic","Realistic"],["illustration","Illustration"],["diagram","Educational Diagram"],["infographic","Infographic"],["flat","Flat Design"],["corporate","Corporate"],["modern","Modern"],["startup","Startup"],["academic","Academic"],["futuristic","Futuristic"],["minimal","Minimal"],["creative","Creative"],["render3d","3D Render"]].map(([v,l])=>(
+                                <option key={v} value={v}>{l}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+                            <button onClick={async()=>{
+                                setAiImgGenerating(true); setAiImgError("");
+                                try {
+                                  let prompt = aiImgPrompt.trim();
+                                  let style = aiImgStyle;
+                                  if (!prompt) {
+                                    const suggestion = await suggestImagePrompt({
+                                      topic: topic || file.name,
+                                      slideTitle: editVal.title || "",
+                                      slideContent: (editVal.bullets||[]).join(", "),
+                                    });
+                                    prompt = suggestion.prompt;
+                                    style = suggestion.style;
+                                    setAiImgStyle(style);
+                                  }
+                                  const { url } = await generateAIImage(prompt, style);
+                                  setEditVal(v=>({...v, image:url, imageSearch:""}));
+                                } catch(e) { setAiImgError(e.message || "Image generation failed"); }
+                                setAiImgGenerating(false);
+                              }}
+                              disabled={aiImgGenerating}
+                              style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", borderRadius:8, border:"none",
+                                background:aiImgGenerating?"#ccc":"linear-gradient(135deg,#7C5CFC,#3D8EF8)",
+                                color:"#fff", fontSize:12, fontWeight:700, cursor:aiImgGenerating?"not-allowed":"pointer", whiteSpace:"nowrap" }}>
+                              {aiImgGenerating ? <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Generating…</> : <><Icon d={I.sparkle} size={11} color="#fff" sw={2}/> {editVal.image && editVal.image.includes("pollinations") ? "Regenerate" : "Generate Image"}</>}
+                            </button>
+                            {aiImgError && <span style={{ fontSize:11, color:C.red }}>{aiImgError}</span>}
                           </div>
                         </div>
                       </div>
