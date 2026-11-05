@@ -1,0 +1,13 @@
+.study-tool { margin: 0 auto; max-width: 52rem; color: inherit; }
+.study-tool h2 { font-family: "Fraunces Variable", Georgia, serif; font-size: 1.65rem; }
+.study-tool p { line-height: 1.55; margin: .65rem 0; }
+.study-tool-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .6rem; margin: .9rem 0; }
+.study-tool-actions input { flex: 1 1 15rem; min-width: 0; padding: .55rem; border: 1px solid #82948d; border-radius: 6px; background: transparent; color: inherit; }
+.study-tool button, .study-tool-actions button, .study-tool-actions a { min-height: 36px; padding: .4rem .7rem; border: 1px solid #16564c; border-radius: 6px; background: #16564c; color: #fff; font: inherit; cursor: pointer; }
+.study-tool button:disabled, .study-tool-actions button:disabled { opacity: .7; cursor: wait; }
+.study-tool button[aria-current], .study-tool button[aria-pressed="true"] { outline: 2px solid #438975; outline-offset: 2px; }
+.study-lesson { border: 1px solid #82948d; border-radius: 8px; padding: 1rem; }
+.study-lesson-text { white-space: pre-wrap; }
+.guest-save-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .7rem; margin-bottom: 1rem; padding: .8rem; border: 1px solid #82948d; border-radius: 8px; }
+.guest-save-banner p { margin: .2rem 0; font-size: .9rem; line-height: 1.4; }
+.guest-save-banner .workspace-action { margin: 0; }

@@ -1,0 +1,16 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function ownsWorkspace(userId) {
+      return request.auth != null && request.auth.uid == userId &&
+        request.auth.token.firebase.sign_in_provider == "google.com";
+    }
+
+    match /users/{userId} {
+      allow get, create, update, delete: if ownsWorkspace(userId);
+      match /savedNotes/{fileId} {
+        allow get, create, update, delete: if ownsWorkspace(userId);
+      }
+    }
+  }
+}
