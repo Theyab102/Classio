@@ -1,14 +1,16 @@
+import { requestJson } from './apiClient';
+
 export async function sendStudyRequest(payload, signal) {
-  const response = await fetch("/api/study", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+  const { accountHeaders } = await import('./firebase');
+  let preferences = {};
+  try { preferences = JSON.parse(localStorage.getItem('classio_ai_preferences') || '{}'); } catch {}
+  const data = await requestJson('/api/study', {
+    headers: await accountHeaders(),
+    body: { provider: preferences.provider || 'auto', allowFallback: preferences.allowFallback === true, ...payload },
     signal,
   });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || typeof data.text !== "string") {
-    throw new Error(data.error || "AI study tools are unavailable.");
-  }
+  if (typeof data.text !== 'string') throw new Error('The AI returned no usable text. Please retry.');
+  window.dispatchEvent(new CustomEvent('classio-ai-result', { detail: { provider: data.provider, fallback: data.fallback } }));
   return data.text;
 }
 

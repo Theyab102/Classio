@@ -24,3 +24,10 @@ yarn-error.log*
 
 .env
 node_modules/
+.env.*
+!.env.example
+.vercel/
+.firebase/
+*-debug.log
+
+test-results/

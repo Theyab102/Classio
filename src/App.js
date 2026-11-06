@@ -5,6 +5,13 @@ import katex from "katex";
 import "katex/dist/katex.min.css";
 import { LegalLinks } from "./Legal";
 import LearnMode from "./LearnMode";
+import ChatAssistant from "./ChatAssistant";
+import Dialog from "./Dialog";
+import AISettings from "./AISettings";
+import MobileNavigation from "./MobileNavigation";
+import { normalizeStudyLink, youtubeVideo } from "./youtube";
+import YouTubePreview from "./YouTubePreview";
+import { getTheme as _getTheme, toggleTheme as _toggleTheme, setTheme, useTheme } from "./theme";
 import PodcastDownload from "./PodcastDownload";
 import { downloadStudyFile, makeStudyId, MAX_AUDIO_BYTES, mergeSessionFolders, scheduleCardReview, sendStudyRequest, TTS_SPACE_URL } from "./studyTools";
 import { openPdf } from "./pdf";
@@ -17,23 +24,12 @@ import { renderInkImage } from "./DocumentInk";
 import { AnnotatedDeckSlide, DeckDesignPicker, DeckSlide, deckDesigns, normalizeSlideTable, parseDeckResponse } from "./DeckDesign";
 import { getPdfFigures, isPdfFile, likelyStudyImage, prepareNoteImage, safeImageSource, searchStudyImages } from "./documentMedia";
 import { escapeHtml, sanitizeDocumentHtml } from "./safeContent";
-import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
+import { signOut, onAuthStateChanged } from "firebase/auth";
+import { auth, db, authReady, authError, signInGoogle, linkVerification } from "./firebase";
+import { migrateWorkspace, loadWorkspace, watchWorkspace, saveWorkspace, recallOriginal } from "./cloudWorkspace";
 import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot, updateDoc, deleteDoc, serverTimestamp, query, orderBy, limit, getDocs, arrayUnion } from "firebase/firestore";
 
 // ─── FIREBASE ─────────────────────────────────────────────────────────────────
-const firebaseConfig = {
-  apiKey: "AIzaSyCDDXRAxLwNmzSYxs0HnnjV2TfhbqSdiag",
-  authDomain: "classio-4378f.firebaseapp.com",
-  projectId: "classio-4378f",
-  messagingSenderId: "595968221954",
-  appId: "1:595968221954:web:cdefee80f05999f8bf181b",
-};
-const firebaseApp = initializeApp(firebaseConfig);
-const auth = getAuth(firebaseApp);
-const db = getFirestore(firebaseApp);
-const googleProvider = new GoogleAuthProvider();
-
 // Language session — persists across tabs
 let _sessionLang = null;
 try { const s = localStorage.getItem("classio_lang"); _sessionLang = (s && s !== "auto") ? s : null; } catch {}
@@ -741,51 +737,8 @@ function useResponsive() {
 // ─── COLORS ───────────────────────────────────────────────────────────────────
 // ─── THEME SYSTEM ─────────────────────────────────────────────────────────────
 // ── Gradient helper used on buttons/bars ─────────────────────────────────────
-const PRIMARY = "#16564c";
+const PRIMARY = "#1d4ed8";
 
-const THEMES = {
-  light: {
-    bg:"#F8F7F4", surface:"#FFFFFF", border:"#EAE6E1", text:"#1A1714",
-    muted:"#625d57", accent:"#16564c", accentL:"#eaf3ef", accentS:"#b8d2c9",
-    warm:"#C17F5A", warmL:"#F5EDE5", green:"#4A7C59", greenL:"#E5F0E8",
-    purple:"#16564c", purpleL:"#EDE5F5", red:"#C45C5C", redL:"#F5E5E5",
-    sidebar:"#FFFFFF", sidebarActive:"#eaf3ef", navText:"#1A1714",
-    shadow:"0 2px 16px rgba(22,86,76,.07)", cardShadow:"0 4px 24px rgba(22,86,76,.10)",
-    grad: PRIMARY,
-    isDark:false,
-  },
-  dark: {
-    bg:"#1A1A15", surface:"#252520", border:"#2E2E28", text:"#EEECEA",
-    muted:"#b9b8ac", accent:"#86bba8", accentL:"#18362e", accentS:"#30584c",
-    warm:"#C17F5A", warmL:"#2A1F16", green:"#5A9C69", greenL:"#162218",
-    purple:"#9B7ECA", purpleL:"#261A35", red:"#D47070", redL:"#2A1616",
-    sidebar:"#131310", sidebarActive:"#252520", navText:"#EEECEA",
-    shadow:"0 2px 12px rgba(0,0,0,.6)", cardShadow:"0 4px 20px rgba(0,0,0,.55)",
-    grad: PRIMARY,
-    isDark:true,
-  },
-};
-let _isDark = false;
-try { _isDark = localStorage.getItem("classio_dark")==="true"; } catch {}
-if (_isDark && typeof document !== "undefined") { document.body.classList.add("classio-dark"); }
-let _themeCallbacks = [];
-function _getTheme() { return _isDark ? THEMES.dark : THEMES.light; }
-function _toggleTheme() {
-  _isDark = !_isDark;
-  try { localStorage.setItem("classio_dark", String(_isDark)); } catch {}
-  document.body.style.background = _getTheme().bg;
-  if (_isDark) document.body.classList.add("classio-dark"); else document.body.classList.remove("classio-dark");
-  _themeCallbacks.forEach(fn => fn());
-}
-function useTheme() {
-  const [t, setT] = useState(() => _getTheme());
-  useEffect(() => {
-    const fn = () => setT(_getTheme());
-    _themeCallbacks.push(fn);
-    return () => { _themeCallbacks = _themeCallbacks.filter(f=>f!==fn); };
-  }, []);
-  return t;
-}
 // C = current theme (updated by re-renders via useTheme)
 let C = _getTheme();
 
@@ -1043,9 +996,9 @@ const Fmt = ({ text }) => {
     const clean = line.replace(/^#+\s*/, "").replace(/\*\*/g, "").replace(/\*/g, "").trim();
     if (!line.trim()) { elements.push(<br key={i} />); i++; continue; }
     if (/^[A-Z][A-Z\s]{3,}$/.test(clean) || line.startsWith('# ') || line.startsWith('## '))
-      { elements.push(<p key={i} style={{ fontWeight:700, fontSize:14, marginBottom:4, marginTop:12, color:"#1a202c", letterSpacing:.3 }}><MathText text={clean} /></p>); i++; continue; }
+      { elements.push(<p key={i} style={{ fontWeight:700, fontSize:14, marginBottom:4, marginTop:12, color:C.text, letterSpacing:.3 }}><MathText text={clean} /></p>); i++; continue; }
     if (/^\*\*[^*]+\*\*$/.test(line.trim()))
-      { elements.push(<p key={i} style={{ fontWeight:700, fontSize:14, marginBottom:4, marginTop:10, color:"#2d3748" }}><MathText text={clean} /></p>); i++; continue; }
+      { elements.push(<p key={i} style={{ fontWeight:700, fontSize:14, marginBottom:4, marginTop:10, color:C.text }}><MathText text={clean} /></p>); i++; continue; }
     if (line.startsWith('• ') || line.startsWith('- ') || line.startsWith('* ') || line.startsWith('· '))
       { elements.push(<p key={i} style={{ paddingLeft:14, marginBottom:3, display:"flex", gap:6, lineHeight:1.6 }}><span style={{flexShrink:0, color:"#666"}}>•</span><span><MathText text={clean.replace(/^[•\-\*·]\s*/,"")} /></span></p>); i++; continue; }
     if (/^\d+\.\s/.test(line))
@@ -1237,30 +1190,59 @@ function openIDB() {
 
 async function idbSave(id, file) {
   if (!auth.currentUser) return;
+  const uid = auth.currentUser.uid;
   try {
     const db = await openIDB();
+    if (auth.currentUser?.uid !== uid) return;
     const tx = db.transaction(IDB_STORE, "readwrite");
-    tx.objectStore(IDB_STORE).put(file, id);
+    tx.objectStore(IDB_STORE).put(file, uid + ":" + id);
     await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
-  } catch(e) { console.warn("IDB save failed", e); }
+    return true;
+  } catch(e) { return false; }
 }
 
 async function idbGet(id) {
   try {
     const db = await openIDB();
     return new Promise((res, rej) => {
-      const req = db.transaction(IDB_STORE, "readonly").objectStore(IDB_STORE).get(id);
+      const req = db.transaction(IDB_STORE, "readonly").objectStore(IDB_STORE).get(auth.currentUser?.uid + ":" + id);
       req.onsuccess = () => res(req.result || null);
       req.onerror = () => res(null);
     });
   } catch(e) { return null; }
 }
 
+async function savePendingOriginal(nonce, id, file) {
+  const database = await openIDB();
+  const transaction = database.transaction(IDB_STORE, 'readwrite');
+  transaction.objectStore(IDB_STORE).put(file, 'google-import:' + nonce + ':' + id);
+  await new Promise((resolve, reject) => { transaction.oncomplete = resolve; transaction.onerror = reject; });
+}
+async function readPendingOriginal(nonce, id) {
+  const database = await openIDB();
+  return new Promise(resolve => {
+    const request = database.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).get('google-import:' + nonce + ':' + id);
+    request.onsuccess = () => resolve(request.result || null); request.onerror = () => resolve(null);
+  });
+}
+
+async function recoverLegacyOriginal(file) {
+  const db = await openIDB();
+  return new Promise((resolve, reject) => {
+    const request = db.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).get(file.id);
+    request.onsuccess = () => {
+      const original = request.result;
+      resolve(original && original.name === file.name && (file.size == null || original.size === file.size) ? original : null);
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
 async function idbDelete(id) {
   try {
     const db = await openIDB();
     const tx = db.transaction(IDB_STORE, "readwrite");
-    tx.objectStore(IDB_STORE).delete(id);
+    tx.objectStore(IDB_STORE).delete(auth.currentUser?.uid + ":" + id);
   } catch(e) {}
 }
 
@@ -1288,173 +1270,12 @@ async function attachBlobs(raw) {
 }
 
 // ─── STANDALONE AI ASSISTANT ─────────────────────────────────────────────────
-function StandaloneAI({ onClose }) {
-  const [msgs, setMsgs] = useState([]);
-  const [inp, setInp] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [attachedImage, setAttachedImage] = useState(null);
-  const imgInputRef = useRef(null);
-  const bottomRef = useRef(null);
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:"smooth" }); }, [msgs]);
-  const attachImage = (f) => {
-    if (!f) return;
-    const r = new FileReader();
-    r.onload = e => setAttachedImage({ base64: e.target.result, name: f.name });
-    r.readAsDataURL(f);
-  };
-  const send = async () => {
-    const text = inp.trim();
-    if ((!text && !attachedImage) || loading) return;
-    const content = text || "Analyze this image and explain or solve it.";
-    const userMsg = { role:"user", content, image: attachedImage?.base64 };
-    const newMsgs = [...msgs, userMsg];
-    setMsgs(newMsgs); setInp(""); setLoading(true);
-    const imgToSend = attachedImage?.base64 || null;
-    setAttachedImage(null);
-    try {
-      const sys = "You are Classio AI, a smart study assistant. Help students with any question — solve problems, explain concepts, analyze images of questions or diagrams. Be clear and concise. No asterisks, no markdown.";
-      const apiMsgs = newMsgs.map(m => ({ role:m.role, content:m.content }));
-      const reply = imgToSend
-        ? await callClaudeVision(sys, apiMsgs, imgToSend)
-        : await callClaudeChat(sys, apiMsgs);
-      setMsgs([...newMsgs, { role:"assistant", content: reply }]);
-    } catch(e) { setMsgs([...newMsgs, { role:"assistant", content:"Error: " + e.message }]); }
-    setLoading(false);
-  };
-  return (
-    <div style={{ position:"fixed", inset:0, zIndex:3000, background:"rgba(26,23,20,.55)",
-      backdropFilter:"blur(4px)", display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <div style={{ background:C.bg, borderRadius:22, width:"100%", maxWidth:680,
-        height:"85vh", display:"flex", flexDirection:"column",
-        boxShadow:"0 24px 80px rgba(0,0,0,.2)", border:`1px solid ${C.border}` }}>
-        {/* Header */}
-        <div style={{ display:"flex", alignItems:"center", gap:12, padding:"16px 20px",
-          borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
-          <div style={{ width:40, height:40, borderRadius:12,
-            background:"#16564c",
-            display:"flex", alignItems:"center", justifyContent:"center" }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8M12 5V3"/><circle cx="12" cy="3" r="1"/></svg>
-          </div>
-          <div style={{ flex:1 }}>
-            <p style={{ margin:0, fontSize:16, fontWeight:700, color:C.text }}>AI Assistant</p>
-            <p style={{ margin:0, fontSize:12, color:C.muted }}>Ask anything · Attach images · Replies in your language</p>
-          </div>
-          <button onClick={onClose} style={{ background:C.surface, border:`1px solid ${C.border}`,
-            borderRadius:"50%", width:32, height:32, cursor:"pointer", fontSize:18,
-            color:C.muted, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
-        </div>
-        {/* Messages */}
-        <div style={{ flex:1, overflowY:"auto", padding:"16px 20px",
-          display:"flex", flexDirection:"column", gap:12 }}>
-          {msgs.length === 0 && (
-            <div style={{ textAlign:"center", padding:"32px 16px" }}>
-              <div style={{ width:64, height:64, borderRadius:20, background:"#16564c", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 14px" }}>
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8M12 5V3"/><circle cx="12" cy="3" r="1"/></svg>
-              </div>
-              <p style={{ fontSize:17, fontWeight:700, color:C.text, marginBottom:8 }}>Classio AI</p>
-              <p style={{ fontSize:13, color:C.muted, lineHeight:1.7, maxWidth:320, margin:"0 auto 24px" }}>
-                Ask me anything! Solve problems, explain concepts, or send a photo of a question.
-              </p>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, maxWidth:360, margin:"0 auto", textAlign:"left" }}>
-                {[["⬡","Photo of a question","Take a photo — I'll solve it"],
-                  ["∑","Math & Science","Step-by-step solutions"],
-                  ["✎","Explain concepts","Clear simple explanations"],
-                  ["◎","Any language","Reply in your language"]].map(([ic,ti,de])=>(
-                  <div key={ti} style={{ background:C.surface, border:`1px solid ${C.border}`,
-                    borderRadius:12, padding:"12px 14px" }}>
-                    <div style={{ marginBottom:6 }}>{ic}</div>
-                    <p style={{ margin:"0 0 2px", fontSize:12, fontWeight:700, color:C.text }}>{ti}</p>
-                    <p style={{ margin:0, fontSize:11, color:C.muted, lineHeight:1.4 }}>{de}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {msgs.map((m,i)=>(
-            <div key={i} style={{ display:"flex", justifyContent:m.role==="user"?"flex-end":"flex-start",
-              alignItems:"flex-end", gap:8 }}>
-              {m.role==="assistant" && (
-                <div style={{ width:28,height:28,borderRadius:8,
-                  background:"#16564c",
-                  display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8"/></svg>
-                </div>
-              )}
-              <div style={{ maxWidth:"75%", borderRadius:16, overflow:"hidden",
-                background:m.role==="user"?C.accent:C.surface,
-                border:m.role==="user"?"none":`1px solid ${C.border}` }}>
-                {m.image && <img src={m.image} alt="attached"
-                  style={{ display:"block", width:"100%", maxWidth:320, maxHeight:200,
-                    objectFit:"contain", background:"#111" }} />}
-                <div style={{ padding:"10px 14px", color:m.role==="user"?"#fff":C.text,
-                  fontSize:14, lineHeight:1.7 }}><Fmt text={m.content} /></div>
-              </div>
-            </div>
-          ))}
-          {loading && (
-            <div style={{ display:"flex", alignItems:"flex-end", gap:8 }}>
-              <div style={{ width:28,height:28,borderRadius:8,
-                background:"#16564c",
-                display:"flex",alignItems:"center",justifyContent:"center" }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8"/></svg>
-              </div>
-              <div style={{ display:"flex", gap:5, padding:"12px 14px", background:C.surface,
-                borderRadius:16, border:`1px solid ${C.border}` }}>
-                {[0,1,2].map(j=><div key={j} style={{ width:7,height:7,borderRadius:"50%",
-                  background:C.accent,animation:"bounce 1.2s infinite",animationDelay:`${j*.2}s` }}/>)}
-              </div>
-            </div>
-          )}
-          <div ref={bottomRef}/>
-        </div>
-        {/* Image preview */}
-        {attachedImage && (
-          <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 20px",
-            background:C.accentL, borderTop:`1px solid ${C.accentS}`, flexShrink:0 }}>
-            <img src={attachedImage.base64} alt="preview"
-              style={{ width:44,height:44,objectFit:"cover",borderRadius:8,flexShrink:0 }}/>
-            <div style={{ flex:1, minWidth:0 }}>
-              <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.accent }}>Image attached</p>
-              <p style={{ margin:0, fontSize:11, color:C.muted, overflow:"hidden",
-                textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{attachedImage.name}</p>
-            </div>
-            <button onClick={()=>setAttachedImage(null)}
-              style={{ background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:20 }}>×</button>
-          </div>
-        )}
-        {/* Input */}
-        <div style={{ display:"flex", gap:8, padding:"14px 20px",
-          borderTop:`1px solid ${C.border}`, flexShrink:0 }}>
-          <button onClick={()=>imgInputRef.current?.click()} title="Attach image"
-            style={{ flexShrink:0, width:44, height:44, borderRadius:8,
-              border:`1.5px solid ${attachedImage?C.accent:C.border}`,
-              background:attachedImage?C.accentL:C.bg, cursor:"pointer",
-              display:"flex", alignItems:"center", justifyContent:"center", color:attachedImage?C.accent:C.muted }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-          </button>
-          <input ref={imgInputRef} type="file" accept="image/*" style={{ display:"none" }}
-            onChange={e=>{ attachImage(e.target.files?.[0]); e.target.value=""; }}/>
-          <input value={inp} onChange={e=>setInp(e.target.value)}
-            onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); }}}
-            placeholder={attachedImage?"Ask about the image… (or just press Send)":"Ask anything…"}
-            style={{ flex:1, border:`1.5px solid ${C.border}`, borderRadius:12,
-              padding:"11px 16px", fontSize:14, outline:"none", background:C.bg, color:C.text }}/>
-          <button onClick={send} disabled={(!inp.trim()&&!attachedImage)||loading}
-            style={{ flexShrink:0,
-              background:(inp.trim()||attachedImage)&&!loading?C.accent:"#ccc",
-              color:"#fff", border:"none", borderRadius:8, padding:"11px 22px",
-              fontSize:14, fontWeight:700,
-              cursor:(inp.trim()||attachedImage)&&!loading?"pointer":"not-allowed" }}>
-            Send
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+function StandaloneAI({ onClose, onCreateCourse }) {
+  return <ChatAssistant onClose={onClose} onCreateCourse={onCreateCourse} renderMessage={text => <Fmt text={text} />} />;
 }
 
 // ─── SETTINGS TAB ─────────────────────────────────────────────────────────────
-function SettingsTab({ onToggleTheme, onClearCache, files, streak }) {
+function SettingsTab({ onToggleTheme, onClearCache, files, streak, onImportLegacyAvatar }) {
   const T = useTheme();
   C = T;
   const [lang, setLang] = useState(() => { try { return localStorage.getItem("classio_lang") || "auto"; } catch { return "auto"; } });
@@ -1490,6 +1311,8 @@ function SettingsTab({ onToggleTheme, onClearCache, files, streak }) {
         <p style={{ fontSize:14, color:T.muted, margin:0 }}>Manage your Classio preferences</p>
       </div>
 
+      <Section title="AI provider & privacy"><AISettings /></Section>
+      {onImportLegacyAvatar && <Section title="Previous avatar"><p style={{ color:T.muted, lineHeight:1.5 }}>An avatar saved before account syncing can be imported from this browser. Only import it if it belongs to you.</p><button type="button" onClick={onImportLegacyAvatar}>Import previous avatar</button></Section>}
       {/* Appearance */}
       <Section title="Appearance">
         <Row label={T.isDark ? "Dark Mode" : "Light Mode"} sub={`Currently using ${T.isDark?"dark":"light"} theme`}>
@@ -1524,7 +1347,7 @@ function SettingsTab({ onToggleTheme, onClearCache, files, streak }) {
                 background: lang===o.v ? PRIMARY : "transparent",
                 color: lang===o.v ? "#fff" : T.muted,
                 border: `1.5px solid ${lang===o.v ? "transparent" : T.border}`,
-                boxShadow: lang===o.v ? "0 3px 10px rgba(22,86,76,.3)" : "none" }}>
+                boxShadow: lang===o.v ? "0 3px 10px rgba(29,78,216,.3)" : "none" }}>
               {o.label}
             </button>
           ))}
@@ -1624,7 +1447,7 @@ function AboutTab() {
       <div style={{ textAlign:"center", padding:"36px 20px 28px",
         background:C.accentL,
         borderRadius:20, marginBottom:28, border:`1px solid ${C.accentS}` }}>
-        <div style={{ width:72,height:72,borderRadius:22,background:"#16564c",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",boxShadow:"0 8px 24px rgba(99,102,241,.3)" }}>
+        <div style={{ width:72,height:72,borderRadius:22,background:"#1d4ed8",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",boxShadow:"0 8px 24px rgba(99,102,241,.3)" }}>
           <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
             <path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 0 3-3h7z"/>
@@ -1643,7 +1466,7 @@ function AboutTab() {
             background:C.surface, border:`1px solid ${C.border}`, borderRadius:14, padding:"14px 16px" }}>
             <div style={{ width:32,height:32,borderRadius:10,background:PRIMARY,
               display:"flex",alignItems:"center",justifyContent:"center",
-              fontSize:14,fontWeight:800,color:"#fff",flexShrink:0,boxShadow:"0 3px 10px rgba(22,86,76,.3)" }}>{s.n}</div>
+              fontSize:14,fontWeight:800,color:"#fff",flexShrink:0,boxShadow:"0 3px 10px rgba(29,78,216,.3)" }}>{s.n}</div>
             <div>
               <p style={{ margin:"0 0 3px", fontSize:14, fontWeight:700, color:C.text }}>{s.title}</p>
               <p style={{ margin:0, fontSize:13, color:C.muted, lineHeight:1.5 }}>{s.desc}</p>
@@ -1702,7 +1525,8 @@ function OnboardingTutorial({ onDone }) {
 
   const finish = () => {
     setLeaving(true);
-    setTimeout(() => { try { localStorage.setItem("classio_onboarded","1"); } catch {} onDone(); }, 320);
+    try { localStorage.setItem("classio_onboarded","1"); } catch {}
+    setTimeout(onDone, 320);
   };
   const next = () => isLast ? finish() : setStep(n => n + 1);
   const prev = () => setStep(n => Math.max(0, n - 1));
@@ -1754,7 +1578,7 @@ function OnboardingTutorial({ onDone }) {
             fontSize:13, fontWeight:600, color:C.muted }}>Skip</button>
           <button onClick={next} style={{ flex:1, padding:"11px", borderRadius:10,
             border:"none", background:PRIMARY, color:"#fff", cursor:"pointer",
-            fontSize:14, fontWeight:700, boxShadow:"0 4px 14px rgba(22,86,76,.3)" }}>
+            fontSize:14, fontWeight:700, boxShadow:"0 4px 14px rgba(29,78,216,.3)" }}>
             {isLast ? "Get Started" : "Next"}
           </button>
         </div>
@@ -1768,17 +1592,17 @@ function OnboardingTutorial({ onDone }) {
 
 // ─── EXTRA GLOBAL CSS ─────────────────────────────────────────────────────────
 const DARK_CSS = `
-  body.classio-dark { background: #1A1A15 !important; color: #EEECEA !important; }
-  body.classio-dark ::-webkit-scrollbar-thumb { background: #2E2E28; }
+  body.classio-dark { background: #0f172a !important; color: #f1f5f9 !important; }
+  body.classio-dark ::-webkit-scrollbar-thumb { background: #3b4a63; }
   body.classio-dark button { color: inherit; }
-  body.classio-dark select { color: #EEECEA; background: #252520; }
-  body.classio-dark input { color: #EEECEA; }
+  body.classio-dark select { color: #f1f5f9; background: #1e293b; }
+  body.classio-dark input { color: #f1f5f9; }
 
   /* ── Gradient primary button ── */
   .btn-primary {
-    background: #16564c !important;
+    background: #1d4ed8 !important;
     color:#fff !important; border:none !important;
-    box-shadow: 0 4px 14px rgba(22,86,76,.35) !important;
+    box-shadow: 0 4px 14px rgba(29,78,216,.35) !important;
     transition: opacity .15s, transform .15s !important;
   }
   .btn-primary:hover:not(:disabled) { opacity:.92; transform:translateY(-1px) scale(1.01); }
@@ -1787,12 +1611,12 @@ const DARK_CSS = `
   /* ── Squircle card ── */
   .sq-card {
     background:#fff; border-radius:20px;
-    box-shadow:0 4px 24px rgba(22,86,76,.10);
+    box-shadow:0 4px 24px rgba(29,78,216,.10);
     border:1px solid #EAE6E1;
     transition:box-shadow .15s;
   }
-  .sq-card:hover { box-shadow:0 8px 32px rgba(22,86,76,.16); }
-  body.classio-dark .sq-card { background:#252520; border-color:#2E2E28; box-shadow:0 4px 20px rgba(0,0,0,.5); }
+  .sq-card:hover { box-shadow:0 8px 32px rgba(29,78,216,.16); }
+  body.classio-dark .sq-card { background:#1e293b; border-color:#3b4a63; box-shadow:0 4px 20px rgba(0,0,0,.5); }
 
   /* ── Animations ── */
   @keyframes cmdIn { from { opacity:0; transform:translateY(-14px) scale(.97); } to { opacity:1; transform:translateY(0) scale(1); } }
@@ -1815,7 +1639,7 @@ const DARK_CSS = `
   .fade-enter { animation: fadeIn .18s ease both; }
 
   /* ── Mastery pill badges ── */
-  .pill-new     { background:#EEF0FF; color:#16564c; border:1.5px solid #b8d2c9; border-radius:20px; padding:5px 14px; font-size:12px; font-weight:700; }
+  .pill-new     { background:#EEF0FF; color:#1d4ed8; border:1.5px solid #b8d2c9; border-radius:20px; padding:5px 14px; font-size:12px; font-weight:700; }
   .pill-learning{ background:#FFF8E6; color:#B45309; border:1.5px solid #FDE68A; border-radius:20px; padding:5px 14px; font-size:12px; font-weight:700; }
   .pill-mastered{ background:#E6F4EA; color:#2E7D32; border:1.5px solid #A8D5B0; border-radius:20px; padding:5px 14px; font-size:12px; font-weight:700; }
 
@@ -1878,7 +1702,7 @@ body { max-width:100vw; overflow-x:hidden; box-sizing:border-box; }
   }
 }
 /* ── sq-card: remove transform hover (creates stacking context) ─── */
-.sq-card:hover { box-shadow:0 8px 32px rgba(22,86,76,.16) !important; transform:none !important; }
+.sq-card:hover { box-shadow:0 8px 32px rgba(29,78,216,.16) !important; transform:none !important; }
 
 /* ── Phone portrait ── */
 @media(max-width:480px) and (orientation:portrait){
@@ -1937,19 +1761,20 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
 
   const NAV = [
     { id:"home",     label:"Dashboard",   icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> },
+    { id:"assistant", label:"AI Assistant", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16v12H9l-5 4V4Z"/><path d="M8 8h8M8 12h5"/></svg> },
     { id:"guides",   label:"Study Guides",icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 0 3-3h7z"/></svg> },
     { id:"settings", label:"Settings",    icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> },
   ];
 
   // ── Context tabs defined early — used by both mobile and desktop ─────────
-  const isBlankDoc = file?._isBlank || file?.isBlankDoc || (!file?._fileObj && !FILE_STORE?.get?.(file?.id));
+  const isBlankDoc = file?._isBlank || file?.isBlankDoc || (!file?.cloudFile && !file?._fileObj && !FILE_STORE?.get?.(file?.id));
   const FILE_TABS = [
     { id:"learn", label:"Learn Mode", icon:<Icon d={I.notes} size={18} /> },
     ...(!isBlankDoc ? [{ id:"view", label:"View File", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> }] : []),
     { id:"notes",   label:"Notes",           icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> },
     { id:"voice",   label:"Voice & Podcast", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg> },
     { id:"cards",   label:"Study Cards",     icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/></svg> },
-    { id:"ai",      label:"AI Assistant",    icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8"/></svg> },
+    { id:"ai",      label:"Ask this file",    icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8"/></svg> },
     { id:"game",    label:"Game Mode",       icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4M8 10v4M15 12h.01M18 12h.01"/></svg> },
     { id:"present", label:"AI Presentation",  icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg> },
     { id:"youtube", label:"YouTube",         icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.54C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg> },
@@ -1961,87 +1786,10 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
     { id:"ai",      label:"AI Assistant",   icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8"/></svg> },
   ];
 
-  if (isMobile) {
-    // Mobile: bottom bar — shows context tabs when inside file/folder
-    if (context === "document") {
-      const mobileTabs = FILE_TABS.slice(0, 5); // View, Notes, Voice, Cards, AI
-      return (
-        <div className="bottom-nav" style={{ position:"fixed", bottom:0, left:0, right:0, height:56, background:T.sidebar, borderTop:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"space-around", zIndex:250, overflowX:"auto" }}>
-          <button onClick={() => onNavigate("home")} style={{ background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:T.muted, padding:"4px 6px", flexShrink:0 }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-            <span style={{ fontSize:8, fontWeight:600 }}>Back</span>
-          </button>
-          {mobileTabs.map(t => {
-            const isActive = fileTab === t.id;
-            return (
-              <button key={t.id} onClick={() => onFileTab && onFileTab(t.id)}
-                style={{ background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:isActive?T.accent:T.muted, padding:"4px 6px", flexShrink:0, position:"relative" }}>
-                {isActive && <div style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)", width:24, height:2.5, borderRadius:2, background:PRIMARY }}/>}
-                {t.icon}
-                <span style={{ fontSize:8, fontWeight:isActive?700:600 }}>{t.label.split(" ")[0]}</span>
-              </button>
-            );
-          })}
-          <button onClick={() => onFileTab && onFileTab("game")} style={{ background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:fileTab==="game"?T.accent:T.muted, padding:"4px 6px", flexShrink:0 }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4M8 10v4M15 12h.01M18 12h.01"/></svg>
-            <span style={{ fontSize:8, fontWeight:600 }}>Games</span>
-          </button>
-        </div>
-      );
-    }
-
-    if (context === "folder") {
-      return (
-        <div className="bottom-nav" style={{ position:"fixed", bottom:0, left:0, right:0, height:56, background:T.sidebar, borderTop:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"space-around", zIndex:250 }}>
-          <button onClick={() => onNavigate("home")} style={{ background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:T.muted, padding:"4px 8px" }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-            <span style={{ fontSize:8, fontWeight:600 }}>Back</span>
-          </button>
-          {FOLDER_TABS.map(t => {
-            const isActive = folderTab === t.id;
-            return (
-              <button key={t.id} onClick={() => onFolderTab && onFolderTab(t.id)}
-                style={{ background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:isActive?T.accent:T.muted, padding:"4px 8px" }}>
-                {t.icon}
-                <span style={{ fontSize:8, fontWeight:isActive?700:600 }}>{t.label.split(" ")[0]}</span>
-              </button>
-            );
-          })}
-          <button onClick={onOpenSearch} style={{ background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:T.muted, padding:"4px 8px" }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-            <span style={{ fontSize:8, fontWeight:600 }}>Search</span>
-          </button>
-        </div>
-      );
-    }
-
-    // Default mobile: dashboard nav
-    return (
-      <div style={{ position:"fixed", bottom:0, left:0, right:0, height:56, background:T.sidebar, borderTop:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"space-around", zIndex:250 }}>
-        {NAV.slice(0,3).map(n => {
-          const active =
-            (n.id==="home" && (screen==="home"||screen==="folder") && homeTab!=="about" && homeTab!=="settings") ||
-            (n.id==="guides" && homeTab==="about") ||
-            (n.id==="settings" && homeTab==="settings");
-          return (
-            <button key={n.id} onClick={()=>onNavigate(n.id)} style={{ background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:active?T.accent:T.muted, padding:"4px 8px" }}>
-              {n.icon}
-              <span style={{ fontSize:9, fontWeight:600 }}>{n.label}</span>
-            </button>
-          );
-        })}
-        <button onClick={onOpenSearch} style={{ background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:T.muted, padding:"4px 8px" }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          <span style={{ fontSize:9, fontWeight:600 }}>Search</span>
-        </button>
-        <button onClick={onOpenCharacter} style={{ background:"none", border:"none", cursor:"pointer", padding:"4px 8px" }}>
-          <div style={{ width:30, height:30, borderRadius:"50%", overflow:"hidden", border:`2px solid ${T.border}` }}>
-            <MiniAvatar character={character||{}} size={30} />
-          </div>
-        </button>
-      </div>
-    );
-  }
+  if (isMobile) return <MobileNavigation navigation={NAV}
+    contextTabs={context === 'document' ? FILE_TABS : context === 'folder' ? FOLDER_TABS : null}
+    onNavigate={onNavigate} onTab={setActiveTab} activeTab={activeTab} onSearch={onOpenSearch}
+    onProfile={onOpenCharacter} onTheme={onToggleTheme} onSignOut={onSignOut} />;
 
   // Desktop: slim icon sidebar
   const sideW = expanded ? 220 : 60;
@@ -2053,7 +1801,7 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
                (n.id==="guides" && homeTab==="about") ||
                (n.id==="settings" && homeTab==="settings");
     } else { active = activeTab === n.id; }
-    const handleClick = () => { if (context === "dashboard") onNavigate(n.id); else if (setActiveTab) setActiveTab(n.id); };
+    const handleClick = () => onNavigate(n.id);
     return (
       <button onClick={handleClick} title={n.label}
         style={{ width:"100%", display:"flex", alignItems:"center", gap:12, padding:expanded?"9px 14px":"12px", borderRadius:10, border:"none", cursor:"pointer", position:"relative",
@@ -2063,7 +1811,7 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
         onMouseLeave={e=>{ if(!active){e.currentTarget.style.background="transparent"; e.currentTarget.style.color=T.muted;}}}>
         <span style={{ flexShrink:0, display:"flex" }}>{n.icon}</span>
         {expanded && <span style={{ whiteSpace:"nowrap" }}>{n.label}</span>}
-      {active && expanded && <div style={{ width:6, height:6, borderRadius:"50%", background:PRIMARY, marginLeft:"auto", boxShadow:"0 0 6px #16564c88" }}/>}
+      {active && expanded && <div style={{ width:6, height:6, borderRadius:"50%", background:PRIMARY, marginLeft:"auto", boxShadow:"0 0 6px #1d4ed888" }}/>}
       {active && !expanded && <div style={{ position:"absolute", left:0, top:"50%", transform:"translateY(-50%)", width:3, height:20, borderRadius:"0 3px 3px 0", background:PRIMARY }}/>}
       </button>
     );
@@ -2095,10 +1843,10 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
   };
 
   return (
-    <div style={{ width:sideW, minWidth:sideW, height:"100vh", background:T.sidebar, borderRight:`1px solid ${T.border}`, display:"flex", flexDirection:"column", position:"fixed", left:0, top:0, zIndex:150, transition:"width .2s ease", overflow:"hidden" }}>
+    <div style={{ width:sideW, minWidth:sideW, height:"100dvh", background:T.sidebar, borderRight:`1px solid ${T.border}`, display:"flex", flexDirection:"column", position:"fixed", left:0, top:0, zIndex:150, transition:"width .2s ease", overflow:"hidden" }}>
       {/* Logo */}
       <div style={{ padding:"16px 0 12px", display:"flex", flexDirection:"column", alignItems:"center", borderBottom:`1px solid ${T.border}`, cursor:"pointer" }} onClick={()=>setExpanded(e=>!e)}>
-        <div style={{ width:36, height:36, background:"#16564c", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center" }}>
+        <div style={{ width:36, height:36, background:"#1d4ed8", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center" }}>
           <Icon d={I.sparkle} size={16} color="#fff" sw={2}/>
         </div>
         {expanded && <span style={{ fontFamily:"'Fraunces Variable',serif", fontSize:16, fontWeight:700, color:T.navText, marginTop:8 }}>Classio</span>}
@@ -2115,7 +1863,7 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
       </div>
 
       {/* Nav — shows context tabs OR main nav */}
-      <nav style={{ flex:1, padding:"4px 8px", display:"flex", flexDirection:"column", gap:2, overflowY:"auto" }}>
+      <nav style={{ flex:1, padding:"4px 8px", display:"flex", flexDirection:"column", gap:2, overflowY:"auto", minHeight:0, overscrollBehavior:"contain" }}>
         {contextTabs ? (
           <>
             {/* Back to dashboard */}
@@ -2150,7 +1898,7 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
       </nav>
 
       {/* Bottom */}
-      <div style={{ padding:"8px 8px 16px", borderTop:`1px solid ${T.border}`, display:"flex", flexDirection:"column", gap:4 }}>
+      <div style={{ flexShrink:0, padding:"8px 8px 16px", borderTop:`1px solid ${T.border}`, display:"flex", flexDirection:"column", gap:4 }}>
         {/* Theme toggle */}
         <button onClick={onToggleTheme}
           style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"9px 12px", borderRadius:10, border:`1px solid ${T.border}`, cursor:"pointer",
@@ -2166,8 +1914,12 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
           }
           {expanded && <span style={{ fontSize:13, fontWeight:600 }}>{T.isDark ? "Light mode" : "Dark mode"}</span>}
         </button>
+        <button type="button" onClick={onSignOut} aria-label={isGuest ? 'Exit guest session' : 'Sign out'} title={isGuest ? 'Exit guest session' : 'Sign out'}
+          style={{ display:'flex', alignItems:'center', justifyContent:expanded?'flex-start':'center', gap:10, minHeight:40, padding:'8px 12px', background:'transparent', color:T.muted, border:0, borderRadius:10, cursor:'pointer' }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 4H4v16h5M14 8l4 4-4 4M8 12h10" /></svg>{expanded && <span>{isGuest ? 'Exit guest session' : 'Sign out'}</span>}
+        </button>
         {/* User */}
-        <button onClick={onOpenCharacter}
+        <button onClick={onOpenCharacter} aria-label="Your avatar"
           style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"8px 12px", borderRadius:10, border:"none", cursor:"pointer", background:"transparent", justifyContent:expanded?"flex-start":"center" }}
           onMouseEnter={e=>{e.currentTarget.style.background=T.sidebarActive;}}
           onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
@@ -2343,11 +2095,11 @@ function AudioRecordModal({ onClose, onSave, onSaveNote }) {
   return (
     <Modal onClose={onClose}>
       <style>{`
-        @keyframes arm-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(22,86,76,.4),0 4px 20px rgba(22,86,76,.3)} 50%{box-shadow:0 0 0 16px rgba(22,86,76,.0),0 4px 20px rgba(22,86,76,.3)} }
+        @keyframes arm-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(29,78,216,.4),0 4px 20px rgba(29,78,216,.3)} 50%{box-shadow:0 0 0 16px rgba(29,78,216,.0),0 4px 20px rgba(29,78,216,.3)} }
         @keyframes arm-pulse-red { 0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.35),0 4px 20px rgba(220,38,38,.3)} 50%{box-shadow:0 0 0 20px rgba(220,38,38,.0),0 4px 20px rgba(220,38,38,.3)} }
         @keyframes arm-fadein { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
         @keyframes arm-spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
-        .arm-bar { border-radius:3px; background:#16564c; transition:height .1s ease; }
+        .arm-bar { border-radius:3px; background:#1d4ed8; transition:height .1s ease; }
       `}</style>
 
       {/* Header */}
@@ -2485,7 +2237,7 @@ function AudioRecordModal({ onClose, onSave, onSaveNote }) {
             <button onClick={saveAsNote}
               style={{ flex:2, padding:"10px", background:PRIMARY, color:"#fff", border:"none",
                 borderRadius:10, cursor:"pointer", fontSize:13, fontWeight:700,
-                boxShadow:"0 3px 10px rgba(22,86,76,.3)" }}>
+                boxShadow:"0 3px 10px rgba(29,78,216,.3)" }}>
               Save as Notes
             </button>
           </div>
@@ -2851,14 +2603,15 @@ function CommandSearch({ folders, onOpenFile, onClose }) {
 
 function WebLinkModal({ folders, onClose, onGo, onNewFolder, onSaveDirect }) {
   const [linkUrl, setLinkUrl] = useState("");
+  const [linkError, setLinkError] = useState("");
   const [linkFolder, setLinkFolder] = useState("__inbox__");
   const realFolders = (folders||[]).filter(f=>f.id!=="inbox");
   return (
     <Modal onClose={onClose}>
       <h2 style={{ fontFamily:"'Fraunces Variable',serif", fontSize:22, fontWeight:700, color:C.text, marginBottom:8 }}>Add a YouTube or Website Link</h2>
       <p style={{ fontSize:13, color:C.muted, marginBottom:16 }}>Save a public link to your dashboard and open it to make study notes.</p>
-      <label style={{ fontSize:13, fontWeight:600, color:C.muted, display:"block", marginBottom:6 }}>URL</label>
-      <input autoFocus value={linkUrl} onChange={e=>setLinkUrl(e.target.value)} placeholder="https://youtube.com/watch?v=…"
+      <label htmlFor="saved-study-url" style={{ fontSize:13, fontWeight:600, color:C.muted, display:"block", marginBottom:6 }}>URL</label>
+      <input id="saved-study-url" autoFocus value={linkUrl} onChange={e=>setLinkUrl(e.target.value)} placeholder="https://youtube.com/watch?v=…"
         style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 14px", fontSize:14, outline:"none", marginBottom:16, color:C.text, background:C.bg, boxSizing:"border-box" }} />
       <label style={{ fontSize:13, fontWeight:600, color:C.muted, display:"block", marginBottom:6 }}>SAVE TO</label>
       <select value={linkFolder} onChange={e=>setLinkFolder(e.target.value)}
@@ -2871,16 +2624,14 @@ function WebLinkModal({ folders, onClose, onGo, onNewFolder, onSaveDirect }) {
           style={{ flex:1, padding:"10px", border:`1.5px solid ${C.border}`, borderRadius:10, background:"transparent", fontSize:14, fontWeight:600, cursor:"pointer", color:C.text }}>Cancel</button>
         <button disabled={!linkUrl.trim()} onClick={()=>{
             if (!linkUrl.trim()) return;
-            if (linkFolder==="__inbox__") {
-              onSaveDirect && onSaveDirect(linkUrl.trim(), "");
-            } else {
-              onGo(linkFolder);
-            }
+            try { onSaveDirect?.(normalizeStudyLink(linkUrl), linkFolder === '__inbox__' ? '' : linkFolder); }
+            catch (error) { setLinkError(error.message || 'Enter a valid URL.'); }
           }}
           style={{ flex:2, padding:"10px", background:linkUrl.trim()?C.accent:C.border, color:linkUrl.trim()?"#fff":C.muted, border:"none", borderRadius:10, fontSize:14, fontWeight:600, cursor:linkUrl.trim()?"pointer":"not-allowed" }}>
-          {linkFolder==="__inbox__" ? "Save to Dashboard →" : "Open Folder →"}
+          {linkFolder==="__inbox__" ? "Save to Dashboard →" : "Save to Folder →"}
         </button>
       </div>
+      {linkError && <p role="alert">{linkError}</p>}
     </Modal>
   );
 }
@@ -2890,7 +2641,7 @@ export default function App() {
   const [showTutorial, setShowTutorial] = useState(() => {
     try { return !localStorage.getItem("classio_onboarded"); } catch { return false; }
   });
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(undefined);
   const isGuest = !user;
   const [signInPending, setSignInPending] = useState(false);
   const [signInError, setSignInError] = useState("");
@@ -2949,12 +2700,13 @@ export default function App() {
   }, []);
   const DEFAULT_CHAR = { skin:"#FDDBB4", hair:"#3D2B1F", hairStyle:0, eyes:"#2980B9", top:"#2C3E50", bg:"#dce8ff", mouth:0, eyebrow:0, eyeShape:0, accessory:0, topStyle:0, blush:false, lips:false, freckles:false, lipColor:"#d06060", hat:0, hatColor:"#E74C3C", glasses:0, glassesColor:"#333333", facialHair:0, necklace:0, necklaceColor:"#f0c040", earring:0, earringColor:"#f0c040", name:"" };
   const [character, setCharacter] = useState(() => {
-    try { return { ...DEFAULT_CHAR, ...(JSON.parse(localStorage.getItem("classio_char") || "null") || {}) }; }
+    try { return { ...DEFAULT_CHAR, ...(JSON.parse(localStorage.getItem("classio_char:" + (auth.currentUser?.uid || "guest")) || "null") || {}) }; }
     catch { return { skin:"#FDDBB4", hair:"#3D2B1F", hairStyle:0, eyes:"#3D5A80", top:"#3D5A80", name:"" }; }
   });
 
   const [workspaceWarning, setWorkspaceWarning] = useState("");
   const saveTimer = useRef(null);
+  const saveRevision = useRef(0);
   const accountUid = useRef(null);
   const deferAccountSync = useRef(false);
 
@@ -2963,103 +2715,141 @@ export default function App() {
     setFolders(next);
   }
 
-  // Restore only the current account's workspace. The legacy unscoped cache is
-  // kept on disk because it cannot be attributed safely on a shared browser.
+  const cloudPending = useRef(false);
+  const pendingUploads = useRef([]);
+  const cloudBaseline = useRef(null);
+  const saveQueue = useRef(Promise.resolve());
+  const cloudLatest = useRef(null);
+
   useEffect(() => {
     let active = true;
     let revision = 0;
+    let stopWatching = () => {};
     const unsubscribe = onAuthStateChanged(auth, async account => {
       const current = ++revision;
+      saveRevision.current++;
+      stopWatching();
       clearTimeout(saveTimer.current);
+      cloudPending.current = false;
+      pendingUploads.current = [];
+      cloudBaseline.current = null;
       if (!account) {
-        if (auth.currentUser === null && accountUid.current) resetWorkspace();
+        if (accountUid.current) resetWorkspace();
         accountUid.current = null;
         setUser(null);
         return;
       }
-      accountUid.current = account.uid;
-      deferAccountSync.current = false;
-      const guestFolders = saveGuestOnSignIn.current ? foldersRef.current : [];
+      let guestFolders = saveGuestOnSignIn.current ? foldersRef.current : [];
+      if (!guestFolders.length) {
+        try {
+          const pending = JSON.parse(sessionStorage.getItem('classio_google_import') || 'null');
+          if (pending?.expires > Date.now()) {
+            guestFolders = await Promise.all(pending.folders.map(async folder => ({ ...folder, files: await Promise.all(folder.files.map(async file => ({ ...file, _fileObj: await readPendingOriginal(pending.nonce, file.id) }))) })));
+          }
+        } catch {}
+      }
+      sessionStorage.removeItem('classio_google_import');
       saveGuestOnSignIn.current = false;
+      accountUid.current = account.uid;
       resetWorkspace();
       setUser(undefined);
-
-      const key = workspaceCacheKey(account.uid);
       let cached = null;
-      try { cached = JSON.parse(localStorage.getItem(key)); } catch {}
-      let raw = Array.isArray(cached?.folders) ? cached.folders : [];
-      let warning = "";
-      let remoteUnavailable = false;
+      try { cached = JSON.parse(localStorage.getItem(workspaceCacheKey(account.uid))); } catch {}
+      let remote = [], raw = cached?.folders || [], warning = '';
+      try { await linkVerification(); }
+      catch { warning = 'This browser is verified. Account-level verification could not sync; the operator may need to configure Firebase Admin.'; }
       try {
-        const snap = await getDoc(doc(db, "users", account.uid));
-        if (snap.metadata.fromCache) throw new Error("Account could only be read from cache.");
-        const remote = snap.data()?.folders;
-        if (Array.isArray(remote)) {
-          if (cached?.mergeOnRestore) raw = mergeSessionFolders(remote, raw);
-          else if (!cached?.pending) raw = remote;
-        }
+        await migrateWorkspace(account.uid);
+        remote = await loadWorkspace(account.uid);
+        cloudLatest.current = remote;
+        raw = cached?.pending ? mergeSessionFolders(remote, raw) : remote;
+        deferAccountSync.current = false;
       } catch {
-        remoteUnavailable = true;
-        warning = "Cloud sync is unavailable. Reload when you are back online to sync your workspace.";
+        deferAccountSync.current = true;
+        warning = 'The cloud workspace upgrade could not connect. Existing data has not been overwritten. Deploy the updated Firebase rules or retry when online.';
+        try {
+          const legacy = (await getDoc(doc(db, 'users', account.uid))).data()?.folders;
+          if (Array.isArray(legacy)) raw = cached?.pending ? mergeSessionFolders(legacy, raw) : legacy;
+        } catch {}
       }
-
       const restored = await attachBlobs(raw);
-      if (!active || current !== revision) return;
-      deferAccountSync.current = remoteUnavailable;
+      if (!active || current !== revision || auth.currentUser?.uid !== account.uid) return;
       const workspace = mergeSessionFolders(restored, guestFolders);
-      for (const folder of workspace) {
-        for (const file of folder.files) if (file._fileObj) FILE_STORE.set(file.id, file._fileObj);
-      }
+      for (const folder of workspace) for (const file of folder.files) if (file._fileObj) FILE_STORE.set(file.id, file._fileObj);
       replaceFolders(workspace);
-      setWorkspaceWarning(warning);
       setUser(account);
       setSignInPending(false);
-      if (guestFolders.length || cached?.pending) saveAccountWorkspace(workspace, account.uid);
-      for (const folder of guestFolders) {
-        for (const file of folder.files) if (file._fileObj) idbSave(file.id, file._fileObj);
-      }
+      setWorkspaceWarning(warning);
+      for (const folder of guestFolders) for (const file of folder.files) if (file._fileObj) idbSave(file.id, file._fileObj);
+      if (guestFolders.length || cached?.pending || cached?.uploadsPending) saveAccountWorkspace(workspace, account.uid, cached?.baseline || remote);
+      stopWatching = watchWorkspace(account.uid, remoteFolders => {
+        if (!active || current !== revision || auth.currentUser?.uid !== account.uid) return;
+        cloudLatest.current = remoteFolders;
+        if (cloudPending.current) return;
+        const next = remoteFolders.map(folder => ({ ...folder, files: folder.files.map(file => ({ ...file, _fileObj: FILE_STORE.get(file.id) || null })) }));
+        replaceFolders(next);
+        setActiveFolder(previous => previous ? next.find(folder => folder.id === previous.id) || null : null);
+        setActiveFile(previous => previous ? next.flatMap(folder => folder.files).find(file => file.id === previous.id) || null : null);
+      }, () => setWorkspaceWarning('Live cloud sync lost its connection. Your local changes are kept; retry when online.'));
     });
-    return () => { active = false; unsubscribe(); clearTimeout(saveTimer.current); };
+    authReady.catch(error => { if (active) setSignInError(authError(error)); });
+    return () => { active = false; unsubscribe(); stopWatching(); clearTimeout(saveTimer.current); };
   }, []);
 
   function setFoldersSave(next) {
     if (user && auth.currentUser?.uid !== user.uid) return;
+    const previous = foldersRef.current;
     replaceFolders(next);
-    if (user) saveAccountWorkspace(next, user.uid);
+    if (user) saveAccountWorkspace(next, user.uid, previous);
   }
 
-  function saveAccountWorkspace(next, uid) {
+  function saveAccountWorkspace(next, uid, baseline = foldersRef.current) {
+    const currentSave = ++saveRevision.current;
+    cloudPending.current = true;
+    cloudBaseline.current ||= stripBlobs(baseline);
     const key = workspaceCacheKey(uid);
-    const folders = JSON.parse(JSON.stringify(stripBlobs(next)));
-    const mergeOnRestore = deferAccountSync.current;
-    const pending = JSON.stringify({ folders, pending: true, mergeOnRestore });
-    let localSaved = false;
-    try { localStorage.setItem(key, pending); localSaved = true; } catch {}
-    if (mergeOnRestore) {
-      setWorkspaceWarning(localSaved
-        ? "Changes are saved on this device. Reload when online to merge them with your account."
-        : "Browser storage and cloud sync are unavailable. Keep this tab open and export important work.");
-      return;
-    }
-    if (!localSaved) setWorkspaceWarning("Browser storage is full or unavailable. Changes will try to sync to your account.");
-
+    const pending = JSON.stringify({ folders: stripBlobs(next), baseline: cloudBaseline.current, pending: true });
+    try { localStorage.setItem(key, pending); } catch { setWorkspaceWarning('Browser storage is full. Keep this tab open until cloud saving completes.'); }
     clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(async () => {
-      if (auth.currentUser?.uid !== uid) return;
-      try {
-        await setDoc(doc(db, "users", uid), { folders }, { merge: true });
-        if (localSaved && localStorage.getItem(key) === pending) {
-          localStorage.setItem(key, JSON.stringify({ folders, pending: false }));
+    setWorkspaceWarning('Saving to your account…');
+    saveTimer.current = setTimeout(() => {
+      const originalBaseline = cloudBaseline.current;
+      saveQueue.current = saveQueue.current.catch(() => {}).then(async () => {
+        if (auth.currentUser?.uid !== uid) return;
+        try {
+          if (deferAccountSync.current) {
+            await migrateWorkspace(uid);
+            await loadWorkspace(uid);
+            deferAccountSync.current = false;
+          }
+          const result = await saveWorkspace(uid, originalBaseline || baseline, next, message => {
+            if (auth.currentUser?.uid === uid) setWorkspaceWarning(message);
+          });
+          const saved = result.folders;
+          if (auth.currentUser?.uid !== uid) return;
+          if (currentSave === saveRevision.current) {
+            try { localStorage.setItem(key, JSON.stringify({ folders: stripBlobs(saved), pending: false, uploadsPending: result.uploadWarnings.length > 0 })); } catch {}
+            cloudPending.current = false;
+            pendingUploads.current = result.uploadWarnings;
+            cloudBaseline.current = null;
+            const remote = cloudLatest.current || saved;
+            const withBlobs = remote.map(folder => ({ ...folder, files: folder.files.map(file => ({ ...file, _fileObj: FILE_STORE.get(file.id) || null })) }));
+            replaceFolders(withBlobs);
+            setActiveFolder(previous => previous ? withBlobs.find(folder => folder.id === previous.id) || previous : null);
+            setActiveFile(previous => previous ? withBlobs.flatMap(folder => folder.files).find(file => file.id === previous.id) || previous : null);
+            setWorkspaceWarning(result.uploadWarnings.length ? 'Workspace metadata saved. Some originals have not uploaded; keep this tab open and retry. ' + result.uploadWarnings[0] : 'Workspace synced to your account. Originals with completed cloud uploads can be recalled on your other devices.');
+          }
+        } catch (error) {
+          if (auth.currentUser?.uid === uid) setWorkspaceWarning(error.code?.startsWith('storage/')
+            ? 'File upload could not finish. The original is kept on this device. Check storage permissions and retry.'
+            : (error.message || 'Cloud saving failed. Changes remain on this device. Retry when online.'));
         }
-        if (auth.currentUser?.uid === uid) setWorkspaceWarning("");
-      } catch {
-        if (auth.currentUser?.uid === uid) {
-          setWorkspaceWarning(localSaved
-            ? "Changes are saved on this device. Cloud sync is unavailable."
-            : "Changes could not be saved. Keep this tab open and try again.");
-        }
-      }
+      });
     }, 500);
+  }
+
+  function retryCloudSync() {
+    if (user) saveAccountWorkspace(foldersRef.current, user.uid, cloudBaseline.current || stripBlobs(cloudLatest.current || foldersRef.current));
   }
 
   function updateFolder(updated) {
@@ -3092,6 +2882,7 @@ export default function App() {
   }
 
   function resetWorkspace() {
+    setCharacter(DEFAULT_CHAR);
     setWorkspaceWarning("");
     replaceFolders([]);
     FILE_STORE.clear();
@@ -3115,12 +2906,42 @@ export default function App() {
     setSignInPending(true);
     setSignInError("");
     saveGuestOnSignIn.current = true;
-    try { await signInWithPopup(auth, googleProvider); }
-    catch {
+    try {
+      const nonce = makeStudyId();
+      sessionStorage.setItem('classio_google_import', JSON.stringify({ nonce, expires: Date.now() + 15 * 60 * 1000, folders: stripBlobs(foldersRef.current) }));
+      for (const folder of foldersRef.current) for (const file of folder.files) if (file._fileObj) await savePendingOriginal(nonce, file.id, file._fileObj);
+      await signInGoogle();
+    }
+    catch (error) {
       saveGuestOnSignIn.current = false;
       setSignInPending(false);
-      setSignInError("Google sign-in could not finish. Your guest session is still open.");
+      setSignInError(error.name === "QuotaExceededError" ? "Browser storage is full, so your guest files could not be preserved for sign-in. Keep this tab open and export important work before retrying." : authError(error));
     }
+  }
+
+  async function exitWorkspace() {
+    if (!user) {
+      if (foldersRef.current.some(folder => folder.files.length) && !window.confirm('Exit this guest workspace? Download important work first; guest documents in this session will be cleared.')) return;
+      sessionStorage.removeItem('classio_chat:guest');
+      resetWorkspace();
+      return;
+    }
+    if (cloudPending.current || pendingUploads.current.length) {
+      const files = foldersRef.current.flatMap(folder => folder.files).filter(file => file._fileObj && !file.cloudFile);
+      const persisted = await Promise.all(files.map(file => idbSave(file.id, file._fileObj)));
+      try {
+        if (persisted.some(result => result !== true)) throw new Error();
+        localStorage.setItem(workspaceCacheKey(user.uid), JSON.stringify({ folders: stripBlobs(foldersRef.current), baseline: cloudBaseline.current || stripBlobs(foldersRef.current), pending: cloudPending.current, uploadsPending: pendingUploads.current.length > 0 }));
+      } catch {
+        setWorkspaceWarning('Some unsynced work could not be preserved on this device. Keep this tab open until saving finishes before signing out.');
+        return;
+      }
+    }
+    try {
+      const uid = user.uid;
+      await signOut(auth);
+      sessionStorage.removeItem('classio_chat:' + uid);
+    } catch { setWorkspaceWarning('Sign-out could not finish. Your account and work remain open; please retry.'); }
   }
 
   function clearFolderCache() {
@@ -3129,10 +2950,35 @@ export default function App() {
     window.location.reload();
   }
 
+  useEffect(() => {
+    if (!user) return;
+    try { const cached = JSON.parse(localStorage.getItem('classio_char:' + user.uid) || 'null'); if (cached) setCharacter(cached); } catch {}
+    const stopAvatar = onSnapshot(doc(db, 'users', user.uid, 'profile', 'avatar'), snapshot => {
+      if (auth.currentUser?.uid === user.uid && snapshot.exists()) setCharacter(snapshot.data().character || DEFAULT_CHAR);
+    }, () => setWorkspaceWarning('Avatar sync is unavailable. Local changes are kept.'));
+    const stopTheme = onSnapshot(doc(db, 'users', user.uid, 'profile', 'preferences'), snapshot => {
+      if (auth.currentUser?.uid === user.uid && ['light', 'dark'].includes(snapshot.data()?.theme)) setTheme(snapshot.data().theme);
+    }, () => {});
+    return () => { stopAvatar(); stopTheme(); };
+  }, [user?.uid]);
+
+  function saveCharacter(value) {
+    setCharacter(value);
+    try { localStorage.setItem('classio_char:' + (user?.uid || 'guest'), JSON.stringify(value)); } catch {}
+    if (user) setDoc(doc(db, 'users', user.uid, 'profile', 'avatar'), { character: value }, { merge: true })
+      .catch(() => setWorkspaceWarning('Avatar could not sync. Your changes are kept on this device.'));
+  }
+  function toggleAccountTheme() {
+    _toggleTheme();
+    if (user) setDoc(doc(db, 'users', user.uid, 'profile', 'preferences'), { theme: _getTheme().isDark ? 'dark' : 'light' }, { merge: true })
+      .catch(() => setWorkspaceWarning('Theme is saved on this device. Account syncing is unavailable.'));
+  }
+
   if (user === undefined) return <Splash />;
 
   const handleNavigate2 = (id) => {
     if (id==="home") { setHomeTab("folders"); setScreen("home"); setActiveFolder(null); setActiveFile(null); }
+    else if (id==="assistant") { setShowHomeAI(true); }
     else if (id==="guides") { setHomeTab("about"); setScreen("home"); setActiveFolder(null); setActiveFile(null); }
     else if (id==="settings") { setHomeTab("settings"); setScreen("home"); setActiveFolder(null); setActiveFile(null); }
   };
@@ -3182,29 +3028,31 @@ export default function App() {
         onNavigate={handleNavigate2}
         character={character}
         onOpenCharacter={() => setShowCharacter(true)}
-        onToggleTheme={_toggleTheme}
+        onToggleTheme={toggleAccountTheme}
         onOpenSearch={() => setShowSearch(true)}
         isMobile={isMobile}
         user={user} isGuest={isGuest}
-        onSignOut={isGuest ? resetWorkspace : () => signOut(auth)}
+        onSignOut={exitWorkspace}
         sidebarExpanded={sidebarExpanded}
         onToggleSidebar={setSidebarExpanded}
         folderTab={folderTab} onFolderTab={setFolderTab}
         fileTab={fileTab} onFileTab={setFileTab}
         folder={activeFolder} file={activeFile}
       />
+      {showHomeAI && <StandaloneAI onClose={() => setShowHomeAI(false)} onCreateCourse={() => { setShowHomeAI(false); startCourse(); }} />}
       {showSearch && <CommandSearch folders={folders} onOpenFile={handleOpenFileFromSearch2} onClose={()=>setShowSearch(false)} />}
-      {showCharacter && <CharacterModal character={character} onChange={c => { setCharacter(c); if (user) localStorage.setItem("classio_char", JSON.stringify(c)); }} onClose={() => setShowCharacter(false)} />}
+      {showCharacter && <CharacterModal character={character} onChange={saveCharacter} onClose={() => setShowCharacter(false)} />}
       <div style={{
         flex: 1,
         marginLeft: isMobile ? 0 : isTablet ? 60 : (sidebarExpanded ? 220 : 60),
-        marginBottom: isMobile ? 56 : 0,
+        marginTop: isMobile ? 56 : 0,
+        marginBottom: 0,
         minWidth: 0,
         overflow: "visible",
         maxWidth: isMobile ? "100vw" : `calc(100vw - ${isMobile ? 0 : isTablet ? 60 : (sidebarExpanded ? 220 : 60)}px)`,
         boxSizing: "border-box",
       }}>
-        {workspaceWarning && <p className="workspace-warning" role="status">{workspaceWarning}</p>}
+        {workspaceWarning && <div className="workspace-warning" role="status">{workspaceWarning}{(cloudPending.current || pendingUploads.current.length > 0) && <button type="button" onClick={retryCloudSync}>Retry sync</button>}</div>}
         {children}
       </div>
     </div>
@@ -3253,13 +3101,14 @@ export default function App() {
 
   const handleNavigate = (id) => {
     if (id==="home") { setHomeTab("folders"); setScreen("home"); }
+    else if (id==="assistant") { setShowHomeAI(true); }
     else if (id==="guides") { setHomeTab("about"); setScreen("home"); }
     else if (id==="settings") { setHomeTab("settings"); setScreen("home"); }
   };
 
   function startCourse() {
     const inbox = foldersRef.current.find(folder => folder.id === "inbox") ||
-      { id: "inbox", name: "Inbox", color: "#16564c", files: [] };
+      { id: "inbox", name: "Inbox", color: "#1d4ed8", files: [] };
     const file = { id: `blank_${makeStudyId()}`, name: "Untitled course", type: "text/plain", notes: "", studyCards: [], _isBlank: true, defaultTab: "learn" };
     const folder = { ...inbox, files: [...inbox.files, file] };
     setFoldersSave([folder, ...foldersRef.current.filter(item => item.id !== inbox.id)]);
@@ -3287,11 +3136,11 @@ export default function App() {
         onNavigate={handleNavigate}
         character={character}
         onOpenCharacter={() => setShowCharacter(true)}
-        onToggleTheme={_toggleTheme}
+        onToggleTheme={toggleAccountTheme}
         onOpenSearch={() => setShowSearch(true)}
         isMobile={isMobile}
         user={user} isGuest={isGuest}
-        onSignOut={isGuest ? resetWorkspace : () => signOut(auth)}
+        onSignOut={exitWorkspace}
         sidebarExpanded={sidebarExpanded}
         onToggleSidebar={setSidebarExpanded}
         folderTab={folderTab} onFolderTab={setFolderTab}
@@ -3300,7 +3149,7 @@ export default function App() {
       />
       {/* Command-K Search */}
       {showSearch && <CommandSearch folders={folders} onOpenFile={handleOpenFileFromSearch} onClose={()=>setShowSearch(false)} />}
-      {showCharacter && <CharacterModal character={character} onChange={c => { setCharacter(c); if (user) localStorage.setItem("classio_char", JSON.stringify(c)); }} onClose={() => setShowCharacter(false)} />}
+      {showCharacter && <CharacterModal character={character} onChange={saveCharacter} onClose={() => setShowCharacter(false)} />}
       {user && showStudyGroupLobby && <StudyGroupLobby
         user={user}
         db={db}
@@ -3308,14 +3157,14 @@ export default function App() {
         onClose={() => setShowStudyGroupLobby(false)}
       />}
       {/* Main content area — offset by sidebar */}
-      <div style={{ flex:1, minWidth:0, marginLeft:isMobile?0:(sidebarExpanded?220:60), marginBottom:isMobile?56:0, minHeight:"100vh", display:"flex", flexDirection:"column", background:T.bg }}>
+      <div style={{ flex:1, minWidth:0, marginLeft:isMobile?0:(sidebarExpanded?220:60), marginTop:isMobile?56:0, marginBottom:0, minHeight:"100vh", display:"flex", flexDirection:"column", background:T.bg }}>
       <div style={{ maxWidth:960, margin:"0 auto", padding:isMobile?"12px 14px":isTablet?"16px 20px":"32px 36px", width:"100%", boxSizing:"border-box" }}>
 
-        {workspaceWarning && <p className="workspace-warning" role="status">{workspaceWarning}</p>}
+        {workspaceWarning && <div className="workspace-warning" role="status">{workspaceWarning}{(cloudPending.current || pendingUploads.current.length > 0) && <button type="button" onClick={retryCloudSync}>Retry sync</button>}</div>}
         {/* ── Dashboard Header ── */}
         {homeTab==="folders" && !user && (
           <section className="guest-save-banner" aria-label="Guest session">
-            <div><strong>Guest session</strong><p>All study tools are free. Sign in to save this session and sync your progress. Guest work clears when you reload or close this tab.</p></div>
+            <div><strong>Guest session</strong><p>All study tools are free. Sign in to save this session and sync your progress. Guest documents clear on refresh. Assistant drafts stay in this tab until you close it.</p></div>
             <button className="workspace-action" onClick={signInToSave} disabled={signInPending}>
               {signInPending ? "Connecting…" : "Sign in to save"}
             </button>
@@ -3356,10 +3205,10 @@ export default function App() {
         {homeTab==="folders" && (
           <div className="quick-actions" style={{ display:"grid", gridTemplateColumns:isMobile?"repeat(2, minmax(0, 1fr))":isTablet?"repeat(3, minmax(0, 1fr))":"repeat(4, minmax(0, 1fr))", gap:12, marginBottom:32 }}>
             {[
-              { grad:"#16564c15", ic:"#16564c", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16564c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>, label:"Blank document", sub:"Write your own notes", action:()=>{ const blankId=`blank_${Date.now()}`; const blankFile={id:blankId,name:"Untitled Document",type:"text/plain",_fileObj:null,notes:"",studyCards:[],_isBlank:true}; const inboxExists=folders.find(f=>f.id==="inbox"); const newFolders=inboxExists?folders.map(f=>f.id==="inbox"?{...f,files:[blankFile,...(f.files||[])]}:f):[...folders,{id:"inbox",name:"Inbox",color:"#16564c",files:[blankFile]}]; setFoldersSave(newFolders); const newInbox=newFolders.find(f=>f.id==="inbox"); setActiveFile(blankFile); setActiveFolder(newInbox); setScreen("file"); setFileTab("notes"); } },
-              { grad:"#39696d15", ic:"#39696d", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#39696d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>, label:"Record audio", sub:"Upload an audio file", action:()=>setShowRecordModal(true) },
-              { grad:"#4A7C5915", ic:"#4A7C59", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4A7C59" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>, label:"Upload document", sub:"PDF, Word or PowerPoint", action:()=>setShowUploadModal(true) },
-              { grad:"#C45C5C15", ic:"#C45C5C", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C45C5C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.54C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg>, label:"Website link", sub:"YouTube or website link", action:()=>setShowWebLinkModal(true) },
+              { grad:C.accentL, ic:C.accent, icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>, label:"Blank document", sub:"Write your own notes", action:()=>{ const blankId=`blank_${Date.now()}`; const blankFile={id:blankId,name:"Untitled Document",type:"text/plain",_fileObj:null,notes:"",studyCards:[],_isBlank:true}; const inboxExists=folders.find(f=>f.id==="inbox"); const newFolders=inboxExists?folders.map(f=>f.id==="inbox"?{...f,files:[blankFile,...(f.files||[])]}:f):[...folders,{id:"inbox",name:"Inbox",color:"#1d4ed8",files:[blankFile]}]; setFoldersSave(newFolders); const newInbox=newFolders.find(f=>f.id==="inbox"); setActiveFile(blankFile); setActiveFolder(newInbox); setScreen("file"); setFileTab("notes"); } },
+              { grad:C.accentL, ic:C.accent, icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>, label:"Record audio", sub:"Upload an audio file", action:()=>setShowRecordModal(true) },
+              { grad:C.accentL, ic:C.accent, icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>, label:"Upload document", sub:"PDF, Word or PowerPoint", action:()=>setShowUploadModal(true) },
+              { grad:C.accentL, ic:C.accent, icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.54C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg>, label:"Website link", sub:"YouTube or website link", action:()=>setShowWebLinkModal(true) },
             ].map((a,i) => (
               <button key={i} onClick={a.action}
                 style={{ display:"flex", alignItems:"center", gap:12, background:T.surface, border:`1.5px solid ${T.border}`, borderRadius:8, padding:isMobile?"10px":"12px", cursor:"pointer", textAlign:"left", minHeight:70, overflow:"hidden" }}
@@ -3379,7 +3228,7 @@ export default function App() {
         {homeTab==="folders" && (
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
             <div style={{ display:"flex", gap:4 }}>
-              <button onClick={()=>setHomeTab("folders")} style={{ background:homeTab==="folders"?T.text:"transparent", color:homeTab==="folders"?"#fff":T.muted, border:`1.5px solid ${homeTab==="folders"?T.text:T.border}`, borderRadius:8, padding:"5px 16px", fontSize:13, fontWeight:600, cursor:"pointer" }}>My Notes</button>
+              <button onClick={()=>setHomeTab("folders")} style={{ background:homeTab==="folders"?T.text:"transparent", color:homeTab==="folders"?T.bg:T.muted, border:`1.5px solid ${homeTab==="folders"?T.text:T.border}`, borderRadius:8, padding:"5px 16px", fontSize:13, fontWeight:600, cursor:"pointer" }}>My Notes</button>
             </div>
             <button onClick={()=>setShowNewFolder(true)} className="btn-anim"
               style={{ display:"flex", alignItems:"center", gap:6, background:"transparent", border:`1.5px solid ${T.border}`, borderRadius:10, padding:"6px 14px", fontSize:13, fontWeight:600, cursor:"pointer", color:T.text }}>
@@ -3389,7 +3238,7 @@ export default function App() {
         )}
 
         {homeTab==="about" && <AboutTab/>}
-        {homeTab==="settings" && <SettingsTab onToggleTheme={_toggleTheme} onClearCache={user ? clearFolderCache : undefined} files={folders.flatMap(folder => folder.files)} streak={studyStreak} />}
+        {homeTab==="settings" && <SettingsTab onToggleTheme={toggleAccountTheme} onClearCache={user ? clearFolderCache : undefined} files={folders.flatMap(folder => folder.files)} streak={studyStreak} onImportLegacyAvatar={() => { if (!window.confirm("Import the previous avatar saved in this browser into the current account or guest profile? Only continue if it belongs to you.")) return; try { const previous = JSON.parse(localStorage.getItem("classio_char") || "null"); if (previous && typeof previous === "object" && !Array.isArray(previous)) saveCharacter({ ...DEFAULT_CHAR, ...previous }); else setWorkspaceWarning("No previous avatar was found in this browser."); } catch { setWorkspaceWarning("The previous avatar could not be read. Your current avatar is unchanged."); } }} />}
 
         {homeTab==="folders" && folders.filter(f=>f.id!=="inbox").length===0 && !folders.find(f=>f.id==="inbox")?.files?.length && (
           <div style={{ textAlign:"center", padding:"80px 0" }}>
@@ -3399,7 +3248,7 @@ export default function App() {
             <p style={{ fontSize:18, fontWeight:600, color:C.text, marginBottom:8 }}>No folders yet</p>
             <p style={{ fontSize:14, color:C.muted, maxWidth:280, margin:"0 auto 24px" }}>Create a folder for each subject to organise your files</p>
             <button onClick={()=>setShowNewFolder(true)} className="hov"
-              style={{ background:PRIMARY, color:"#fff", border:"none", borderRadius:10, padding:"10px 24px", fontSize:14, fontWeight:600, cursor:"pointer", boxShadow:"0 3px 12px rgba(22,86,76,.3)" }}>
+              style={{ background:PRIMARY, color:"#fff", border:"none", borderRadius:10, padding:"10px 24px", fontSize:14, fontWeight:600, cursor:"pointer", boxShadow:"0 3px 12px rgba(29,78,216,.3)" }}>
               Create First Folder
             </button>
           </div>
@@ -3527,7 +3376,7 @@ export default function App() {
           </div>
         )}
 
-      {showHomeAI && <StandaloneAI onClose={() => setShowHomeAI(false)} />}
+      {showHomeAI && <StandaloneAI onClose={() => setShowHomeAI(false)} onCreateCourse={() => { setShowHomeAI(false); startCourse(); }} />}
 
       {confirmDelete && (
         <ConfirmDialog
@@ -3632,12 +3481,12 @@ export default function App() {
         <WebLinkModal folders={folders} onClose={() => setShowWebLinkModal(false)}
           onGo={(folderId) => { setShowWebLinkModal(false); const found = folders.find(f=>f.id===folderId); if (found) { setActiveFolder(found); setScreen("folder"); }}}
           onNewFolder={() => { setShowWebLinkModal(false); setShowNewFolder(true); }}
-          onSaveDirect={(url) => {
-            const inbox = folders.find(f=>f.id==="inbox") || {id:"inbox",name:"Inbox",color:"#6B4E8A",files:[]};
+          onSaveDirect={(url, folderId) => {
+            const inbox = (folderId ? folders.find(folder => folder.id === folderId) : folders.find(f=>f.id==="inbox")) || {id:"inbox",name:"Inbox",color:"#6B4E8A",files:[]};
             const newDoc = { id:`fi${Date.now()}`, name:url.slice(0,60)||"Web / YouTube Notes",
               type:"text/youtube", size:0, colorIndex:0, notes:"", studyCards:[],
               uploadedAt:new Date().toLocaleDateString(), linkedFileIds:[], youtubeUrl:url };
-            setFoldersSave([{...inbox,files:[...inbox.files,newDoc]}, ...folders.filter(f=>f.id!=="inbox")]);
+            setFoldersSave([{...inbox,files:[...inbox.files,newDoc]}, ...folders.filter(f=>f.id!==inbox.id)]);
             setShowWebLinkModal(false);
             const restored = {...newDoc, _fileObj:null};
             setActiveFile(restored);
@@ -3658,8 +3507,8 @@ export default function App() {
           <div onClick={e=>e.stopPropagation()} style={{ background:C.surface,borderRadius:24,padding:"28px 28px 24px",width:"100%",maxWidth:440,boxShadow:"0 24px 64px rgba(0,0,0,.18)",border:`1px solid ${C.border}` }}>
             {/* Header */}
             <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:22 }}>
-              <div style={{ width:42,height:42,background:"#16564c15",borderRadius:14,display:"flex",alignItems:"center",justifyContent:"center" }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16564c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              <div style={{ width:42,height:42,background:"#1d4ed815",borderRadius:14,display:"flex",alignItems:"center",justifyContent:"center" }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
               </div>
               <div>
                 <h2 style={{ fontFamily:"'Fraunces Variable',serif",fontSize:20,fontWeight:700,color:C.text,margin:0 }}>New Folder</h2>
@@ -3739,7 +3588,7 @@ export default function App() {
               </button>
               <button disabled={!newName.trim()}
                 onClick={()=>{setFoldersSave([...folders,{id:`f${Date.now()}`,name:newName.trim(),color:newColor,files:[]}]);setShowNewFolder(false);setNewName("");}}
-                style={{ flex:2,padding:"12px",background:newName.trim()?PRIMARY:C.border,color:newName.trim()?"#fff":C.muted,border:"none",borderRadius:8,fontSize:14,fontWeight:700,cursor:newName.trim()?"pointer":"not-allowed",boxShadow:newName.trim()?"0 3px 14px rgba(22,86,76,.35)":"none",transition:"all .15s" }}>
+                style={{ flex:2,padding:"12px",background:newName.trim()?PRIMARY:C.border,color:newName.trim()?"#fff":C.muted,border:"none",borderRadius:8,fontSize:14,fontWeight:700,cursor:newName.trim()?"pointer":"not-allowed",boxShadow:newName.trim()?"0 3px 14px rgba(29,78,216,.35)":"none",transition:"all .15s" }}>
                 Create Folder
               </button>
             </div>
@@ -3784,7 +3633,7 @@ function Header({ user, saveStatus, isGuest, onSignOut, character, onOpenCharact
           {/* AI Assistant */}
           <button onClick={onOpenAI}
             style={{ display:"flex", alignItems:"center", gap:6,
-              background:"#16564c",
+              background:"#1d4ed8",
               color:"#fff", border:"none", borderRadius:10, padding:isMobile?"6px 10px":"6px 14px",
               fontSize:13, fontWeight:700, cursor:"pointer",
               boxShadow:"0 2px 10px rgba(99,102,241,.4)" }}>
@@ -5685,13 +5534,13 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFi
             <div onDragOver={e=>{e.preventDefault();setDragging(true);}} onDragLeave={()=>setDragging(false)}
               onDrop={e=>{e.preventDefault();setDragging(false);addFiles(e.dataTransfer.files);}}
               onClick={()=>fileInput.current.click()}
-              style={{ border:`2px dashed ${dragging?"#16564c":C.border}`, borderRadius:20, padding:"36px 24px", textAlign:"center", cursor:"pointer",
-                background:dragging?"#16564c0d":C.surface,
-                marginBottom:24, transition:"all .2s", boxShadow:dragging?"0 0 0 3px #16564c22":"none" }}>
-              <div style={{ width:52, height:52, background:dragging?"#16564c15":C.accentL, borderRadius:16, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 14px", transition:"all .2s" }}>
-                <Icon d={I.upload} size={24} color={dragging?"#16564c":C.accent} />
+              style={{ border:`2px dashed ${dragging?"#1d4ed8":C.border}`, borderRadius:20, padding:"36px 24px", textAlign:"center", cursor:"pointer",
+                background:dragging?"#1d4ed80d":C.surface,
+                marginBottom:24, transition:"all .2s", boxShadow:dragging?"0 0 0 3px #1d4ed822":"none" }}>
+              <div style={{ width:52, height:52, background:dragging?"#1d4ed815":C.accentL, borderRadius:16, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 14px", transition:"all .2s" }}>
+                <Icon d={I.upload} size={24} color={dragging?"#1d4ed8":C.accent} />
               </div>
-              <p style={{ fontSize:15, fontWeight:700, color:dragging?"#16564c":C.text, marginBottom:6 }}>
+              <p style={{ fontSize:15, fontWeight:700, color:dragging?"#1d4ed8":C.text, marginBottom:6 }}>
                 {dragging ? "Drop to upload" : "Drop files here or choose files"}
               </p>
               <p style={{ fontSize:12, color:C.muted, margin:0 }}>PDF, Word, PowerPoint, images, and more</p>
@@ -5733,7 +5582,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFi
                             <LinkBtn file={file} allFiles={folder.files}
                               onSave={ids => onUpdate({...folder,files:folder.files.map(f=>f.id===file.id?{...f,linkedFileIds:ids}:f)})} />
                             <button onClick={() => onOpenFile(file)}
-                              style={{ display:"flex", alignItems:"center", gap:6, background:"#16564c", color:"#fff", border:"none", borderRadius:10, padding:"8px 18px", fontSize:13, fontWeight:600, cursor:"pointer", boxShadow:"0 3px 10px rgba(22,86,76,.3)" }}>
+                              style={{ display:"flex", alignItems:"center", gap:6, background:"#1d4ed8", color:"#fff", border:"none", borderRadius:10, padding:"8px 18px", fontSize:13, fontWeight:600, cursor:"pointer", boxShadow:"0 3px 10px rgba(29,78,216,.3)" }}>
                               Open →
                             </button>
                             <FileActionsMenu
@@ -5772,7 +5621,23 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFi
 }
 
 // ─── FILE VIEW ────────────────────────────────────────────────────────────────
-function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate, activeTab, onTabChange }) {
+function FileView({ file: sourceFile, folder, allFiles, user, isGuest, onBack, onUpdate, activeTab, onTabChange }) {
+  const [recalled, setRecalled] = useState(null);
+  const [recallError, setRecallError] = useState('');
+  const [recallAttempt, setRecallAttempt] = useState(0);
+  const file = { ...sourceFile, _fileObj: sourceFile._fileObj || FILE_STORE.get(sourceFile.id) || (recalled?.id === sourceFile.id ? recalled.blob : null) };
+  useEffect(() => {
+    if (file._fileObj || !file.cloudFile || !user) return;
+    let active = true;
+    setRecallError('');
+    recallOriginal(user.uid, file).then(blob => {
+      if (!active || auth.currentUser?.uid !== user.uid || !blob) return;
+      FILE_STORE.set(file.id, blob);
+      idbSave(file.id, blob);
+      setRecalled({ id: file.id, blob });
+    }).catch(() => { if (active) setRecallError('This file could not be downloaded from your account. Check your connection and try again.'); });
+    return () => { active = false; };
+  }, [sourceFile.id, sourceFile.cloudFile?.path, user?.uid, recallAttempt]);
   const tab = activeTab || "view";
   const setTab = onTabChange || (() => {});
   const fc = getFileColor(file);
@@ -5812,11 +5677,17 @@ function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate, act
           <span style={{ fontSize:15, fontWeight:600, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:360 }}>{file.name}</span>
         </div>
       </div>
+      {!file.cloudFile && !file._fileObj && !file._isBlank && file.type !== 'text/youtube' && user && <div className="workspace-warning"><p>The original may have been saved in this browser before cloud file sync was added. Only recover it here if it belongs to this account.</p><button type="button" onClick={async () => {
+        try { const blob = await recoverLegacyOriginal(file); if (!blob) { setRecallError('No matching original was found in this browser. Upload the original file again to enable cloud recall.'); return; } FILE_STORE.set(file.id, blob); await idbSave(file.id, blob); setRecalled({ id: file.id, blob }); onUpdate({ ...file, _fileObj: blob }); }
+        catch { setRecallError('This browser could not read the old original. Upload the file again.'); }
+      }}>Recover this account's original from this browser</button>{recallError && <p role="alert">{recallError}</p>}</div>}
+      {file.cloudFile && !file._fileObj && <p role="status" className="workspace-warning">{recallError || 'Downloading your original file from your account…'}{recallError && <button type="button" onClick={() => setRecallAttempt(value => value + 1)}>Retry download</button>}</p>}
       {/* Tabs controlled by sidebar */}
       {(() => {
         const isBlank = file._isBlank || file.isBlankDoc || file.id.startsWith("blank_");
         const effectiveTab = tab === "view" && isBlank ? file.defaultTab || "notes"
           : tab === "view" && file.type === "text/youtube" ? "youtube" : tab;
+        if (effectiveTab === "view" && file.cloudFile && !file._fileObj) return null;
         if (effectiveTab === "view") return <ViewTab file={file} onUpdate={onUpdate} />;
         return (
           <div className="page-inner" style={{ maxWidth:900, margin:"0 auto", padding:"32px 24px", overflow:"visible" }}>
@@ -5890,11 +5761,11 @@ ${text}`
       <div style={{ flex:1, display:"flex", overflow:"hidden" }}>
         <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", background:C.isDark?"#111110":"#2a2a26", padding:40 }}>
           <div style={{ background:C.surface, borderRadius:20, padding:"48px 56px", maxWidth:500, width:"100%", boxShadow:"0 8px 40px rgba(0,0,0,.3)", textAlign:"center", border:`1px solid ${C.border}` }}>
-            <div style={{ width:64, height:64, background:"#16564c15", borderRadius:18, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 20px" }}>
-              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#16564c" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            <div style={{ width:64, height:64, background:"#1d4ed815", borderRadius:18, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 20px" }}>
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
             </div>
-            <p style={{ fontSize:20, fontWeight:700, color:C.text, marginBottom:8, fontFamily:"'Fraunces Variable',serif" }}>Untitled Document</p>
-            <p style={{ fontSize:14, color:C.muted, marginBottom:28, lineHeight:1.6 }}>This is a blank notebook. Switch to the <strong style={{color:C.accent}}>Notes</strong> tab to write or generate AI notes.</p>
+            <p style={{ fontSize:20, fontWeight:700, color:C.text, marginBottom:8, fontFamily:"'Fraunces Variable',serif" }}>{file._isBlank || file.isBlankDoc ? "Untitled document" : "Original file unavailable on this device"}</p>
+            <p style={{ fontSize:14, color:C.muted, marginBottom:28, lineHeight:1.6 }}>{file._isBlank || file.isBlankDoc ? <>This is a blank notebook. Switch to the <strong style={{color:C.accent}}>Notes</strong> tab to write or generate notes.</> : "The original is not available in this browser. Recover it using the action above, or select the matching original from your device to enable cloud recall."}</p>
             <label style={{ display:"inline-flex", alignItems:"center", gap:8, background:"transparent", color:C.muted, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 20px", cursor:"pointer", fontSize:13, fontWeight:600 }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
               Upload a file instead
@@ -5934,7 +5805,7 @@ ${text}`
             </div>
           )}
           <button onClick={() => doExplain()} disabled={explaining}
-            style={{ display:"flex", alignItems:"center", gap:5, background:explaining?"#ccc":PRIMARY, color:"#fff", border:"none", borderRadius:7, padding:"6px 14px", fontSize:13, fontWeight:600, cursor:explaining?"default":"pointer", boxShadow:explaining?"none":"0 2px 8px rgba(22,86,76,.3)" }}>
+            style={{ display:"flex", alignItems:"center", gap:5, background:explaining?"#ccc":PRIMARY, color:"#fff", border:"none", borderRadius:7, padding:"6px 14px", fontSize:13, fontWeight:600, cursor:explaining?"default":"pointer", boxShadow:explaining?"none":"0 2px 8px rgba(29,78,216,.3)" }}>
             <Icon d={I.sparkle} size={12} color="#fff" sw={2} />{explaining?"Explaining…":"AI Explain"}
           </button>
       </div>
@@ -5993,7 +5864,7 @@ function ViewAIPanel({ file, explaining, explanation, showExplain, onHideExplain
       const sys = `You are a knowledgeable study assistant. ${fileText ? "Document content: " + fileText.slice(0,8000) : ""}
 Format responses with markdown: # headings, **bold** key terms, - bullet points, > for formulas/quotes.
 For comparisons/tables respond ONLY with JSON: {"TABLE":{"explanation":"...","columns":["A","B"],"rows":[["x","y"]]}}
-GRAPHS/CHARTS: If the user asks for a graph, chart, plot, scatter plot, or visualization of data, respond with ONLY valid JSON (no other text): {"GRAPH":{"type":"bar","title":"...","labels":["A","B","C"],"datasets":[{"label":"Series 1","data":[10,20,30],"backgroundColor":["#16564c","#39696d","#06b6d4"]}]}}
+GRAPHS/CHARTS: If the user asks for a graph, chart, plot, scatter plot, or visualization of data, respond with ONLY valid JSON (no other text): {"GRAPH":{"type":"bar","title":"...","labels":["A","B","C"],"datasets":[{"label":"Series 1","data":[10,20,30],"backgroundColor":["#1d4ed8","#39696d","#06b6d4"]}]}}
 Supported graph types: bar, line, pie, doughnut, scatter.
 If the user's request would clearly benefit from a visual (e.g. "show this as a graph", "compare these visually", "make a table"), proactively use the TABLE or GRAPH format even if not explicitly asked for JSON.
 NEVER use pipe-table markdown (| col | col |).`;
@@ -6046,7 +5917,7 @@ NEVER use pipe-table markdown (| col | col |).`;
       {explanation && msgs.length === 0 && (
         <div style={{ flex:1, overflowY:"auto", padding:"16px 20px" }}>
           <div style={{ background:T.isDark?"#222":"#2a2a2a", borderRadius:14, padding:"14px 16px" }}>
-            <p style={{ margin:"0 0 8px", fontSize:11, fontWeight:700, color:"#16564c", letterSpacing:.8, textTransform:"uppercase" }}>
+            <p style={{ margin:"0 0 8px", fontSize:11, fontWeight:700, color:"#1d4ed8", letterSpacing:.8, textTransform:"uppercase" }}>
               {isPDF ? `Page ${pageNum} — Explanation` : "AI Explanation"}
             </p>
             <p style={{ margin:0, fontSize:13, lineHeight:1.75, color:"#ddd", whiteSpace:"pre-wrap" }}>{explanation}</p>
@@ -6060,7 +5931,7 @@ NEVER use pipe-table markdown (| col | col |).`;
           {msgs.map((m,i) => (
             <div key={i} style={{ display:"flex", justifyContent:m.role==="user"?"flex-end":"flex-start" }}>
               <div style={{ maxWidth:"90%", padding:"10px 14px", borderRadius:14, fontSize:13, lineHeight:1.65,
-                background:m.role==="user"?"#16564c":"rgba(255,255,255,.08)",
+                background:m.role==="user"?"#1d4ed8":"rgba(255,255,255,.08)",
                 color:m.role==="user"?"#fff":"#ddd",
                 borderBottomRightRadius:m.role==="user"?2:14,
                 borderBottomLeftRadius:m.role==="user"?14:2 }}>
@@ -6076,7 +5947,7 @@ NEVER use pipe-table markdown (| col | col |).`;
           ))}
           {loading && (
             <div style={{ alignSelf:"flex-start", padding:"10px 14px", background:"rgba(255,255,255,.08)", borderRadius:14 }}>
-              <div style={{ display:"flex", gap:4 }}>{[0,1,2].map(j=><span key={j} style={{width:6,height:6,borderRadius:"50%",background:"#16564c",animation:`bounce .8s ease-in-out ${j*0.15}s infinite`,display:"inline-block"}}/>)}</div>
+              <div style={{ display:"flex", gap:4 }}>{[0,1,2].map(j=><span key={j} style={{width:6,height:6,borderRadius:"50%",background:"#1d4ed8",animation:`bounce .8s ease-in-out ${j*0.15}s infinite`,display:"inline-block"}}/>)}</div>
             </div>
           )}
           <div ref={bottomRef}/>
@@ -6100,7 +5971,7 @@ NEVER use pipe-table markdown (| col | col |).`;
             </button>
             <button onClick={()=>send()} disabled={!inp.trim()||loading}
               style={{ width:34, height:34, borderRadius:"50%", border:"none",
-                background:inp.trim()&&!loading?"#16564c":"rgba(255,255,255,.15)",
+                background:inp.trim()&&!loading?"#1d4ed8":"rgba(255,255,255,.15)",
                 cursor:inp.trim()&&!loading?"pointer":"default",
                 display:"flex", alignItems:"center", justifyContent:"center" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -6432,7 +6303,7 @@ FORMATTING — strictly follow:
         })()}
         {msgs.length === 0 && (
           <div style={{ textAlign:"center", padding:"24px 20px", color:C.muted }}>
-            <div style={{ width:52, height:52, borderRadius:16, background:"#16564c", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px" }}>
+            <div style={{ width:52, height:52, borderRadius:16, background:"#1d4ed8", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px" }}>
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8M12 5V3"/><circle cx="12" cy="3" r="1"/></svg>
             </div>
             <p style={{ fontSize:15, fontWeight:600, color:C.text, marginBottom:6 }}>AI Assistant</p>
@@ -6515,10 +6386,10 @@ FORMATTING — strictly follow:
             background:C.bg, color:C.text }} />
         <button onClick={send} disabled={(!inp.trim() && !attachedImage) || loading}
           style={{ flexShrink:0,
-            background:(inp.trim()||attachedImage)&&!loading?"#16564c":"#ccc",
+            background:(inp.trim()||attachedImage)&&!loading?"#1d4ed8":"#ccc",
             color:"#fff", border:"none", borderRadius:8, padding:"11px 20px",
             fontSize:14, fontWeight:700,
-            boxShadow:(inp.trim()||attachedImage)&&!loading?"0 3px 10px rgba(22,86,76,.3)":"none",
+            boxShadow:(inp.trim()||attachedImage)&&!loading?"0 3px 10px rgba(29,78,216,.3)":"none",
             cursor:(inp.trim()||attachedImage)&&!loading?"pointer":"not-allowed" }}>
           Send
         </button>
@@ -7005,7 +6876,7 @@ function ClassioTable({ data, onClose }) {
       chartInstance.current = new window.Chart(chartRef.current, {
         type:"bar",
         data:{ labels:chart.labels, datasets:[{ label:"Value", data:chart.values,
-          backgroundColor:"rgba(22,86,76,0.7)", borderColor:"#16564c", borderWidth:2, borderRadius:6 }] },
+          backgroundColor:"rgba(29,78,216,0.7)", borderColor:"#1d4ed8", borderWidth:2, borderRadius:6 }] },
         options:{ responsive:true, plugins:{ legend:{display:false} },
           scales:{ y:{ beginAtZero:true, grid:{color:"rgba(0,0,0,.06)"} } } }
       });
@@ -7175,7 +7046,7 @@ function NotesImageInsert({ file, onInsert }) {
           <button onClick={()=>{ if(aiPrompt.trim()){ onInsert(`[AIImage: ${aiPrompt.trim()} | ${aiStyle}]`); setAiPrompt(""); setShowAI(false); } }}
             disabled={!aiPrompt.trim()}
             style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"7px", borderRadius:8, border:"none",
-              background:aiPrompt.trim()?"#16564c":"#ccc", color:"#fff", fontSize:12, fontWeight:700, cursor:aiPrompt.trim()?"pointer":"not-allowed" }}>
+              background:aiPrompt.trim()?"#1d4ed8":"#ccc", color:"#fff", fontSize:12, fontWeight:700, cursor:aiPrompt.trim()?"pointer":"not-allowed" }}>
             <Icon d={I.sparkle} size={11} color="#fff" sw={2}/> Insert
           </button>
         </div>
@@ -7212,7 +7083,7 @@ You MUST respond with ONLY this exact JSON format and nothing else — no markdo
 Do NOT use markdown pipe tables (|col|col|) — ONLY use the JSON TABLE format above.
 
 GRAPHS/CHARTS: If the user asks for a graph, chart, plot, or visualization of data, respond with ONLY valid JSON (no other text):
-{"GRAPH":{"type":"bar","title":"...","labels":["A","B","C"],"datasets":[{"label":"Series 1","data":[10,20,30],"backgroundColor":["#16564c","#39696d","#06b6d4"]}]}}
+{"GRAPH":{"type":"bar","title":"...","labels":["A","B","C"],"datasets":[{"label":"Series 1","data":[10,20,30],"backgroundColor":["#1d4ed8","#39696d","#06b6d4"]}]}}
 Supported graph types: bar, line, pie, doughnut.
 
 Otherwise respond normally with formatted text. Never use pipe-table markdown (| col | col |) under any circumstances.`;
@@ -7269,7 +7140,7 @@ Otherwise respond normally with formatted text. Never use pipe-table markdown (|
               style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 12px", borderRadius:8,
                 border:`1px solid ${T.border}`, background:T.bg, cursor:"pointer", textAlign:"left",
                 position:"relative", transition:"all .15s", boxShadow:"none" }}
-              onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.boxShadow=`0 2px 10px rgba(22,86,76,.1)`;}}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.boxShadow=`0 2px 10px rgba(29,78,216,.1)`;}}
               onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
               {q.badge && <span style={{ position:"absolute", top:6, right:6, background:q.badgeColor, color:"#fff", fontSize:9, fontWeight:700, padding:"2px 7px", borderRadius:20 }}>{q.badge}</span>}
               <span style={{ display:"flex", flexShrink:0 }}>{q.icon}</span>
@@ -7502,7 +7373,7 @@ function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
             <table style={{ width:"100%", borderCollapse:"collapse", fontSize:fs, tableLayout:"fixed" }}>
               <colgroup>{cols.map((_,ci)=><col key={ci} style={{ width:`${100/n}%` }}/>)}</colgroup>
               <thead>
-                <tr style={{ background:"#16564c" }}>
+                <tr style={{ background:"#1d4ed8" }}>
                   {cols.map((col,ci)=>(
                     <th key={ci} style={{ padding:pad, textAlign:"left", fontWeight:700, color:"#fff", fontSize:fs-1, wordBreak:"break-word", verticalAlign:"top", borderRight:ci<n-1?"1px solid rgba(255,255,255,.15)":"none" }}>{col}</th>
                   ))}
@@ -7706,7 +7577,7 @@ function InlineChart({ data }) {
       }
       if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
       const ctx = canvasRef.current.getContext("2d");
-      const COLORS = ["#16564c","#39696d","#06b6d4","#10b981","#f59e0b","#ef4444","#16564c","#ec4899"];
+      const COLORS = ["#1d4ed8","#39696d","#06b6d4","#10b981","#f59e0b","#ef4444","#1d4ed8","#ec4899"];
       const processedDatasets = datasets.map((ds, di) => ({
         ...ds,
         backgroundColor: ds.backgroundColor || (type === "bar" || type === "line" ? COLORS[di % COLORS.length] + "cc" : labels.map((_, li) => COLORS[li % COLORS.length] + "cc")),
@@ -7940,7 +7811,7 @@ function RichText({ text }) {
     const parts = str.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
     return parts.map((p, pi) => {
       if (p.startsWith("**") && p.endsWith("**")) return <strong key={pi} style={{ fontWeight:700 }}>{p.slice(2,-2)}</strong>;
-      if (p.startsWith("`") && p.endsWith("`")) return <code key={pi} style={{ background:T.isDark?"#2a2a3a":"#f0eeff", color:"#16564c", borderRadius:4, padding:"1px 6px", fontSize:12, fontFamily:"monospace" }}>{p.slice(1,-1)}</code>;
+      if (p.startsWith("`") && p.endsWith("`")) return <code key={pi} style={{ background:T.isDark?"#2a2a3a":"#f0eeff", color:"#1d4ed8", borderRadius:4, padding:"1px 6px", fontSize:12, fontFamily:"monospace" }}>{p.slice(1,-1)}</code>;
       return p;
     });
   };
@@ -7960,7 +7831,7 @@ function RichText({ text }) {
       i++; continue;
     }
     if (trim.startsWith("### ")) {
-      els.push(<h4 key={i} style={{ fontSize:14, fontWeight:700, color:"#16564c", margin:"10px 0 3px" }}>{trim.slice(4)}</h4>);
+      els.push(<h4 key={i} style={{ fontSize:14, fontWeight:700, color:"#1d4ed8", margin:"10px 0 3px" }}>{trim.slice(4)}</h4>);
       i++; continue;
     }
     if (trim.startsWith("|") && trim.endsWith("|")) {
@@ -7974,8 +7845,8 @@ function RichText({ text }) {
         const body = rows.slice(1);
         els.push(<div key={"t"+i} style={{ margin:"12px 0", overflowX:"auto", borderRadius:10, border:`1.5px solid ${T.border}` }}>
           <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
-            <thead><tr style={{ background:T.isDark?"#252520":"#f0eeff" }}>
-              {headers.map((h,ci) => <th key={ci} style={{ padding:"8px 12px", textAlign:"left", fontWeight:700, color:"#16564c", borderBottom:`2px solid ${T.border}`, whiteSpace:"nowrap" }}>{h}</th>)}
+            <thead><tr style={{ background:T.isDark?"#1e293b":"#f0eeff" }}>
+              {headers.map((h,ci) => <th key={ci} style={{ padding:"8px 12px", textAlign:"left", fontWeight:700, color:"#1d4ed8", borderBottom:`2px solid ${T.border}`, whiteSpace:"nowrap" }}>{h}</th>)}
             </tr></thead>
             <tbody>{body.map((row,ri) => {
               const cells = parseRow(row);
@@ -7989,7 +7860,7 @@ function RichText({ text }) {
       continue;
     }
     if (trim.startsWith("> ")) {
-      els.push(<div key={i} style={{ borderLeft:"3px solid #16564c", padding:"8px 14px", margin:"8px 0", color:"#16564c", fontSize:14, lineHeight:1.65, fontStyle:"italic", background:T.isDark?"#16564c11":"#16564c08", borderRadius:"0 8px 8px 0" }}>{renderInline(trim.slice(2))}</div>);
+      els.push(<div key={i} style={{ borderLeft:"3px solid #1d4ed8", padding:"8px 14px", margin:"8px 0", color:"#1d4ed8", fontSize:14, lineHeight:1.65, fontStyle:"italic", background:T.isDark?"#1d4ed811":"#1d4ed808", borderRadius:"0 8px 8px 0" }}>{renderInline(trim.slice(2))}</div>);
       i++; continue;
     }
     if (trim.match(/^[-*\u2022] /)) {
@@ -7997,7 +7868,7 @@ function RichText({ text }) {
       while (i < lines.length && lines[i].trim().match(/^[-*\u2022] /)) { bullets.push(lines[i].trim().replace(/^[-*\u2022] /,"")); i++; }
       els.push(<ul key={"ul"+i} style={{ margin:"6px 0", paddingLeft:0, listStyle:"none" }}>
         {bullets.map((b,bi) => <li key={bi} style={{ display:"flex", gap:8, alignItems:"flex-start", margin:"3px 0" }}>
-          <span style={{ color:"#16564c", fontWeight:700, flexShrink:0, marginTop:2 }}>•</span>
+          <span style={{ color:"#1d4ed8", fontWeight:700, flexShrink:0, marginTop:2 }}>•</span>
           <span style={{ fontSize:14, color:T.text, lineHeight:1.65 }}>{renderInline(b)}</span>
         </li>)}
       </ul>);
@@ -8008,7 +7879,7 @@ function RichText({ text }) {
       while (i < lines.length && lines[i].trim().match(/^\d+\. /)) { items.push(lines[i].trim().replace(/^\d+\. /,"")); i++; }
       els.push(<ol key={"ol"+i} style={{ margin:"6px 0", paddingLeft:0, listStyle:"none" }}>
         {items.map((b,bi) => <li key={bi} style={{ display:"flex", gap:8, alignItems:"flex-start", margin:"3px 0" }}>
-          <span style={{ color:"#16564c", fontWeight:700, flexShrink:0, minWidth:20 }}>{bi+1}.</span>
+          <span style={{ color:"#1d4ed8", fontWeight:700, flexShrink:0, minWidth:20 }}>{bi+1}.</span>
           <span style={{ fontSize:14, color:T.text, lineHeight:1.65 }}>{renderInline(b)}</span>
         </li>)}
       </ol>);
@@ -8095,7 +7966,7 @@ function ELI5Panel({ card }) {
             style={{ flex:1, border:`1px solid ${T.border}`, borderRadius:10, padding:"8px 12px", fontSize:13, outline:"none", color:T.text, background:T.bg, fontFamily:"inherit" }}/>
           <button onClick={() => { setOpen(true); sendAsk(); }} disabled={!askQ.trim()||sending}
             style={{ width:34, height:34, borderRadius:"50%", border:"none",
-              background:askQ.trim()&&!sending?"#16564c":T.border,
+              background:askQ.trim()&&!sending?"#1d4ed8":T.border,
               cursor:askQ.trim()&&!sending?"pointer":"not-allowed",
               display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -8124,7 +7995,7 @@ function ELI5Panel({ card }) {
               {msgs.map((m, i) => (
                 <div key={i} style={{ maxWidth: m.role==="user" ? "85%" : "100%", alignSelf: m.role==="user" ? "flex-end" : "flex-start" }}>
                   {m.role === "user" ? (
-                    <div style={{ background:"#16564c", color:"#fff", borderRadius:16, padding:"12px 18px", fontSize:14, lineHeight:1.6 }}>
+                    <div style={{ background:"#1d4ed8", color:"#fff", borderRadius:16, padding:"12px 18px", fontSize:14, lineHeight:1.6 }}>
                       {m.content}
                     </div>
                   ) : (
@@ -8157,7 +8028,7 @@ function ELI5Panel({ card }) {
                 autoFocus/>
               <button onClick={sendAsk} disabled={!askQ.trim()||sending}
                 style={{ width:38, height:38, borderRadius:"50%", border:"none",
-                  background:askQ.trim()&&!sending?"#16564c":"#ef4444",
+                  background:askQ.trim()&&!sending?"#1d4ed8":"#ef4444",
                   cursor:askQ.trim()&&!sending?"pointer":"default",
                   display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                 {sending
@@ -8306,8 +8177,8 @@ function CardsTab({ file, onUpdate }) {
     <div>
       {/* ── Turbo-style header with icon + count ── */}
       <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20 }}>
-        <div style={{ width:48, height:48, background:"#16564c15", borderRadius:16, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#16564c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/></svg>
+        <div style={{ width:48, height:48, background:"#1d4ed815", borderRadius:16, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/></svg>
         </div>
         <div>
           <h2 style={{ fontFamily:"'Fraunces Variable',serif", fontSize:22, fontWeight:700, color:C.text, margin:0 }}>Study Cards</h2>
@@ -8319,7 +8190,7 @@ function CardsTab({ file, onUpdate }) {
             <Icon d={I.plus} size={13} color={C.text} sw={2.5}/> Add Card
           </button>
           <button onClick={()=>setShowCountPicker(p=>!p)} disabled={gen} className="hov"
-            style={{ display:"flex", alignItems:"center", gap:7, background:gen?"#ccc":"#16564c", color:"#fff", border:"none", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:gen?"not-allowed":"pointer", boxShadow:gen?"none":"0 3px 10px rgba(22,86,76,.3)" }}>
+            style={{ display:"flex", alignItems:"center", gap:7, background:gen?"#ccc":"#1d4ed8", color:"#fff", border:"none", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:gen?"not-allowed":"pointer", boxShadow:gen?"none":"0 3px 10px rgba(29,78,216,.3)" }}>
             {gen ? <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Generating…</> : <><Icon d={I.sparkle} size={13} color="#fff"/>AI Generate</>}
           </button>
         </div>
@@ -8350,7 +8221,7 @@ function CardsTab({ file, onUpdate }) {
       {/* ── Progress bar ── */}
       {cards.length > 0 && (
         <div style={{ height:5, background:C.border, borderRadius:3, marginBottom:20, overflow:"hidden" }}>
-          <div style={{ height:"100%", width:`${progress}%`, background:"#16564c", borderRadius:3, transition:"width .4s" }}/>
+          <div style={{ height:"100%", width:`${progress}%`, background:"#1d4ed8", borderRadius:3, transition:"width .4s" }}/>
         </div>
       )}
 
@@ -8384,7 +8255,7 @@ function CardsTab({ file, onUpdate }) {
                 style={{ width:52, border:"none", outline:"none", fontSize:14, fontWeight:700, color:C.text, background:"transparent", textAlign:"center" }}/>
             </div>
             <button onClick={()=>generate(parseInt(cardCount)||8)} disabled={gen||!parseInt(cardCount)}
-              style={{ flex:1, background:gen?"#ccc":PRIMARY, color:"#fff", border:"none", borderRadius:10, padding:"10px 0", fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer", boxShadow:gen?"none":"0 3px 12px rgba(22,86,76,.3)", display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
+              style={{ flex:1, background:gen?"#ccc":PRIMARY, color:"#fff", border:"none", borderRadius:10, padding:"10px 0", fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer", boxShadow:gen?"none":"0 3px 12px rgba(29,78,216,.3)", display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
               {gen ? <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Generating…</> : <><Icon d={I.sparkle} size={13} color="#fff"/> Generate {cardCount} Cards</>}
             </button>
           </div>
@@ -8443,7 +8314,7 @@ function CardsTab({ file, onUpdate }) {
               </div>
             </div>
             <div style={{ flexShrink:0, height:5, background:C.border }}>
-              <div style={{ height:"100%", width:`${pct}%`, background:"#16564c", transition:"width .35s ease" }}/>
+              <div style={{ height:"100%", width:`${pct}%`, background:"#1d4ed8", transition:"width .35s ease" }}/>
             </div>
             <div style={{ flexShrink:0, display:"flex", justifyContent:"center", gap:16, padding:"10px 28px 0", background:C.bg }}>
               <span className="pill-new">{(displayCards.length - Object.values(known).filter(Boolean).length - Object.values(starred).filter(Boolean).length)} New</span>
@@ -8484,7 +8355,7 @@ function CardsTab({ file, onUpdate }) {
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>Don't Know
                   </button>
                   <button onClick={() => gradeCard(card.id, true)} className="no-min-h"
-                    style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 28px", borderRadius:8, border:"none", background:isKnown?C.green:"#16564c", color:"#fff", fontSize:14, fontWeight:700, cursor:"pointer", boxShadow:isKnown?`0 3px 12px ${C.green}55`:"0 3px 12px rgba(22,86,76,.35)" }}>
+                    style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 28px", borderRadius:8, border:"none", background:isKnown?C.green:"#1d4ed8", color:"#fff", fontSize:14, fontWeight:700, cursor:"pointer", boxShadow:isKnown?`0 3px 12px ${C.green}55`:"0 3px 12px rgba(29,78,216,.35)" }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Remembered
                   </button>
                 </div>
@@ -8563,7 +8434,7 @@ function CardsTab({ file, onUpdate }) {
               </button>
             </div>
             <button onClick={()=>{setViewMode("study");setStudyIdx(0);setFlipped({});}} className="hov"
-              style={{ display:"flex", alignItems:"center", gap:8, background:"#16564c", color:"#fff", border:"none", borderRadius:8, padding:"10px 24px", fontSize:14, fontWeight:700, cursor:"pointer", boxShadow:"0 3px 14px rgba(22,86,76,.35)" }}>
+              style={{ display:"flex", alignItems:"center", gap:8, background:"#1d4ed8", color:"#fff", border:"none", borderRadius:8, padding:"10px 24px", fontSize:14, fontWeight:700, cursor:"pointer", boxShadow:"0 3px 14px rgba(29,78,216,.35)" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
               Start Studying
             </button>
@@ -8662,10 +8533,7 @@ function YouTubeTab({ file, onUpdate }) {
   const [cardsLoading, setCardsLoading] = useState(false);
   const [ytTableData,  setYtTableData]  = useState(null);
 
-  const extractVideoId = (u) => {
-    const m = u.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([A-Za-z0-9_-]{11})/);
-    return m ? m[1] : null;
-  };
+  const extractVideoId = url => youtubeVideo(url)?.id || null;
 
   const detectUrlType = (hostname) => {
     if (hostname === "youtu.be" || /(?:^|\.)youtube\.com$/.test(hostname)) return "youtube";
@@ -8704,7 +8572,7 @@ function YouTubeTab({ file, onUpdate }) {
     } catch { return null; }
   };
 
-  // Fetch transcript using multiple free methods
+  // Fetch a transcript from the configured service; otherwise request a pasted source.
   const fetchTranscript = async (vid) => {
     const serverUrl = TTS_SPACE_URL;
 
@@ -8714,29 +8582,17 @@ function YouTubeTab({ file, onUpdate }) {
         const resp = await fetch(`${serverUrl}/transcript/${vid}`, { signal: AbortSignal.timeout(12000) });
         if (resp.ok) {
           const data = await resp.json();
-          if (data.success && data.transcript) {
+          if (data.success && typeof data.transcript === "string") {
             return { transcript: data.transcript, title: data.title || "" };
           }
         }
       } catch { /* fall through */ }
     }
 
-    // Method 2: youtubetranscript.com free API (no key needed)
-    try {
-      const r = await fetch(`https://youtubetranscript.com/?server_vid2=${vid}`, { signal: AbortSignal.timeout(10000) });
-      if (r.ok) {
-        const xml = await r.text();
-        const lines = [...xml.matchAll(/<text[^>]*>([\s\S]*?)<\/text>/g)]
-          .map(m => m[1].replace(/<[^>]+>/g,"").replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&#39;/g,"'").trim())
-          .filter(Boolean);
-        if (lines.length > 10) return { transcript: lines.join(" "), title: "" };
-      }
-    } catch { /* fall through */ }
-
     return { transcript: null, title: "" };
   };
 
-  // Step 2: Get title via oEmbed (no API key, always works)
+  // Optional title via oEmbed; private videos and network failures may prevent it.
   const fetchTitle = async (vid) => {
     try {
       const r = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${vid}&format=json`);
@@ -8772,9 +8628,8 @@ function YouTubeTab({ file, onUpdate }) {
           content = transcript.slice(0, 16000);
           sourceLabel = "video transcript";
         } else {
-          content = null;
-          sourceLabel = "video title";
-          setStatus("No transcript — generating topic notes from title…");
+          setError('A transcript could not be retrieved. Paste the transcript below to generate source-based notes. The video has not been analyzed.');
+          setLoading(false); setStatus(''); return;
         }
       } else if (type === "wikipedia") {
         setStatus("Fetching Wikipedia article…");
@@ -8858,6 +8713,7 @@ ${modeGuide}`,
 
   return (
     <div>
+      <YouTubePreview url={url} />
       <div style={{ marginBottom:20 }}>
         <h2 style={{ fontFamily:"'Fraunces Variable',serif", fontSize:20, fontWeight:700, color:C.text, marginBottom:4 }}>Link Notes</h2>
         <p style={{ fontSize:13, color:C.muted }}>Paste a public link to make study notes from a YouTube video, Wikipedia article or webpage.</p>
@@ -8874,7 +8730,7 @@ ${modeGuide}`,
           ].map(m => (
             <button key={m.id} onClick={() => setMode(m.id)}
               style={{ flex:"1 1 0", padding:"9px 12px", borderRadius:10, border:`1.5px solid ${mode===m.id?C.accent:C.border}`,
-                background:mode===m.id?"#16564c15":"transparent", cursor:"pointer", textAlign:"left", transition:"all .15s" }}>
+                background:mode===m.id?"#1d4ed815":"transparent", cursor:"pointer", textAlign:"left", transition:"all .15s" }}>
               <p style={{ margin:"0 0 1px", fontSize:13, fontWeight:700, color:mode===m.id?C.accent:C.text }}>{m.label}</p>
               <p style={{ margin:0, fontSize:11, color:C.muted }}>{m.desc}</p>
             </button>
@@ -8903,7 +8759,7 @@ ${modeGuide}`,
         </div>
         {error && <p style={{ fontSize:13, color:C.red, marginTop:8 }}>{error}</p>}
         <p style={{ fontSize:11, color:C.muted, marginTop:10 }}>
-          Works with YouTube (any video, with or without transcript), Wikipedia articles, and any public webpage.
+          YouTube notes require an available or pasted transcript. Websites must allow browser access to their content.
         </p>
       </div>
 
@@ -8940,7 +8796,7 @@ Only include what's in the transcript.`,
                 Generate Table
               </button>
               <button onClick={saveAll} disabled={cardsLoading}
-                style={{ background:saved?"linear-gradient(135deg,#4A7C59,#4A9C69)":"#16564c", color:"#fff",
+                style={{ background:saved?"linear-gradient(135deg,#4A7C59,#4A9C69)":"#1d4ed8", color:"#fff",
                   border:"none", borderRadius:10, padding:"8px 16px",
                   fontSize:13, fontWeight:700, cursor:cardsLoading?"not-allowed":"pointer",
                   display:"flex", alignItems:"center", gap:6 }}>
@@ -9336,7 +9192,7 @@ RULES:
                 background:notes.trim()?PRIMARY:"#ccc", color:"#fff", border:"none",
                 borderRadius:10, padding:"10px 22px", fontSize:14, fontWeight:700,
                 cursor:notes.trim()?"pointer":"not-allowed",
-                boxShadow:notes.trim()?"0 4px 14px rgba(22,86,76,.35)":"none" }}>
+                boxShadow:notes.trim()?"0 4px 14px rgba(29,78,216,.35)":"none" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
               {script ? "Generate new podcast" : "Generate podcast"}
             </button>
@@ -9440,7 +9296,7 @@ RULES:
       <div style={{ display:"flex", alignItems:"center", gap:14 }}>
         <button onClick={listening ? stopMic : startMic}
           style={{ width:50, height:50, borderRadius:"50%", flexShrink:0, border:"none", cursor:"pointer",
-            background: listening ? "linear-gradient(135deg,#ef4444,#dc2626)" : "#16564c",
+            background: listening ? "linear-gradient(135deg,#ef4444,#dc2626)" : "#1d4ed8",
             boxShadow: listening ? "0 0 0 8px rgba(239,68,68,.15),0 4px 18px rgba(239,68,68,.35)" : "0 4px 16px rgba(124,58,237,.35)",
             display:"flex", alignItems:"center", justifyContent:"center", transition:"all .2s" }}>
           <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -9754,7 +9610,7 @@ Simple language, give an example, under 100 words. No markdown.`,
             width:54, height:54, borderRadius:"50%", flexShrink:0, border:"none", cursor:"pointer",
             background: listening
               ? "linear-gradient(135deg,#ef4444,#dc2626)"
-              : "#16564c",
+              : "#1d4ed8",
             boxShadow: listening
               ? "0 0 0 8px rgba(239,68,68,.18),0 4px 18px rgba(239,68,68,.4)"
               : "0 4px 18px rgba(124,58,237,.38)",
@@ -9859,8 +9715,8 @@ function PresentationTab({ file, onUpdate }) {
     { id:"ocean",  label:"Ocean",  bg:"#0c4a6e", accent:"#38bdf8", text:"#f0f9ff", sub:"#bae6fd", header:"#0e5a84", card:"rgba(255,255,255,.07)" },
     { id:"forest", label:"Forest", bg:"#14532d", accent:"#4ade80", text:"#f0fdf4", sub:"#bbf7d0", header:"#166534", card:"rgba(255,255,255,.07)" },
     { id:"sunset", label:"Sunset", bg:"#431407", accent:"#fb923c", text:"#fff7ed", sub:"#fed7aa", header:"#7c2d12", card:"rgba(255,255,255,.07)" },
-    { id:"minimal",label:"Minimal",bg:"#f8f9fa", accent:"#16564c", text:"#111827", sub:"#6b7280", header:"#16564c",  card:"rgba(0,0,0,.04)" },
-    { id:"dark",   label:"Dark",   bg:"#0f172a", accent:"#16564c", text:"#f1f5f9", sub:"#94a3b8", header:"#1e293b", card:"rgba(255,255,255,.05)" },
+    { id:"minimal",label:"Minimal",bg:"#f8f9fa", accent:"#1d4ed8", text:"#111827", sub:"#6b7280", header:"#1d4ed8",  card:"rgba(0,0,0,.04)" },
+    { id:"dark",   label:"Dark",   bg:"#0f172a", accent:"#1d4ed8", text:"#f1f5f9", sub:"#94a3b8", header:"#1e293b", card:"rgba(255,255,255,.05)" },
     { id:"rose",   label:"Rose",   bg:"#1c0010", accent:"#fb7185", text:"#fff1f2", sub:"#fecdd3", header:"#4c0519", card:"rgba(255,255,255,.07)" },
     { id:"slate",  label:"Slate",  bg:"#0f172a", accent:"#38bdf8", text:"#e2e8f0", sub:"#94a3b8", header:"#1e293b", card:"rgba(255,255,255,.06)" },
     { id:"amber",  label:"Amber",  bg:"#1c0a00", accent:"#f59e0b", text:"#fffbeb", sub:"#fde68a", header:"#451a03", card:"rgba(255,255,255,.07)" },
@@ -10175,7 +10031,7 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
               PDF
             </button>
             <button onClick={exportPPTX} disabled={exporting}
-              style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 16px", borderRadius:10, border:"none", background:"#16564c", color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", boxShadow:"0 3px 10px rgba(22,86,76,.3)" }}>
+              style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 16px", borderRadius:10, border:"none", background:"#1d4ed8", color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", boxShadow:"0 3px 10px rgba(29,78,216,.3)" }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
               {exporting ? "Exporting…" : "PPTX"}
             </button>
@@ -10223,7 +10079,7 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
               style={{ width:24,height:24,borderRadius:6,border:`1px solid ${C.border}`,background:C.surface,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",color:C.text,flexShrink:0 }}>+</button>
           </div>
           <button onClick={generate} disabled={generating}
-            style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 20px", borderRadius:10, border:"none", background:generating?"#ccc":"#16564c", color:"#fff", fontSize:14, fontWeight:700, cursor:generating?"not-allowed":"pointer", boxShadow:generating?"none":"0 3px 12px rgba(22,86,76,.3)", whiteSpace:"nowrap" }}>
+            style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 20px", borderRadius:10, border:"none", background:generating?"#ccc":"#1d4ed8", color:"#fff", fontSize:14, fontWeight:700, cursor:generating?"not-allowed":"pointer", boxShadow:generating?"none":"0 3px 12px rgba(29,78,216,.3)", whiteSpace:"nowrap" }}>
             {generating ? <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Generating…</> : <><Icon d={I.sparkle} size={12} color="#fff" sw={2}/> Generate</>}
           </button>
         </div>
@@ -10237,23 +10093,23 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
                 <button key={t.id} onClick={() => { setTheme(t.id); onUpdate({ ...file, presentationTheme: t.id }); }} title={t.label}
                   style={{ width:32, height:32, borderRadius:"50%",
                     background:t.bg, borderBottomColor:t.accent,
-                    border:`3px solid ${theme===t.id?"#16564c":"transparent"}`,
+                    border:`3px solid ${theme===t.id?"#1d4ed8":"transparent"}`,
                     cursor:"pointer", boxShadow:"0 2px 8px rgba(0,0,0,.25)",
                     transition:"all .15s", flexShrink:0, position:"relative",
                     transform:theme===t.id?"scale(1.15)":"scale(1)" }}>
-                  {theme===t.id && <div style={{ position:"absolute", inset:-4, borderRadius:"50%", border:"2px solid #16564c66" }}/>}
+                  {theme===t.id && <div style={{ position:"absolute", inset:-4, borderRadius:"50%", border:"2px solid #1d4ed866" }}/>}
                 </button>
               ))}
               {customTheme && (
                 <button key="custom" onClick={() => { setTheme("custom"); onUpdate({ ...file, presentationTheme: "custom" }); }} title={customTheme.label}
                   style={{ width:32, height:32, borderRadius:"50%",
                     background:customTheme.bg, borderBottomColor:customTheme.accent,
-                    border:`3px solid ${theme==="custom"?"#16564c":"transparent"}`,
+                    border:`3px solid ${theme==="custom"?"#1d4ed8":"transparent"}`,
                     cursor:"pointer", boxShadow:"0 2px 8px rgba(0,0,0,.25)",
                     transition:"all .15s", flexShrink:0, position:"relative",
                     transform:theme==="custom"?"scale(1.15)":"scale(1)" }}>
-                  {theme==="custom" && <div style={{ position:"absolute", inset:-4, borderRadius:"50%", border:"2px solid #16564c66" }}/>}
-                  <span style={{ position:"absolute", bottom:-2, right:-2, width:12, height:12, borderRadius:"50%", background:"#16564c", color:"#fff", fontSize:8, fontWeight:900, display:"flex", alignItems:"center", justifyContent:"center", border:`1.5px solid ${C.surface}` }}>✦</span>
+                  {theme==="custom" && <div style={{ position:"absolute", inset:-4, borderRadius:"50%", border:"2px solid #1d4ed866" }}/>}
+                  <span style={{ position:"absolute", bottom:-2, right:-2, width:12, height:12, borderRadius:"50%", background:"#1d4ed8", color:"#fff", fontSize:8, fontWeight:900, display:"flex", alignItems:"center", justifyContent:"center", border:`1.5px solid ${C.surface}` }}>✦</span>
                 </button>
               )}
             </div>
@@ -10267,7 +10123,7 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
                 onBlur={e=>e.target.style.borderColor=C.border}/>
               <button onClick={generateTheme} disabled={themeGenerating || !themePrompt.trim()}
                 style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 12px", borderRadius:8, border:"none",
-                  background:themeGenerating||!themePrompt.trim()?"#ccc":"#16564c",
+                  background:themeGenerating||!themePrompt.trim()?"#ccc":"#1d4ed8",
                   color:"#fff", fontSize:12, fontWeight:700, cursor:themeGenerating||!themePrompt.trim()?"not-allowed":"pointer", whiteSpace:"nowrap" }}>
                 {themeGenerating ? <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Generating…</> : <><Icon d={I.sparkle} size={11} color="#fff" sw={2}/> Generate Theme</>}
               </button>
@@ -10486,7 +10342,7 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
                               }}
                               disabled={aiImgGenerating}
                               style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", borderRadius:8, border:"none",
-                                background:aiImgGenerating?"#ccc":"#16564c",
+                                background:aiImgGenerating?"#ccc":"#1d4ed8",
                                 color:"#fff", fontSize:12, fontWeight:700, cursor:aiImgGenerating?"not-allowed":"pointer", whiteSpace:"nowrap" }}>
                               {aiImgGenerating ? <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Generating…</> : <><Icon d={I.sparkle} size={11} color="#fff" sw={2}/> {editVal.image && editVal.image.includes("pollinations") ? "Regenerate" : "Generate Image"}</>}
                             </button>
@@ -10547,7 +10403,7 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
                         const next = slides.map((item, index) => index === idx ? slide : item);
                         setSlides(next); onUpdate({ ...file, presentation:next }); setEditIdx(null);
                       }}
-                        style={{ flex:2, padding:"8px", background:"#16564c", color:"#fff", border:"none", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                        style={{ flex:2, padding:"8px", background:"#1d4ed8", color:"#fff", border:"none", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>
                         ✓ Save Changes
                       </button>
                       <button onClick={()=>setEditIdx(null)}
@@ -10665,7 +10521,7 @@ function GResults({ score, total, onBack, msg }) {
       <p style={{ fontSize:14, color:pct>=80?C.green:pct>=50?C.warm:C.red, fontWeight:600, marginBottom:32 }}>
         {pct>=80?"Excellent!":pct>=50?"Good effort! Keep studying.":"Keep practicing — you've got this!"}
       </p>
-      <button onClick={onBack} style={{ background:PRIMARY, color:"#fff", border:"none", borderRadius:8, padding:"13px 32px", fontSize:15, fontWeight:700, cursor:"pointer", boxShadow:"0 4px 14px rgba(22,86,76,.3)" }}>← Back to Games</button>
+      <button onClick={onBack} style={{ background:PRIMARY, color:"#fff", border:"none", borderRadius:8, padding:"13px 32px", fontSize:15, fontWeight:700, cursor:"pointer", boxShadow:"0 4px 14px rgba(29,78,216,.3)" }}>← Back to Games</button>
     </div>
   );
 }
@@ -12330,8 +12186,8 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
   const TTS_SERVER = _TTS_SERVER_URL;
   // Voices available from server (matches server.py VOICES dict)
   const SERVER_VOICES = [
-    { id:"aria",  label:"Aria",  gender:"female", color:"#16564c", desc:"Warm & natural"   },
-    { id:"nova",  label:"Nova",  gender:"female", color:"#16564c", desc:"Bright & clear"   },
+    { id:"aria",  label:"Aria",  gender:"female", color:"#1d4ed8", desc:"Warm & natural"   },
+    { id:"nova",  label:"Nova",  gender:"female", color:"#1d4ed8", desc:"Bright & clear"   },
     { id:"jade",  label:"Jade",  gender:"female", color:"#0f766e", desc:"Calm & smooth"    },
     { id:"echo",  label:"Echo",  gender:"male",   color:"#2563eb", desc:"Deep & confident" },
     { id:"atlas", label:"Atlas", gender:"male",   color:"#ea580c", desc:"Bold & clear"     },
@@ -12686,13 +12542,13 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
       {loading ? (
         <div style={{ padding:"48px 24px", textAlign:"center" }}>
           <div style={{ display:"flex", justifyContent:"center", gap:5, marginBottom:16 }}>
-            {[0,1,2,3].map(i => <span key={i} style={{ width:5, height:28, background:"#16564c", borderRadius:3, display:"inline-block", animation:`ppbar 0.9s ease-in-out ${i*0.15}s infinite` }}/>)}
+            {[0,1,2,3].map(i => <span key={i} style={{ width:5, height:28, background:"#1d4ed8", borderRadius:3, display:"inline-block", animation:`ppbar 0.9s ease-in-out ${i*0.15}s infinite` }}/>)}
           </div>
           <p style={{ color:"#a5b4fc", fontSize:14, fontWeight:600 }}>Generating podcast script…</p>
         </div>
       ) : !script ? (
         <div style={{ padding:"40px 24px", textAlign:"center" }}>
-          <p style={{ color:"#16564c", fontSize:14 }}>Generate a script to start the podcast.</p>
+          <p style={{ color:"#1d4ed8", fontSize:14 }}>Generate a script to start the podcast.</p>
         </div>
       ) : (
         <>
@@ -12700,9 +12556,9 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
           <div style={{ padding:"18px 20px 0", display:"flex", alignItems:"flex-start", justifyContent:"space-between" }}>
             <div>
               <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}>
-                <p style={{ fontSize:10, fontWeight:800, color:"#16564c", letterSpacing:1.5, textTransform:"uppercase" }}>Study Podcast</p>
+                <p style={{ fontSize:10, fontWeight:800, color:"#1d4ed8", letterSpacing:1.5, textTransform:"uppercase" }}>Study Podcast</p>
                 {usePiper && (
-                  <span style={{ fontSize:9, background:"#16564c", color:"#fff", borderRadius:6, padding:"1px 7px", fontWeight:800, letterSpacing:.5 }}>
+                  <span style={{ fontSize:9, background:"#1d4ed8", color:"#fff", borderRadius:6, padding:"1px 7px", fontWeight:800, letterSpacing:.5 }}>
                     PIPER
                   </span>
                 )}
@@ -12727,7 +12583,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
           {piperLoading && (
             <div style={{ margin:"12px 20px 0", background:"rgba(99,102,241,.15)", border:"1px solid rgba(99,102,241,.3)", borderRadius:10, padding:"10px 14px", display:"flex", alignItems:"center", gap:10 }}>
               <div style={{ display:"flex", gap:3 }}>
-                {[0,1,2].map(i => <span key={i} style={{ width:4, height:14, background:"#16564c", borderRadius:2, display:"inline-block", animation:`ppbar 0.8s ease-in-out ${i*0.15}s infinite` }}/>)}
+                {[0,1,2].map(i => <span key={i} style={{ width:4, height:14, background:"#1d4ed8", borderRadius:2, display:"inline-block", animation:`ppbar 0.8s ease-in-out ${i*0.15}s infinite` }}/>)}
               </div>
               <p style={{ color:"#a5b4fc", fontSize:12, margin:0 }}>Generating audio… if slow, the server just restarted and is downloading voices. Wait ~60s then try again.</p>
             </div>
@@ -12751,7 +12607,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
             {/* Progress bar */}
             <div onClick={handleSeekBar} onTouchStart={handleSeekBar}
               style={{ height:6, background:"rgba(255,255,255,.1)", borderRadius:3, cursor:"pointer", marginBottom:16, position:"relative", userSelect:"none" }}>
-              <div style={{ height:"100%", width:`${progress*100}%`, background:"#16564c", borderRadius:3, transition:"width .15s linear" }}/>
+              <div style={{ height:"100%", width:`${progress*100}%`, background:"#1d4ed8", borderRadius:3, transition:"width .15s linear" }}/>
               <div style={{ position:"absolute", top:"50%", left:`${progress*100}%`, transform:"translate(-50%,-50%)", width:13, height:13, borderRadius:"50%", background:"#fff", boxShadow:"0 0 6px rgba(99,102,241,.8)", pointerEvents:"none" }}/>
             </div>
 
@@ -12769,7 +12625,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
 
               {/* Play / Pause */}
               <button onClick={isPlaying ? handlePause : handlePlay} disabled={piperLoading}
-                style={{ width:60, height:60, borderRadius:"50%", background: piperLoading ? "rgba(99,102,241,.4)" : "#16564c", border:"none", color:"#fff", cursor: piperLoading ? "not-allowed" : "pointer", boxShadow:"0 6px 24px rgba(99,102,241,.5)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                style={{ width:60, height:60, borderRadius:"50%", background: piperLoading ? "rgba(99,102,241,.4)" : "#1d4ed8", border:"none", color:"#fff", cursor: piperLoading ? "not-allowed" : "pointer", boxShadow:"0 6px 24px rgba(99,102,241,.5)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                 {piperLoading
                   ? <div style={{ display:"flex", gap:3 }}>{[0,1,2].map(i=><span key={i} style={{ width:3, height:12, background:"#fff", borderRadius:2, animation:`ppbar 0.8s ease-in-out ${i*0.15}s infinite` }}/>)}</div>
                   : isPlaying
@@ -12790,7 +12646,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
 
               {/* Voice picker toggle */}
               <button onClick={() => setShowPicker(v => !v)}
-                style={{ width:36, height:36, borderRadius:"50%", background:showPicker?"rgba(99,102,241,.5)":"rgba(255,255,255,.08)", border:`1.5px solid ${showPicker?"#16564c":"rgba(255,255,255,.15)"}`, color:"#a5b4fc", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                style={{ width:36, height:36, borderRadius:"50%", background:showPicker?"rgba(99,102,241,.5)":"rgba(255,255,255,.08)", border:`1.5px solid ${showPicker?"#1d4ed8":"rgba(255,255,255,.15)"}`, color:"#a5b4fc", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
                   <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
@@ -12805,7 +12661,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
               <span style={{ fontSize:9, fontWeight:800, color:"#4b5563", marginRight:2, letterSpacing:1 }}>SPEED</span>
               {SPEEDS.map(s => (
                 <button key={s} onClick={() => changeSpeed(s)}
-                  style={{ padding:"3px 8px", borderRadius:8, border:`1.5px solid ${speed===s?"#16564c":"rgba(255,255,255,.12)"}`, background:speed===s?"#16564c":"transparent", color:speed===s?"#fff":"#818cf8", fontSize:11, fontWeight:700, cursor:"pointer" }}>
+                  style={{ padding:"3px 8px", borderRadius:8, border:`1.5px solid ${speed===s?"#1d4ed8":"rgba(255,255,255,.12)"}`, background:speed===s?"#1d4ed8":"transparent", color:speed===s?"#fff":"#818cf8", fontSize:11, fontWeight:700, cursor:"pointer" }}>
                   {s}×
                 </button>
               ))}
@@ -12820,8 +12676,8 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
                 <div style={{ display:"flex", gap:4, marginBottom:10, background:"rgba(255,255,255,.05)", borderRadius:10, padding:3 }}>
                   <button onClick={switchToPiper}
                     style={{ flex:1, padding:"5px 0", borderRadius:8, border:"none", cursor:"pointer", fontSize:10, fontWeight:800,
-                      background:usePiper?"#16564c":"transparent",
-                      color:usePiper?"#fff":"#16564c" }}>
+                      background:usePiper?"#1d4ed8":"transparent",
+                      color:usePiper?"#fff":"#1d4ed8" }}>
                     PIPER Neural
                   </button>
                   <button onClick={switchToBrowser}
@@ -12877,7 +12733,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
                 <>
                   <span style={{ width:10, height:10, borderRadius:"50%", background:serverVoice.color, display:"inline-block", boxShadow:`0 0 6px ${serverVoice.color}` }}/>
                   <span style={{ fontSize:11, color:"#c7d2fe", fontWeight:700 }}>{serverVoice.label}</span>
-                  <span style={{ fontSize:11, color:"#16564c" }}>· {serverVoice.gender==="female"?"♀":"♂"} · {serverVoice.desc}</span>
+                  <span style={{ fontSize:11, color:"#1d4ed8" }}>· {serverVoice.gender==="female"?"♀":"♂"} · {serverVoice.desc}</span>
                   <span style={{ fontSize:9, background:"#31544c", color:"#c7d2fe", borderRadius:6, padding:"1px 7px", fontWeight:800 }}>PIPER</span>
                   {!piperReady && !piperLoading && <span style={{ fontSize:9, color:"#f59e0b" }}>▶ Press play to generate</span>}
                 </>
@@ -12885,7 +12741,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
                 <>
                   <span style={{ width:10, height:10, borderRadius:"50%", background:persona.color, display:"inline-block", boxShadow:`0 0 6px ${persona.color}` }}/>
                   <span style={{ fontSize:11, color:"#c7d2fe", fontWeight:700 }}>{persona.label}</span>
-                  <span style={{ fontSize:11, color:"#16564c" }}>· {persona.gender==="female"?"♀":persona.gender==="male"?"♂":"◇"} · {persona.desc}</span>
+                  <span style={{ fontSize:11, color:"#1d4ed8" }}>· {persona.gender==="female"?"♀":persona.gender==="male"?"♂":"◇"} · {persona.desc}</span>
                 </>
               )}
             </div>
@@ -12894,7 +12750,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
           {/* No server banner */}
           {!usePiper && (
             <div style={{ margin:"0 12px 12px", background:"rgba(99,102,241,.08)", border:"1px dashed rgba(99,102,241,.3)", borderRadius:10, padding:"8px 12px", textAlign:"center" }}>
-              <p style={{ color:"#16564c", fontSize:11, margin:0 }}>
+              <p style={{ color:"#1d4ed8", fontSize:11, margin:0 }}>
                 Browser voices are available on this device.
               </p>
             </div>
@@ -12902,7 +12758,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
 
           {/* Script viewer */}
           <details style={{ borderTop:"1px solid rgba(255,255,255,.06)" }}>
-            <summary style={{ padding:"10px 20px", color:"#16564c", fontSize:12, fontWeight:700, cursor:"pointer", userSelect:"none", letterSpacing:.5 }}>READ SCRIPT</summary>
+            <summary style={{ padding:"10px 20px", color:"#1d4ed8", fontSize:12, fontWeight:700, cursor:"pointer", userSelect:"none", letterSpacing:.5 }}>READ SCRIPT</summary>
             <div style={{ padding:"0 20px 20px", maxHeight:200, overflowY:"auto" }}>
               <p style={{ fontSize:13, color:"#c7d2fe", lineHeight:1.9, whiteSpace:"pre-wrap" }}>{script}</p>
             </div>
@@ -13092,7 +12948,7 @@ Be conversational. Under 120 words. No markdown, no asterisks.`,
             width:48, height:48, borderRadius:"50%", flexShrink:0, border:"none", cursor:loading?"not-allowed":"pointer",
             background: listening
               ? "linear-gradient(135deg,#ef4444,#dc2626)"
-              : "#16564c",
+              : "#1d4ed8",
             boxShadow: listening
               ? "0 0 0 6px rgba(239,68,68,.25), 0 4px 16px rgba(239,68,68,.4)"
               : "0 4px 16px rgba(99,102,241,.5)",
@@ -13127,16 +12983,8 @@ Be conversational. Under 120 words. No markdown, no asterisks.`,
 
 // ─── MODAL ────────────────────────────────────────────────────────────────────
 function Modal({ children, onClose }) {
-  return (
-    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.35)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
-      <div onClick={e=>e.stopPropagation()} style={{ background:C.surface, borderRadius:20, padding:"28px 32px", width:"100%", maxWidth:460, boxShadow:"0 24px 64px rgba(0,0,0,.18)", border:`1px solid ${C.border}`, position:"relative" }}>
-        <button onClick={onClose} style={{ position:"absolute", top:16, right:16, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:20, lineHeight:1, padding:"2px 6px", borderRadius:6 }}>×</button>
-        {children}
-      </div>
-    </div>
-  );
+  return <Dialog onClose={onClose}>{children}</Dialog>;
 }
-
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // STUDY GROUP SYSTEM
@@ -14414,7 +14262,7 @@ function SGAIFlashcardGen({ groupId, db, user, groupFile, onClose }) {
                 background:gen||(!groupFile&&!topic.trim())?"#ccc":PRIMARY, color:"#fff", border:"none", borderRadius:8,
                 padding:"12px", fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer",
                 display:"flex", alignItems:"center", justifyContent:"center", gap:8,
-                opacity:(!groupFile&&!topic.trim())?.5:1, boxShadow:"0 4px 14px rgba(22,86,76,.3)",
+                opacity:(!groupFile&&!topic.trim())?.5:1, boxShadow:"0 4px 14px rgba(29,78,216,.3)",
               }}>
                 {gen?<><SGSpinner color="#fff"/>Generating…</>:<><Icon d={I.sparkle} size={13} color="#fff"/> Generate {cardCount} Cards</>}
               </button>
@@ -14584,7 +14432,7 @@ Math: proper notation (1×10⁻¹⁰ not words, H₂O not words). Units: standar
             background:gen||(!groupFile&&!topic.trim())?"#ccc":PRIMARY, color:"#fff", border:"none", borderRadius:8,
             padding:"12px", fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer",
             display:"flex", alignItems:"center", justifyContent:"center", gap:8,
-            opacity:(!groupFile&&!topic.trim())?.5:1, boxShadow:"0 4px 14px rgba(22,86,76,.3)",
+            opacity:(!groupFile&&!topic.trim())?.5:1, boxShadow:"0 4px 14px rgba(29,78,216,.3)",
           }}>
             {gen?<><SGSpinner color="#fff"/>Generating notes…</>:<><Icon d={I.sparkle} size={13} color="#fff"/> Generate Notes</>}
           </button>

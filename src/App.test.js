@@ -4,42 +4,54 @@ import { checkBirthDate } from "./eligibility";
 import { escapeHtml, sanitizeDocumentHtml } from "./safeContent";
 import { parseStudyRequest } from "../server/study-request";
 
+jest.mock('./firebase', () => ({ auth: { currentUser: null }, accountHeaders: jest.fn(async () => ({})) }));
+let mockAccessStage = 'new';
 const mockWorkspace = jest.fn(() => <p>Workspace loaded</p>);
 jest.mock("./App", () => ({ __esModule: true, default: () => mockWorkspace() }));
 
 beforeEach(() => {
   sessionStorage.clear();
+  localStorage.clear();
+  mockAccessStage = 'new';
+  global.fetch = jest.fn(async (_url, options) => {
+    if (options?.method === 'POST') {
+      const body = JSON.parse(options.body);
+      if (body.action === 'screen') mockAccessStage = checkBirthDate(body.birthDate) ? 'eligible' : 'blocked';
+      if (body.action === 'accept') mockAccessStage = 'accepted';
+    }
+    return { ok: true, json: async () => ({ stage: mockAccessStage }) };
+  });
   window.history.replaceState({}, "", "/");
   mockWorkspace.mockImplementation(() => <p>Workspace loaded</p>);
 });
 
-function enterBirthDate(value) {
-  fireEvent.click(screen.getByRole("button", { name: "Get started" }));
+async function enterBirthDate(value) {
+  fireEvent.click(await screen.findByRole("button", { name: "Get started" }));
   const field = screen.getByLabelText("Date of birth");
   fireEvent.change(field, { target: { value } });
-  fireEvent.submit(field.form);
+  await act(async () => { fireEvent.submit(field.form); });
 }
 
-test("blocks a younger visitor before loading the workspace, including after reload", () => {
+test("blocks a younger visitor before loading the workspace, including after reload", async () => {
   const page = render(<Entry />);
-  enterBirthDate("2020-01-01");
+  await enterBirthDate("2020-01-01");
   expect(screen.getByRole("heading", { name: "Classio is unavailable to you" })).toBeInTheDocument();
-  expect(sessionStorage.getItem("classio_access_v1")).toBe("blocked");
+  expect(global.fetch).toHaveBeenCalledWith("/api/access", expect.objectContaining({ method: "POST" }));
   expect(mockWorkspace).not.toHaveBeenCalled();
   page.unmount();
   render(<Entry />);
-  expect(screen.getByRole("heading", { name: "Classio is unavailable to you" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Classio is unavailable to you" })).toBeInTheDocument();
 });
 
 test("loads the workspace only after the terms step for an eligible visitor", async () => {
   render(<Entry />);
-  enterBirthDate("2000-01-01");
+  await enterBirthDate("2000-01-01");
   expect(mockWorkspace).not.toHaveBeenCalled();
-  expect(sessionStorage.getItem("classio_access_v1")).toBe("eligible");
+  expect(mockAccessStage).toBe("eligible");
   fireEvent.click(screen.getByRole("checkbox"));
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Open workspace" })); });
   expect(await screen.findByText("Workspace loaded")).toBeInTheDocument();
-  expect(sessionStorage.getItem("classio_access_v1")).toBe("accepted");
+  expect(mockAccessStage).toBe("accepted");
 });
 
 test.each([
@@ -89,7 +101,7 @@ test("guest AI requests send no account token", async () => {
     const payload = { messages: [{ role: "user", content: "Explain momentum." }], maxTokens: 500 };
     expect(await sendStudyRequest(payload)).toMatch(/momentum/i);
     expect(global.fetch).toHaveBeenCalledWith("/api/study", expect.objectContaining({
-      headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider: "auto", allowFallback: false, ...payload }),
     }));
   } finally { global.fetch = originalFetch; }
 });

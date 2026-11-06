@@ -1,0 +1,76 @@
+:root {
+  --paper: var(--theme-bg, #f8fafc); --ink: var(--theme-text, #17243b); --muted: var(--theme-muted, #52627a);
+  --line: var(--theme-border, #dbe4ef); --surface: var(--theme-surface, #fff); --brand: #1d4ed8; --soft-blue: #eff6ff;
+  --radius: 18px; color-scheme: light;
+}
+:root[data-theme="dark"] { color-scheme: dark; --soft-blue: #172e50; }
+body { background: var(--paper); color: var(--ink); }
+button, input, textarea, select { font: inherit; }
+button, a, input, textarea, select, summary { -webkit-tap-highlight-color: transparent; }
+button { touch-action: manipulation; }
+button, a { transition: background-color .16s, color .16s, border-color .16s, box-shadow .16s; }
+button:disabled { cursor: not-allowed; }
+:focus-visible { outline: 3px solid #60a5fa; outline-offset: 3px; }
+input, textarea, select { min-width: 0; max-width: 100%; accent-color: #2563eb; }
+input, textarea, select, .classio-dialog { color: var(--ink); background: var(--surface); border-color: var(--line); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.classio-dialog { border: 1px solid var(--line); border-radius: 22px; width: min(460px, calc(100vw - 24px)); max-width: calc(100vw - 24px); max-height: calc(100dvh - 24px); padding: 24px; box-shadow: 0 24px 70px #0f172a33; overflow-y: auto; overscroll-behavior: contain; }
+.classio-dialog::backdrop { background: #07142799; backdrop-filter: blur(3px); }
+.dialog-close { position: absolute; top: 10px; right: 10px; width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--ink); font-size: 24px; z-index: 2; cursor: pointer; }
+.classio-dialog h2 { padding-right: 24px; }
+.classio-dialog button:not(.dialog-close), .course-form button, .assistant-toolbar button, .assistant-composer button { min-height: 42px; }
+.course-form { display: grid; gap: 14px; padding: 20px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.course-form label, .study-lesson label, .assistant-toolbar label, .ai-preferences label { display: grid; gap: 7px; font-size: 14px; font-weight: 600; }
+.course-form input, .course-form textarea, .course-form select, .study-lesson textarea, .assistant-toolbar select, .ai-preferences select { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); color: var(--ink); width: 100%; }
+.course-form textarea { min-height: 80px; resize: vertical; }
+.study-lesson textarea { min-height: 280px; resize: vertical; }
+.course-form button { justify-self: start; }
+.ai-preferences { border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: grid; gap: 12px; }
+.ai-preferences p { font-size: 12px; color: var(--muted); margin: 0; line-height: 1.6; }
+.ai-preferences .checkbox-label { display: flex; gap: 10px; align-items: start; font-weight: 400; line-height: 1.5; }
+.checkbox-label input { margin-top: 4px; }
+.assistant-dialog { width: min(900px, calc(100vw - 24px)); height: min(860px, calc(100dvh - 24px)); padding: 0; overflow: hidden; }
+.assistant-dialog[open] { display: flex; flex-direction: column; }
+.assistant-header { padding: 24px 24px 12px; }
+.assistant-header h2 { font-family: 'Fraunces Variable', Georgia, serif; font-size: 28px; margin: 4px 0; }
+.assistant-header > p:last-child { color: var(--muted); margin: 8px 0; }
+.assistant-toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; padding: 0 24px 12px; }
+.assistant-toolbar label { flex: 1; min-width: 140px; }
+.assistant-toolbar button, .assistant-composer button { padding: 8px 14px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 10px; cursor: pointer; }
+.assistant-settings { padding: 0 24px 12px; max-height: 190px; overflow: auto; flex-shrink: 0; }
+.assistant-settings summary { cursor: pointer; color: var(--muted); margin: 4px 0 8px; }
+.assistant-messages { flex: 1; min-height: 60px; padding: 16px 24px; overflow-y: auto; overscroll-behavior: contain; border-block: 1px solid var(--line); }
+.assistant-empty { padding: 32px 8px; max-width: 380px; margin: auto; text-align: center; color: var(--muted); line-height: 1.6; }
+.chat-message { max-width: 94%; margin-bottom: 18px; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); overflow-wrap: anywhere; line-height: 1.6; }
+.chat-message.user { margin-left: auto; background: var(--soft-blue); }
+.chat-message > strong { display: block; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.chat-message img { max-width: 100%; max-height: 200px; object-fit: contain; }
+.chat-message pre, .chat-message table { display: block; max-width: 100%; overflow-x: auto; }
+.assistant-composer { display: flex; align-items: end; gap: 8px; padding: 12px 24px 4px; flex-wrap: wrap; }
+.assistant-composer textarea { flex: 1 1 200px; min-height: 44px; max-height: 120px; padding: 12px; resize: vertical; border: 1px solid var(--line); border-radius: 12px; }
+.assistant-composer button[type="submit"] { color: #fff; background: var(--brand); border-color: var(--brand); }
+.attachment-control { display: block; font-size: 12px; cursor: pointer; width: 100%; }
+.attachment-control input { margin-left: 8px; max-width: 250px; }
+.assistant-save-state { padding: 4px 24px 12px; margin: 0; font-size: 12px; color: var(--muted); }
+.inline-error { padding: 4px 24px; color: var(--theme-red); }
+.workspace-warning { background: var(--soft-blue); color: var(--ink); border-color: #60a5fa; line-height: 1.5; border-radius: 10px; }
+.workspace-warning button { margin-left: 12px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+.mobile-header { position: fixed; inset: 0 0 auto; z-index: 350; height: 56px; display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; background: var(--surface); color: var(--ink); border-bottom: 1px solid var(--line); }
+.mobile-header > a { color: inherit; text-decoration: none; font: 700 22px 'Fraunces Variable', Georgia, serif; }
+.mobile-header button { width: 44px; height: 44px; display: grid; place-items: center; border: 0; background: transparent; color: var(--ink); font-size: 28px; border-radius: 10px; }
+.classio-dialog.navigation-drawer { margin: 0; width: min(340px, 92vw); max-height: 100dvh; height: 100dvh; border-radius: 0 20px 20px 0; padding: 22px 16px; }
+.navigation-drawer nav { display: grid; gap: 5px; margin: 16px 0; }
+.navigation-drawer nav + nav { border-top: 1px solid var(--line); padding-top: 12px; }
+.navigation-drawer nav h3 { margin: 4px 12px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.navigation-drawer button:not(.dialog-close) { display: flex; align-items: center; gap: 12px; padding: 12px; border: 0; border-radius: 10px; color: var(--ink); background: transparent; text-align: left; cursor: pointer; }
+.navigation-drawer button:hover, .navigation-drawer button[aria-current] { background: var(--soft-blue); }
+.drawer-account { border-top: 1px solid var(--line); display: grid; padding-top: 12px; }
+.youtube-preview { padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); margin-bottom: 20px; }
+.youtube-preview h3 { margin-top: 0; }
+.youtube-preview iframe { width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 10px; }
+.youtube-preview p { color: var(--muted); line-height: 1.5; font-size: 13px; }
+.youtube-preview a { color: var(--theme-accent); }
+body.classio-dark button[style*="background: rgb(147, 197, 253)"], body.classio-dark button[style*="background-color: rgb(147, 197, 253)"] { color: #0f172a !important; }
+@media (max-width: 640px) { .assistant-header, .assistant-toolbar, .assistant-messages { padding: 14px; } .assistant-composer { padding: 10px 14px; } .assistant-header h2 { font-size: 23px; } .classio-dialog { padding: 18px; } .assistant-dialog { padding: 0; } .course-form { padding: 14px; } .page-inner { padding: 18px 12px !important; } }
+@media (pointer: coarse) { input, textarea, select { font-size: 16px !important; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }

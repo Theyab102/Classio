@@ -1,4 +1,4 @@
-.notes-studio,.document-viewer,.deck-studio { --studio-bg:#f3f4f0; --studio-paper:#fff; --studio-ink:#24332f; --studio-muted:#53645e; --studio-rule:#cdd9d3; --studio-accent:#16564c; color:var(--studio-ink); min-width:0; }
+.notes-studio,.document-viewer,.deck-studio { --studio-bg:#f3f4f0; --studio-paper:#fff; --studio-ink:#24332f; --studio-muted:#53645e; --studio-rule:#cdd9d3; --studio-accent:#1d4ed8; color:var(--studio-ink); min-width:0; }
 .classio-dark :is(.notes-studio,.document-viewer,.deck-studio) { --studio-bg:#20231f; --studio-paper:#292e29; --studio-ink:#eef3ed; --studio-muted:#bcc9c0; --studio-rule:#46534a; --studio-accent:#9bd1bb; }
 .studio-header { display:flex; align-items:center; justify-content:space-between; gap:.75rem; margin-bottom:.75rem; flex-wrap:wrap; }
 .studio-header h2 { font:700 clamp(1.6rem,4vw,2.2rem) "Fraunces Variable",Georgia,serif; }

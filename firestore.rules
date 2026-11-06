@@ -3,6 +3,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
     function ownsWorkspace(userId) {
       return request.auth != null && request.auth.uid == userId &&
+        request.auth.token.email_verified == true &&
         request.auth.token.firebase.sign_in_provider == "google.com";
     }
 
@@ -11,6 +12,22 @@ service cloud.firestore {
       match /savedNotes/{fileId} {
         allow get, create, update, delete: if ownsWorkspace(userId);
       }
+      match /folders/{folderId} {
+        allow read: if ownsWorkspace(userId);
+        allow create: if ownsWorkspace(userId) && request.resource.data.id == folderId;
+        allow update: if ownsWorkspace(userId) &&
+          (!('id' in request.resource.data) || request.resource.data.id == folderId);
+      }
+      match /files/{fileId} {
+        allow read: if ownsWorkspace(userId);
+        allow create: if ownsWorkspace(userId) && request.resource.data.id == fileId;
+        allow update: if ownsWorkspace(userId) &&
+          (!('id' in request.resource.data) || request.resource.data.id == fileId);
+      }
+      match /sync/{recordId} { allow read, create, update: if ownsWorkspace(userId); }
+      match /profile/{recordId} { allow read, create, update: if ownsWorkspace(userId); }
+      match /conversations/{conversationId} { allow read, create, update: if ownsWorkspace(userId); }
+      // access/verification and aiJobs are written only by verified backend code.
     }
   }
 }

@@ -1,0 +1,140 @@
+const { chromium } = require('playwright-core');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const outputDirectory = path.resolve(process.env.CLASSIO_TEST_OUTPUT || 'test-results');
+fs.mkdirSync(outputDirectory, {recursive:true});
+// Requires the local frontend/API. Course success uses an explicit test fixture; no live provider is claimed.
+(async () => {
+  const browser = await chromium.launch({executablePath:process.env.CLASSIO_BROWSER_PATH || '/usr/bin/chromium',headless:true,args:['--no-sandbox']});
+  try {
+    const initial = await browser.newContext({viewport:{width:1366,height:900},colorScheme:'light'});
+    const page = await initial.newPage();
+    await page.goto('http://127.0.0.1:3000');
+    await page.getByRole('button',{name:'Get started',exact:true}).click();
+    await page.getByLabel('Date of birth').fill('2000-01-01');
+    await page.getByRole('button',{name:'Continue',exact:true}).click();
+    await page.getByRole('checkbox').check();
+    await page.getByRole('button',{name:'Open workspace',exact:true}).click();
+    await page.getByRole('heading',{name:'Dashboard',exact:true}).waitFor();
+    await page.getByRole('button',{name:'Skip',exact:true}).click();
+    await page.getByRole('button',{name:'Skip',exact:true}).waitFor({state:'hidden'});
+    const cookie = (await initial.cookies()).find(cookie=>cookie.name==='classio_access_v2');
+    assert(cookie?.httpOnly && cookie.expires > Date.now()/1000+300*86400);
+    await page.reload();
+    await page.getByRole('heading',{name:'Dashboard',exact:true}).waitFor();
+    const storageState = await initial.storageState();
+    console.log('PASS real signed age verification, terms, persistent HttpOnly cookie, refresh');
+    await initial.close();
+    const sizes=[{width:320,height:740},{width:390,height:844},{width:844,height:390},{width:768,height:1024},{width:1024,height:768},{width:1366,height:900},{width:1920,height:1080}];
+    for (const viewport of sizes) {
+      const phone = viewport.width < 480 || viewport.height < 480;
+      const context = await browser.newContext({viewport,storageState,colorScheme:'light',...(phone?{isMobile:true,hasTouch:true,userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148'}:{})});
+      const page = await context.newPage(); const errors=[];
+      page.on('pageerror',error=>errors.push(error.message));
+      await page.goto('http://127.0.0.1:3000');
+      await page.getByRole('heading',{name:'Dashboard',exact:true}).waitFor();
+      assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`Dashboard overflow at ${viewport.width}`);
+      const mobile = await page.getByRole('button',{name:'Open navigation menu',exact:true}).count();
+      if(mobile) {
+        await page.getByRole('button',{name:'Open navigation menu',exact:true}).click();
+        assert.equal(await page.evaluate(()=>document.body.style.overflow),'hidden');
+        await page.keyboard.press('Escape');
+        await page.getByRole('dialog',{name:'Navigation menu'}).waitFor({state:'hidden'});
+        await page.getByRole('button',{name:'Open navigation menu',exact:true}).click();
+      }
+      await page.getByRole('button',{name:'AI Assistant',exact:true}).click();
+      await page.getByRole('dialog',{name:'AI Assistant'}).waitFor();
+      assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`Assistant overflow at ${viewport.width}`);
+      await page.getByRole('button',{name:'Close dialog',exact:true}).click();
+      if(mobile) { await page.getByRole('button',{name:'Open navigation menu',exact:true}).click(); await page.getByRole('button',{name:'Switch appearance',exact:true}).click(); await page.keyboard.press('Escape'); }
+      else await page.getByRole('button',{name:'Switch to dark mode',exact:true}).click();
+      assert.equal(await page.evaluate(()=>document.documentElement.dataset.theme),'dark');
+      await page.reload(); await page.getByRole('heading',{name:'Dashboard',exact:true}).waitFor();
+      assert.equal(await page.evaluate(()=>document.documentElement.dataset.theme),'dark');
+      assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+      assert.deepEqual(errors,[]);
+      console.log(`PASS ${viewport.width}x${viewport.height}: navigation, assistant, theme persistence, no page overflow/errors`);
+      if(viewport.width===1366) {
+        await page.getByRole('button',{name:'AI Assistant',exact:true}).click();
+        await page.getByLabel('Your message',{exact:true}).fill('Explain momentum.');
+        await page.getByRole('button',{name:'Send',exact:true}).click();
+        await page.getByRole('alert').filter({hasText:'AI is not configured'}).waitFor();
+        assert.equal(await page.getByRole('article',{name:'Classio',exact:true}).count(),0);
+        await page.getByRole('button',{name:'Retry',exact:true}).click();
+        await page.getByRole('alert').filter({hasText:'AI is not configured'}).waitFor();
+        assert.equal(await page.getByRole('article',{name:'You',exact:true}).count(),1);
+        await page.getByRole('button',{name:'Close dialog',exact:true}).click();
+        await page.reload(); await page.getByRole('heading',{name:'Dashboard',exact:true}).waitFor();
+        await page.getByRole('button',{name:'AI Assistant',exact:true}).click();
+        assert.equal(await page.getByRole('article',{name:'You',exact:true}).count(),1);
+        console.log('PASS actual missing-configuration response, retry without duplicate messages, chat recall after refresh');
+        await page.getByRole('button',{name:'Close dialog',exact:true}).click();
+        await page.getByRole('button',{name:'New Folder',exact:true}).click();
+        await page.getByPlaceholder('e.g. Biology, Maths, History…').fill('Physics');
+        await page.getByRole('button',{name:'Create Folder',exact:true}).click();
+        await page.getByRole('button',{name:/^Website link/}).click();
+        await page.getByLabel('URL',{exact:true}).fill('https://youtu.be/dQw4w9WgXcQ?si=test');
+        await page.getByRole('combobox').selectOption({label:'Physics'});
+        await page.getByRole('button',{name:/Save to Folder/}).click();
+        await page.getByRole('region',{name:'Saved YouTube video'}).waitFor();
+        await page.getByRole('button',{name:'Physics',exact:true}).click();
+        await page.getByRole('heading',{name:'Physics',exact:true}).waitFor();
+        await page.getByText('https://www.youtube.com/watch?v=dQw4w9WgXcQ',{exact:true}).first().waitFor();
+        await page.getByRole('button',{name:'Dashboard',exact:true}).first().click();
+        await page.getByRole('button',{name:'Build a course',exact:true}).click();
+        await page.getByLabel('Course topic',{exact:true}).fill('Forces and motion');
+        await page.getByRole('button',{name:'Build course',exact:true}).click();
+        await page.getByRole('alert').filter({hasText:'AI is not configured'}).waitFor();
+        assert.equal(await page.getByLabel('Course topic',{exact:true}).inputValue(),'Forces and motion');
+        console.log('PASS actual named-folder YouTube save/reopen and recoverable course error preserving the request');
+        const unit={title:'Forces',lesson:'A force changes motion.',question:'Unit of force?',options:['Newton','Watt','Joule'],correct:0,explanation:'Force is measured in newtons.'};
+        await page.route('**/api/study', async route=>{
+          if(route.request().method()==='POST') await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({text:JSON.stringify([unit,unit,unit,unit]),provider:'test-fixture',fallback:false})});
+          else await route.continue();
+        });
+        await page.getByRole('button',{name:'Retry course generation',exact:true}).click();
+        await page.getByRole('heading',{name:'Forces',exact:true}).waitFor();
+        await page.getByRole('button',{name:'Newton',exact:true}).click();
+        await page.getByText('1 of 4 lessons completed',{exact:true}).waitFor();
+        await page.getByRole('button',{name:'Edit lesson',exact:true}).click();
+        await page.getByLabel('Lesson explanation',{exact:true}).fill('A force changes motion. This explanation has been edited.');
+        await page.getByRole('button',{name:'Finish editing',exact:true}).click();
+        await page.getByRole('button',{name:'Dashboard',exact:true}).first().click();
+        await page.getByText('Forces and motion',{exact:true}).first().click();
+        await page.getByRole('button',{name:'Learn Mode',exact:true}).click();
+        await page.getByText('A force changes motion. This explanation has been edited.',{exact:true}).waitFor();
+        await page.getByText('1 of 4 lessons completed',{exact:true}).waitFor();
+        console.log('PASS course rendering, progress, editing and reopen with an explicit mocked AI response; no live provider claim');
+        await page.unroute('**/api/study');
+
+        await page.getByRole('button',{name:'Dashboard',exact:true}).first().click();
+        await page.getByRole('button',{name:/^Upload document/}).click();
+        await page.getByRole('dialog').locator('input[type=file]').setInputFiles({name:'Physics.txt',mimeType:'text/plain',buffer:Buffer.from('A force changes the motion of an object.')});
+        await page.getByText('Physics.txt',{exact:true}).first().click();
+        await page.getByText('A force changes the motion of an object.',{exact:true}).waitFor();
+        await page.getByRole('button',{name:'Notes',exact:true}).click();
+        await page.getByRole('textbox',{name:'Study notes',exact:true}).fill('Work equals force times distance.');
+        await page.getByRole('button',{name:'View File',exact:true}).click();
+        await page.getByRole('button',{name:'Notes',exact:true}).click();
+        assert.equal(await page.getByRole('textbox',{name:'Study notes',exact:true}).innerText(),'Work equals force times distance.');
+        console.log('PASS original text-file upload/view and note editing retained across navigation');
+        await page.screenshot({path:path.join(outputDirectory,'notes-dark.png'),fullPage:true});
+        await page.screenshot({path:path.join(outputDirectory,'dashboard-dark.png'),fullPage:true});
+      }
+      assert.deepEqual(errors,[]);
+      await context.close();
+    }
+    const fresh=await browser.newContext(); const blockedPage=await fresh.newPage();
+    await blockedPage.goto('http://127.0.0.1:3000');
+    await blockedPage.evaluate(()=>{localStorage.setItem('classio_access_v1','accepted');sessionStorage.setItem('classio_access_v1','accepted');});
+    await blockedPage.reload(); await blockedPage.getByRole('button',{name:'Get started',exact:true}).waitFor();
+    await blockedPage.getByRole('button',{name:'Get started',exact:true}).click();
+    await blockedPage.getByLabel('Date of birth').fill('2020-01-01');
+    await blockedPage.getByRole('button',{name:'Continue',exact:true}).click();
+    await blockedPage.getByRole('heading',{name:'Classio is unavailable to you'}).waitFor();
+    await blockedPage.reload(); await blockedPage.getByRole('heading',{name:'Classio is unavailable to you'}).waitFor();
+    console.log('PASS local-storage tampering ignored and blocked age result survives refresh');
+    await fresh.close();
+  } finally { await browser.close(); }
+})().catch(error=>{console.error(error);process.exitCode=1;});

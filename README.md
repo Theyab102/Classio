@@ -22,7 +22,7 @@ Use Node.js 22 or 24. Run `npm ci`, then `npm start` for the browser app. The gu
 
 ## Workspace behavior
 
-Signed-in users keep an account-specific cached folder list. Cloud records are restored through the same Firebase account. The previous unscoped `classio_v2` entry stays in browser storage because it has no account identifier. If that entry contains the only copy of old offline work, recover it in the original browser before clearing site data. Original personal files are still stored separately in that browser. Guests can use all the study tools and download results. Their workspace clears on refresh or when the tab closes. The dashboard’s optional sign-in button imports the guest workspace into the signed-in account. Notes, progress and supported file metadata sync to Firebase. Original uploads remain on the device where they were added.
+Signed-in users keep an account-specific cached folder list. Cloud records are restored through the same Firebase account. The previous unscoped `classio_v2` entry stays in browser storage because it has no account identifier. If that entry contains the only copy of old offline work, recover it in the original browser before clearing site data. Original personal files are still stored separately in that browser. Guests can use all the study tools and download results. Their workspace clears on refresh or when the tab closes. The dashboard’s optional sign-in button imports the guest workspace into the signed-in account. Notes, progress and supported file metadata sync to Firebase. Originals with completed private Firebase Storage uploads can be recalled on another device signed into the same Google account. Older browser-only originals must be recovered or uploaded from the original device first.
 
 The built app serves DM Sans, Fraunces and KaTeX fonts from its own assets. General website summaries use the source website directly. If the website blocks browser access, paste the text into the study tool.
 
@@ -35,3 +35,7 @@ The built app serves DM Sans, Fraunces and KaTeX fonts from its own assets. Gene
 - **Study Cards** offers spaced review and a TSV download. Missed cards are due again in ten minutes. Successful reviews use gradually longer intervals.
 - **Record audio** can turn uploaded recordings up to 2.8 MB into a transcript and notes. It can also use compatible browsers for live dictation. Keep the original file if an upload exceeds the limit or transcription is unavailable.
 - **AI Podcast** offers a quick review or deep dive, repeat playback and a script download. The optional WAV download sends the generated script to the existing `Theyab102/classio-tts` Hugging Face Space. That Space runs Piper and has an English download voice. The browser handles playback in the app. Set `REACT_APP_CLASSIO_TTS_URL` to an empty value at build time to disable the external speech integration. Test the Space after it wakes from sleep. [Classio TTS Space](https://huggingface.co/spaces/Theyab102/classio-tts)
+
+## Critical upgrade branch
+
+See [the upgrade and deployment guide](docs/UPGRADE.md) for the shared Groq/Gemini backend, signed eligibility, private cross-device file recall, migration behavior and remaining work. See [validation results](docs/VALIDATION.md) for checks actually executed. This branch is not the complete podcast/avatar redesign.

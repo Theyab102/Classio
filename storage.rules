@@ -1,0 +1,19 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function owns(userId) {
+      return request.auth != null && request.auth.uid == userId &&
+        request.auth.token.email_verified == true &&
+        request.auth.token.firebase.sign_in_provider == 'google.com';
+    }
+    match /users/{userId}/files/{fileId}/{revision} {
+      allow read: if owns(userId);
+      allow create: if owns(userId) &&
+        request.resource.size <= 20 * 1024 * 1024 &&
+        request.resource.metadata.owner == userId && revision.matches('[a-f0-9]{64}');
+      // Immutable versions prevent one device overwriting another's original.
+      // Garbage collection/deletion is an explicit operator action, never setup.
+      allow update, delete: if false;
+    }
+  }
+}

@@ -1,7 +1,7 @@
 const { createHmac } = require("node:crypto");
 const { isIP } = require("node:net");
-const { cert, getApps, initializeApp } = require("firebase-admin/app");
-const { getFirestore, Timestamp } = require("firebase-admin/firestore");
+const { Timestamp } = require("firebase-admin/firestore");
+const { database: getDatabase } = require('./admin');
 
 const WINDOW_MS = 10 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -16,7 +16,7 @@ function requester(req) {
 }
 
 function configured() {
-  return Boolean(process.env.GROQ_API_KEY && process.env.FIREBASE_SERVICE_ACCOUNT_JSON &&
+  return Boolean((process.env.FIREBASE_SERVICE_ACCOUNT_JSON || (process.env.NODE_ENV !== 'production' && process.env.FIRESTORE_EMULATOR_HOST)) &&
     (process.env.AI_RATE_LIMIT_SECRET || "").length >= 32);
 }
 
@@ -25,19 +25,17 @@ function bucket(key, now, interval, limit, collection) {
   return { ref: collection.doc(key), start, end: start + interval, limit };
 }
 
-async function reserveRequest(req, action) {
+async function reserveRequest(req, action, uid) {
   const id = requester(req);
   if (!id) return { unavailable: true };
-  const name = "classio-api";
-  const app = getApps().find(item => item.name === name) ??
-    initializeApp({ credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON)) }, name);
-  const database = getFirestore(app);
+  const database = getDatabase();
   const collection = database.collection("aiRateLimits");
   const now = Date.now();
   const transcription = action === "audio";
   const buckets = [
     bucket(`${action}-client-${id}`, now, WINDOW_MS, transcription ? 3 : 18, collection),
     bucket(`${action}-all`, now, DAY_MS, transcription ? 40 : 250, collection),
+    ...(uid ? [bucket(`${action}-account-${createHmac('sha256', process.env.AI_RATE_LIMIT_SECRET).update(uid).digest('hex')}`, now, WINDOW_MS, transcription ? 3 : 18, collection)] : []),
   ];
 
   return database.runTransaction(async transaction => {
