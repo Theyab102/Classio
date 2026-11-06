@@ -1,6 +1,6 @@
 import { memo, useId } from 'react';
 
-export const avatarDefaults = { skin:'#edc19c', hair:'#3d2b24', hairStyle:1, eyes:'#476775', top:'#2b6777', bg:'#c8d8e4', mouth:0, eyebrow:0, eyeShape:0, faceShape:0, nose:0, eyeSpacing:0, mouthPosition:0, topStyle:0, blush:false, lips:false, freckles:false, lipColor:'#b96669', hat:0, hatColor:'#2b6777', glasses:0, glassesColor:'#31434a', facialHair:0, necklace:0, necklaceColor:'#d4ad62', earring:0, earringColor:'#d4ad62', name:'' };
+export const avatarDefaults = { portraitStyle:0, eyeSize:1, noseSize:1, mouthSize:1, browHeight:0, skin:'#edc19c', hair:'#3d2b24', hairStyle:1, eyes:'#476775', top:'#2b6777', bg:'#c8d8e4', mouth:0, eyebrow:0, eyeShape:0, faceShape:0, nose:0, eyeSpacing:0, mouthPosition:0, topStyle:0, blush:false, lips:false, freckles:false, lipColor:'#b96669', hat:0, hatColor:'#2b6777', glasses:0, glassesColor:'#31434a', facialHair:0, necklace:0, necklaceColor:'#d4ad62', earring:0, earringColor:'#d4ad62', name:'' };
 const colour = (value, fallback) => /^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(value || '') ? value : fallback;
 function shade(hex, amount) {
   const full = hex.length === 4 ? '#' + [...hex.slice(1)].map(value => value + value).join('') : hex;
@@ -38,6 +38,8 @@ function Avatar({ character = {}, size = 80, animate = false, label }) {
   const id = 'classio-avatar-' + useId().replace(/[^a-zA-Z0-9]/g,'');
   const ch = { ...avatarDefaults, ...character };
   for (const key of ['skin','hair','eyes','top','bg','hatColor','glassesColor','necklaceColor','earringColor','lipColor']) ch[key] = colour(ch[key],avatarDefaults[key]);
+  const classic=Number(ch.portraitStyle)!==1;
+  const featureScale=key=>Math.max(0.65,Math.min(1.4,Number(ch[key])||1));
   const skinShadow = shade(ch.skin,-27), hairShadow = shade(ch.hair,-24);
   const hs = Math.abs(Number(ch.hairStyle) || 0) % 17, eye = Math.abs(Number(ch.eyeShape) || 0) % 5;
   const facial = Number(ch.facialHair) || 0, top = Number(ch.topStyle) || 0, glasses = Number(ch.glasses) || 0, hat = Number(ch.hat) || 0;
@@ -83,8 +85,12 @@ function Avatar({ character = {}, size = 80, animate = false, label }) {
         {ch.blush && [68,132].map(x=><ellipse key={x} cx={x} cy="114" rx="12" ry="7" fill="#d7736d" opacity=".3"/>)}
         {ch.freckles && [0,1,2,3,4,5].map(index=><circle key={index} cx={index<3?62+index*6:124+(index-3)*6} cy={111+index%2*3} r="1.2" fill={shade(ch.skin,-60)} opacity=".65"/>)}
         <g className="avatar-eyes">
-          {[-1,1].map(side=><g key={side} transform={`translate(${100+side*(23+eyeSpacing)} 91)`}>
-            {eye===3 ? <path d="M-10 2q10-13 20 0" fill="none" stroke="#2e3032" strokeWidth="3" strokeLinecap="round"/> : <>
+          {[-1,1].map(side=><g key={side} transform={`translate(${100+side*(23+eyeSpacing)} 91) scale(${featureScale('eyeSize')})`}>
+            {classic && eye!==3 ? <>
+              {eye===4 && <ellipse rx="8" ry="10" fill="#fffdf8"/>}
+              <ellipse cx="0" cy="0" rx={eye===1?5.5:eye===2?6.5:4.5} ry={eye===1?3.8:eye===2?5:8} fill={eye===4?ch.eyes:shade(ch.eyes,-35)} transform={eye===2?'rotate(-12)':''}/>
+              <ellipse cx="-1" cy="-2" rx="1" ry="1.5" fill="#fff" opacity=".5"/>
+            </> : eye===3 ? <path d="M-10 2q10-13 20 0" fill="none" stroke="#2e3032" strokeWidth="3" strokeLinecap="round"/> : <>
               {eye!==1 && <ellipse cx="0" cy="0" rx={eye===2?12:10} ry={eye===2?7:eye===4?12:10} fill="#fffdf8"/>}
               {eye===1 && <path d="M-13 0Q0-14 13 0 0 11-13 0" fill="#fffdf8"/>}
               <ellipse cx="0" cy="1" rx={eye===2?5:5.8} ry={eye===2?6:7.5} fill={ch.eyes}/><ellipse cx="0" cy="2" rx="3" ry="4.5" fill="#202829"/>
@@ -93,10 +99,12 @@ function Avatar({ character = {}, size = 80, animate = false, label }) {
             </>}
           </g>)}
         </g>
-        {[-1,1].map(side=><path key={side} d={brow} transform={`translate(${100+side*(23+eyeSpacing)} 72) scale(${side} 1)`} fill="none" stroke={ch.hair} strokeWidth={Number(ch.eyebrow)===2?5.5:3.5} strokeLinecap="round"/>)}
-        {Number(ch.nose)===1 ? <path d="M98 96q-5 14-4 17 5 5 13 0" fill="none" stroke={skinShadow} strokeWidth="2.4" strokeLinecap="round"/> : Number(ch.nose)===2 ? <path d="m100 96-5 16 10 1" fill="none" stroke={skinShadow} strokeWidth="2.6" strokeLinecap="round"/> : <><ellipse cx="100" cy="111" rx={Number(ch.nose)===3?10:7} ry="5" fill={skinShadow} opacity=".65"/><ellipse cx="98" cy="108" rx="5" ry="3" fill={shade(ch.skin,16)} opacity=".9"/></>}
+        {[-1,1].map(side=><path key={side} d={brow} transform={`translate(${100+side*(23+eyeSpacing)} ${72+Math.max(-6,Math.min(6,Number(ch.browHeight)||0))}) scale(${side} 1)`} fill="none" stroke={ch.hair} strokeWidth={Number(ch.eyebrow)===2?5.5:3.5} strokeLinecap="round"/>)}
+        <g transform={`translate(100 108) scale(${featureScale('noseSize')}) translate(-100 -108)`}>
+        {classic && Number(ch.nose)===0 ? <><path d="m100 97-8 17 15 1Z" fill={skinShadow} opacity=".65"/><path d="m100 97 6 15-10-2Z" fill={shade(ch.skin,20)}/></> : Number(ch.nose)===1 ? <path d="M98 96q-5 14-4 17 5 5 13 0" fill="none" stroke={skinShadow} strokeWidth="2.4" strokeLinecap="round"/> : Number(ch.nose)===2 ? <path d="m100 96-5 16 10 1" fill="none" stroke={skinShadow} strokeWidth="2.6" strokeLinecap="round"/> : <><ellipse cx="100" cy="111" rx={Number(ch.nose)===3?10:7} ry="5" fill={skinShadow} opacity=".65"/><ellipse cx="98" cy="108" rx="5" ry="3" fill={shade(ch.skin,16)} opacity=".9"/></>}
+        </g>
         {facial>0 && facial!==2 && <path d={facial===1?'M63 120Q67 154 100 158q33-4 37-38l-7 26q-30 27-60 0Z':facial===5?'M86 139q14 11 28 0l-5 19H91Z':facial===3?'M61 116q12 27 39 28t39-28l-8 29q-31 28-62 0Z':'M59 111q12 32 41 33t41-33l-6 37q-35 33-70 0Z'} fill={ch.hair} opacity={facial===1?.35:1}/>}
-        <g transform={`translate(0 ${mouthY})`}>
+        <g transform={`translate(100 ${132+mouthY}) scale(${featureScale('mouthSize')*(classic ? .72 : 1)}) translate(-100 -132)`}>
           {[2,5].includes(Number(ch.mouth)) ? <><path d="M82 128q18 5 36 0c-2 20-34 20-36 0" fill="#754139"/><path d="M84 129q16 4 32 0l-3 7H87Z" fill="#fffdf8"/></> : <path d={Number(ch.mouth)===1?'M85 136q15-13 30 0':Number(ch.mouth)===3?'M88 132q17 6 29-4':Number(ch.mouth)===4?'M88 133h24':Number(ch.mouth)===6?'M89 130q11 9 22 0':'M84 129q16 15 32 0'} fill="none" stroke={ch.lips?ch.lipColor:'#9a5c50'} strokeWidth={ch.lips?4:2.8} strokeLinecap="round"/>}
           {ch.lips && <path d="M94 136h10" stroke="#fff" strokeWidth="1" opacity=".45"/>}
         </g>

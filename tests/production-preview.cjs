@@ -1,0 +1,9 @@
+// Internal test harness: serves the production build and real local API handlers.
+const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
+const root=path.resolve(__dirname,'..');process.env.NODE_ENV='development';process.env.CLASSIO_SESSION_SECRET=crypto.randomBytes(32).toString('hex');
+const mime={'.html':'text/html','.js':'application/javascript','.css':'text/css','.png':'image/png','.svg':'image/svg+xml','.woff2':'font/woff2','.woff':'font/woff','.json':'application/json','.txt':'text/plain','.md':'text/plain','.mjs':'application/javascript'};
+const security=JSON.parse(fs.readFileSync(path.join(root,'vercel.json'))).headers[0].headers;
+http.createServer(async(req,res)=>{const url=new URL(req.url,'http://localhost');for(const {key,value} of security)res.setHeader(key,value);res.status=status=>{res.statusCode=status;return res};res.json=value=>res.end(JSON.stringify(value));
+ if(url.pathname.startsWith('/api/')){const name=url.pathname.slice(5);if(!['access','study','agent','podcast'].includes(name)){res.statusCode=404;return res.end();}let body='';try{for await(const chunk of req){body+=chunk;if(body.length>4100000){res.statusCode=413;return res.end();}}req.body=body?JSON.parse(body):{};await require(path.join(root,'api',name+'.js'))(req,res);}catch{if(!res.writableEnded){res.statusCode=503;res.end(JSON.stringify({error:'Local API failed'}));}}return;}
+ let filename=path.resolve(root,'build','.'+decodeURIComponent(url.pathname));if(!filename.startsWith(path.join(root,'build')+'/')||!fs.existsSync(filename)||fs.statSync(filename).isDirectory())filename=path.join(root,'build/index.html');res.setHeader('Content-Type',mime[path.extname(filename)]||'application/octet-stream');fs.createReadStream(filename).pipe(res);
+}).listen(3000,'127.0.0.1',()=>console.log('Local production-build/API test server ready.'));

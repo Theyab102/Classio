@@ -31,10 +31,10 @@ async function reserveRequest(req, action, uid) {
   const database = getDatabase();
   const collection = database.collection("aiRateLimits");
   const now = Date.now();
-  const transcription = action === "audio";
+  const transcription = action === "audio" || action === "podcast";
   const buckets = [
     bucket(`${action}-client-${id}`, now, WINDOW_MS, transcription ? 3 : 18, collection),
-    bucket(`${action}-all`, now, DAY_MS, transcription ? 40 : 250, collection),
+    bucket(`${action}-all`, now, DAY_MS, action === "podcast" ? 20 : transcription ? 40 : 250, collection),
     ...(uid ? [bucket(`${action}-account-${createHmac('sha256', process.env.AI_RATE_LIMIT_SECRET).update(uid).digest('hex')}`, now, WINDOW_MS, transcription ? 3 : 18, collection)] : []),
   ];
 

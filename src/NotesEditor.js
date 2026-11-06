@@ -4,6 +4,8 @@ import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
 import { TableKit } from "@tiptap/extension-table";
 import TextAlign from "@tiptap/extension-text-align";
+import { TextStyleKit } from "@tiptap/extension-text-style";
+import NotesChat from "./NotesChat";
 import { getPdfContext, getPdfFigures, isPdfFile, likelyStudyImage, prepareNoteImage, searchStudyImages } from "./documentMedia";
 import { markdownToNoteHtml, noteHtmlToMarkdown, sanitizeNoteHtml } from "./noteFormat";
 import { downloadStudyFile, sendStudyRequest } from "./studyTools";
@@ -12,6 +14,7 @@ import { getReplyLanguage, useLocale } from "./locale";
 import "./documentStudio.css";
 
 const editorExtensions = [
+  TextStyleKit,
   StarterKit.configure({ link: { openOnClick: false, HTMLAttributes: { rel: "noopener noreferrer" } } }),
   Image.configure({ allowBase64: true, resize: { enabled: true, minWidth: 60, minHeight: 45, alwaysPreserveAspectRatio: true }, HTMLAttributes: { referrerpolicy: "no-referrer" } }),
   TableKit.configure({ table: { resizable: true, renderWrapper: true } }),
@@ -84,8 +87,10 @@ async function enrichDraft(markdown, pdfFile, useWeb, signal, originalHtml) {
   return sanitizeNoteHtml(root.innerHTML);
 }
 
-export default function NotesEditor({ file, fileObj, getFileText, onUpdate, readSavedNotes }) {
+export default function NotesEditor({ file, fileObj, getFileText, onUpdate, readSavedNotes, onTool, onBack, renderMessage }) {
   const { t } = useLocale();
+  const [chatOpen,setChatOpen] = useState(()=>window.innerWidth>=1100);
+  const [fontSize,setFontSize] = useState(16);
   const [pastedSource, setPastedSource] = useState("");
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
@@ -103,6 +108,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
   const [versionName, setVersionName] = useState("");
   const [preview, setPreview] = useState(false);
   const upload = useRef(null);
+  const fontInput=useRef(null);
   const aiRequest = useRef(null);
   const mediaRequest = useRef(null);
   const [initial] = useState(() => file.notesHtml ? sanitizeNoteHtml(file.notesHtml) : markdownToNoteHtml(file.notes));
@@ -130,6 +136,8 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
   const tools = useEditorState({
     editor,
     selector: ({ editor: current }) => ({
+      fontSize:current?.getAttributes("textStyle").fontSize || "16px",
+      fontFamily:current?.getAttributes("textStyle").fontFamily || "DM Sans Variable",
       table: current?.isActive("table"),
       image: current?.isActive("image"),
       bold: current?.isActive("bold"),
@@ -143,6 +151,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
       outline: current?.getJSON().content?.filter(node => node.type === "heading").map(node => node.content?.map(part => part.text).join("") || "") || [],
     }),
   });
+  useEffect(()=>{if(document.activeElement!==fontInput.current)setFontSize(parseFloat(tools?.fontSize)||16);},[tools?.fontSize]);
   useEffect(() => () => {
     aiRequest.current?.abort();
     mediaRequest.current?.abort();
@@ -263,29 +272,12 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
   const action = (label, operation, pressed) => <button type="button" disabled={preview} aria-pressed={pressed} onMouseDown={event => event.preventDefault()} onClick={() => run(operation)}>{t(label)}</button>;
 
   return (
-    <section className="notes-studio" aria-label={t('Notes editor')}>
+    <section className={`notes-studio combined-notes ${chatOpen ? "chat-visible" : ""}`} aria-label={t('Notes editor')}>
       <header className="studio-header">
-        <div><p className="studio-eyebrow">{t('Notebook')}</p><h2>{t("Study notes")}</h2></div>
-        <div className="studio-controls">
-          <button className="generate-notes-button" type="button" disabled={busy} onClick={() => generate('generate')}>{t(busy ? 'Generating…' : 'Generate AI notes')}</button>
-          <button type="button" onClick={() => downloadStudyFile(new Blob([`<!doctype html><meta charset="utf-8"><style>body{max-width:760px;margin:40px auto;font:16px/1.65 system-ui}table{border-collapse:collapse}td,th{border:1px solid #aaa;padding:.45rem}img{max-width:100%}</style>${sanitizeNoteHtml(editor.getHTML())}`], { type: "text/html" }), "classio-notes.html")}>{t('Download notes')}</button>
-          {file.transcript && <button type="button" onClick={() => downloadStudyFile(new Blob([file.transcript], { type: "text/plain" }), "classio-transcript.txt")}>{t('Download transcript')}</button>}
-        </div>
-      </header>
-      <p className="note-editor-hint">{t('Your writing stays here. AI notes are added in the same editor.')}</p>
-      <details className="note-generation-options"><summary>{t('Generation options')}</summary>
-        <div className="note-generation-fields">
-          <label>{t('Optional focus')}<input value={topic} onChange={event=>setTopic(event.target.value)} placeholder={file.name} maxLength={300}/></label>
-          <label>{t('Note style')}<select value={style} onChange={event=>setStyle(event.target.value)}>{['Detailed','Exam review','Concise summary','Simple explanations'].map(value=><option key={value} value={value}>{t(value)}</option>)}</select></label>
-          <label>{t('Language')}<select value={language} onChange={event=>setLanguage(event.target.value)}><option value="settings">{t('Use settings')}</option>{['Same as source','English','Arabic','Chinese','French','Spanish'].map(value=><option key={value} value={value}>{t(value)}</option>)}</select></label>
-          <label className="note-source-field">{t('Source text or transcript')}<textarea value={pastedSource} maxLength={120000} onChange={event=>setPastedSource(event.target.value)} placeholder={t('Paste source text if a link cannot be read.')} /></label>
-          <label className="studio-check"><input type="checkbox" checked={webImages} onChange={event=>setWebImages(event.target.checked)}/>{t('Look for relevant web images')}</label>
-        </div>
-        <div className="studio-controls"><button type="button" disabled={busy} onClick={()=>generate('organize')}>{t('Organize my notes')}</button><button type="button" disabled={busy} onClick={()=>generate('table')}>{t('Make a table')}</button></div>
-      </details>
-      <div className="notes-studio-grid">
-        <article className="note-workspace">
+        {onBack&&<button className="notes-back" type="button" aria-label={t("Back to folder")} onClick={onBack}>←</button>}<div className="notes-document-title"><p className="studio-eyebrow">Classio · {t("Notebook")}</p><h2 title={file.name}>{file.name}</h2></div>
           <div className="studio-controls note-toolbar" role="toolbar" aria-label={t('Note formatting')}>
+            <select aria-label={t('Font family')} disabled={preview} onChange={event=>run(chain=>chain.setFontFamily(event.target.value))} value={tools?.fontFamily || "DM Sans Variable"}><option value="DM Sans Variable">DM Sans</option><option value="Fraunces Variable">Fraunces</option><option value="system-ui">System</option><option value="monospace">Monospace</option></select>
+            <label className="note-font-size"><span className="sr-only">{t('Font size')}</span><input ref={fontInput} aria-label={t('Font size')} type="number" min="10" max="48" disabled={preview} value={fontSize} onChange={event=>setFontSize(event.target.value)} onBlur={()=>{const next=Math.max(10,Math.min(48,Number(fontSize)||16));setFontSize(next);run(chain=>chain.setFontSize(next+'px'));}} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();event.currentTarget.blur();}}}/></label>
             <select aria-label={t('Paragraph style')} disabled={preview} value={tools?.heading || 0} onChange={event => {
               const level = Number(event.target.value);
               run(chain => level ? chain.setHeading({ level }) : chain.setParagraph());
@@ -294,9 +286,9 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
             </select>
             {action("Bold", chain => chain.toggleBold(), tools?.bold)}
             {action("Italic", chain => chain.toggleItalic(), tools?.italic)}
+            {action("Underline", chain => chain.toggleUnderline(), tools?.underline)}
             {action("Bullets", chain => chain.toggleBulletList(), tools?.bullet)}
             <details className="note-more-tools"><summary>{t("More tools")}</summary><div className="studio-controls">
-            {action("Underline", chain => chain.toggleUnderline(), tools?.underline)}
             {action("Strike", chain => chain.toggleStrike(), tools?.strike)}
             {action("Numbered list", chain => chain.toggleOrderedList(), tools?.ordered)}
             {action("Callout", chain => chain.toggleBlockquote(), tools?.callout)}
@@ -316,12 +308,34 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
             {action("Redo", chain => chain.redo())}
             <button type="button" aria-pressed={preview} onClick={() => { editor.setEditable(preview); setPreview(value => !value); if (!preview) setImageTools(false); }}>{t(preview ? "Edit notes" : "Reading view")}</button>
           </div>
-          {tools?.table && <div className="studio-controls note-table-tools" aria-label="Table actions">
+        <div className="studio-controls">
+          <button type="button" aria-expanded={chatOpen} aria-label={t("Document chat")} onClick={()=>setChatOpen(value=>!value)}>{t("Chat")}</button>
+          <button className="generate-notes-button" type="button" disabled={busy} onClick={() => generate('generate')}>{t(busy ? 'Generating…' : 'Generate AI notes')}</button>
+          <button type="button" onClick={() => downloadStudyFile(new Blob([`<!doctype html><meta charset="utf-8"><style>body{max-width:760px;margin:40px auto;font:16px/1.65 system-ui}table{border-collapse:collapse}td,th{border:1px solid #aaa;padding:.45rem}img{max-width:100%}</style>${sanitizeNoteHtml(editor.getHTML())}`], { type: "text/html" }), "classio-notes.html")}>{t('Download notes')}</button>
+          {file.transcript && <button type="button" onClick={() => downloadStudyFile(new Blob([file.transcript], { type: "text/plain" }), "classio-transcript.txt")}>{t('Download transcript')}</button>}
+        </div>
+      </header>
+      <p className="note-editor-hint">{t('Your writing stays here. AI notes are added in the same editor.')}</p>
+      <details className="note-generation-options"><summary>{t('Generation options')}</summary>
+        <div className="note-generation-fields">
+          <label>{t('Optional focus')}<input value={topic} onChange={event=>setTopic(event.target.value)} placeholder={file.name} maxLength={300}/></label>
+          <label>{t('Note style')}<select value={style} onChange={event=>setStyle(event.target.value)}>{['Detailed','Exam review','Concise summary','Simple explanations'].map(value=><option key={value} value={value}>{t(value)}</option>)}</select></label>
+          <label>{t('Language')}<select value={language} onChange={event=>setLanguage(event.target.value)}><option value="settings">{t('Use settings')}</option>{['Same as source','English','Arabic','Chinese','French','Spanish'].map(value=><option key={value} value={value}>{t(value)}</option>)}</select></label>
+          <label className="note-source-field">{t('Source text or transcript')}<textarea value={pastedSource} maxLength={120000} onChange={event=>setPastedSource(event.target.value)} placeholder={t('Paste source text if a link cannot be read.')} /></label>
+          <label className="studio-check"><input type="checkbox" checked={webImages} onChange={event=>setWebImages(event.target.checked)}/>{t('Look for relevant web images')}</label>
+        </div>
+        <div className="studio-controls"><button type="button" disabled={busy} onClick={()=>generate('organize')}>{t('Organize my notes')}</button><button type="button" disabled={busy} onClick={()=>generate('table')}>{t('Make a table')}</button></div>
+      </details>
+      {status && <p className="studio-status" role="status">{status}</p>}
+      {error && <p className="studio-error" role="alert">{error}</p>}
+      <div className="notes-studio-grid">
+        <article className="note-workspace">
+          {tools?.table && !preview && <details className="note-table-tools"><summary>{t('Table actions')}</summary><div className="studio-controls" aria-label={t('Table actions')}>
             {action("Add row", chain => chain.addRowAfter())}{action("Add column", chain => chain.addColumnAfter())}
             {action("Delete row", chain => chain.deleteRow())}{action("Delete column", chain => chain.deleteColumn())}
             {action("Merge cells", chain => chain.mergeCells())}{action("Split cell", chain => chain.splitCell())}
             {action("Delete table", chain => chain.deleteTable())}
-          </div>}
+          </div></details>}
           {tools?.image && !preview && <div className="studio-controls note-table-tools">
             <button type="button" onClick={() => run(chain => chain.deleteSelection())}>Remove selected image</button>
           </div>}
@@ -359,9 +373,9 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
           {!!tools?.outline?.length && <nav className="note-outline" aria-label={t("On this page")}>{tools.outline.map((heading,index)=><button key={index} type="button" onClick={()=>editor.view.dom.querySelectorAll("h1,h2,h3")[index]?.scrollIntoView({block:"nearest"})}>{heading}</button>)}</nav>}
           </details>
         </article>
+        {chatOpen && <NotesChat file={file} notes={noteHtmlToMarkdown(editor.getHTML())} getFileText={()=>pdfFile ? getPdfContext(pdfFile) : getFileText()} onUpdate={onUpdate} onInsert={html=>editor.chain().focus('end').insertContent('<p></p>'+sanitizeNoteHtml(html)).run()} onTool={onTool} renderMessage={renderMessage} onClose={()=>setChatOpen(false)} />}
       </div>
-      {status && <p className="studio-status" role="status">{status}</p>}
-      {error && <p className="studio-error" role="alert">{error}</p>}
+
 
     </section>
   );

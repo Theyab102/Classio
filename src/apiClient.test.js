@@ -7,9 +7,8 @@ test('timeout rejects with a recoverable message and aborts the actual fetch', a
   jest.useFakeTimers();
   global.fetch = jest.fn((_url, options) => new Promise((_resolve, reject) => options.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))));
   const request = requestJson('/api/study', { body: { question: 'Test question' }, timeout: 1000 });
-  const assertion = expect(request).rejects.toThrow('Your input is still here');
   jest.advanceTimersByTime(1001);
-  await assertion;
+  await expect(request).rejects.toThrow('Your input is still here');
   expect(global.fetch.mock.calls[0][1].signal.aborted).toBe(true);
 });
 

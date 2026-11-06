@@ -20,7 +20,15 @@ export default function Entry() {
   useEffect(() => {
     if (page) return;
     let active = true;
-    accessRequest().then(stage => { if (active) setAccess(stage); }).catch(() => {
+    accessRequest().then(async stage => {
+      let requested=false;try{requested=localStorage.getItem('classio_google_signin_requested')==='true';}catch{}
+      if(stage==='new'&&requested){
+        const firebase=await import('./firebase');
+        const user=await firebase.restoreSignedInAccount();
+        if(user)stage=await accessRequest({action:'restore'},await firebase.accountHeaders());
+      }
+      if(active)setAccess(stage);
+    }).catch(() => {
       if (active) { setAccess('unavailable'); setError('Could not check your saved verification. Check your connection and retry.'); }
     });
     return () => { active = false; };

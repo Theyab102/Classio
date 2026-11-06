@@ -5,6 +5,7 @@
   "dependencies": {
     "@fontsource-variable/dm-sans": "^5.3.0",
     "@fontsource-variable/fraunces": "^5.3.0",
+    "@fontsource-variable/noto-sans-arabic": "5.3.0",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -12,20 +13,25 @@
     "@tiptap/extension-image": "^3.32.3",
     "@tiptap/extension-table": "^3.32.3",
     "@tiptap/extension-text-align": "^3.32.3",
+    "@tiptap/extension-text-style": "3.32.3",
     "@tiptap/pm": "^3.32.3",
     "@tiptap/react": "^3.32.3",
     "@tiptap/starter-kit": "^3.32.3",
+    "chart.js": "4.6.1",
     "dompurify": "^3.4.17",
     "firebase": "^12.10.0",
     "firebase-admin": "^14.5.0",
     "jszip": "^3.10.2",
     "katex": "^0.19.1",
+    "mammoth": "1.13.0",
     "marked": "^18.1.3",
+    "mermaid": "12.3.0",
     "pdfjs-dist": "^4.10.38",
     "pptxgenjs": "^4.0.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-scripts": "5.0.1",
+    "read-excel-file": "9.3.14",
     "turndown": "^7.2.5",
     "turndown-plugin-gfm": "^1.0.2"
   },
@@ -37,7 +43,8 @@
     "eject": "react-scripts eject",
     "test:rules": "firebase emulators:exec --project demo-classio --only firestore,storage \"node --test tests/firebase-rules.test.cjs\"",
     "test:browser": "node tests/browser-smoke.cjs",
-    "test:ui": "node tests/calm-ui-browser.cjs"
+    "test:ui": "node tests/calm-ui-browser.cjs",
+    "test:integrated": "node tests/integrated-workspace.cjs"
   },
   "eslintConfig": {
     "extends": [
@@ -64,11 +71,22 @@
   "overrides": {
     "proxy-addr": "^2.0.8",
     "shell-quote": "^1.8.5",
-    "websocket-driver": "^0.7.5"
+    "websocket-driver": "^0.7.5",
+    "@grpc/grpc-js": "1.14.7",
+    "image-size": "2.0.4",
+    "postcss@^8.0.0": "8.5.32",
+    "serialize-javascript": "7.1.4",
+    "underscore": "1.13.8"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
     "@firebase/rules-unit-testing": "5.0.0",
     "firebase-tools": "15.35.0",
     "playwright-core": "1.56.1"
+  },
+  "jest": {
+    "transformIgnorePatterns": [
+      "node_modules/(?!marked/)"
+    ]
   }
 }

@@ -1,5 +1,8 @@
 # Executed validation
 
+Historical first-pass results. See [INTEGRATED-VALIDATION.md](INTEGRATED-VALIDATION.md)
+for the later integrated-workspace pass; the counts below are not its final counts.
+
 Date: 6 November 2026. These results apply to this local development branch,
 not a production deployment or an independently restored cloud task.
 

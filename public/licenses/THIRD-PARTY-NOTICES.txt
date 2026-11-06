@@ -1,0 +1,22 @@
+Classio third-party notices
+
+Fonts are vendored under /fonts and licensed under the SIL Open Font License 1.1.
+Classio character drawings are original SVG artwork, not official Nintendo assets.
+The notes/chat layout uses common editor patterns; no Turbo branding or proprietary code is included.
+
+Runtime library notices included below. Build chunks may also have associated LICENSE.txt files.
+
+react 19.2.4 — MIT. react-LICENSE.txt
+react-dom 19.2.4 — MIT. react-dom-LICENSE.txt
+@tiptap/core 3.32.3 — MIT. tiptap-core-LICENSE.txt
+mermaid 12.3.0 — MIT. mermaid-LICENSE.txt
+mammoth 1.13.0 — BSD-2-Clause. mammoth-LICENSE.txt
+chart.js 4.6.1 — MIT. chart.js-LICENSE.txt
+read-excel-file 9.3.14 — MIT. read-excel-file-LICENSE.txt
+dompurify 3.4.17 — (MPL-2.0 OR Apache-2.0). dompurify-LICENSE.txt
+jszip 3.10.2 — (MIT OR GPL-3.0-or-later). See package distribution.
+pdfjs-dist 4.10.38 — Apache-2.0. pdfjs-dist-LICENSE.txt
+pptxgenjs 4.0.1 — MIT. pptxgenjs-LICENSE.txt
+firebase 12.10.0 — Apache-2.0. See package distribution.
+katex 0.19.1 — MIT. katex-LICENSE.txt
+KaTeX fonts — MIT license. See KaTeX-fonts-MIT.txt (upstream katex-fonts license).

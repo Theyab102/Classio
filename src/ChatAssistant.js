@@ -70,7 +70,7 @@ export default function ChatAssistant({ onClose, onCreateCourse, renderMessage }
       if (controller.signal.aborted) return;
       const complete = [...next, { role: 'assistant', content: response }];
       setMessages(complete); persist(complete, id);
-    } catch (failure) { if (!controller.signal.aborted) { setError(failure.message); setInput(text); } }
+    } catch (failure) { if (!controller.signal.aborted) { setError(failure.message); setInput(current=>current||text); } }
     finally { request.current = null; if (!controller.signal.aborted) setLoading(false); }
   }
   useEffect(() => {

@@ -161,3 +161,25 @@ export async function saveWorkspace(uid, before, next, onProgress) {
   await commit();
   return { folders: uploaded, uploadWarnings };
 }
+
+// Audio is a separate immutable object; it never replaces the learner's source file.
+export async function savePodcastAudio(uid, jobId, blob) {
+  if(!/^[a-f0-9]{64}$/.test(jobId))throw new Error('The podcast identifier is invalid.');
+  const id='podcast_'+jobId;
+  const value=await uploadOriginal(uid,{id,name:'Classio podcast',_fileObj:new File([blob],'classio-podcast',{type:blob.type})});
+  return {storageId:id,cloudFile:value.cloudFile};
+}
+export async function recallPodcastAudio(uid, record) {
+  if(!/^podcast_[a-f0-9]{64}$/.test(record?.storageId||''))return null;
+  return recallOriginal(uid,{id:record.storageId,name:'classio-podcast',cloudFile:record.cloudFile});
+}
+export async function saveRecordingAudio(uid, digest, blob) {
+  if(!/^[a-f0-9]{64}$/.test(digest))throw new Error('The recording identifier is invalid.');
+  const id='voice_'+digest;
+  const value=await uploadOriginal(uid,{id,name:'Voice recording',_fileObj:new File([blob],'voice-recording',{type:blob.type})});
+  return {storageId:id,cloudFile:value.cloudFile};
+}
+export async function recallRecordingAudio(uid, record) {
+  if(!/^voice_[a-f0-9]{64}$/.test(record?.storageId||''))return null;
+  return recallOriginal(uid,{id:record.storageId,name:'voice-recording',cloudFile:record.cloudFile});
+}

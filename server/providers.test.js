@@ -1,7 +1,8 @@
 const { test, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
-const { generate, transcribe, geminiContent } = require('./ai-providers');
+const { generate: generateForEligibility, transcribe, geminiContent } = require('./ai-providers');
 const { parseCourse, courseInput } = require('../src/shared/course-schema.js');
+const generate=(input,selection,eligibility={adult:true})=>generateForEligibility(input,selection,eligibility);
 const names = ['GROQ_API_KEY', 'GEMINI_API_KEY', 'GEMINI_MODEL', 'GEMINI_ENABLED', 'GEMINI_FREE_TIER_VERIFIED', 'GROQ_VISION_MODEL'];
 let previous;
 beforeEach(() => { previous = Object.fromEntries(names.map(name => [name, process.env[name]])); for (const name of names) delete process.env[name]; });
@@ -104,4 +105,14 @@ test('partial courses never pass validation or claim a saved result', () => {
   assert.equal(parseCourse(JSON.stringify([unit, unit]), 2).length, 2);
   assert.throws(() => parseCourse(JSON.stringify([unit, unit]), 3));
   assert.throws(() => parseCourse(JSON.stringify([unit, { ...unit, correct: 9 }])));
+});
+
+
+test('minor or unknown sessions cannot use Gemini, including permitted fallback', async context => {
+  enableBoth();
+  const fetch = context.mock.method(global,'fetch',async()=>({ok:false,status:429}));
+  await assert.rejects(generate(input,{provider:'gemini'},{adult:false}),error=>error.code==='PROVIDER_AGE_RESTRICTED');
+  assert.equal(fetch.mock.callCount(),0);
+  await assert.rejects(generate(input,{provider:'groq',allowFallback:true},{adult:false}),error=>error.code==='PROVIDER_RATE_LIMIT');
+  assert.equal(fetch.mock.callCount(),1);
 });

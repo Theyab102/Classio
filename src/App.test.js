@@ -2,9 +2,11 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import Entry from "./Entry";
 import { checkBirthDate } from "./eligibility";
 import { escapeHtml, sanitizeDocumentHtml } from "./safeContent";
+import { restoreSignedInAccount } from "./firebase";
+import { waitFor } from "@testing-library/react";
 import { parseStudyRequest } from "../server/study-request";
 
-jest.mock('./firebase', () => ({ auth: { currentUser: null }, accountHeaders: jest.fn(async () => ({})) }));
+jest.mock('./firebase', () => ({ auth: { currentUser: null }, accountHeaders: jest.fn(async () => ({})), restoreSignedInAccount:jest.fn() }));
 let mockAccessStage = 'new';
 const mockWorkspace = jest.fn(() => <p>Workspace loaded</p>);
 jest.mock("./App", () => ({ __esModule: true, default: () => mockWorkspace() }));
@@ -17,7 +19,7 @@ beforeEach(() => {
     if (options?.method === 'POST') {
       const body = JSON.parse(options.body);
       if (body.action === 'screen') mockAccessStage = checkBirthDate(body.birthDate) ? 'eligible' : 'blocked';
-      if (body.action === 'accept') mockAccessStage = 'accepted';
+      if (body.action === 'accept' || body.action==='restore') mockAccessStage = 'accepted';
     }
     return { ok: true, json: async () => ({ stage: mockAccessStage }) };
   });
@@ -29,16 +31,18 @@ async function enterBirthDate(value) {
   fireEvent.click(await screen.findByRole("button", { name: "Get started" }));
   const field = screen.getByLabelText("Date of birth");
   fireEvent.change(field, { target: { value } });
+  // Eligibility updates after the asynchronous server response.
+  // eslint-disable-next-line testing-library/no-unnecessary-act
   await act(async () => { fireEvent.submit(field.form); });
 }
 
 test("blocks a younger visitor before loading the workspace, including after reload", async () => {
-  const page = render(<Entry />);
+  const view = render(<Entry />);
   await enterBirthDate("2020-01-01");
   expect(screen.getByRole("heading", { name: "Classio is unavailable to you" })).toBeInTheDocument();
   expect(global.fetch).toHaveBeenCalledWith("/api/access", expect.objectContaining({ method: "POST" }));
   expect(mockWorkspace).not.toHaveBeenCalled();
-  page.unmount();
+  view.unmount();
   render(<Entry />);
   expect(await screen.findByRole("heading", { name: "Classio is unavailable to you" })).toBeInTheDocument();
 });
@@ -49,6 +53,7 @@ test("loads the workspace only after the terms step for an eligible visitor", as
   expect(mockWorkspace).not.toHaveBeenCalled();
   expect(mockAccessStage).toBe("eligible");
   fireEvent.click(screen.getByRole("checkbox"));
+  // eslint-disable-next-line testing-library/no-unnecessary-act
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Open workspace" })); });
   expect(await screen.findByText("Workspace loaded")).toBeInTheDocument();
   expect(mockAccessStage).toBe("accepted");
@@ -130,4 +135,23 @@ test("course generation rejects invalid quiz answers", () => {
     options: ["Joule", "Newton", "Watt"], correct: 1, explanation: "Force is measured in newtons." };
   expect(parseLessonPlan(JSON.stringify([unit, unit]))).toEqual([unit, unit]);
   expect(() => parseLessonPlan(JSON.stringify([unit, { ...unit, correct: 3 }]))).toThrow();
+});
+
+
+test('returning Google sessions wait for account verification restore without flashing the age form (mocked auth)',async()=>{
+  localStorage.setItem('classio_google_signin_requested','true');
+  let complete;restoreSignedInAccount.mockReturnValue(new Promise(resolve=>{complete=resolve;}));
+  render(<Entry/>);
+  await waitFor(()=>expect(restoreSignedInAccount).toHaveBeenCalled());
+  expect(screen.queryByRole('button',{name:'Get started'})).not.toBeInTheDocument();
+  await act(async()=>{complete({uid:'test-account'});});
+  expect(await screen.findByText('Workspace loaded')).toBeInTheDocument();
+  expect(global.fetch.mock.calls.some(([,options])=>options?.body&&JSON.parse(options.body).action==='restore')).toBe(true);
+});
+test('a failed account restore preserves the retry state instead of marking a returning account unverified',async()=>{
+  localStorage.setItem('classio_google_signin_requested','true');
+  restoreSignedInAccount.mockRejectedValue(new Error('Temporary network problem'));
+  render(<Entry/>);
+  await screen.findByText('Could not check your saved verification. Check your connection and retry.');
+  expect(screen.queryByRole('button',{name:'Get started'})).not.toBeInTheDocument();
 });

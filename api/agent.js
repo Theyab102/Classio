@@ -44,7 +44,7 @@ module.exports = async (req, res) => {
       res.setHeader('Retry-After', String(quota.retryAfter));
       throw Object.assign(new Error('The free AI request limit was reached. Please retry later.'), { status: 429, code: 'USAGE_LIMIT' });
     }
-    const output = await generate({ messages: courseMessages(args, typeof source.notes === 'string' && source.notes ? source.notes : (args.sourceText || '')), maxTokens: 7000 }, req.body);
+    const output = await generate({ messages: courseMessages(args, typeof source.notes === 'string' && source.notes ? source.notes : (args.sourceText || '')), maxTokens: 7000 }, req.body, {adult:access.adult===true});
     let units;
     try { units = parseCourse(output.text, args.lessons); }
     catch { throw Object.assign(new Error('The AI returned an incomplete course. Your previous course is unchanged. Retry generation.'), { status: 502, code: 'INVALID_COURSE' }); }

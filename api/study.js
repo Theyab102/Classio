@@ -28,7 +28,7 @@ module.exports = async function study(req, res) {
       res.setHeader('Retry-After', String(quota.retryAfter));
       return reject(res, 429, 'USAGE_LIMIT', 'The free AI request limit was reached. Try again later.');
     }
-    const result = audio ? await transcribe(input) : await generate(input, req.body);
+    const result = audio ? await transcribe(input) : await generate(input, req.body, {adult:access.adult===true});
     return res.status(200).json(result);
   } catch (error) {
     if (publicError(error)) return reject(res, error.status, error.code, error.message);

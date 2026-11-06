@@ -22,6 +22,8 @@ export async function sendStudyRequest(payload, signal) {
   return data.text;
 }
 
+export const PODCAST_SERVER_URL = (process.env.REACT_APP_CLASSIO_PODCAST_URL || process.env.REACT_APP_CLASSIO_TTS_URL || "https://theyab102-classio-tts.hf.space").replace(/\/$/, "");
+
 export const MAX_AUDIO_BYTES = 2_800_000;
 
 export function mergeSessionFolders(accountFolders, sessionFolders) {

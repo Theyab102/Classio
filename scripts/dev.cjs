@@ -5,8 +5,9 @@ const { randomBytes } = require('node:crypto');
 const path = require('node:path');
 
 process.env.NODE_ENV = 'development';
+process.env.HOST ||= '127.0.0.1';
 process.env.CLASSIO_SESSION_SECRET ||= randomBytes(32).toString('hex');
-const routes = new Set(['study', 'access', 'agent']);
+const routes = new Set(['study', 'access', 'agent', 'podcast']);
 const api = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const route = url.pathname.replace(/^\/api\//, '');

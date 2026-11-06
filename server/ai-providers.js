@@ -6,7 +6,7 @@ class ProviderError extends Error {
 }
 
 function redactCredentials(text) {
-  for (const name of ['GROQ_API_KEY', 'GEMINI_API_KEY', 'AI_RATE_LIMIT_SECRET', 'CLASSIO_SESSION_SECRET', 'FIREBASE_SERVICE_ACCOUNT_JSON']) {
+  for (const name of ['GROQ_API_KEY', 'GEMINI_API_KEY', 'CLASSIO_TTS_SIGNING_SECRET', 'AI_RATE_LIMIT_SECRET', 'CLASSIO_SESSION_SECRET', 'FIREBASE_SERVICE_ACCOUNT_JSON']) {
     const value = process.env[name];
     if (value?.length >= 8) text = text.split(value).join('[redacted credential]');
   }
@@ -75,8 +75,12 @@ async function generateWith(provider, input) {
   return data.choices?.[0]?.message?.content || '';
 }
 
-async function generate(input, selection = {}) {
+async function generate(input, selection = {}, eligibility = {}) {
   const available = providers();
+  if(eligibility.adult!==true && available.gemini) {
+    available.gemini=false;
+    if(selection.provider==='gemini' || ((selection.provider||'auto')==='auto'&&!available.groq))throw new ProviderError(403,'PROVIDER_AGE_RESTRICTED','Gemini is unavailable for this session under the deployment’s audience rules. Choose Groq.','gemini');
+  }
   const selected = selection.provider || 'auto';
   if (!['auto', 'groq', 'gemini'].includes(selected)) throw new ProviderError(400, 'INVALID_PROVIDER', 'Choose Auto, Groq or Gemini.');
   if (selected === 'auto' && !available.groq && !available.gemini) throw new ProviderError(503, 'PROVIDER_NOT_CONFIGURED', 'No AI provider is enabled on this deployment. The operator must configure Groq or an eligible Gemini project and redeploy.');

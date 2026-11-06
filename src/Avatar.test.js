@@ -8,6 +8,8 @@ beforeEach(()=>{setLanguages({interfaceLanguage:'en',replyLanguage:'auto'},{remo
 
 test('multiple avatars use unique gradient identifiers and reject invalid colour values',()=>{
   const {container}=render(<><Avatar character={{skin:'bad-css-value'}} label="First"/><Avatar label="Second"/></>);
+  // Internal SVG paint-server IDs must be unique; these are not accessible UI nodes.
+  // eslint-disable-next-line testing-library/no-container, testing-library/no-node-access
   const ids=[...container.querySelectorAll('[id]')].map(item=>item.id);
   expect(new Set(ids).size).toBe(ids.length);
   expect(container.innerHTML).not.toContain('bad-css-value');
@@ -19,7 +21,7 @@ test('live customization preserves saved legacy attributes and nickname input fo
   function Harness(){const [character,setCharacter]=useState({name:'Learner',hairStyle:12,unknownLegacySetting:'kept'});value=character;return <AvatarEditor character={character} onChange={setCharacter} onClose={()=>{}}/>;}
   render(<Harness/>);
   const name=screen.getByLabelText('Nickname');name.focus();fireEvent.change(name,{target:{value:'Classio learner'}});
-  expect(document.activeElement).toBe(name);
+  expect(name).toHaveFocus();
   fireEvent.click(screen.getByRole('button',{name:'Oval',exact:true}));
   expect(value).toMatchObject({faceShape:1,hairStyle:12,name:'Classio learner',unknownLegacySetting:'kept'});
   fireEvent.click(screen.getByRole('tab',{name:'Hair',exact:true}));

@@ -17,9 +17,17 @@ import { normalizeStudyLink, youtubeVideo } from "./youtube";
 import YouTubePreview from "./YouTubePreview";
 import { getTheme as _getTheme, toggleTheme as _toggleTheme, setTheme, useTheme } from "./theme";
 import PodcastDownload from "./PodcastDownload";
+import PodcastStudio from "./PodcastStudio";
+import VoiceCapture from "./VoiceCapture";
+import SavedRecordingAudio from "./SavedRecordingAudio";
+import { cachePodcast, voiceDraftKey } from "./podcastAudio";
+import { saveRecordingAudio } from "./cloudWorkspace";
+import { requestText, requestJson as requestRemoteJson } from "./apiClient";
+import { loadMermaid, loadWord, loadCharts, readSpreadsheet } from "./localLibraries";
 import { downloadStudyFile, makeStudyId, MAX_AUDIO_BYTES, mergeSessionFolders, scheduleCardReview, sendStudyRequest, TTS_SPACE_URL } from "./studyTools";
 import { openPdf } from "./pdf";
 import NotesEditor from "./NotesEditor";
+import StudyMarkdown from "./StudyMarkdown";
 import { markdownToNoteHtml } from "./noteFormat";
 import LocalPdfViewer from "./LocalPdfViewer";
 import PowerPointViewer from "./PowerPointViewer";
@@ -623,7 +631,7 @@ async function extractFileText(fileObj) {
 
   // Images — return a note that it's an image
   if (type.startsWith("image/")) {
-    return `[This is an image file: ${fileObj.name}. Describe its likely content based on the filename.]`;
+    return null; // A filename is not a reliable description of an image.
   }
 
   // PowerPoint / Word / Excel — try to read as binary and extract any readable text
@@ -925,17 +933,9 @@ function MermaidBlock({ code }) {
     if (!code || !ref.current) return;
     const render = async () => {
       try {
-        if (!window.mermaid) {
-          await new Promise((res, rej) => {
-            const s = document.createElement("script");
-            s.src = "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js";
-            s.onload = res; s.onerror = rej;
-            document.head.appendChild(s);
-          });
-          window.mermaid.initialize({ startOnLoad:false, theme:"default", securityLevel:"strict" });
-        }
+        const mermaid = await loadMermaid();
         const id = "mermaid-" + Math.random().toString(36).slice(2);
-        const { svg } = await window.mermaid.render(id, code.trim());
+        const { svg } = await mermaid.render(id, code.trim());
         if (ref.current) ref.current.innerHTML = svg;
       } catch(e) {
         setError(true);
@@ -959,57 +959,8 @@ function MermaidBlock({ code }) {
   );
 }
 
-// Upgraded Fmt — handles mermaid blocks, tables, headings, bullets
-const Fmt = ({ text }) => {
-  if (!text) return null;
-  const lines = text.split('\n');
-  const elements = [];
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i];
-    // Mermaid code block
-    if (line.trim().startsWith("```mermaid")) {
-      const mermaidLines = [];
-      i++;
-      while (i < lines.length && !lines[i].trim().startsWith("```")) {
-        mermaidLines.push(lines[i]);
-        i++;
-      }
-      elements.push(<MermaidBlock key={`m${i}`} code={mermaidLines.join('\n')} />);
-      i++;
-      continue;
-    }
-    // Generic code block
-    if (line.trim().startsWith("```")) {
-      const codeLines = [];
-      i++;
-      while (i < lines.length && !lines[i].trim().startsWith("```")) {
-        codeLines.push(lines[i]);
-        i++;
-      }
-      elements.push(
-        <pre key={`c${i}`} style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 14px", fontSize:12, overflowX:"auto", margin:"6px 0", color:C.text }}>
-          {codeLines.join('\n')}
-        </pre>
-      );
-      i++;
-      continue;
-    }
-    const clean = line.replace(/^#+\s*/, "").replace(/\*\*/g, "").replace(/\*/g, "").trim();
-    if (!line.trim()) { elements.push(<br key={i} />); i++; continue; }
-    if (/^[A-Z][A-Z\s]{3,}$/.test(clean) || line.startsWith('# ') || line.startsWith('## '))
-      { elements.push(<p key={i} style={{ fontWeight:700, fontSize:14, marginBottom:4, marginTop:12, color:C.text, letterSpacing:.3 }}><MathText text={clean} /></p>); i++; continue; }
-    if (/^\*\*[^*]+\*\*$/.test(line.trim()))
-      { elements.push(<p key={i} style={{ fontWeight:700, fontSize:14, marginBottom:4, marginTop:10, color:C.text }}><MathText text={clean} /></p>); i++; continue; }
-    if (line.startsWith('• ') || line.startsWith('- ') || line.startsWith('* ') || line.startsWith('· '))
-      { elements.push(<p key={i} style={{ paddingLeft:14, marginBottom:3, display:"flex", gap:6, lineHeight:1.6 }}><span style={{flexShrink:0, color:"#666"}}>•</span><span><MathText text={clean.replace(/^[•\-\*·]\s*/,"")} /></span></p>); i++; continue; }
-    if (/^\d+\.\s/.test(line))
-      { elements.push(<p key={i} style={{ paddingLeft:14, marginBottom:3, lineHeight:1.6 }}><MathText text={clean} /></p>); i++; continue; }
-    elements.push(<p key={i} style={{ marginBottom:3, lineHeight:1.6 }}><MathText text={clean} /></p>);
-    i++;
-  }
-  return <div>{elements}</div>;
-};
+// Shared safe Markdown, mathematics and the existing Mermaid renderer.
+const Fmt = ({ text }) => <StudyMarkdown text={text} Diagram={MermaidBlock}/>;
 
 // ─── GLOBAL STYLES ────────────────────────────────────────────────────────────
 const GS = `
@@ -1809,14 +1760,14 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
   };
 
   return (
-    <div style={{ width:sideW, minWidth:sideW, height:"100dvh", background:T.sidebar, borderRight:`1px solid ${T.border}`, display:"flex", flexDirection:"column", position:"fixed", insetInlineStart:0, top:0, zIndex:150, transition:"width .2s ease", overflow:"hidden" }}>
+    <div className="classio-sidebar" style={{ width:sideW, minWidth:sideW, height:"100dvh", background:T.sidebar, borderRight:`1px solid ${T.border}`, display:"flex", flexDirection:"column", position:"fixed", insetInlineStart:0, top:0, zIndex:150, transition:"width .2s ease", overflow:"hidden" }}>
       {/* Logo */}
-      <div style={{ padding:"16px 0 12px", display:"flex", flexDirection:"column", alignItems:"center", borderBottom:`1px solid ${T.border}`, cursor:"pointer" }} onClick={()=>setExpanded(e=>!e)}>
+      <button type="button" aria-label={tr(expanded ? "Collapse navigation" : "Expand navigation")} aria-expanded={expanded} style={{ padding:"16px 0 12px", display:"flex", flexDirection:"column", alignItems:"center", border:0, background:"transparent", color:T.navText, borderBottom:`1px solid ${T.border}`, cursor:"pointer" }} onClick={()=>setExpanded(e=>!e)}>
         <div style={{ width:36, height:36, background:"#2b6777", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center" }}>
           <Icon d={I.sparkle} size={16} color="#fff" sw={2}/>
         </div>
         {expanded && <span style={{ fontFamily:"'Fraunces Variable',serif", fontSize:16, fontWeight:700, color:T.navText, marginTop:8 }}>Classio</span>}
-      </div>
+      </button>
 
       {/* Search bar */}
       <div style={{ padding:"10px 8px 4px" }}>
@@ -1824,7 +1775,7 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
           style={{ width:"100%", display:"flex", alignItems:"center", gap:8, background:T.bg, border:`1px solid ${T.border}`, borderRadius:10,
             padding:expanded?"8px 12px":"10px", cursor:"pointer", justifyContent:expanded?"flex-start":"center" }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          {expanded && <><span style={{ fontSize:13, color:T.muted, flex:1 }}>{tr("Search")}…</span><span style={{ fontSize:10, color:T.muted, background:T.border, borderRadius:4, padding:"1px 5px" }}>⌘K</span></>}
+          {expanded && <><span style={{ fontSize:13, color:T.muted, flex:1 }}>{tr("Search")}…</span><span style={{ fontSize:10, color:T.text, background:T.border, borderRadius:4, padding:"1px 5px" }}>⌘K</span></>}
         </button>
       </div>
 
@@ -1905,7 +1856,14 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
 
 
 // ── Audio Record Modal ────────────────────────────────────────────────────────
-function AudioRecordModal({ onClose, onSave, onSaveNote }) {
+function AudioRecordModal({onClose,onSave,onSaveNote}) {
+  const [legacy,setLegacy]=useState(false);
+  const dirty=useRef(false);
+  const close=()=>{if(!dirty.current||window.confirm('Close this recording? Download a copy first if you have not saved it.'))onClose();};
+  if(legacy)return <LegacyAudioRecordModal onClose={onClose} onSave={onSave} onSaveNote={onSaveNote}/>;
+  return <Dialog label="Record audio" className="voice-capture-dialog" onClose={close}><h2>Voice notes</h2><VoiceCapture key={voiceDraftKey("new",auth.currentUser?.uid)} draftKey={voiceDraftKey("new",auth.currentUser?.uid)} onDirtyChange={value=>{dirty.current=value;}} onKeepFile={onSave} onSave={({notes,transcript,file})=>onSaveNote?.(notes,transcript,file)}/><button className="settings-secondary-button" type="button" onClick={()=>setLegacy(true)}>Use live browser dictation</button></Dialog>;
+}
+function LegacyAudioRecordModal({ onClose, onSave, onSaveNote }) {
   const T = useTheme();
   const [phase, setPhase] = useState("idle"); // idle | recording | processing | done | upload
   const [seconds, setSeconds] = useState(0);
@@ -2907,6 +2865,7 @@ export default function App() {
     try {
       const uid = user.uid;
       await signOut(auth);
+      try{localStorage.removeItem("classio_google_signin_requested");}catch{}
       sessionStorage.removeItem('classio_chat:' + uid);
     } catch { setWorkspaceWarning('Sign-out could not finish. Your account and work remain open; please retry.'); }
   }
@@ -2945,6 +2904,8 @@ export default function App() {
     if (user) setDoc(doc(db, 'users', user.uid, 'profile', 'preferences'), { theme: _getTheme().isDark ? 'dark' : 'light' }, { merge: true })
       .catch(() => setWorkspaceWarning('Theme is saved on this device. Account syncing is unavailable.'));
   }
+
+  useEffect(()=>{if(screen==='file'&&(fileTab==='notes'||(fileTab==='view'&&(activeFile?._isBlank||activeFile?.isBlankDoc))))setSidebarExpanded(false);},[screen,fileTab,activeFile?.id]);
 
   useEffect(() => { try { localStorage.setItem('classio_sidebar_expanded', String(sidebarExpanded)); } catch {} }, [sidebarExpanded]);
 
@@ -4132,7 +4093,7 @@ function FileView({ file: sourceFile, folder, allFiles, user, isGuest, onBack, o
   useEffect(() => { return () => stopAllAudio(); }, []);
 
   return (
-    <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans Variable',sans-serif" }}>
+    <div className={tab==="notes" || (tab==="view"&&(file._isBlank||file.isBlankDoc)) ? "document-notes-mode" : undefined} style={{ minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans Variable',sans-serif" }}>
       <style>{GS}</style>
       <div className="app-header" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", height:64, display:"flex", alignItems:"center", gap:10 }}>
         <button onClick={handleBack} className="hov" style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14, fontWeight:500, padding:"6px 10px", borderRadius:8 }}>
@@ -4159,10 +4120,10 @@ function FileView({ file: sourceFile, folder, allFiles, user, isGuest, onBack, o
         if (effectiveTab === "view" && file.cloudFile && !file._fileObj) return null;
         if (effectiveTab === "view") return <ViewTab file={file} onUpdate={onUpdate} />;
         return (
-          <div className="page-inner" style={{ maxWidth:900, margin:"0 auto", padding:"32px 24px", overflow:"visible" }}>
+          <div className={effectiveTab==="notes" ? "page-inner document-study-page" : "page-inner"} style={{ maxWidth:effectiveTab==="notes" ? "none" : 900, margin:"0 auto", padding:effectiveTab==="notes" ? "12px 18px" : "32px 24px", overflow:"visible" }}>
             {effectiveTab==="learn" && <LearnMode key={file.id} file={file} onUpdate={onUpdate}
               getFileText={() => extractFileText(file._fileObj || FILE_STORE.get(file.id))} />}
-            {effectiveTab==="notes" && <div key="notes" className="page-fade"><NotesTab key={file.id} file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} onTabChange={setTab} /></div>}
+            {effectiveTab==="notes" && <div key="notes" className="page-fade"><NotesTab key={file.id} file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} onTabChange={setTab} onBack={handleBack} /></div>}
             {effectiveTab==="voice" && <div key="voice" className="page-fade"><VoicePodcastTab file={file} onUpdate={onUpdate} user={user} /></div>}
             {effectiveTab==="cards" && <div key="cards" className="page-fade"><CardsTab file={file} onUpdate={onUpdate} /></div>}
             {effectiveTab==="ai"    && <div key="ai" className="page-fade"><AITab file={file} allFiles={allFiles} folder={folder} onUpdate={onUpdate} /></div>}
@@ -4482,6 +4443,28 @@ function TextViewer({ fileObj }) {
   );
 }
 
+function RemoteOfficePreview({url,title,kind,page=1,onTotalPages=()=>{}}) {
+  const [file,setFile]=useState(null),[google,setGoogle]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState("");
+  const pending=useRef(null);
+  useEffect(()=>()=>pending.current?.abort(),[]);
+  async function load(){
+    if(pending.current)return;
+    const controller=new AbortController();pending.current=controller;setBusy(true);setError("");
+    const timeout=setTimeout(()=>controller.abort(),20000);
+    try{
+      const address=new URL(url);if(!['https:','http:'].includes(address.protocol)||address.username||address.password)throw new Error('This file URL is invalid.');
+      const response=await fetch(address.href,{signal:controller.signal,credentials:'omit',referrerPolicy:'no-referrer'});
+      if(!response.ok||Number(response.headers.get('content-length'))>20*1024*1024)throw new Error('The shared file could not be loaded or is larger than 20 MB.');
+      const blob=await response.blob();if(blob.size>20*1024*1024)throw new Error('The shared file is larger than 20 MB.');
+      if(!controller.signal.aborted)setFile(new File([blob],title,{type:blob.type}));
+    }catch(failure){if(!controller.signal.aborted)setError(failure.message);else setError('The file took too long to load. Retry or open the original.');}
+    finally{clearTimeout(timeout);pending.current=null;setBusy(false);}
+  }
+  if(file)return kind==='ppt'?<PowerPointViewer fileObj={file} page={page} onTotalPages={onTotalPages} onSlidesLoaded={()=>{}}/>:<WordViewer fileObj={file}/>;
+  if(google)return <iframe src={'https://docs.google.com/viewer?url='+encodeURIComponent(url)+'&embedded=true'} title={title} referrerPolicy="no-referrer" style={{width:'100%',height:'100%',minHeight:500,border:0}}/>;
+  return <div style={{padding:24,maxWidth:600,color:C.text,background:C.surface,borderRadius:14}}><h3>Shared document preview</h3><p style={{margin:'14px 0',lineHeight:1.7}}>Load the original file to render it in Classio. No document URL is sent to Google unless you choose its optional viewer.</p><div className="podcast-actions"><button type="button" disabled={busy} onClick={load}>{busy?'Loading original…':'Load in Classio'}</button><a href={url} target="_blank" rel="noreferrer">Open original file</a></div>{error&&<p role="alert">{error}</p>}<details><summary>Optional external viewer</summary><p>Google receives your IP address and the file URL when this viewer is loaded. Use it only for material you can share with Google.</p><button className="settings-secondary-button" type="button" onClick={()=>setGoogle(true)}>Load Google viewer</button></details></div>;
+}
+
 function WordViewer({ fileObj }) {
   const [html,    setHtml]    = useState("");
   const [loading, setLoading] = useState(true);
@@ -4489,15 +4472,9 @@ function WordViewer({ fileObj }) {
   useEffect(() => {
     (async () => {
       try {
-        if (!window.mammoth) {
-          await new Promise((res, rej) => {
-            const s = document.createElement("script");
-            s.src = "https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js";
-            s.onload = res; s.onerror = rej; document.head.appendChild(s);
-          });
-        }
+        const mammoth = await loadWord();
         const ab  = await fileObj.arrayBuffer();
-        const out = await window.mammoth.convertToHtml({ arrayBuffer: ab });
+        const out = await mammoth.convertToHtml({ arrayBuffer: ab });
         if (out.value) setHtml(sanitizeDocumentHtml(out.value));
         else setError("Document appears empty.");
       } catch(e) {
@@ -4526,19 +4503,7 @@ function ExcelViewer({ fileObj }) {
   useEffect(() => {
     (async () => {
       try {
-        if (!window.XLSX) {
-          await new Promise((res, rej) => {
-            const s = document.createElement("script");
-            s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-            s.onload = res; s.onerror = rej; document.head.appendChild(s);
-          });
-        }
-        const ab = await fileObj.arrayBuffer();
-        const wb = window.XLSX.read(ab, { type:"array" });
-        const all = wb.SheetNames.map(sn => ({
-          name: sn,
-          rows: window.XLSX.utils.sheet_to_json(wb.Sheets[sn], { header:1, defval:"" }),
-        }));
+        const all = await readSpreadsheet(fileObj);
         if (all.length === 0) setError("No sheets found.");
         else setSheets(all);
       } catch(e) {
@@ -5200,6 +5165,15 @@ STRICT RULES — follow every single one:
       {/* ─── VOICE NOTES ─── */}
       {subTab === "record" && (
         <div dir={isRTL ? "rtl" : "ltr"}>
+          <VoiceCapture key={voiceDraftKey(file.id,user?.uid)} draftKey={voiceDraftKey(file.id,user?.uid)} onSave={async ({notes:capturedNotes,transcript,file:audioFile})=>{
+            const digest=[...new Uint8Array(await crypto.subtle.digest('SHA-256',await audioFile.arrayBuffer()))].map(value=>value.toString(16).padStart(2,'0')).join('');
+            const audioCacheKey=(user?.uid||'guest')+':voice:'+digest;
+            await cachePodcast(audioCacheKey,audioFile);
+            let audioCloud;
+            if(user)try{audioCloud=await saveRecordingAudio(user.uid,digest,audioFile);}catch{setVoiceStatus('Recording saved on this device. Cloud upload is unavailable.');}
+            updateRecordings([{text:capturedNotes,transcript,lang,date:new Date().toLocaleString(),words:capturedNotes.split(/\s+/).length,audioCacheKey,...(audioCloud?{audioCloud}:{})},...voiceRecordings]);
+          }}/>
+          <details style={{margin:'20px 0'}}><summary>Live browser dictation</summary>
             <div style={{ background: recording?"#fff0f0":C.surface, border:`2px solid ${recording?C.red+"55":C.border}`, borderRadius:18, padding:"26px 24px", marginBottom:20, textAlign:"center", transition:"all .3s" }}>
               {recording && <style>{`@keyframes vpulse{0%,100%{opacity:1}50%{opacity:.5}}`}</style>}
               <div style={{ fontSize:54, marginBottom:12, animation:recording?"vpulse 1.4s infinite":"none" }}>
@@ -5231,6 +5205,7 @@ STRICT RULES — follow every single one:
             </div>
           )}
 
+          </details>
           {/* Recordings list */}
           {/* Playback voice picker */}
           {voiceRecordings.length > 0 && (
@@ -5284,7 +5259,7 @@ STRICT RULES — follow every single one:
                     </div>
                     <p style={{ fontSize:13, color:C.text, lineHeight:1.55, background:"#f9fafb", borderRadius:8, padding:"8px 10px", maxHeight:80, overflowY:"auto", margin:0, direction:rec.lang?.startsWith("ar")?"rtl":"ltr" }}>
                       {rec.text.slice(0,200)}{rec.text.length>200?"…":""}
-                    </p>
+                    </p><SavedRecordingAudio record={rec}/>
                   </div>
                 ))}
               </div>
@@ -5338,11 +5313,9 @@ function ClassioTable({ data, onClose }) {
     if (!showChart || !chart || !chartRef.current) return;
     // Load Chart.js dynamically
     const load = async () => {
-      if (!window.Chart) {
-        await new Promise((res,rej)=>{ const s=document.createElement("script"); s.src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"; s.onload=res; s.onerror=rej; document.head.appendChild(s); });
-      }
+      const Chart = await loadCharts();
       if (chartInstance.current) { chartInstance.current.destroy(); }
-      chartInstance.current = new window.Chart(chartRef.current, {
+      chartInstance.current = new Chart(chartRef.current, {
         type:"bar",
         data:{ labels:chart.labels, datasets:[{ label:"Value", data:chart.values,
           backgroundColor:"rgba(43,103,119,0.7)", borderColor:"#2b6777", borderWidth:2, borderRadius:6 }] },
@@ -6037,13 +6010,7 @@ function InlineChart({ data }) {
   useEffect(() => {
     if (!canvasRef.current) return;
     const loadAndRender = async () => {
-      if (!window.Chart) {
-        await new Promise((res, rej) => {
-          const s = document.createElement("script");
-          s.src = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js";
-          s.onload = res; s.onerror = rej; document.head.appendChild(s);
-        });
-      }
+      const Chart = await loadCharts();
       if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
       const ctx = canvasRef.current.getContext("2d");
       const COLORS = ["#2b6777","#39696d","#06b6d4","#10b981","#f59e0b","#ef4444","#2b6777","#ec4899"];
@@ -6056,7 +6023,7 @@ function InlineChart({ data }) {
         tension: type === "line" ? 0.4 : undefined,
         pointBackgroundColor: type === "line" ? COLORS[di % COLORS.length] : undefined,
       }));
-      chartRef.current = new window.Chart(ctx, {
+      chartRef.current = new Chart(ctx, {
         type: type || "bar",
         data: { labels, datasets: processedDatasets },
         options: {
@@ -6129,7 +6096,7 @@ function InlineClassioTable({ data }) {
   );
 }
 
-function NotesTab({ file, onUpdate, user }) {
+function NotesTab({ file, onUpdate, user, onTabChange, onBack }) {
   const fileObj = file._fileObj || FILE_STORE.get(file.id);
   const readSavedNotes = useCallback(async () => {
     if (!user?.uid) return [];
@@ -6141,7 +6108,7 @@ function NotesTab({ file, onUpdate, user }) {
     return snapshot.data()?.notes || [];
   }, [file.id, user?.uid]);
   return <NotesEditor file={file} fileObj={fileObj} onUpdate={onUpdate}
-    getFileText={() => extractFileText(fileObj)} readSavedNotes={readSavedNotes} />;
+    getFileText={() => extractFileText(fileObj)} readSavedNotes={readSavedNotes} onTool={onTabChange} onBack={onBack} renderMessage={text=><Fmt text={text}/>} />;
 }
 
 function NotesQASidebar({ file, notes, lang }) {
@@ -7011,9 +6978,7 @@ function YouTubeTab({ file, onUpdate }) {
 
   const fetchPageContent = async (targetUrl) => {
     try {
-      const response = await fetch(targetUrl, { credentials: "omit", referrerPolicy: "no-referrer", signal: AbortSignal.timeout(12000) });
-      if (!response.ok) return null;
-      const html = await response.text();
+      const html = await requestText(targetUrl);
       const text = html.replace(/<script[\s\S]*?<\/script>/gi, "")
         .replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, " ")
         .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
@@ -7047,9 +7012,8 @@ function YouTubeTab({ file, onUpdate }) {
     // Method 1: Our HF Space server (most reliable — add /transcript endpoint to app.py)
     if (serverUrl) {
       try {
-        const resp = await fetch(`${serverUrl}/transcript/${vid}`, { signal: AbortSignal.timeout(12000) });
-        if (resp.ok) {
-          const data = await resp.json();
+        const data = await requestRemoteJson(`${serverUrl}/transcript/${vid}`, {timeout:12000});
+        {
           if (data.success && typeof data.transcript === "string") {
             return { transcript: data.transcript, title: data.title || "" };
           }
@@ -7373,6 +7337,9 @@ function MicPromptOverlay({ onSubmit, onCancel }) {
 }
 
 function AIPodcastPanel({ file, lang, onUpdate }) {
+  return <><PodcastStudio key={(auth.currentUser?.uid||"guest")+":"+file.id} file={file} onUpdate={onUpdate} getFileText={()=>extractFileText(file._fileObj || FILE_STORE.get(file.id))}/><details style={{marginTop:24}}><summary>Existing browser speech & voice questions</summary><p style={{fontSize:12,color:C.muted,margin:"12px 0"}}>These browser speech controls retain the older podcast workflow. Use the generated audio player above for measured captions and seeking.</p><LegacyAIPodcastPanel file={file} lang={lang} onUpdate={onUpdate}/></details></>;
+}
+function LegacyAIPodcastPanel({ file, lang, onUpdate }) {
   const [micPromptActive, setMicPromptActive] = useState(false);
   const [allSaved] = useState(() => {
     if (file.namedNotes) return file.namedNotes;
@@ -11856,9 +11823,6 @@ function SGFileViewer({ fileData, fileURL, fileChunks, groupId, fileName }) {
     alignItems:"center", justifyContent:"center", flexShrink:0,
   });
 
-  // Google Docs viewer works for PPT/Word when we have a public URL
-  const gdocsURL = (url) =>
-    `https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`;
 
   if (isLoading) return (
     <div style={{ flex:1, display:"flex", flexDirection:"column",
@@ -11947,15 +11911,11 @@ function SGFileViewer({ fileData, fileURL, fileChunks, groupId, fileName }) {
             onTotalPages={setPptTotal} onSlidesLoaded={()=>{}} />
         )}
         {isPPT && !fileObj && fileURL && (
-          <iframe src={gdocsURL(fileURL)} title={fileName}
-            style={{ width:"100%", height:"100%", minHeight:500, border:"none",
-              borderRadius:8, background:"#fff" }} allow="autoplay" />
+          <RemoteOfficePreview url={fileURL} title={fileName} kind="ppt" page={pptPage} onTotalPages={setPptTotal}/>
         )}
         {isWord && fileObj && <WordViewer fileObj={fileObj} />}
         {isWord && !fileObj && fileURL && (
-          <iframe src={gdocsURL(fileURL)} title={fileName}
-            style={{ width:"100%", height:"100%", minHeight:500, border:"none",
-              borderRadius:8, background:"#fff" }} allow="autoplay" />
+          <RemoteOfficePreview url={fileURL} title={fileName} kind="word"/>
         )}
 
         {/* Plain text */}

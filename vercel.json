@@ -2,6 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
+      "source": "/__/auth/:path*",
+      "destination": "https://classio-4378f.firebaseapp.com/__/auth/:path*"
+    },
+    {
       "source": "/privacy",
       "destination": "/index.html"
     },
@@ -28,7 +32,19 @@
         },
         {
           "key": "X-Frame-Options",
-          "value": "DENY"
+          "value": "SAMEORIGIN"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(self), geolocation=(), payment=(), browsing-topics=()"
+        },
+        {
+          "key": "X-DNS-Prefetch-Control",
+          "value": "off"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "font-src 'self' data:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'"
         }
       ]
     }
@@ -39,6 +55,9 @@
     },
     "api/agent.js": {
       "maxDuration": 60
+    },
+    "api/podcast.js": {
+      "maxDuration": 30
     }
   }
 }

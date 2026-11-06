@@ -32,12 +32,18 @@ export function authError(error) {
   return messages[error?.code] || 'Google sign-in could not finish. Please retry. Your work is still open.';
 }
 export async function signInGoogle() {
+  try{localStorage.setItem('classio_google_signin_requested','true');}catch{}
   await persistence;
   try { return await signInWithPopup(auth, provider); }
   catch (error) {
     if (error.code === 'auth/popup-blocked' || error.code === 'auth/operation-not-supported-in-this-environment') return signInWithRedirect(auth, provider);
     throw error;
   }
+}
+export async function restoreSignedInAccount(){
+  await authReady;
+  await auth.authStateReady();
+  return auth.currentUser;
 }
 export async function accountHeaders() {
   await authReady.catch(() => {});

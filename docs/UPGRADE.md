@@ -1,5 +1,8 @@
 # Classio critical functionality and cloud workspace upgrade
 
+Historical first-pass handoff. For the subsequent integrated notes, characters,
+privacy and podcast work, see [INTEGRATED-WORKSPACE.md](INTEGRATED-WORKSPACE.md).
+
 This development branch starts at Classio `799b891` and speech server `135098c`.
 The previously described Blue Workspace ZIP was not attached to this task and
 has not been merged. This is an implementation of the critical functionality
