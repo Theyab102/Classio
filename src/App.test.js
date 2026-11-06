@@ -5,6 +5,7 @@ import { escapeHtml, sanitizeDocumentHtml } from "./safeContent";
 import { restoreSignedInAccount } from "./firebase";
 import { waitFor } from "@testing-library/react";
 import { parseStudyRequest } from "../server/study-request";
+import { setLanguages } from './locale';
 
 jest.mock('./firebase', () => ({ auth: { currentUser: null }, accountHeaders: jest.fn(async () => ({})), restoreSignedInAccount:jest.fn() }));
 let mockAccessStage = 'new';
@@ -14,6 +15,7 @@ jest.mock("./App", () => ({ __esModule: true, default: () => mockWorkspace() }))
 beforeEach(() => {
   sessionStorage.clear();
   localStorage.clear();
+  setLanguages({ interfaceLanguage: 'en', replyLanguage: 'auto' }, { remote: true });
   mockAccessStage = 'new';
   restoreSignedInAccount.mockReset();
   global.fetch = jest.fn(async (_url, options) => {
@@ -27,6 +29,7 @@ beforeEach(() => {
   window.history.replaceState({}, "", "/");
   mockWorkspace.mockImplementation(() => <p>Workspace loaded</p>);
 });
+afterEach(() => setLanguages({ interfaceLanguage: 'en', replyLanguage: 'auto' }, { remote: true }));
 
 async function enterBirthDate(value) {
   const start=await screen.findByRole("button", { name: "Get started" });
@@ -212,4 +215,31 @@ test('a stalled Firebase restoration is bounded and never marks the account as n
     expect(screen.queryByLabelText('Date of birth')).not.toBeInTheDocument();
     expect(mockWorkspace).not.toHaveBeenCalled();
   }finally{jest.useRealTimers();}
+});
+
+test('a configuration error changes back to English without allowing unverified access', async () => {
+  setLanguages({ interfaceLanguage: 'ar' }, { remote: true });
+  global.fetch = jest.fn(async () => ({ ok: false, status: 503, headers: { get: () => null }, json: async () => ({ code: 'VERIFICATION_CONFIG_MISSING', error: 'Classio’s secure access service is not ready yet. Please try again shortly.' }) }));
+  render(<Entry />);
+  expect(await screen.findByRole('alert')).toHaveTextContent('كلاسيو غير متاح مؤقتًا. يرجى العودة لاحقًا.');
+  fireEvent.change(screen.getByLabelText('لغة الواجهة'), { target: { value: 'en' } });
+  expect(screen.getByRole('alert')).toHaveTextContent('Classio is temporarily unavailable. Please check back later.');
+  expect(screen.getByRole('button', { name: 'Returning? Sign in with Google' })).toBeDisabled();
+  expect(screen.queryByLabelText('Date of birth')).not.toBeInTheDocument();
+  expect(mockWorkspace).not.toHaveBeenCalled();
+});
+
+test('a missing server secret does not start automatic retry polling and can recover after a manual check', async () => {
+  jest.useFakeTimers();
+  global.fetch = jest.fn(async () => ({ ok: false, status: 503, headers: { get: () => null }, json: async () => ({ code: 'VERIFICATION_CONFIG_MISSING' }) }));
+  try {
+    render(<Entry />);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    await act(async () => jest.advanceTimersByTime(15000));
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    global.fetch.mockResolvedValue({ ok: true, json: async () => ({ stage: 'accepted' }) });
+    fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
+    expect(await screen.findByText('Workspace loaded')).toBeInTheDocument();
+  } finally { jest.useRealTimers(); }
 });

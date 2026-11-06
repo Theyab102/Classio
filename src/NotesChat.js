@@ -44,7 +44,7 @@ export default function NotesChat({ file, getFileText, notes, onUpdate, onInsert
       {messages.map((message,index)=><article key={index} dir="auto" className={'notes-chat-message '+message.role}><strong>{message.role==='user'?t('You'):'Classio'}</strong>{renderMessage?renderMessage(message.content):<div dangerouslySetInnerHTML={{__html:markdownToNoteHtml(message.content)}}/>}{message.role==='assistant'&&<button type="button" onClick={()=>onInsert(markdownToNoteHtml(message.content))}>{t('Add to notes')}</button>}</article>)}
       {busy&&<p role="status">{t('Thinking…')}</p>}<div ref={bottom}/>
     </div>
-    {error&&<p role="alert" className="notes-chat-error">{error}</p>}
+    {error&&<p role="alert" className="notes-chat-error">{t(error)}</p>}
     <form className="notes-chat-composer" onSubmit={send}><label className="sr-only" htmlFor="note-chat-input">{t('Ask about this document')}</label><textarea id="note-chat-input" dir="auto" placeholder={t('Ask about this document')} value={input} maxLength={8000} onChange={event=>setInput(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();send(event);}}}/><div><small>{t('Uses this file and your notes')}</small><button type="submit" disabled={busy||!input.trim()}>{t(busy?'Thinking…':error?'Retry':'Send')}</button></div></form>
   </>;
   return compact?<Dialog className="notes-chat-dialog" label={t('Document chat')} onClose={onClose}>{content}</Dialog>:<aside className="notes-chat" aria-label={t('Document chat')}>{content}</aside>;

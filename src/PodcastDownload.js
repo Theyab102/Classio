@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { downloadStudyFile, TTS_SPACE_URL } from "./studyTools";
 
 import { generatePodcastAudio, singleVoiceDialogue } from "./podcastAudio";
+import {useLocale} from './locale';
 
 export default function PodcastDownload({ script }) {
+  const {t}=useLocale();
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
   const pending = useRef(null);
@@ -34,10 +36,10 @@ export default function PodcastDownload({ script }) {
 
   return (
     <div className="study-tool-actions">
-      <button type="button" onClick={() => downloadStudyFile(new Blob([script], { type: "text/plain" }), "classio-podcast.txt")}>Download script</button>
-      {TTS_SPACE_URL && <button type="button" disabled={loading} onClick={downloadAudio}>Download audio (English voice)</button>}
-      {TTS_SPACE_URL && <p>Downloading audio sends this script to the Classio Piper voice service.</p>}
-      {status && <p role="status">{status}</p>}
+      <button type="button" onClick={() => downloadStudyFile(new Blob([script], { type: "text/plain" }), "classio-podcast.txt")}>{t('Download script')}</button>
+      {TTS_SPACE_URL && <button type="button" disabled={loading} onClick={downloadAudio}>{t('Download audio (English voice)')}</button>}
+      {TTS_SPACE_URL && <p>{t('Downloading audio sends this script to the Classio Piper voice service.')}</p>}
+      {status && <p role="status">{t(status)}</p>}
     </div>
   );
 }

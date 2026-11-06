@@ -1,4 +1,4 @@
-import { translate as tr } from "./locale";
+import { useLocale } from './locale';
 import { useEffect, useRef, useState } from 'react';
 import {cachePodcast,readPodcast} from './podcastAudio';
 import { MAX_AUDIO_BYTES, downloadStudyFile, sendStudyRequest } from './studyTools';
@@ -6,6 +6,7 @@ export default function VoiceCapture({
   onSave,
   onKeepFile, draftKey, onDirtyChange
 }) {
+  const { t: tr } = useLocale();
   const [phase, setPhase] = useState('idle'),
     [recording, setRecording] = useState(null),
     [url, setUrl] = useState(''),
@@ -212,6 +213,6 @@ export default function VoiceCapture({
             if (mounted.current) setPhase('ready');
           }
         }}>{tr("Add voice note to workspace")}</button></div></>}
-    {status && <p role="status">{tr(status)}</p>}{error && <p role="alert" className="podcast-error">{error}</p>}<small>{tr("Transcribe sends the audio to Groq. Organize sends the transcript to your selected AI provider. No background microphone or keystroke recording is used.")}</small>
+    {status && <p role="status">{tr(status)}</p>}{error && <p role="alert" className="podcast-error">{tr(error)}</p>}<small>{tr("Transcribe sends the audio to Groq. Organize sends the transcript to your selected AI provider. No background microphone or keystroke recording is used.")}</small>
   </section>;
 }

@@ -1,8 +1,36 @@
-import { useSyncExternalStore } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 
 export const interfaceLanguages = [{ value: 'auto', label: 'System default' }, { value: 'en', label: 'English' }, { value: 'ar', label: 'العربية' }];
 export const replyLanguages = ['auto', 'English', 'Arabic', 'French', 'Spanish', 'German', 'Italian', 'Portuguese', 'Turkish', 'Hindi', 'Urdu', 'Chinese', 'Japanese', 'Korean', 'Russian'];
 const ar = {
+  "Classio is temporarily unavailable. Please check back later.": "كلاسيو غير متاح مؤقتًا. يرجى العودة لاحقًا.",
+  "Check again": "تحقّق مجددًا",
+  "Organizing your writing…": "جارٍ تنظيم كتابتك…",
+  "Added {title}.": "أُضيفت {title}.",
+  "Saved version: {name}.": "حُفظت النسخة: {name}.",
+  "Review the results and insert the right image.": "راجع النتائج وأضف الصورة المناسبة.",
+  "No licensed image results. Try a more specific search.": "لم نعثر على صور مرخّصة. حاول استخدام عبارة بحث أكثر تحديدًا.",
+  "Table inserted. You can edit every cell.": "أُضيف الجدول. يمكنك تحرير كل خلية.",
+  "Organized in the same editor. Your original writing is kept in the previous version.": "نُظّمت الملاحظات في المحرر نفسه، مع الاحتفاظ بكتابتك الأصلية في النسخة السابقة.",
+  "Course saved to your account using {provider}.": "حُفظت الدورة في حسابك باستخدام {provider}.",
+  "Course saved to your account using {provider} (permitted fallback).": "حُفظت الدورة في حسابك باستخدام {provider} (تحويل مسموح إلى مزوّد بديل).",
+  "Course created in this guest session. Sign in to save it across devices.": "أُنشئت الدورة في جلسة الضيف هذه. سجّل الدخول لحفظها عبر أجهزتك.",
+  "Preparing study material…": "جارٍ تجهيز المادة الدراسية…",
+  "Building lessons and knowledge checks…": "جارٍ إنشاء الدروس وأسئلة التحقق من الفهم…",
+  "{done} of {total} dialogue turns": "{done} من {total} مقاطع الحوار",
+  "Download audio (English voice)": "تنزيل الصوت (بالإنجليزية)",
+  "Downloading audio sends this script to the Classio Piper voice service.": "يرسل تنزيل الصوت هذا النص إلى خدمة Classio Piper الصوتية.",
+  "Preparing audio. A sleeping voice server can take a moment to start.": "جارٍ تجهيز الصوت. قد يحتاج الخادم الصوتي بعض الوقت لبدء العمل.",
+  "Audio downloaded.": "نُزّل الصوت.",
+  "Original voice recording": "التسجيل الصوتي الأصلي",
+  "The original recording could not be loaded. Its notes are still available.": "تعذّر تحميل التسجيل الأصلي. ما زالت ملاحظاته متاحة.",
+  "Sign-in was cancelled. Your work is still open.": "أُلغي تسجيل الدخول. ما زال عملك مفتوحًا.",
+  "Another sign-in window is already open.": "هناك نافذة أخرى لتسجيل الدخول مفتوحة بالفعل.",
+  "Google sign-in could not connect. Check your connection and retry.": "تعذّر الاتصال بتسجيل الدخول عبر Google. تحقّق من اتصالك وحاول مجددًا.",
+  "Google sign-in could not finish. Please retry. Your work is still open.": "تعذّر إكمال تسجيل الدخول عبر Google. حاول مجددًا؛ ما زال عملك مفتوحًا.",
+  "The AI service did not respond in time. Please retry.": "لم تستجب خدمة الذكاء الاصطناعي في الوقت المحدد. حاول مجددًا.",
+  "The AI returned no usable content. Please retry.": "لم تُرجع خدمة الذكاء الاصطناعي محتوى قابلًا للاستخدام. حاول مجددًا.",
+  "This request could not finish. Please retry.": "تعذّر إكمال الطلب. حاول مجددًا.",
   "Enter a valid date of birth.":"أدخل تاريخ ميلاد صحيحًا.",
   "Complete eligibility and accept the terms.":"أكمل التحقق من الأهلية ووافق على الشروط.",
   "Tuft style":"شكل خصلة الشعر", "Smooth":"أملس", "Little tuft":"خصلة صغيرة", "Curls":"خصلات مجعدة", "Side sweep":"خصلة جانبية",
@@ -535,7 +563,14 @@ let replyPreference = 'auto';
 try { const saved=localStorage.getItem('classio_lang'); if(replyLanguages.includes(saved))replyPreference=saved; } catch {}
 const listeners = new Set();
 function resolvedLocale() { return interfacePreference === 'auto' ? (navigator.language?.startsWith('ar') ? 'ar' : 'en') : interfacePreference; }
-export function translate(text) { return resolvedLocale() === 'ar' ? ar[text] || text : text; }
+function formatMessage(message,parameters,locale){
+  const key=message&&typeof message==='object'&&typeof message.key==='string'?message.key:message;
+  const values=parameters||(message&&typeof message==='object'?message.values:null);
+  const template=locale==='ar'?ar[key]||key:key;
+  if(typeof template!=='string'||!values)return template;
+  return template.replace(/\{([A-Za-z][A-Za-z0-9_]*)\}/g,(match,name)=>typeof values[name]==='string'||typeof values[name]==='number'?String(values[name]):match);
+}
+export function translate(message,parameters) { return formatMessage(message,parameters,resolvedLocale()); }
 export function getReplyLanguage() { return replyPreference; }
 export function getLanguagePreferences() { return { interfaceLanguage: interfacePreference, replyLanguage: getReplyLanguage() }; }
 function apply() {
@@ -554,9 +589,12 @@ export function setLanguages(next, { remote = false } = {}) {
   apply();
   if (!remote) window.dispatchEvent(new CustomEvent('classio-language-change', { detail: getLanguagePreferences() }));
 }
+function subscribe(listener){listeners.add(listener);return()=>listeners.delete(listener);}
 export function useLocale() {
-  useSyncExternalStore(listener => { listeners.add(listener); return () => listeners.delete(listener); }, () => interfacePreference + '|' + replyPreference + '|' + resolvedLocale());
-  return { locale:resolvedLocale(), t: translate, direction: resolvedLocale() === 'ar' ? 'rtl' : 'ltr' };
+  useSyncExternalStore(subscribe, () => interfacePreference + '|' + replyPreference + '|' + resolvedLocale());
+  const locale=resolvedLocale();
+  const t=useCallback((message,parameters)=>formatMessage(message,parameters,locale),[locale]);
+  return { locale, t, direction: locale === 'ar' ? 'rtl' : 'ltr' };
 }
 if (typeof document !== 'undefined') apply();
 window.addEventListener('languagechange', apply);

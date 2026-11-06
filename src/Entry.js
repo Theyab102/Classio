@@ -20,7 +20,7 @@ function OpeningWorkspace(){
 export default function Entry() {
   const {t}=useLocale();
   const page=legalPages[window.location.pathname.replace(/\/$/,'')];
-  const {stage,checking,pending,error,check,run}=useAccessSession(!page);
+  const {stage,checking,pending,error,configurationMissing,check,run}=useAccessSession(!page);
   const [screening,setScreening]=useState(false);
   async function restoreAccount(){
     await run({action:'restore'},async()=>{
@@ -40,8 +40,8 @@ export default function Entry() {
       <h2 id="entry-step">{t('A quick eligibility check')}</h2><p>{t('Classio is for people aged 13 and over. We keep the verification result, not your date of birth.')}</p><label htmlFor="birth-date">{t('Date of birth')}</label><input id="birth-date" name="birthDate" type="date" required disabled={waiting} aria-describedby={error?'access-error':undefined}/><button className="entry-button" disabled={waiting}>{t(pending?'Continuing…':'Continue')}</button>
     </form>:<>
       <h2 id="entry-step">{t('Your space to learn')}</h2><p>{t('Bring your materials. Find a little clarity, one idea at a time.')}</p>
-      {stage==='unavailable'?<button className="entry-button" onClick={check} disabled={waiting}>{t('Try again')}</button>:<button className="entry-button" onClick={()=>setScreening(true)} disabled={waiting}>{t('Get started')}</button>}
-      <button className="entry-button secondary" onClick={restoreAccount} disabled={waiting}>{t(pending?'Connecting…':'Returning? Sign in with Google')}</button>
+      {stage==='unavailable'?<button className="entry-button" onClick={check} disabled={waiting}>{t(configurationMissing?'Check again':'Try again')}</button>:<button className="entry-button" onClick={()=>setScreening(true)} disabled={waiting}>{t('Get started')}</button>}
+      <button className="entry-button secondary" onClick={restoreAccount} disabled={waiting||configurationMissing}>{t(pending?'Connecting…':'Returning? Sign in with Google')}</button>
     </>}
     {error&&<p id="access-error" className="entry-error" role="alert">{t(error)}</p>}
   </section></EntryShell>;

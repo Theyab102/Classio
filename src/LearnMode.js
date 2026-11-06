@@ -1,8 +1,7 @@
-import { translate as tr } from "./locale";
 import { useEffect, useRef, useState } from 'react';
 import { sendStudyRequest, makeStudyId } from './studyTools';
 import { auth, accountHeaders } from './firebase';
-import { getReplyLanguage } from './locale';
+import { getReplyLanguage, useLocale } from './locale';
 import { requestJson } from './apiClient';
 import courseSchema from './shared/course-schema.js';
 import './studyTools.css';
@@ -16,6 +15,7 @@ export default function LearnMode({
   getFileText,
   onUpdate
 }) {
+  const { t: tr } = useLocale();
   const [topic, setTopic] = useState(file.course?.title || '');
   const [difficulty, setDifficulty] = useState(file.course?.difficulty || 'beginner');
   const [lessons, setLessons] = useState(4);
@@ -75,7 +75,7 @@ export default function LearnMode({
         });
         if (data.saved !== true) throw new Error('The course could not be saved. Retry when connected.');
         course = data.course;
-        setStatus(`Course saved to your account using ${data.provider}${data.fallback ? ' (permitted fallback)' : ''}.`);
+        setStatus({key:data.fallback?'Course saved to your account using {provider} (permitted fallback).':'Course saved to your account using {provider}.',values:{provider:data.provider}});
       } else {
         const raw = await sendStudyRequest({
           messages: courseMessages(args, source),
@@ -134,7 +134,7 @@ export default function LearnMode({
       <details><summary>{tr("Custom instructions")}</summary><label>{tr("Additional guidance")}<textarea maxLength={1500} value={instructions} onChange={event => changeRequest(setInstructions, event.target.value)} disabled={loading} /></label></details>
       <button type="submit" disabled={loading}>{tr(loading ? 'Building course…' : units.length ? 'Build a new course' : error ? 'Retry course generation' : 'Build course')}</button>
     </form>
-    {error && <p role="alert">{error}</p>}{status && <p role="status">{status}</p>}
+    {error && <p role="alert">{tr(error)}</p>}{status && <p role="status">{tr(status)}</p>}
     {unit && <>
       <p role="status">{completed.length}{tr(" of ")}{units.length}{tr(" lessons completed")}</p>
       <nav aria-label={tr("Course lessons")} className="study-tool-actions">{units.map((item, index) => <button key={index} type="button" aria-current={index === active ? 'step' : undefined} onClick={() => {
@@ -155,7 +155,7 @@ export default function LearnMode({
             }
           })} /></label> : <p className="study-lesson-text">{unit.lesson}</p>}
         <h4>{unit.question}</h4><div className="study-tool-actions">{unit.options.map((option, index) => <button type="button" key={index} aria-pressed={choice === index} onClick={() => answer(index)}>{option}</button>)}</div>
-        {choice !== null && <p role="status">{choice === unit.correct ? `Correct. ${unit.explanation}` : 'Try another answer.'}</p>}
+        {choice !== null && <p role="status">{choice === unit.correct ? <>{tr('Correct.')} {unit.explanation}</> : tr('Try another answer.')}</p>}
         {completed.includes(active) && active < units.length - 1 && <button type="button" onClick={() => {
           setActive(active + 1);
           setChoice(null);

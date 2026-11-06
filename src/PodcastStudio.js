@@ -288,8 +288,8 @@ export default function PodcastStudio({
         setPhase('idle');
         setSaveState('Stopped checking. A submitted audio job can continue on the server; retry to resume it.');
       }}>{tr("Cancel")}</button>}</div>
-    {phase === 'audio' && <p role="status">{progress ? `${progress.status === 'queued' ? 'Queued' : 'Synthesizing'} · ${progress.completedTurns} of ${progress.totalTurns} dialogue turns` : 'Authorizing this podcast…'}</p>}
-    {error && <p role="alert" className="podcast-error">{error}</p>}
+    {phase === 'audio' && <p role="status">{progress ? `${tr(progress.status === 'queued' ? 'Queued' : 'Synthesizing')} · ${tr('{done} of {total} dialogue turns',{done:progress.completedTurns,total:progress.totalTurns})}` : tr('Authorizing this podcast…')}</p>}
+    {error && <p role="alert" className="podcast-error">{tr(error)}</p>}
     {!!dialogue.length && <>
       <div className="podcast-hosts">{[0, 1].slice(0, hosts).map(index => <div key={index} className={'podcast-host ' + (playing && active?.speaker === index ? 'speaking' : '')} style={{
           '--voice-energy': amplitude

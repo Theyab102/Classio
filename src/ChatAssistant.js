@@ -69,13 +69,13 @@ export default function ChatAssistant({ onClose, onCreateCourse, renderMessage, 
     try {
       if(toolMode){
         const source=files.find(file=>file.id===sourceId);
-        if(!uid||!source)throw new Error(t('Choose a synced study file and sign in before using study actions.'));
+        if(!uid||!source)throw new Error('Choose a synced study file and sign in before using study actions.');
         const sourceText=source.notes||await getFileText?.(source)||'';
-        if(auth.currentUser?.uid!==uid)throw new Error(t('Your account changed. Sign in again before syncing.'));
+        if(auth.currentUser?.uid!==uid)throw new Error('Your account changed. Sign in again before syncing.');
         const plan=await planStudyAction(text,{...source,sourceText},controller.signal);
         if(controller.signal.aborted)return;
         if(plan.provider)setProvider(`${plan.provider}${plan.fallback?' · permitted fallback':''}`);
-        const complete=[...next,{role:'assistant',content:plan.message||t('Review this action before creating a new study file.'),...(plan.action?{action:{...plan.action,requestId:makeStudyId()}}:{})}];
+        const complete=[...next,{role:'assistant',content:plan.message||'Review this action before creating a new study file.',...(plan.action?{action:{...plan.action,requestId:makeStudyId()}}:{})}];
         setMessages(complete);persist(complete,id);return;
       }
       const history = next.map((message, index) => ({ role: message.role, content: message.image && index === next.length - 1 ? [{ type: 'image_url', image_url: { url: message.image } }, { type: 'text', text: message.content }] : message.content }));
@@ -98,17 +98,17 @@ export default function ChatAssistant({ onClose, onCreateCourse, renderMessage, 
       {onCreateCourse && <button type="button" disabled={loading} onClick={onCreateCourse}>{t("Create course")}</button>}
     </div>
     <details className="assistant-settings"><summary>{t("Provider & privacy")}</summary><AISettings /></details>
-    <details className="assistant-settings"><summary>{t('Create from a file')}</summary>{uid?<><label className="checkbox-label"><input type="checkbox" checked={toolMode} disabled={loading} onChange={event=>{if(event.target.checked&&image){setError(t('Remove the attached image before using file actions.'));return;}setToolMode(event.target.checked);}}/>{t('Suggest study actions for my request')}</label><label>{t('Study file')}<select aria-label={t('Study file')} value={sourceId} disabled={loading} onChange={event=>setSourceId(event.target.value)}><option value="">{t('Choose a saved file')}</option>{files.filter(file=>!file._deleted).map(file=><option key={file.id} value={file.id}>{file.name}</option>)}</select></label><p>{t('Ask for notes, flashcards, a quiz or a course. Review and confirm the proposed action before it runs.')}</p></>:<p>{t('Sign in to use account study tools.')}</p>}</details>
+    <details className="assistant-settings"><summary>{t('Create from a file')}</summary>{uid?<><label className="checkbox-label"><input type="checkbox" checked={toolMode} disabled={loading} onChange={event=>{if(event.target.checked&&image){setError('Remove the attached image before using file actions.');return;}setToolMode(event.target.checked);}}/>{t('Suggest study actions for my request')}</label><label>{t('Study file')}<select aria-label={t('Study file')} value={sourceId} disabled={loading} onChange={event=>setSourceId(event.target.value)}><option value="">{t('Choose a saved file')}</option>{files.filter(file=>!file._deleted).map(file=><option key={file.id} value={file.id}>{file.name}</option>)}</select></label><p>{t('Ask for notes, flashcards, a quiz or a course. Review and confirm the proposed action before it runs.')}</p></>:<p>{t('Sign in to use account study tools.')}</p>}</details>
     <div className="assistant-messages" role="log" aria-label={t("Conversation messages")} aria-busy={loading}>
       {!messages.length && <div className="assistant-empty"><h3>{t("What are you curious about?")}</h3><p>{t("Ask a question or attach an image of a problem. Your materials stay yours.")}</p></div>}
       {messages.map((message, index) => <article dir="auto" key={index} className={`chat-message ${message.role}`} aria-label={message.role === 'user' ? t('You') : 'Classio'}>
         <strong>{message.role === 'user' ? t('You') : 'Classio'}</strong>{message.image && <img src={message.image} alt={t("Your attachment")} />}
-        {renderMessage ? renderMessage(message.content) : <div className="markdown-content" dangerouslySetInnerHTML={{ __html: markdownToNoteHtml(message.content) }} />}
+        {renderMessage ? renderMessage(message.action?t('Review this action before creating a new study file.'):message.content) : <div className="markdown-content" dangerouslySetInnerHTML={{ __html: markdownToNoteHtml(message.action?t('Review this action before creating a new study file.'):message.content) }} />}
         {message.action&&<AssistantAction action={message.action} getSourceText={async fileId=>{const source=files.find(item=>item.id===fileId);return source?(source.notes||await getFileText?.(source)||''):'';}} onOpenFile={onOpenFile} onComplete={result=>{const base=current.current===selected?latest.current:messages;const next=base.map(item=>item.action?.requestId===message.action.requestId?{...item,action:{...item.action,result}}:item);if(current.current===selected)setMessages(next);persist(next,selected);}}/>}
       </article>)}
       {loading && <p role="status">{t("Thinking through your question…")}</p>}<div ref={bottom} />
     </div>
-    {error && <p role="alert" className="inline-error">{error} {t("Your question is ready to retry.")}</p>}
+    {error && <p role="alert" className="inline-error">{t(error)} {t("Your question is ready to retry.")}</p>}
     <form className="assistant-composer" onSubmit={event => { event.preventDefault(); send(); }}>
       <label className="attachment-control">{t("Attach image")}<input aria-label={t("Attach image")} type="file" accept="image/png,image/jpeg,image/webp" disabled={loading||toolMode} onChange={event => {
         const file = event.target.files[0];

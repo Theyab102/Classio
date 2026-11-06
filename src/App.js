@@ -2994,7 +2994,7 @@ export default function App() {
         maxWidth: isMobile ? "100vw" : `calc(100vw - ${isMobile ? 0 : (sidebarExpanded ? 220 : 60)}px)`,
         boxSizing: "border-box",
       }}>
-        {workspaceWarning && <div className="workspace-warning" role="status">{workspaceWarning}{(cloudPending.current || pendingUploads.current.length > 0) && <button type="button" onClick={retryCloudSync}>Retry sync</button>}</div>}
+        {workspaceWarning && <div className="workspace-warning" role="status">{tr(workspaceWarning)}{(cloudPending.current || pendingUploads.current.length > 0) && <button type="button" onClick={retryCloudSync}>Retry sync</button>}</div>}
         {children}
       </div>
     </div>
@@ -3056,13 +3056,13 @@ export default function App() {
 
   async function openAgentFile(result) {
     const uid=auth.currentUser?.uid;
-    if(!uid||!result||!/^[-A-Za-z0-9_.]{1,150}$/.test(result.fileId||""))throw new Error(tr("Sign in to use account study tools."));
+    if(!uid||!result||!/^[-A-Za-z0-9_.]{1,150}$/.test(result.fileId||""))throw new Error("Sign in to use account study tools.");
     const file=(await getDoc(doc(db,"users",uid,"files",result.fileId))).data();
-    if(auth.currentUser?.uid!==uid)throw new Error(tr("Your account changed. Sign in again before syncing."));
-    if(!file||file._deleted||!/^[-A-Za-z0-9_.]{1,150}$/.test(file.folderId||""))throw new Error(tr("The saved file is unavailable. Refresh your workspace and retry."));
+    if(auth.currentUser?.uid!==uid)throw new Error("Your account changed. Sign in again before syncing.");
+    if(!file||file._deleted||!/^[-A-Za-z0-9_.]{1,150}$/.test(file.folderId||""))throw new Error("The saved file is unavailable. Refresh your workspace and retry.");
     let folder=foldersRef.current.find(item=>item.id===file.folderId);
     if(!folder){const metadata=(await getDoc(doc(db,"users",uid,"folders",file.folderId))).data();if(metadata&&!metadata._deleted)folder={...metadata,files:[]};}
-    if(!folder||auth.currentUser?.uid!==uid)throw new Error(tr("The saved file is unavailable. Refresh your workspace and retry."));
+    if(!folder||auth.currentUser?.uid!==uid)throw new Error("The saved file is unavailable. Refresh your workspace and retry.");
     folder={...folder,files:[...(folder.files||[]).filter(item=>item.id!==file.id),file]};
     replaceFolders([...foldersRef.current.filter(item=>item.id!==folder.id),folder]);
     setShowHomeAI(false);setActiveFolder(folder);setActiveFile(file);setFileTab(file.defaultTab||"notes");setScreen("file");
@@ -3122,7 +3122,7 @@ export default function App() {
       <div style={{ flex:1, minWidth:0, marginInlineStart:isMobile?0:(sidebarExpanded?220:60), marginTop:isMobile?56:0, marginBottom:0, minHeight:"100vh", display:"flex", flexDirection:"column", background:T.bg }}>
       <div style={{ maxWidth:960, margin:"0 auto", padding:isMobile?"12px 14px":isTablet?"16px 20px":"32px 36px", width:"100%", boxSizing:"border-box" }}>
 
-        {workspaceWarning && <div className="workspace-warning" role="status">{workspaceWarning}{(cloudPending.current || pendingUploads.current.length > 0) && <button type="button" onClick={retryCloudSync}>Retry sync</button>}</div>}
+        {workspaceWarning && <div className="workspace-warning" role="status">{tr(workspaceWarning)}{(cloudPending.current || pendingUploads.current.length > 0) && <button type="button" onClick={retryCloudSync}>Retry sync</button>}</div>}
         {/* ── Dashboard Header ── */}
         {homeTab==="folders" && !user && (
           <section className="guest-save-banner" aria-label="Guest session">
@@ -3130,7 +3130,7 @@ export default function App() {
             <button className="workspace-action" onClick={signInToSave} disabled={signInPending}>
               {signInPending ? '…' : tr('Sign in to save')}
             </button>
-            {signInError && <p role="alert">{signInError}</p>}
+            {signInError && <p role="alert">{tr(signInError)}</p>}
           </section>
         )}
         {homeTab==="folders" && (
@@ -4489,7 +4489,7 @@ function RemoteOfficePreview({url,title,kind,page=1,onTotalPages=()=>{}}) {
   }
   if(file)return kind==='ppt'?<PowerPointViewer fileObj={file} page={page} onTotalPages={onTotalPages} onSlidesLoaded={()=>{}}/>:<WordViewer fileObj={file}/>;
   if(google)return <iframe src={'https://docs.google.com/viewer?url='+encodeURIComponent(url)+'&embedded=true'} title={title} referrerPolicy="no-referrer" style={{width:'100%',height:'100%',minHeight:500,border:0}}/>;
-  return <div style={{padding:24,maxWidth:600,color:C.text,background:C.surface,borderRadius:14}}><h3>Shared document preview</h3><p style={{margin:'14px 0',lineHeight:1.7}}>Load the original file to render it in Classio. No document URL is sent to Google unless you choose its optional viewer.</p><div className="podcast-actions"><button type="button" disabled={busy} onClick={load}>{busy?'Loading original…':'Load in Classio'}</button><a href={url} target="_blank" rel="noreferrer">Open original file</a></div>{error&&<p role="alert">{error}</p>}<details><summary>Optional external viewer</summary><p>Google receives your IP address and the file URL when this viewer is loaded. Use it only for material you can share with Google.</p><button className="settings-secondary-button" type="button" onClick={()=>setGoogle(true)}>Load Google viewer</button></details></div>;
+  return <div style={{padding:24,maxWidth:600,color:C.text,background:C.surface,borderRadius:14}}><h3>Shared document preview</h3><p style={{margin:'14px 0',lineHeight:1.7}}>Load the original file to render it in Classio. No document URL is sent to Google unless you choose its optional viewer.</p><div className="podcast-actions"><button type="button" disabled={busy} onClick={load}>{busy?'Loading original…':'Load in Classio'}</button><a href={url} target="_blank" rel="noreferrer">Open original file</a></div>{error&&<p role="alert">{tr(error)}</p>}<details><summary>Optional external viewer</summary><p>Google receives your IP address and the file URL when this viewer is loaded. Use it only for material you can share with Google.</p><button className="settings-secondary-button" type="button" onClick={()=>setGoogle(true)}>Load Google viewer</button></details></div>;
 }
 
 function WordViewer({ fileObj }) {
@@ -4515,7 +4515,7 @@ function WordViewer({ fileObj }) {
   return (
     <div style={{ background:"#fff", padding:"48px 60px", borderRadius:4, maxWidth:860, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,.4)", minHeight:500, fontSize:14, lineHeight:1.9, color:"#111" }}>
       {loading && <p style={{ color:"#888" }}>Loading document…</p>}
-      {error   && <p style={{ color:"#e53e3e" }}>{error}</p>}
+      {error   && <p style={{ color:"#e53e3e" }}>{tr(error)}</p>}
       {html    && <div dangerouslySetInnerHTML={{ __html: html }} />}
     </div>
   );
@@ -4542,7 +4542,7 @@ function ExcelViewer({ fileObj }) {
   }, [fileObj]);
 
   if (loading) return <div style={{ color:"#fff", padding:40 }}>Loading spreadsheet…</div>;
-  if (error)   return <div style={{ color:"#fca5a5", padding:40, background:"#1e1e2e", borderRadius:8 }}>{error}</div>;
+  if (error)   return <div style={{ color:"#fca5a5", padding:40, background:"#1e1e2e", borderRadius:8 }}>{tr(error)}</div>;
 
   const sheet = sheets[activeSheet] || { rows:[] };
   // Find max columns
@@ -6658,7 +6658,7 @@ function CardsTab({ file, onUpdate }) {
         </div>
       </div>
 
-      {error && <p className="workspace-warning" role="alert">{error}</p>}
+      {error && <p className="workspace-warning" role="alert">{tr(error)}</p>}
       {cards.length > 0 && (
         <div className="study-tool-actions">
           <button type="button" disabled={!due.length} onClick={() => { setFilter("due"); setStudyIdx(0); setFlipped({}); setViewMode("study"); }}>Review due cards ({due.length})</button>
@@ -7216,7 +7216,7 @@ ${modeGuide}`,
             }
           </button>
         </div>
-        {error && <p style={{ fontSize:13, color:C.red, marginTop:8 }}>{error}</p>}
+        {error && <p style={{ fontSize:13, color:C.red, marginTop:8 }}>{tr(error)}</p>}
         <p style={{ fontSize:11, color:C.muted, marginTop:10 }}>
           YouTube notes require an available or pasted transcript. Websites must allow browser access to their content.
         </p>
@@ -11638,7 +11638,7 @@ function StudyGroupLobby({ user, db, onJoin, onClose }) {
                     placeholder="e.g. Physics Study Squad" style={{ ...inp, opacity: loading ? .6 : 1 }} />
                 </div>
                 {error && <div style={{ padding: "10px 12px", borderRadius: 10, background: C.redL,
-                  border: `1px solid ${C.red}44`, color: C.red, fontSize: 12, fontWeight: 600 }}>{error}</div>}
+                  border: `1px solid ${C.red}44`, color: C.red, fontSize: 12, fontWeight: 600 }}>{tr(error)}</div>}
                 <button onClick={handleCreate} disabled={loading} style={{
                   display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
                   background: loading ? C.accentS : C.accent, color: "#fff", border: "none",
@@ -11664,7 +11664,7 @@ function StudyGroupLobby({ user, db, onJoin, onClose }) {
                     style={{ ...inp, fontSize: 22, fontWeight: 800, letterSpacing: 5, textAlign: "center", fontFamily: "monospace", opacity: loading ? .6 : 1 }} />
                 </div>
                 {error && <div style={{ padding: "10px 12px", borderRadius: 10, background: C.redL,
-                  border: `1px solid ${C.red}44`, color: C.red, fontSize: 12, fontWeight: 600 }}>{error}</div>}
+                  border: `1px solid ${C.red}44`, color: C.red, fontSize: 12, fontWeight: 600 }}>{tr(error)}</div>}
                 <button onClick={handleJoin} disabled={loading} style={{
                   display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
                   background: loading ? C.accentS : C.accent, color: "#fff", border: "none",
@@ -12262,7 +12262,7 @@ function SGScreenShareHost({ groupId, db, user, onStop, registerStop }) {
           </div>
           {error && (
             <div style={{ padding: "8px 12px", borderRadius: 9, background: C.redL,
-              border: `1px solid ${C.red}44`, color: C.red, fontSize: 12 }}>{error}</div>
+              border: `1px solid ${C.red}44`, color: C.red, fontSize: 12 }}>{tr(error)}</div>
           )}
           <button onClick={startCapture} style={{
             background: C.accent, color: "#fff", border: "none", borderRadius: 8,
@@ -14103,7 +14103,7 @@ function SGGameLauncher({ group, db, groupId, user, groupFile, onClose }) {
 
           {error && (
             <div style={{ padding: "8px 12px", borderRadius: 9, background: C.redL,
-              border: `1px solid ${C.red}44`, color: C.red, fontSize: 12 }}>{error}</div>
+              border: `1px solid ${C.red}44`, color: C.red, fontSize: 12 }}>{tr(error)}</div>
           )}
 
           {/* ── Game mode grid ── */}

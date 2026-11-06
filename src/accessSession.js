@@ -33,7 +33,7 @@ export async function restoreAccess(signal){
   return stage;
 }
 export function accessFailure(error){
-  if(error.code==='VERIFICATION_CONFIG_MISSING')return error.message;
+  if(error.code==='VERIFICATION_CONFIG_MISSING')return 'Classio is temporarily unavailable. Please check back later.';
   if(error.code==='ACCESS_COOKIE_REQUIRED')return error.message;
   if(error.code==='INVALID_ACCESS_RESPONSE')return 'Classio’s access service could not be reached. Please try again shortly.';
   if(['INVALID_DATE','TERMS_REQUIRED','AGE_RESTRICTED','VERIFICATION_UNAVAILABLE'].includes(error.code))return error.message;

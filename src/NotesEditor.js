@@ -133,6 +133,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
       onUpdate({ ...file, notesHtml, notes: noteHtmlToMarkdown(notesHtml) });
     },
   });
+  useEffect(()=>{if(editor)editor.setOptions({editorProps:{...editor.options.editorProps,attributes:{...editor.options.editorProps.attributes,"aria-label":t("Study notes")}}});},[editor,t]);
   const tools = useEditorState({
     editor,
     selector: ({ editor: current }) => ({
@@ -177,7 +178,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
     imageHtml.append(marker);
     insertFigure(marker, image);
     editor.chain().focus().insertContent(sanitizeNoteHtml(imageHtml.innerHTML)).run();
-    setStatus(`Added ${image.title}.`);
+    setStatus({key:'Added {title}.',values:{title:image.title}});
   }
 
   async function findImages(source) {
@@ -208,7 +209,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
     aiRequest.current = controller;
     setError("");
     setBusy(true);
-    setStatus(t(action === "organize" ? "Organizing your writing…" : "Preparing study notes…"));
+    setStatus(action === "organize" ? "Organizing your writing…" : "Preparing study notes…");
     try {
       const originalHtml = editor.getHTML();
       const existing = noteHtmlToMarkdown(originalHtml);
@@ -241,7 +242,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
         } else {
           if(editor.isEmpty) editor.commands.setContent(html);
           else editor.chain().focus('end').insertContent('<p></p>' + html).run();
-          setStatus(t('Added to your notes. Your original writing is kept; use Undo to remove this addition.'));
+          setStatus('Added to your notes. Your original writing is kept; use Undo to remove this addition.');
         }
       }
     } catch (failure) {
@@ -264,7 +265,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
     setSaved(next);
     setVersionName("");
     onUpdate({ ...file, notes, notesHtml: html, namedNotes: next });
-    setStatus(`Saved version: ${name}.`);
+    setStatus({key:'Saved version: {name}.',values:{name}});
   }
 
   if (!editor) return <p role="status">Opening notes editor…</p>;
@@ -326,8 +327,8 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
         </div>
         <div className="studio-controls"><button type="button" disabled={busy} onClick={()=>generate('organize')}>{t('Organize my notes')}</button><button type="button" disabled={busy} onClick={()=>generate('table')}>{t('Make a table')}</button></div>
       </details>
-      {status && <p className="studio-status" role="status">{status}</p>}
-      {error && <p className="studio-error" role="alert">{error}</p>}
+      {status && <p className="studio-status" role="status">{t(status)}</p>}
+      {error && <p className="studio-error" role="alert">{t(error)}</p>}
       <div className="notes-studio-grid">
         <article className="note-workspace">
           {tools?.table && !preview && <details className="note-table-tools"><summary>{t('Table actions')}</summary><div className="studio-controls" aria-label={t('Table actions')}>

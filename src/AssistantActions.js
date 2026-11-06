@@ -18,16 +18,16 @@ export default function AssistantAction({action,onComplete,onOpenFile,getSourceT
     setBusy(true);setError('');
     try{
       const uid=auth.currentUser?.uid;
-      if(!uid)throw new Error(t('Sign in to use account study tools.'));
+      if(!uid)throw new Error('Sign in to use account study tools.');
       const sourceText=(await getSourceText?.(valid.fileId)||'').slice(0,20000);
       const headers=await accountHeaders();
-      if(auth.currentUser?.uid!==uid)throw new Error(t('Your account changed. Sign in again before syncing.'));
+      if(auth.currentUser?.uid!==uid)throw new Error('Your account changed. Sign in again before syncing.');
       const result=await requestJson('/api/agent',{headers,body:{tool:action.tool,arguments:{...valid,sourceText},requestId:action.requestId,confirmed:true,...providerPreferences()},timeout:60000});
-      if(result.saved!==true||!result.file?.id)throw new Error(t('Saving was not confirmed. Your original file is unchanged.'));
+      if(result.saved!==true||!result.file?.id)throw new Error('Saving was not confirmed. Your original file is unchanged.');
       if(result.provider)window.dispatchEvent(new CustomEvent('classio-ai-result',{detail:{provider:result.provider,fallback:result.fallback===true}}));
-      if(auth.currentUser?.uid!==uid)throw new Error(t('Your account changed. Sign in again before syncing.'));
+      if(auth.currentUser?.uid!==uid)throw new Error('Your account changed. Sign in again before syncing.');
       onComplete({fileId:result.file.id,folderId:result.file.folderId,title:result.file.name,defaultTab:result.file.defaultTab});
     }catch(failure){setError(failure.message);}finally{setBusy(false);}
   }
-  return <section className="assistant-action" aria-label={t('Review study action')}><strong>{t(actionLabels[action.tool])}</strong><p>{action.arguments.title}</p><small>{t('Creates a separate file. Your source stays intact.')}</small><details><summary>{t('Action details')}</summary><p>{action.arguments.instructions}</p><p>{t('Difficulty')}: {t(action.arguments.difficulty)}</p><p>{t('Items')}: {action.arguments.count}</p></details>{action.result?<><p role="status">{t('Saved to your account.')}</p><button type="button" disabled={busy} onClick={async()=>{setBusy(true);setError('');try{await onOpenFile?.(action.result);}catch(failure){setError(failure.message);}finally{setBusy(false);}}}>{t('Open saved file')}</button></>:<button type="button" disabled={busy} onClick={execute}>{t(busy?'Creating and saving…':error?'Retry action':'Confirm and create')}</button>}{error&&<p role="alert">{error}</p>}</section>;
+  return <section className="assistant-action" aria-label={t('Review study action')}><strong>{t(actionLabels[action.tool])}</strong><p>{action.arguments.title}</p><small>{t('Creates a separate file. Your source stays intact.')}</small><details><summary>{t('Action details')}</summary><p>{action.arguments.instructions}</p><p>{t('Difficulty')}: {t(action.arguments.difficulty)}</p><p>{t('Items')}: {action.arguments.count}</p></details>{action.result?<><p role="status">{t('Saved to your account.')}</p><button type="button" disabled={busy} onClick={async()=>{setBusy(true);setError('');try{await onOpenFile?.(action.result);}catch(failure){setError(failure.message);}finally{setBusy(false);}}}>{t('Open saved file')}</button></>:<button type="button" disabled={busy} onClick={execute}>{t(busy?'Creating and saving…':error?'Retry action':'Confirm and create')}</button>}{error&&<p role="alert">{t(error)}</p>}</section>;
 }

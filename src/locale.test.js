@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import { useMemo } from 'react';
 import LanguageSettings from './LanguageSettings';
-import { getLanguagePreferences, getReplyLanguage, setLanguages, translate } from './locale';
+import { getLanguagePreferences, getReplyLanguage, setLanguages, translate, useLocale } from './locale';
 import { sendStudyRequest } from './studyTools';
 jest.mock('./firebase', () => ({ accountHeaders:jest.fn(async () => ({})) }));
 let originalFetch;
@@ -19,6 +20,8 @@ test('language controls translate immediately, set RTL and persist independent c
   expect(localStorage.getItem('classio_lang')).toBe('French');
   fireEvent.change(screen.getByLabelText('لغة الواجهة'),{target:{value:'en'}});
   expect(document.documentElement).toHaveAttribute('dir','ltr');
+  expect(screen.getByLabelText('AI response language')).toHaveValue('French');
+  expect(screen.getByText('Choose the language of navigation, settings and study controls.')).toBeInTheDocument();
 });
 
 test('a remote preference update is preserved when the next local setting changes', () => {
@@ -50,4 +53,19 @@ test('blocked browser storage still allows an immediate in-memory language prefe
   setLanguages({interfaceLanguage:'ar',replyLanguage:'Arabic'});
   expect(getReplyLanguage()).toBe('Arabic');
   expect(document.documentElement.dir).toBe('rtl');
+});
+
+test('memoized labels and stored message keys follow an Arabic to English round trip', () => {
+  const message = { key: 'Saved version: {name}.', values: { name: 'مراجعتي — Chapter 1' } };
+  function Preview() {
+    const { t } = useLocale();
+    const label = useMemo(() => t('Study notes'), [t]);
+    return <><label>{label}<textarea aria-label={label} defaultValue="كتابتي الأصلية" /></label><p role="status">{t(message)}</p></>;
+  }
+  render(<Preview />);
+  act(() => setLanguages({ interfaceLanguage: 'ar' }));
+  expect(screen.getByRole('status')).toHaveTextContent('حُفظت النسخة: مراجعتي — Chapter 1.');
+  act(() => setLanguages({ interfaceLanguage: 'en' }));
+  expect(screen.getByRole('textbox', { name: 'Study notes' })).toHaveValue('كتابتي الأصلية');
+  expect(screen.getByRole('status')).toHaveTextContent('Saved version: مراجعتي — Chapter 1.');
 });

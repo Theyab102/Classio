@@ -189,8 +189,17 @@ const base = process.env.CLASSIO_TEST_URL || 'http://127.0.0.1:3000';
       await p.keyboard.press('Escape');
       await p.getByRole('dialog').waitFor({state:'hidden'});
       assert.equal(await p.evaluate(()=>document.body.style.overflow),'');
+      await navigate('الإعدادات');
+      await p.getByLabel('لغة الواجهة',{exact:true}).selectOption('en');
+      await p.getByRole('heading',{name:'Settings',exact:true}).waitFor();
+      assert.equal(await p.evaluate(()=>document.documentElement.dir),'ltr');
+      assert.equal(await p.getByLabel('Interface language',{exact:true}).inputValue(),'en');
+      await navigate('Your avatar');
+      await p.getByRole('tab',{name:'Accessories',exact:true}).waitFor();
+      await p.getByRole('button',{name:'Done',exact:true}).click();
+      assert(await noOverflow(),`Restored English ${viewport.width}`);
       assert.deepEqual(problems,[]);
-      console.log(`PASS ${viewport.width}x${viewport.height}: English/Arabic navigation, Settings, all avatar tabs, viewport fit, Escape, reduced motion`);
+      console.log(`PASS ${viewport.width}x${viewport.height}: English/Arabic/English navigation and Settings, all avatar tabs, viewport fit, Escape, reduced motion`);
       await c.close();
     }
   } catch(error) { if(activePage&&!activePage.isClosed())await activePage.screenshot({path:path.join(output,'calm-failure.png'),fullPage:true}).catch(()=>{});throw error; }
