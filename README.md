@@ -9,6 +9,7 @@ Use Node.js 22 or 24. Run `npm ci`, then `npm start` for the browser app. The gu
 - `npm run build` builds the browser app into `build/`.
 - `CI=true npm test -- --watchAll=false` runs the focused regression tests.
 - `node --test server/*.test.js` checks guest AI, transcription and provider failover with mocked providers.
+- `npm run check:ai` checks the local server configuration and prints missing setting names, never their values.
 - The policy URLs are `/privacy`, `/terms` and `/copyright`.
 
 ## AI providers and Vercel settings
@@ -21,11 +22,13 @@ Set server-only `GROQ_API_KEY`, `FIREBASE_SERVICE_ACCOUNT_JSON` and `AI_RATE_LIM
 
 The API reserves quota before calling either provider, allows up to 20 seconds per provider, and bounds quota lookup at eight seconds. `vercel.json` assigns this Node function a 60-second budget; verify availability in your Vercel plan. Diagnostic logs include provider/error codes rather than prompts or credentials.
 
+If a deployed study tool says AI is unavailable, open `/api/status` on that deployment. It reports missing or malformed setting names and enabled providers without returning credentials. This checks configuration only, not provider authorization, quota availability or Firestore permissions. Add the missing settings securely in the Classio Vercel project's **Production** environment, redeploy, then test an actual guest request from the site. A GitHub push deploys code; it does not create provider credentials or change Vercel's environment settings.
+
 ## Appearance and devices
 
 The welcome page follows the device color scheme by default. Its Appearance selector offers Light, Dark and Use device setting; an explicit selection is remembered across visits. Eligibility and terms acknowledgment are also remembered in the same browser without retaining the date of birth. Guests still start a fresh workspace when the session ends.
 
-Phones use a hamburger menu containing every study tool. Tablet and PC sidebars scroll, including account and appearance controls, and expanding the sidebar reserves the same space on dashboard and document screens. A failed workspace download offers a reload action instead of a blank page. Reloading ends guest work, so the recovery screen explains that consequence.
+The Library groups creation and import actions under **New**. Phones use a hamburger menu containing every study tool. Tablet and PC sidebars scroll, including account and appearance controls. A single **Ask AI** action opens the same conversation from the global header and uses the current file as context. A failed workspace download offers a reload action instead of a blank page. Reloading ends guest work, so the recovery screen explains that consequence.
 
 ## Before public launch
 
@@ -38,16 +41,16 @@ Phones use a hamburger menu containing every study tool. Tablet and PC sidebars 
 
 ## Workspace behavior
 
-Signed-in users keep an account-specific cached folder list. Cloud records are restored through the same Firebase account. The previous unscoped `classio_v2` entry stays in browser storage because it has no account identifier. If that entry contains the only copy of old offline work, recover it in the original browser before clearing site data. Original personal files are still stored separately in that browser. Guests can use all the study tools and download results. Their workspace clears on refresh or when the tab closes. The dashboard’s optional sign-in button imports the guest workspace into the signed-in account. Notes, progress and supported file metadata sync to Firebase. Original uploads remain on the device where they were added.
+Signed-in users keep an account-specific cached folder list. Cloud records are restored through the same Firebase account. The previous unscoped `classio_v2` entry stays in browser storage because it has no account identifier. If that entry contains the only copy of old offline work, recover it in the original browser before clearing site data. Original personal files are still stored separately in that browser. Guests can use all the study tools and download results. Their workspace clears on refresh or when the tab closes. The Library’s optional sign-in button imports the guest workspace into the signed-in account. Notes, progress and supported file metadata sync to Firebase. Original uploads remain on the device where they were added.
 
 The built app serves DM Sans, Fraunces and KaTeX fonts from its own assets. General website summaries use the source website directly. If the website blocks browser access, paste the text into the study tool.
 
 ## Study tools
 
-- **Notes Studio** supports formatting, editable tables, uploads and images from a PDF. AI can organize a draft or build a table for review. The image picker searches Wikimedia Commons and shows the image credits. Google Images opens as a separate manual search.
+- **Notes** combines writing, AI note generation and lessons in one workspace. Its compact toolbar supports fonts, sizes, formatting, editable tables and images from a PDF. AI drafts are reviewed before replacing or appending to notes; replacement can be undone. The image picker searches Wikimedia Commons and shows image credits. Optional tools use a side panel on PC and a dismissible drawer on smaller screens. Named versions and HTML downloads remain available from Note options.
 - **Document viewers** render original PDF pages locally and keep the same scale during page navigation. The PPTX viewer supports native text, images and tables. Both viewers support page-specific pen and highlighter strokes.
 - **Presentations** preview the same generated deck in two or three layouts before applying one. Edit text, tables and images, annotate slides and export as PDF or PPTX.
-- **Learn Mode** turns a topic, document or note into lessons with a knowledge check after each lesson.
-- **Study Cards** offers spaced review and a TSV download. Missed cards are due again in ten minutes. Successful reviews use gradually longer intervals.
+- **Lessons**, inside Notes, turns a topic, document or note into lessons with a knowledge check after each lesson. Lesson explanations can be added to the editable notes without losing existing writing.
+- **Review** groups flashcards and practice questions. Cards support spaced review and a TSV download. Missed cards are due again in ten minutes. Successful reviews use gradually longer intervals.
 - **Record audio** can turn uploaded recordings up to 2.8 MB into a transcript and notes. It can also use compatible browsers for live dictation. Keep the original file if an upload exceeds the limit or transcription is unavailable.
 - **AI Podcast** offers a quick review or deep dive, repeat playback and a script download. The optional WAV download sends the generated script to the existing `Theyab102/classio-tts` Hugging Face Space. That Space runs Piper and has an English download voice. The browser handles playback in the app. Set `REACT_APP_CLASSIO_TTS_URL` to an empty value at build time to disable the external speech integration. Test the Space after it wakes from sleep. [Classio TTS Space](https://huggingface.co/spaces/Theyab102/classio-tts)

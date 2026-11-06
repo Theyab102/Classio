@@ -12,6 +12,7 @@
     "@tiptap/extension-image": "^3.32.3",
     "@tiptap/extension-table": "^3.32.3",
     "@tiptap/extension-text-align": "^3.32.3",
+    "@tiptap/extension-text-style": "3.32.3",
     "@tiptap/pm": "^3.32.3",
     "@tiptap/react": "^3.32.3",
     "@tiptap/starter-kit": "^3.32.3",
@@ -33,7 +34,9 @@
     "start": "react-scripts start",
     "build": "CI=false react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "check:ai": "node scripts/check-ai-config.cjs",
+    "test:server": "node --test server/*.test.js"
   },
   "eslintConfig": {
     "extends": [

@@ -1,7 +1,8 @@
 const { configured, reserveRequest } = require("../server/ai-quota");
 const { parseAudioRequest, parseStudyRequest } = require("../server/study-request");
 
-const { availableProviders, generateStudy } = require("../server/ai-providers");
+const { generateStudy } = require("../server/ai-providers");
+const { configurationStatus } = require("../server/ai-configuration");
 
 async function requestQuota(req, action) {
   let timer;
@@ -30,7 +31,11 @@ module.exports = async function study(req, res) {
   const audio = req.body?.kind === "audio";
   const input = audio ? parseAudioRequest(req.body) : parseStudyRequest(req.body);
   if (!input) return res.status(400).json({ error: "This request is invalid or too large. Check the file or shorten the input." });
-  if (!configured() || !availableProviders().length) return res.status(503).json({ error: "AI is not connected on this deployment. You can still use and edit your workspace.", code: "AI_NOT_CONFIGURED" });
+  const report = configurationStatus();
+  if (!configured() || !report.configured) {
+    console.error("study_configuration", { missing: report.missing });
+    return res.status(503).json({ error: "AI is unavailable because the site’s server settings are incomplete. Your writing is still saved in this session.", code: "AI_NOT_CONFIGURED" });
+  }
 
   try {
     const quota = await requestQuota(req, audio ? "audio" : "study");

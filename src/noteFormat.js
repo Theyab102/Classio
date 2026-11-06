@@ -20,8 +20,12 @@ export function sanitizeNoteHtml(html) {
   });
   for (const node of fragment.querySelectorAll("[style]")) {
     const alignment = node.style.textAlign;
+    const font = node.style.fontFamily.replace(/['"]/g, "");
+    const size = node.style.fontSize;
     node.removeAttribute("style");
     if (["left", "center", "right", "justify"].includes(alignment)) node.style.textAlign = alignment;
+    if (["DM Sans Variable", "Fraunces Variable", "ui-monospace"].includes(font)) node.style.fontFamily = font;
+    if ([12, 14, 16, 18, 20, 24, 28, 32].some(value => size === `${value}px`)) node.style.fontSize = size;
   }
   for (const image of fragment.querySelectorAll("img")) {
     if (!safeImageSource(image.getAttribute("src"))) image.replaceWith(image.getAttribute("alt") || "");

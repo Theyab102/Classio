@@ -5,6 +5,7 @@ import "./entry.css";
 import { readAccess, rememberAccess } from "./access";
 import { ThemeSelector, useThemeMode } from "./theme";
 import WorkspaceBoundary from "./WorkspaceBoundary";
+import WorkspaceFrame from "./WorkspaceFrame";
 
 const Workspace = lazy(() => import("./App"));
 
@@ -17,7 +18,7 @@ export default function Entry() {
   const page = legalPages[window.location.pathname.replace(/\/$/, "")];
   if (page) return <LegalPage page={page} />;
   if (access === "accepted") {
-    return <WorkspaceBoundary><Suspense fallback={<p className="entry-loading" role="status">Opening your workspace…</p>}><Workspace /></Suspense></WorkspaceBoundary>;
+    return <WorkspaceBoundary><Suspense fallback={<WorkspaceFrame />}><Workspace /></Suspense></WorkspaceBoundary>;
   }
 
   function setDecision(decision) {

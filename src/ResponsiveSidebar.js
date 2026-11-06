@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ThemeSelector } from "./theme";
+import UiIcon from "./UiIcon";
 import "./responsive.css";
 
 function MenuIcon({ close = false }) {
@@ -81,16 +82,16 @@ export default function ResponsiveSidebar({ mobile, expanded, onExpand, main, ma
     </div>
   </aside>;
 
-  if (!mobile) return menu;
   return <>
-    <header className="phone-navigation-bar">
-      <button ref={trigger} type="button" aria-label="Open menu" aria-expanded={open} aria-controls="classio-navigation" onClick={() => setOpen(true)}><MenuIcon /></button>
-      <span>Classio</span>
-      <button type="button" onClick={() => onNavigate("assistant")}>AI Assistant</button>
+    <header className="workspace-topbar" style={{ insetInlineStart: mobile ? 0 : expanded ? 220 : 60 }}>
+      {mobile && <button ref={trigger} type="button" className="quiet-button" aria-label="Open menu" aria-expanded={open} aria-controls="classio-navigation" onClick={() => setOpen(true)}><MenuIcon /></button>}
+      {documentName && <button type="button" className="quiet-button" aria-label="Back to library" onClick={() => onNavigate("home")}><UiIcon name="back" /></button>}
+      <span className="workspace-topbar-title">{documentName || "Classio"}</span>
+      <button type="button" className="quiet-button" aria-label="AI Assistant" onClick={() => onNavigate("assistant")}>Ask AI</button>
     </header>
-    {open && <div className="phone-navigation-overlay">
+    {mobile ? open && <div className="phone-navigation-overlay">
       <button type="button" tabIndex={-1} className="navigation-backdrop" aria-label="Close menu backdrop" onClick={() => setOpen(false)} />
       {menu}
-    </div>}
+    </div> : menu}
   </>;
 }

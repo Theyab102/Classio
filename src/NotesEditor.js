@@ -4,15 +4,22 @@ import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
 import { TableKit } from "@tiptap/extension-table";
 import TextAlign from "@tiptap/extension-text-align";
+import { closeHistory } from "@tiptap/pm/history";
+import { TextStyleKit } from "@tiptap/extension-text-style";
+import LearnMode from "./LearnMode";
+import UiIcon from "./UiIcon";
+import ActionMenu from "./ActionMenu";
 import { getPdfContext, getPdfFigures, isPdfFile, likelyStudyImage, prepareNoteImage, searchStudyImages } from "./documentMedia";
 import { markdownToNoteHtml, noteHtmlToMarkdown, sanitizeNoteHtml } from "./noteFormat";
 import { downloadStudyFile, sendStudyRequest } from "./studyTools";
 import "./documentStudio.css";
+import "./workspace.css";
 
 const editorExtensions = [
   StarterKit.configure({ link: { openOnClick: false, HTMLAttributes: { rel: "noopener noreferrer" } } }),
   Image.configure({ allowBase64: true, resize: { enabled: true, minWidth: 60, minHeight: 45, alwaysPreserveAspectRatio: true }, HTMLAttributes: { referrerpolicy: "no-referrer" } }),
   TableKit.configure({ table: { resizable: true, renderWrapper: true } }),
+  TextStyleKit.configure({ color: false, backgroundColor: false, lineHeight: false }),
   TextAlign.configure({ types: ["heading", "paragraph"] }),
 ];
 
@@ -82,7 +89,7 @@ async function enrichDraft(markdown, pdfFile, useWeb, signal, originalHtml) {
   return sanitizeNoteHtml(root.innerHTML);
 }
 
-export default function NotesEditor({ file, fileObj, getFileText, onUpdate, readSavedNotes, assistant }) {
+export default function NotesEditor({ file, fileObj, getFileText, onUpdate, readSavedNotes }) {
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [topic, setTopic] = useState("");
@@ -91,7 +98,18 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
   const [webImages, setWebImages] = useState(false);
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState("");
-  const [imageTools, setImageTools] = useState(false);
+  const [panel, setPanel] = useState(file.notesMode === "generate" ? "generate" : null);
+  const [view, setView] = useState((file.notesMode || (file.defaultTab === "learn" ? "lessons" : "write")) === "lessons" ? "lessons" : "write");
+  const [moreTools, setMoreTools] = useState(false);
+  const [narrow, setNarrow] = useState(() => window.innerWidth < 900);
+  const panelRef = useRef(null);
+  const latest = useRef({ file, onUpdate });
+  latest.current = { file, onUpdate };
+  const updateFields = patch => {
+    const next = { ...latest.current.file, ...patch };
+    latest.current.file = next;
+    latest.current.onUpdate(next);
+  };
   const [imageQuery, setImageQuery] = useState("");
   const [pdfPage, setPdfPage] = useState(1);
   const [searching, setSearching] = useState(false);
@@ -99,7 +117,6 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
   const [saved, setSaved] = useState(file.namedNotes || []);
   const [versionName, setVersionName] = useState("");
   const [preview, setPreview] = useState(false);
-  const [assistantOpen, setAssistantOpen] = useState(false);
   const upload = useRef(null);
   const aiRequest = useRef(null);
   const mediaRequest = useRef(null);
@@ -122,7 +139,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
     },
     onUpdate({ editor: current }) {
       const notesHtml = current.getHTML();
-      onUpdate({ ...file, notesHtml, notes: noteHtmlToMarkdown(notesHtml) });
+      updateFields({ notesHtml, notes: noteHtmlToMarkdown(notesHtml) });
     },
   });
   const tools = useEditorState({
@@ -137,6 +154,8 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
       bullet: current?.isActive("bulletList"),
       ordered: current?.isActive("orderedList"),
       callout: current?.isActive("blockquote"),
+      fontFamily: current?.getAttributes("textStyle").fontFamily,
+      fontSize: current?.getAttributes("textStyle").fontSize,
       heading: [1, 2, 3].find(level => current?.isActive("heading", { level })) || 0,
       outline: current?.getJSON().content?.filter(node => node.type === "heading").map(node => node.content?.map(part => part.text).join("") || "") || [],
     }),
@@ -152,6 +171,29 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
     readSavedNotes().then(versions => { if (active && versions?.length) setSaved(current => current.length ? current : versions); }).catch(() => {});
     return () => { active = false; };
   }, [file.id, file.namedNotes, readSavedNotes]);
+
+  useEffect(() => {
+    const media = window.matchMedia?.("(max-width: 899px)");
+    const change = event => setNarrow(event.matches);
+    media?.addEventListener?.("change", change);
+    return () => media?.removeEventListener?.("change", change);
+  }, []);
+
+  useEffect(() => {
+    if (!narrow || !panel || !panelRef.current) return;
+    const before = document.activeElement, overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    panelRef.current.querySelector("button")?.focus();
+    const keyboard = event => {
+      if (event.key === "Escape") setPanel(null);
+      if (event.key !== "Tab") return;
+      const controls = [...panelRef.current.querySelectorAll("button:not(:disabled), input:not([hidden]), select, summary, a[href]")];
+      if (event.shiftKey && document.activeElement === controls[0]) { event.preventDefault(); controls.at(-1)?.focus(); }
+      else if (!event.shiftKey && document.activeElement === controls.at(-1)) { event.preventDefault(); controls[0]?.focus(); }
+    };
+    window.addEventListener("keydown", keyboard);
+    return () => { document.body.style.overflow = overflow; window.removeEventListener("keydown", keyboard); if (before?.isConnected) before.focus(); };
+  }, [narrow, panel, editor]);
 
   async function uploadImage(image) {
     try {
@@ -203,7 +245,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
       const originalHtml = editor.getHTML();
       const existing = noteHtmlToMarkdown(originalHtml);
       const source = action === "organize" || action === "table" ? existing
-        : pdfFile ? await getPdfContext(pdfFile) : await getFileText();
+        : pdfFile ? await getPdfContext(pdfFile) : (await getFileText?.()) || existing;
       if (!source?.trim() && (action !== "generate" || !topic.trim())) {
         throw new Error(action === "generate" ? "Enter a topic or choose a file with readable text." : "Write a few notes before using this tool.");
       }
@@ -246,128 +288,124 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
     const next = [{ name, html, text: notes, date: new Date().toLocaleDateString() }, ...saved.filter(item => item.name !== name)];
     setSaved(next);
     setVersionName("");
-    onUpdate({ ...file, notes, notesHtml: html, namedNotes: next });
+    updateFields({ notes, notesHtml: html, namedNotes: next });
     setStatus(`Saved version: ${name}.`);
   }
 
-  if (!editor) return <p role="status">Opening notes editor…</p>;
+  if (!editor) return <section className="note-initial-frame" aria-busy="true" aria-label="Notes" />;
   const run = operation => operation(editor.chain().focus()).run();
-  const action = (label, operation, pressed) => <button type="button" disabled={preview} aria-pressed={pressed} onMouseDown={event => event.preventDefault()} onClick={() => run(operation)}>{label}</button>;
+  const action = (label, icon, operation, pressed) => <button type="button" title={label} aria-label={label}
+    disabled={preview} aria-pressed={pressed} onMouseDown={event => event.preventDefault()} onClick={() => run(operation)}><UiIcon name={icon} /></button>;
+  const openPanel = name => { setView("write"); setPanel(value => value === name ? null : name); };
+  const exportNotes = () => downloadStudyFile(new Blob([`<!doctype html><meta charset="utf-8"><style>body{max-width:760px;margin:40px auto;font:16px/1.65 system-ui}table{border-collapse:collapse}td,th{border:1px solid #aaa;padding:.45rem}img{max-width:100%}</style>${sanitizeNoteHtml(editor.getHTML())}`], { type: "text/html" }), "classio-notes.html");
+  const applyDraft = append => {
+    const chain = editor.chain().focus(append ? "end" : undefined).command(({ tr }) => { closeHistory(tr); return true; });
+    if (!append) chain.selectAll();
+    chain.insertContent(draft).run();
+    setDraft(""); setPanel(null); updateFields({ notesMode: "write" });
+    setStatus("Notes updated. You can undo this change.");
+  };
 
-  return (
-    <section className="notes-studio" aria-label="Notes editor">
-      <header className="studio-header">
-        <div><p className="studio-eyebrow">Notebook</p><h2>Study notes</h2></div>
-        <div className="studio-controls">
-          {assistant && <button type="button" aria-expanded={assistantOpen} onClick={() => setAssistantOpen(value => !value)}>AI assistant</button>}
-          <button type="button" onClick={() => downloadStudyFile(new Blob([`<!doctype html><meta charset="utf-8"><style>body{max-width:760px;margin:40px auto;font:16px/1.65 system-ui}table{border-collapse:collapse}td,th{border:1px solid #aaa;padding:.45rem}img{max-width:100%}</style>${sanitizeNoteHtml(editor.getHTML())}`], { type: "text/html" }), "classio-notes.html")}>Download notes</button>
-          {file.transcript && <button type="button" onClick={() => downloadStudyFile(new Blob([file.transcript], { type: "text/plain" }), "classio-transcript.txt")}>Download transcript</button>}
-        </div>
-      </header>
-      <div className="notes-studio-grid">
-        <article className="note-workspace">
-          <div className="studio-controls note-toolbar" role="toolbar" aria-label="Note formatting">
-            <select aria-label="Paragraph style" disabled={preview} value={tools?.heading || 0} onChange={event => {
-              const level = Number(event.target.value);
-              run(chain => level ? chain.setHeading({ level }) : chain.setParagraph());
-            }}>
-              <option value="0">Paragraph</option><option value="1">Title</option><option value="2">Heading</option><option value="3">Subheading</option>
-            </select>
-            {action("Bold", chain => chain.toggleBold(), tools?.bold)}
-            {action("Italic", chain => chain.toggleItalic(), tools?.italic)}
-            {action("Underline", chain => chain.toggleUnderline(), tools?.underline)}
-            {action("Strike", chain => chain.toggleStrike(), tools?.strike)}
-            {action("Bullets", chain => chain.toggleBulletList(), tools?.bullet)}
-            {action("Numbered list", chain => chain.toggleOrderedList(), tools?.ordered)}
-            {action("Callout", chain => chain.toggleBlockquote(), tools?.callout)}
-            <select aria-label="Align text" disabled={preview} value="" onChange={event => run(chain => chain.setTextAlign(event.target.value))}>
-              <option value="" disabled>Align</option><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option><option value="justify">Justify</option>
-            </select>
-            {action("Insert table", chain => chain.insertTable({ rows: 3, cols: 3, withHeaderRow: true }))}
-            <button type="button" disabled={preview} onMouseDown={event => event.preventDefault()} onClick={() => upload.current?.click()}>Upload image</button>
-            <input ref={upload} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={event => {
-              const file = event.target.files[0];
-              event.target.value = "";
-              if (file) uploadImage(file);
-            }} />
-            <button type="button" disabled={preview} aria-expanded={imageTools} onClick={() => setImageTools(value => !value)}>Find images</button>
-            {action("Undo", chain => chain.undo())}
-            {action("Redo", chain => chain.redo())}
-            <button type="button" aria-pressed={preview} onClick={() => { editor.setEditable(preview); setPreview(value => !value); if (!preview) setImageTools(false); }}>{preview ? "Edit notes" : "Reading view"}</button>
-          </div>
-          {tools?.table && <div className="studio-controls note-table-tools" aria-label="Table actions">
-            {action("Add row", chain => chain.addRowAfter())}{action("Add column", chain => chain.addColumnAfter())}
-            {action("Delete row", chain => chain.deleteRow())}{action("Delete column", chain => chain.deleteColumn())}
-            {action("Merge cells", chain => chain.mergeCells())}{action("Split cell", chain => chain.splitCell())}
-            {action("Delete table", chain => chain.deleteTable())}
-          </div>}
-          {tools?.image && !preview && <div className="studio-controls note-table-tools">
-            <button type="button" onClick={() => run(chain => chain.deleteSelection())}>Remove selected image</button>
-          </div>}
-          {imageTools && (
-            <div className="note-image-tools">
-              <form className="studio-controls" onSubmit={event => { event.preventDefault(); findImages("web"); }}>
-                <input aria-label="Image search terms" placeholder="Example: plant cell diagram" value={imageQuery} onChange={event => setImageQuery(event.target.value)} />
-                <button type="submit" disabled={searching || !imageQuery.trim()}>Search Wikimedia</button>
-                {imageQuery.trim() && <a href={`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(imageQuery.trim())}`} target="_blank" rel="noreferrer">Search Google Images</a>}
-              </form>
-              {pdfFile && <div className="studio-controls">
-                <label>PDF page <input type="number" min="1" value={pdfPage} onChange={event => setPdfPage(event.target.value)} /></label>
-                <button type="button" disabled={searching} onClick={() => findImages("pdf")}>Find figures on page</button>
-              </div>}
-              {searching && <p role="status">Finding images…</p>}
-              <div className="note-image-results">
-                {images.map(image => <figure key={image.src}>
-                  <img src={image.src} alt={image.title} referrerPolicy="no-referrer" loading="lazy" />
-                  <figcaption>{image.source ? <a href={image.source} target="_blank" rel="noreferrer">{image.credit}</a> : image.title}</figcaption>
-                  <button type="button" onClick={() => addFoundImage(image)}>Insert image</button>
-                </figure>)}
-              </div>
-            </div>
-          )}
-          <div className="note-paper"><EditorContent editor={editor} /></div>
-          <form className="studio-controls note-versions" onSubmit={saveVersion}>
-            <input aria-label="Version name" placeholder="Version name" value={versionName} onChange={event => setVersionName(event.target.value)} />
-            <button type="submit" disabled={!versionName.trim()}>Save named version</button>
-            {saved.length > 0 && <select aria-label="Load a saved version" value="" onChange={event => {
-              const version = saved[Number(event.target.value)];
-              if (version) editor.commands.setContent(version.html ? sanitizeNoteHtml(version.html) : markdownToNoteHtml(version.text));
-            }}><option value="" disabled>Load version</option>{saved.map((version, index) => <option key={version.name} value={index}>{version.name}</option>)}</select>}
-          </form>
-        </article>
-        <aside className="notes-studio-side">
-          <section>
-            <h3>Improve with AI</h3>
-            <p>Write freely, then let AI organize your ideas or build a comparison table.</p>
-            <div className="studio-controls">
-              <button type="button" disabled={busy} onClick={() => generate("organize")}>Organize my notes</button>
-              <button type="button" disabled={busy} onClick={() => generate("table")}>Make a table</button>
-            </div>
-            <label>Topic <input value={topic} onChange={event => setTopic(event.target.value)} placeholder="Optional with a study file" /></label>
-            <label>Note style <select value={style} onChange={event => setStyle(event.target.value)}><option>Detailed</option><option>Exam review</option><option>Concise summary</option><option>Simple explanations</option></select></label>
-            <label>Language <select value={language} onChange={event => setLanguage(event.target.value)}><option>Same as source</option><option>English</option><option>Arabic</option><option>Chinese</option><option>French</option><option>Spanish</option></select></label>
-            <label className="studio-check"><input type="checkbox" checked={webImages} onChange={event => setWebImages(event.target.checked)} /> Look for relevant web images</label>
-            <div className="studio-controls"><button type="button" disabled={busy} onClick={() => generate("generate")}>{busy ? "Working…" : "Generate notes"}</button></div>
-          </section>
-          {!!tools?.outline?.length && <section><h3>On this page</h3><ol>{tools.outline.map((heading, index) => <li key={index}><button type="button" onClick={() => editor.view.dom.querySelectorAll("h1,h2,h3")[index]?.scrollIntoView({ block: "nearest" })}>{heading || "Untitled heading"}</button></li>)}</ol></section>}
-        </aside>
+  return <section className="notes-studio notes-workspace" aria-label="Notes workspace">
+    <header className="notes-workspace-header">
+      <nav className="workspace-tabs" aria-label="Notes modes">
+        <button type="button" aria-pressed={view === "write"} onClick={() => { setView("write"); updateFields({ notesMode: "write" }); }}>Notes</button>
+        <button type="button" aria-pressed={view === "lessons"} onClick={() => { setView("lessons"); setPanel(null); updateFields({ notesMode: "lessons" }); }}>Lessons</button>
+      </nav>
+      <div className="notes-primary-actions">
+        <button className="quiet-button is-primary" type="button" aria-expanded={panel === "generate"} onClick={() => openPanel("generate")}><UiIcon name="generate" /><span>Generate</span></button>
+        <ActionMenu label="Note options" items={[
+          { label: "Download notes", icon: "download", run: exportNotes },
+          ...(file.transcript ? [{ label: "Download transcript", run: () => downloadStudyFile(new Blob([file.transcript], { type: "text/plain" }), "classio-transcript.txt") }] : []),
+          { label: "Saved versions", run: () => openPanel("versions") },
+          { label: preview ? "Edit notes" : "Reading view", run: () => { editor.setEditable(preview); setPreview(value => !value); } },
+        ]} />
       </div>
-      {assistantOpen && <div className="note-assistant-slot">{assistant(noteHtmlToMarkdown(editor.getHTML()))}</div>}
-      {status && <p className="studio-status" role="status">{status}</p>}
-      {error && <p className="studio-error" role="alert">{error}</p>}
-      {draft && <section className="note-draft" aria-label="AI draft">
-        <h3>AI draft</h3>
-        <div className="classio-note-content" dangerouslySetInnerHTML={{ __html: draft }} />
-        <div className="studio-controls">
-          <button type="button" onClick={() => {
-            editor.commands.setContent(draft);
-            setDraft("");
-            setStatus("Draft applied. Use Undo to return to your original notes.");
-          }}>Apply to notes</button>
-          <button type="button" onClick={() => { editor.chain().focus("end").insertContent(draft).run(); setDraft(""); }}>Append to notes</button>
-          <button type="button" onClick={() => { setDraft(""); setStatus("Draft discarded."); }}>Discard draft</button>
+    </header>
+    {view === "lessons" ? <LearnMode file={file} getFileText={getFileText} onUpdate={next => updateFields({ course: next.course })}
+      onUseAsNotes={markdown => {
+        editor.chain().focus("end").command(({ tr }) => { closeHistory(tr); return true; }).insertContent(markdownToNoteHtml(markdown)).run();
+        setView("write"); updateFields({ notesMode: "write" }); setStatus("Lessons added to your notes.");
+      }} /> : <div className={`notes-layout ${panel && !narrow ? "has-inspector" : ""}`}>
+      <article className="note-workspace">
+        <div className="note-toolbar" role="toolbar" aria-label="Note formatting">
+          <select aria-label="Font family" disabled={preview} value={tools?.fontFamily || "DM Sans Variable"} onChange={event => run(chain => chain.setFontFamily(event.target.value))}>
+            <option value="DM Sans Variable">Sans</option><option value="Fraunces Variable">Serif</option><option value="ui-monospace">Mono</option>
+          </select>
+          <select aria-label="Font size" disabled={preview} value={tools?.fontSize || "16px"} onChange={event => run(chain => chain.setFontSize(event.target.value))}>
+            {[12, 14, 16, 18, 20, 24, 28, 32].map(size => <option key={size} value={`${size}px`}>{size}</option>)}
+          </select>
+          <span className="toolbar-divider" />
+          {action("Bold", "bold", chain => chain.toggleBold(), tools?.bold)}
+          {action("Italic", "italic", chain => chain.toggleItalic(), tools?.italic)}
+          {action("Underline", "underline", chain => chain.toggleUnderline(), tools?.underline)}
+          {action("Bullets", "list", chain => chain.toggleBulletList(), tools?.bullet)}
+          <span className="toolbar-divider" />
+          <button type="button" disabled={preview} aria-label="Insert table" title="Insert table" onMouseDown={event => event.preventDefault()} onClick={() => run(chain => chain.insertTable({ rows: 3, cols: 3, withHeaderRow: true }))}><UiIcon name="table" /></button>
+          <button type="button" disabled={preview} aria-label="Insert image" title="Insert image" aria-expanded={panel === "images"} onClick={() => openPanel("images")}><UiIcon name="image" /></button>
+          <button type="button" aria-label="More formatting" title="More formatting" aria-expanded={moreTools} onClick={() => setMoreTools(value => !value)}><UiIcon name="more" /></button>
         </div>
-      </section>}
-    </section>
-  );
+        {moreTools && <div className="studio-controls note-more-formatting" aria-label="Additional formatting">
+          <select aria-label="Paragraph style" disabled={preview} value={tools?.heading || 0} onChange={event => {
+            const level = Number(event.target.value); run(chain => level ? chain.setHeading({ level }) : chain.setParagraph());
+          }}><option value="0">Paragraph</option><option value="1">Title</option><option value="2">Heading</option><option value="3">Subheading</option></select>
+          <button type="button" disabled={preview} aria-pressed={tools?.ordered} onClick={() => run(chain => chain.toggleOrderedList())}>Numbered list</button>
+          <button type="button" disabled={preview} aria-pressed={tools?.callout} onClick={() => run(chain => chain.toggleBlockquote())}>Callout</button>
+          <button type="button" disabled={preview} aria-pressed={tools?.strike} onClick={() => run(chain => chain.toggleStrike())}>Strike</button>
+          <select aria-label="Align text" disabled={preview} value="" onChange={event => run(chain => chain.setTextAlign(event.target.value))}>
+            <option value="" disabled>Align</option><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option><option value="justify">Justify</option>
+          </select>
+          {action("Undo", "undo", chain => chain.undo())}{action("Redo", "undo", chain => chain.redo())}
+        </div>}
+        {tools?.table && <div className="studio-controls note-table-tools" aria-label="Table actions">
+          <button onClick={() => run(chain => chain.addRowAfter())}>Add row</button><button onClick={() => run(chain => chain.addColumnAfter())}>Add column</button>
+          <button onClick={() => run(chain => chain.deleteRow())}>Delete row</button><button onClick={() => run(chain => chain.deleteColumn())}>Delete column</button>
+          <button onClick={() => run(chain => chain.mergeCells())}>Merge cells</button><button onClick={() => run(chain => chain.splitCell())}>Split cell</button>
+          <button onClick={() => run(chain => chain.deleteTable())}>Delete table</button>
+        </div>}
+        {tools?.image && !preview && <div className="studio-controls note-table-tools"><button onClick={() => run(chain => chain.deleteSelection())}>Remove selected image</button></div>}
+        <div className={`note-paper ${preview ? "is-reading" : ""}`}><EditorContent editor={editor} /></div>
+        {status && !busy && <p className="note-local-status" role="status">{status}</p>}
+      </article>
+      {panel && <>
+        {narrow && <button className="notes-panel-backdrop" aria-label="Close note tools backdrop" onClick={() => setPanel(null)} />}
+        <aside ref={panelRef} className="notes-inspector" role={narrow ? "dialog" : "complementary"} aria-modal={narrow || undefined}
+          aria-label={panel === "generate" ? "AI note tools" : panel === "images" ? "Note images" : "Saved versions"}>
+          <header><h2>{panel === "generate" ? "Generate notes" : panel === "images" ? "Images" : "Versions"}</h2>
+            <button type="button" className="quiet-button" aria-label="Close note tools" onClick={() => setPanel(null)}><UiIcon name="close" /></button></header>
+          {panel === "generate" && <div className="notes-panel-body">
+            <p>Start with a topic or use the material in this file.</p>
+            <label>Topic<input value={topic} onChange={event => setTopic(event.target.value)} placeholder="Optional with source material" /></label>
+            <div className="notes-panel-options"><label>Style<select aria-label="Note style" value={style} onChange={event => setStyle(event.target.value)}><option>Detailed</option><option>Exam review</option><option>Concise summary</option><option>Simple explanations</option></select></label>
+              <label>Language<select aria-label="Note language" value={language} onChange={event => setLanguage(event.target.value)}><option>Same as source</option><option>English</option><option>Arabic</option><option>Chinese</option><option>French</option><option>Spanish</option></select></label></div>
+            <label className="studio-check"><input type="checkbox" checked={webImages} onChange={event => setWebImages(event.target.checked)} /> Include relevant images</label>
+            <button className="quiet-button is-primary" type="button" disabled={busy} onClick={() => generate("generate")}>{busy ? "Generating…" : "Generate notes"}</button>
+            <details><summary>Use my writing</summary><div className="studio-controls">
+              <button type="button" disabled={busy} onClick={() => generate("organize")}>Organize notes</button>
+              <button type="button" disabled={busy} onClick={() => generate("table")}>Make a table</button></div></details>
+            {error && <p className="studio-error" role="alert">{error}</p>}
+            {draft && <section className="note-draft" aria-label="AI draft"><h3>Review draft</h3>
+              <div className="classio-note-content" dangerouslySetInnerHTML={{ __html: draft }} />
+              <div className="studio-controls"><button type="button" onClick={() => applyDraft(false)}>Replace notes</button><button type="button" onClick={() => applyDraft(true)}>Append</button><button type="button" onClick={() => setDraft("")}>Discard</button></div>
+            </section>}
+          </div>}
+          {panel === "images" && <div className="notes-panel-body">
+            <button type="button" className="quiet-button" onClick={() => upload.current?.click()}><UiIcon name="image" />Upload image</button>
+            <input ref={upload} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={event => { const image = event.target.files[0]; event.target.value = ""; if (image) uploadImage(image); }} />
+            {pdfFile && <form onSubmit={event => { event.preventDefault(); findImages("pdf"); }}><label>PDF page<input type="number" min="1" value={pdfPage} onChange={event => setPdfPage(event.target.value)} /></label><button type="submit" className="quiet-button" disabled={searching}>Extract figures</button></form>}
+            <form onSubmit={event => { event.preventDefault(); findImages("web"); }}><label>Search images<input value={imageQuery} onChange={event => setImageQuery(event.target.value)} placeholder="e.g. plant cell diagram" /></label>
+              <button type="submit" className="quiet-button" disabled={searching || !imageQuery.trim()}>Search Wikimedia</button></form>
+            {error && <p role="alert" className="studio-error">{error}</p>}
+            <div className="note-image-results">{images.map(image => <figure key={image.src}><img src={image.src} alt={image.title} referrerPolicy="no-referrer" loading="lazy" />
+              <figcaption>{image.source ? <a href={image.source} target="_blank" rel="noreferrer">{image.credit}</a> : image.title}</figcaption><button onClick={() => addFoundImage(image)}>Insert image</button></figure>)}</div>
+          </div>}
+          {panel === "versions" && <div className="notes-panel-body"><form onSubmit={saveVersion}><label>Version name<input value={versionName} onChange={event => setVersionName(event.target.value)} placeholder="e.g. Before exam review" /></label>
+            <button className="quiet-button" type="submit" disabled={!versionName.trim()}>Save version</button></form>
+            {saved.length > 0 && <label>Restore version<select aria-label="Restore version" value="" onChange={event => { const version = saved[Number(event.target.value)]; if (version) editor.commands.setContent(version.html ? sanitizeNoteHtml(version.html) : markdownToNoteHtml(version.text)); }}>
+              <option value="" disabled>Choose a version</option>{saved.map((version, index) => <option key={version.name} value={index}>{version.name}</option>)}</select></label>}
+          </div>}
+        </aside>
+      </>}
+    </div>}
+  </section>;
 }

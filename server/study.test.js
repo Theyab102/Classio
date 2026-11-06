@@ -12,9 +12,14 @@ require.cache[quotaPath] = {
 };
 const study = require("../api/study");
 const { parseAudioRequest } = require("./study-request");
-const previousKey = process.env.GROQ_API_KEY;
-process.env.GROQ_API_KEY = "test-only-provider-key";
-after(() => { if (previousKey === undefined) delete process.env.GROQ_API_KEY; else process.env.GROQ_API_KEY = previousKey; });
+const fixture = {
+  GROQ_API_KEY: "test-only-provider-key",
+  FIREBASE_SERVICE_ACCOUNT_JSON: JSON.stringify({ project_id: "test", client_email: "test@example.com", private_key: "test-only-private-key" }),
+  AI_RATE_LIMIT_SECRET: "test-only-rate-limit-secret-32-characters",
+};
+const previous = Object.fromEntries(Object.keys(fixture).map(key => [key, process.env[key]]));
+Object.assign(process.env, fixture);
+after(() => { for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } });
 
 beforeEach(() => {
   requestQuota = {};

@@ -42,9 +42,9 @@ test("opens a signed-in cached workspace when Firebase never answers", async () 
     mockAuth.currentUser = { uid: "account-a", displayName: "Student" };
     let restore;
     await act(async () => { restore = mockAuthListener(mockAuth.currentUser); });
-    expect(screen.getByText("Loading…")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Preparing workspace" })).toBeInTheDocument();
     await act(async () => { jest.advanceTimersByTime(8000); await restore; });
-    expect(screen.getByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Library" })).toBeInTheDocument();
     expect(screen.getByText("Physics")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Cloud sync is unavailable");
   } finally { jest.useRealTimers(); }
@@ -55,7 +55,7 @@ test("explains an unauthorized Firebase hostname and keeps the guest dashboard o
   render(<App />);
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Sign in to save" })); });
   expect(screen.getByRole("alert")).toHaveTextContent("authorized domains");
-  expect(screen.getByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Library" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Sign in to save" })).toBeEnabled();
 });
 
@@ -72,7 +72,7 @@ test("opens saved notes when the browser file database is blocked", async () => 
     let restore;
     await act(async () => { restore = mockAuthListener(mockAuth.currentUser); });
     await act(async () => { jest.advanceTimersByTime(8000); await restore; });
-    expect(screen.getByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Library" })).toBeInTheDocument();
     expect(screen.getByText("Physics")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Original uploads could not be restored");
   } finally {

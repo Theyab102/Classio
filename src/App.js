@@ -1,14 +1,19 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
 import JSZip from "jszip";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 import { LegalLinks } from "./Legal";
-import LearnMode from "./LearnMode";
 import PodcastDownload from "./PodcastDownload";
 import { downloadStudyFile, makeStudyId, MAX_AUDIO_BYTES, mergeSessionFolders, scheduleCardReview, sendStudyRequest, TTS_SPACE_URL } from "./studyTools";
 import { openPdf } from "./pdf";
-import NotesEditor from "./NotesEditor";
+import LibraryHome from "./LibraryHome";
+import ActionMenu from "./ActionMenu";
+import FriendlyAvatar from "./FriendlyAvatar";
+import AvatarEditor from "./AvatarEditor";
+import WorkspaceFrame from "./WorkspaceFrame";
+import UiIcon from "./UiIcon";
+import "./workspace.css";
 import { markdownToNoteHtml } from "./noteFormat";
 import LocalPdfViewer from "./LocalPdfViewer";
 import PowerPointViewer from "./PowerPointViewer";
@@ -23,6 +28,8 @@ import { activeTheme, setThemePreference, useThemeMode } from "./theme";
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot, updateDoc, deleteDoc, serverTimestamp, query, orderBy, limit, getDocs, arrayUnion } from "firebase/firestore";
+
+const NotesEditor = lazy(() => import("./NotesEditor"));
 
 // ─── FIREBASE ─────────────────────────────────────────────────────────────────
 const firebaseConfig = {
@@ -1274,7 +1281,7 @@ async function attachBlobs(raw) {
 }
 
 // ─── STANDALONE AI ASSISTANT ─────────────────────────────────────────────────
-function StandaloneAI({ onClose, messages, onMessagesChange, pending, onPendingChange }) {
+function StandaloneAI({ onClose, context, messages, onMessagesChange, pending, onPendingChange }) {
   const msgs = messages;
   const setMsgs = onMessagesChange;
   const [inp, setInp] = useState("");
@@ -1283,7 +1290,23 @@ function StandaloneAI({ onClose, messages, onMessagesChange, pending, onPendingC
   const [attachedImage, setAttachedImage] = useState(null);
   const imgInputRef = useRef(null);
   const bottomRef = useRef(null);
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:"smooth" }); }, [msgs]);
+  const dialogRef = useRef(null), closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => {
+    const before = document.activeElement, overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    dialogRef.current?.querySelector('[aria-label="Message"]')?.focus();
+    const keyboard = event => {
+      if (event.key === "Escape") { event.preventDefault(); closeRef.current(); }
+      if (event.key !== "Tab") return;
+      const controls = [...dialogRef.current.querySelectorAll('button:not(:disabled), input:not([type=file])')];
+      if (event.shiftKey && document.activeElement === controls[0]) { event.preventDefault(); controls.at(-1)?.focus(); }
+      else if (!event.shiftKey && document.activeElement === controls.at(-1)) { event.preventDefault(); controls[0]?.focus(); }
+    };
+    window.addEventListener("keydown", keyboard);
+    return () => { document.body.style.overflow = overflow; window.removeEventListener("keydown", keyboard); if (before?.isConnected) before.focus(); };
+  }, []);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:"auto" }); }, [msgs]);
   const attachImage = (f) => {
     if (!f) return;
     const r = new FileReader();
@@ -1300,7 +1323,8 @@ function StandaloneAI({ onClose, messages, onMessagesChange, pending, onPendingC
     const imgToSend = attachedImage?.base64 || null;
     setAttachedImage(null);
     try {
-      const sys = "You are Classio AI, a smart study assistant. Help students with any question — solve problems, explain concepts, analyze images of questions or diagrams. Be clear and concise. No asterisks, no markdown.";
+      const source = context ? context.notes || await extractFileText(context._fileObj || FILE_STORE.get(context.id)).catch(() => "") || "" : "";
+      const sys = "You are Classio AI, a smart study assistant. Help students with any question — solve problems, explain concepts, analyze images of questions or diagrams. Be clear and concise. No asterisks, no markdown." + (context ? `\nCurrent file: ${context.name}\nStudy material:\n${source.slice(0, 12000)}\nUse the supplied material when answering about this file. If it is missing, say so.` : "");
       const apiMsgs = newMsgs.map(m => ({ role:m.role, content:m.content }));
       const reply = imgToSend
         ? await callClaudeVision(sys, apiMsgs, imgToSend)
@@ -1312,7 +1336,7 @@ function StandaloneAI({ onClose, messages, onMessagesChange, pending, onPendingC
   return (
     <div style={{ position:"fixed", inset:0, zIndex:3000, background:"rgba(26,23,20,.55)",
       backdropFilter:"blur(4px)", display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <div className="assistant-dialog" role="dialog" aria-modal="true" aria-label="AI Assistant" style={{ background:C.bg, borderRadius:10, width:"100%", maxWidth:680,
+      <div ref={dialogRef} className="assistant-dialog" role="dialog" aria-modal="true" aria-label="AI Assistant" style={{ background:C.bg, borderRadius:10, width:"100%", maxWidth:680,
         height:"min(85dvh, 780px)", maxHeight:"calc(100dvh - 32px)", display:"flex", flexDirection:"column",
         boxShadow:"0 24px 80px rgba(0,0,0,.2)", border:`1px solid ${C.border}` }}>
         {/* Header */}
@@ -1325,7 +1349,7 @@ function StandaloneAI({ onClose, messages, onMessagesChange, pending, onPendingC
           </div>
           <div style={{ flex:1 }}>
             <p style={{ margin:0, fontSize:16, fontWeight:700, color:C.text }}>AI Assistant</p>
-            <p style={{ margin:0, fontSize:12, color:C.muted }}>Ask anything · Attach images · Replies in your language</p>
+            <p style={{ margin:0, fontSize:12, color:C.muted }}>{context ? `About ${context.name}` : "Study questions and explanations"}</p>
           </div>
           <button aria-label="Close AI Assistant" onClick={onClose} style={{ background:C.surface, border:`1px solid ${C.border}`,
             borderRadius:"50%", width:32, height:32, cursor:"pointer", fontSize:18,
@@ -1334,30 +1358,11 @@ function StandaloneAI({ onClose, messages, onMessagesChange, pending, onPendingC
         {/* Messages */}
         <div style={{ flex:1, overflowY:"auto", padding:"16px 20px",
           display:"flex", flexDirection:"column", gap:12 }}>
-          {msgs.length === 0 && (
-            <div style={{ textAlign:"center", padding:"32px 16px" }}>
-              <div style={{ width:64, height:64, borderRadius:20, background:"#286a9b", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 14px" }}>
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8M12 5V3"/><circle cx="12" cy="3" r="1"/></svg>
-              </div>
-              <p style={{ fontSize:17, fontWeight:700, color:C.text, marginBottom:8 }}>Classio AI</p>
-              <p style={{ fontSize:13, color:C.muted, lineHeight:1.7, maxWidth:320, margin:"0 auto 24px" }}>
-                Ask about a study topic or attach a question. Your conversation stays here while you use this workspace.
-              </p>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, maxWidth:360, margin:"0 auto", textAlign:"left" }}>
-                {[["⬡","Photo of a question","Upload a question image"],
-                  ["∑","Math & Science","Step-by-step solutions"],
-                  ["✎","Explain concepts","Clear simple explanations"],
-                  ["◎","Any language","Reply in your language"]].map(([ic,ti,de])=>(
-                  <div key={ti} style={{ background:C.surface, border:`1px solid ${C.border}`,
-                    borderRadius:12, padding:"12px 14px" }}>
-                    <div style={{ marginBottom:6 }}>{ic}</div>
-                    <p style={{ margin:"0 0 2px", fontSize:12, fontWeight:700, color:C.text }}>{ti}</p>
-                    <p style={{ margin:0, fontSize:11, color:C.muted, lineHeight:1.4 }}>{de}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {msgs.length === 0 && <div className="assistant-empty">
+            <p>{context ? "Ask a question about this file." : "Ask a study question or attach an image."}</p>
+            <div className="studio-controls">{["Explain the main ideas", "Give me a practice question"].map(prompt =>
+              <button type="button" key={prompt} onClick={() => setInp(prompt)}>{prompt}</button>)}</div>
+          </div>}
           {msgs.map((m,i)=>(
             <div key={i} style={{ display:"flex", justifyContent:m.role==="user"?"flex-end":"flex-start",
               alignItems:"flex-end", gap:8 }}>
@@ -1369,12 +1374,12 @@ function StandaloneAI({ onClose, messages, onMessagesChange, pending, onPendingC
                 </div>
               )}
               <div style={{ maxWidth:"75%", borderRadius:16, overflow:"hidden",
-                background:m.role==="user"?C.accent:C.surface,
+                background:m.role==="user"?"var(--app-accent)":C.surface,
                 border:m.role==="user"?"none":`1px solid ${C.border}` }}>
                 {m.image && <img src={m.image} alt="attached"
                   style={{ display:"block", width:"100%", maxWidth:320, maxHeight:200,
                     objectFit:"contain", background:"#111" }} />}
-                <div style={{ padding:"10px 14px", color:m.role==="user"?"#fff":C.text,
+                <div style={{ padding:"10px 14px", color:m.role==="user"?"var(--app-on-accent)":C.text,
                   fontSize:14, lineHeight:1.7 }}><Fmt text={m.content} /></div>
               </div>
             </div>
@@ -1422,11 +1427,11 @@ function StandaloneAI({ onClose, messages, onMessagesChange, pending, onPendingC
           </button>
           <input ref={imgInputRef} type="file" accept="image/*" style={{ display:"none" }}
             onChange={e=>{ attachImage(e.target.files?.[0]); e.target.value=""; }}/>
-          <input value={inp} onChange={e=>setInp(e.target.value)}
+          <input aria-label="Message" value={inp} onChange={e=>setInp(e.target.value)}
             onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); }}}
-            placeholder={attachedImage?"Ask about the image… (or just press Send)":"Ask anything…"}
-            style={{ flex:1, border:`1.5px solid ${C.border}`, borderRadius:12,
-              padding:"11px 16px", fontSize:14, outline:"none", background:C.bg, color:C.text }}/>
+            placeholder={attachedImage?"Ask about the image":"Ask a study question"}
+            style={{ flex:1, minWidth:0, border:`1.5px solid ${C.border}`, borderRadius:7,
+              padding:"11px 16px", fontSize:16, outline:"none", background:C.bg, color:C.text }}/>
           <button onClick={send} disabled={(!inp.trim()&&!attachedImage)||loading}
             style={{ flexShrink:0,
               background:(inp.trim()||attachedImage)&&!loading?C.accent:"#ccc",
@@ -1682,76 +1687,7 @@ const TUTORIAL_STEPS = [
   { icon:I.game, title:"Game Mode and More", desc:"Make studying fun with Game Mode — quiz games, matching, and more all generated from your notes. Use the YouTube tab to turn any video into study notes and flashcards.", tip:"Everything is powered by your own uploaded content." },
 ];
 
-function OnboardingTutorial({ onDone }) {
-  const [step, setStep] = useState(0);
-  const [leaving, setLeaving] = useState(false);
-  const s = TUTORIAL_STEPS[step];
-  const isLast = step === TUTORIAL_STEPS.length - 1;
 
-  const finish = () => {
-    setLeaving(true);
-    setTimeout(() => { try { localStorage.setItem("classio_onboarded","1"); } catch {} onDone(); }, 320);
-  };
-  const next = () => isLast ? finish() : setStep(n => n + 1);
-  const prev = () => setStep(n => Math.max(0, n - 1));
-
-  return (
-    <div style={{ position:"fixed", inset:0, zIndex:9000, background:"rgba(0,0,0,.6)",
-      display:"flex", alignItems:"center", justifyContent:"center", padding:20,
-      backdropFilter:"blur(6px)", opacity:leaving?0:1, transition:"opacity .32s ease" }}>
-      <div style={{ background:C.surface, borderRadius:24, width:"100%", maxWidth:460,
-        padding:"30px 28px 24px", boxShadow:"0 28px 70px rgba(0,0,0,.3)",
-        fontFamily:"'DM Sans Variable',sans-serif" }}>
-
-        {/* Progress bar */}
-        <div style={{ display:"flex", gap:5, marginBottom:28, justifyContent:"center" }}>
-          {TUTORIAL_STEPS.map((_,i) => (
-            <div key={i} onClick={() => setStep(i)}
-              style={{ height:6, borderRadius:3, cursor:"pointer", transition:"all .3s",
-                width: i===step ? 28 : 8,
-                background: i===step ? C.accent : i<step ? C.accentS+"88" : C.border }} />
-          ))}
-        </div>
-
-        {/* Icon */}
-        <div style={{ display:"flex", justifyContent:"center", marginBottom:14 }}><Icon d={s.icon} size={32} color={C.accent} /></div>
-
-        {/* Title */}
-        <h2 style={{ fontFamily:"'Fraunces Variable',serif", fontSize:21, fontWeight:700, color:C.text,
-          textAlign:"center", marginBottom:10 }}>{s.title}</h2>
-
-        {/* Desc */}
-        <p style={{ fontSize:14, color:C.muted, lineHeight:1.75, textAlign:"center", marginBottom:14 }}>{s.desc}</p>
-
-        {/* Tip */}
-        <div style={{ background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:12,
-          padding:"10px 14px", marginBottom:22, display:"flex", alignItems:"flex-start", gap:8 }}>
-          <span style={{flexShrink:0, display:"flex"}}><Icon d={I.lightbulb} size={16} color={C.accent} sw={2}/></span>
-          <p style={{ fontSize:13, color:C.link, fontWeight:600, margin:0, lineHeight:1.5 }}>{s.tip}</p>
-        </div>
-
-        {/* Buttons */}
-        <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-          {step > 0 && (
-            <button onClick={prev} style={{ padding:"10px 16px", borderRadius:10,
-              border:`1.5px solid ${C.border}`, background:"none", cursor:"pointer",
-              fontSize:13, fontWeight:600, color:C.muted }}>← Back</button>
-          )}
-          <button onClick={finish} style={{ padding:"10px 14px", borderRadius:10,
-            border:"none", background:"none", cursor:"pointer",
-            fontSize:13, fontWeight:600, color:C.muted }}>Skip</button>
-          <button onClick={next} style={{ flex:1, padding:"11px", borderRadius:10,
-            border:"none", background:PRIMARY, color:primaryInk(PRIMARY, "#fff"), cursor:"pointer",
-            fontSize:14, fontWeight:700, boxShadow:"0 4px 14px rgba(22,86,76,.3)" }}>
-            {isLast ? "Get Started" : "Next"}
-          </button>
-        </div>
-
-        <p style={{ textAlign:"center", fontSize:11, color:C.muted, marginTop:10 }}>{step+1} of {TUTORIAL_STEPS.length}</p>
-      </div>
-    </div>
-  );
-}
 
 
 // ─── EXTRA GLOBAL CSS ─────────────────────────────────────────────────────────
@@ -1922,39 +1858,32 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
   const setActiveTab = context === "document" ? onFileTab : context === "folder" ? onFolderTab : null;
 
   const NAV = [
-    { id:"home",     label:"Dashboard",   icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> },
+    { id:"home",     label:"Library",   icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> },
     { id:"guides",   label:"Study Guides",icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 0 3-3h7z"/></svg> },
     { id:"settings", label:"Settings",    icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> },
   ];
 
   // ── Context tabs defined early — used by both mobile and desktop ─────────
-  const isBlankDoc = file?._isBlank || file?.isBlankDoc || (!file?._fileObj && !FILE_STORE?.get?.(file?.id));
+  const isBlankDoc = file?._isBlank || file?.isBlankDoc || file?.id?.startsWith("blank_") || file?.type === "text/youtube";
   const FILE_TABS = [
-    { id:"learn", label:"Learn Mode", icon:<Icon d={I.notes} size={18} /> },
-    ...(!isBlankDoc ? [{ id:"view", label:"View File", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> }] : []),
-    { id:"notes",   label:"Notes",           icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> },
-    { id:"voice",   label:"Voice & Podcast", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg> },
-    { id:"cards",   label:"Study Cards",     icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/></svg> },
-    { id:"ai",      label:"AI Assistant",    icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8"/></svg> },
-    { id:"game",    label:"Game Mode",       icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4M8 10v4M15 12h.01M18 12h.01"/></svg> },
-    { id:"present", label:"AI Presentation",  icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg> },
-    { id:"youtube", label:"YouTube",         icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.54C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg> },
+    { id:"notes", label:"Notes", icon:<UiIcon name="notes" /> },
+    { id:"cards", label:"Review", icon:<UiIcon name="cards" /> },
+    { id:"voice", label:"Audio", icon:<UiIcon name="podcast" /> },
+    { id:"present", label:"Slides", icon:<UiIcon name="slides" /> },
+    ...(!isBlankDoc ? [{ id:"view", label:"Source", icon:<UiIcon name="source" /> }] : []),
+    ...(file?.type === "text/youtube" || file?.youtubeUrl ? [{ id:"youtube", label:"Link", icon:<UiIcon name="link" /> }] : []),
   ];
-
-  const FOLDER_TABS = [
-    { id:"files",   label:"Files",          icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> },
-    { id:"youtube", label:"YouTube",        icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.54C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg> },
-    { id:"ai",      label:"AI Assistant",   icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8"/></svg> },
-  ];
+  const FOLDER_TABS = [{ id:"files", label:"Files", icon:<UiIcon name="folder" /> }];
+  const documentTab = activeTab === "view" && isBlankDoc ? file?.type === "text/youtube" ? "youtube" : file?.defaultTab || "notes" : activeTab;
 
   return <ResponsiveSidebar mobile={isMobile} expanded={sidebarExpanded} onExpand={onToggleSidebar}
     mainActive={context === "dashboard" ? homeTab === "about" ? "guides" : homeTab === "settings" ? "settings" : "home" : undefined}
-    main={[NAV[0], { id: "assistant", label: "AI Assistant", icon: <Icon d={I.sparkle} size={20} /> }, ...NAV.slice(1)]}
+    main={NAV}
     tabs={context === "document" ? FILE_TABS : context === "folder" ? FOLDER_TABS : []}
-    active={activeTab} onTab={setActiveTab} onNavigate={onNavigate} onSearch={onOpenSearch}
+    active={documentTab === "learn" || documentTab === "ai" ? "notes" : documentTab === "game" ? "cards" : documentTab} onTab={setActiveTab} onNavigate={onNavigate} onSearch={onOpenSearch}
     onCharacter={onOpenCharacter} avatar={<MiniAvatar character={character || {}} size={28} />}
     account={character?.name || user?.displayName?.split(" ")[0]} guest={isGuest} onSignOut={onSignOut}
-    onToggleTheme={onToggleTheme} dark={T.isDark} documentName={file?.name || folder?.name} />;
+    onToggleTheme={onToggleTheme} dark={T.isDark} documentName={context === "document" ? file?.name : context === "folder" ? folder?.name : null} />;
 }
 
 // ── Audio Record Modal ────────────────────────────────────────────────────────
@@ -2620,47 +2549,27 @@ function CommandSearch({ folders, onOpenFile, onClose }) {
   );
 }
 
-function WebLinkModal({ folders, onClose, onGo, onNewFolder, onSaveDirect }) {
-  const [linkUrl, setLinkUrl] = useState("");
-  const [linkFolder, setLinkFolder] = useState("__inbox__");
-  const realFolders = (folders||[]).filter(f=>f.id!=="inbox");
-  return (
-    <Modal onClose={onClose}>
-      <h2 style={{ fontFamily:"'Fraunces Variable',serif", fontSize:22, fontWeight:700, color:C.text, marginBottom:8 }}>Add a YouTube or Website Link</h2>
-      <p style={{ fontSize:13, color:C.muted, marginBottom:16 }}>Save a public link to your dashboard and open it to make study notes.</p>
-      <label style={{ fontSize:13, fontWeight:600, color:C.muted, display:"block", marginBottom:6 }}>URL</label>
-      <input autoFocus value={linkUrl} onChange={e=>setLinkUrl(e.target.value)} placeholder="https://youtube.com/watch?v=…"
-        style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 14px", fontSize:14, outline:"none", marginBottom:16, color:C.text, background:C.bg, boxSizing:"border-box" }} />
-      <label style={{ fontSize:13, fontWeight:600, color:C.muted, display:"block", marginBottom:6 }}>SAVE TO</label>
-      <select value={linkFolder} onChange={e=>setLinkFolder(e.target.value)}
-        style={{ width:"100%", padding:"10px 14px", borderRadius:10, border:`1.5px solid ${C.border}`, background:C.bg, color:C.text, fontSize:14, marginBottom:20, outline:"none", boxSizing:"border-box" }}>
-        <option value="__inbox__">My Dashboard (no folder)</option>
-        {realFolders.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
-      </select>
-      <div style={{ display:"flex", gap:10 }}>
-        <button onClick={onClose}
-          style={{ flex:1, padding:"10px", border:`1.5px solid ${C.border}`, borderRadius:10, background:"transparent", fontSize:14, fontWeight:600, cursor:"pointer", color:C.text }}>Cancel</button>
-        <button disabled={!linkUrl.trim()} onClick={()=>{
-            if (!linkUrl.trim()) return;
-            if (linkFolder==="__inbox__") {
-              onSaveDirect && onSaveDirect(linkUrl.trim(), "");
-            } else {
-              onGo(linkFolder);
-            }
-          }}
-          style={{ flex:2, padding:"10px", background:linkUrl.trim()?C.accent:C.border, color:linkUrl.trim()?"#fff":C.muted, border:"none", borderRadius:10, fontSize:14, fontWeight:600, cursor:linkUrl.trim()?"pointer":"not-allowed" }}>
-          {linkFolder==="__inbox__" ? "Save to Dashboard →" : "Open Folder →"}
-        </button>
-      </div>
-    </Modal>
-  );
+function WebLinkModal({ folders, onClose, onSaveDirect }) {
+  const [url, setUrl] = useState("");
+  const [target, setTarget] = useState("inbox");
+  const [error, setError] = useState("");
+  return <Modal onClose={onClose}><form className="simple-workspace-form" onSubmit={event => {
+    event.preventDefault();
+    let address; try { address = new URL(url.trim()); } catch {}
+    if (!address || !["http:", "https:"].includes(address.protocol) || address.username || address.password) { setError("Enter a public http:// or https:// link."); return; }
+    onSaveDirect(address.href, target);
+  }}><h2>Add a link</h2><p>Use a video transcript or readable webpage as study material.</p>
+    <label>Link<input autoFocus type="url" maxLength={2048} required value={url} onChange={event => { setUrl(event.target.value); setError(""); }} placeholder="https://" /></label>
+    <label>Save to<select aria-label="Save link to" value={target} onChange={event => setTarget(event.target.value)}><option value="inbox">Library</option>
+      {folders.filter(folder => folder.id !== "inbox").map(folder => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></label>
+    {error && <p role="alert">{error}</p>}
+    <footer><button className="quiet-button" type="button" onClick={onClose}>Cancel</button><button className="quiet-button is-primary" type="submit">Add link</button></footer>
+  </form></Modal>;
 }
+
 
 export default function App() {
   const { isMobile, isTablet } = useResponsive();
-  const [showTutorial, setShowTutorial] = useState(() => {
-    try { return !localStorage.getItem("classio_onboarded"); } catch { return false; }
-  });
   const [user, setUser] = useState(null);
   const isGuest = !user;
   const [signInPending, setSignInPending] = useState(false);
@@ -2679,7 +2588,6 @@ export default function App() {
   const assistantEpoch = useRef(0);
   const [newName, setNewName] = useState("");
   const [newColor,       setNewColor]       = useState(FOLDER_COLORS[0]);
-  const [showFolderPicker,setShowFolderPicker] = useState(false);
   const [showCharacter, setShowCharacter] = useState(false);
   const [activeStudyGroup, setActiveStudyGroup] = useState(null); // group doc id
   const [showStudyGroupLobby, setShowStudyGroupLobby] = useState(false);
@@ -2917,7 +2825,7 @@ export default function App() {
 
   function renderAssistant() {
     const epoch = assistantEpoch.current;
-    return showHomeAI && <StandaloneAI onClose={() => setShowHomeAI(false)} messages={assistantMessages}
+    return showHomeAI && <StandaloneAI context={screen === "file" ? activeFile : null} onClose={() => setShowHomeAI(false)} messages={assistantMessages}
       onMessagesChange={messages => { if (epoch === assistantEpoch.current) setAssistantMessages(messages); }}
       pending={assistantPending} onPendingChange={pending => { if (epoch === assistantEpoch.current) setAssistantPending(pending); }} />;
   }
@@ -2991,7 +2899,7 @@ export default function App() {
       <div className="workspace-content" style={{
         flex: 1,
         marginLeft: isMobile ? 0 : (sidebarExpanded ? 220 : 60),
-        marginTop: isMobile ? 56 : 0,
+        marginTop: 60,
         marginBottom: 0,
         minWidth: 0,
         overflow: "visible",
@@ -3027,7 +2935,7 @@ export default function App() {
   if (screen === "folder" && activeFolder) {
     const folder = folders.find(f => f.id === activeFolder.id) || activeFolder;
     return renderSubscreen(
-        <FolderView folder={folder} onBack={() => { setScreen("home"); setActiveFolder(null); }}
+        <FolderView folder={folder} guest={isGuest} onBack={() => { setScreen("home"); setActiveFolder(null); }}
           onOpenFile={(f) => { const restored = {...f, _fileObj: f._fileObj || FILE_STORE.get(f.id) || null}; setActiveFile(restored); setScreen("file"); setFileTab("view"); }}
           onUpdate={updateFolder}
           activeTab={folderTab}
@@ -3052,16 +2960,13 @@ export default function App() {
     else if (id==="settings") { setHomeTab("settings"); setScreen("home"); }
   };
 
-  function startCourse() {
-    const inbox = foldersRef.current.find(folder => folder.id === "inbox") ||
-      { id: "inbox", name: "Inbox", color: "#286a9b", files: [] };
-    const file = { id: `blank_${makeStudyId()}`, name: "Untitled course", type: "text/plain", notes: "", studyCards: [], _isBlank: true, defaultTab: "learn" };
-    const folder = { ...inbox, files: [...inbox.files, file] };
+  function createNote(mode = "write") {
+    const inbox = foldersRef.current.find(folder => folder.id === "inbox") || { id: "inbox", name: "Inbox", color: "#286a9b", files: [] };
+    const file = { id: `blank_${makeStudyId()}`, name: "Untitled note", type: "text/plain", notes: "", studyCards: [],
+      _isBlank: true, defaultTab: "notes", notesMode: mode };
+    const folder = { ...inbox, files: [file, ...inbox.files] };
     setFoldersSave([folder, ...foldersRef.current.filter(item => item.id !== inbox.id)]);
-    setActiveFolder(folder);
-    setActiveFile(file);
-    setFileTab("learn");
-    setScreen("file");
+    setActiveFolder(folder); setActiveFile(file); setFileTab("notes"); setScreen("file");
   }
 
   const handleOpenFileFromSearch = (fi, folder) => {
@@ -3103,224 +3008,22 @@ export default function App() {
         onClose={() => setShowStudyGroupLobby(false)}
       />}
       {/* Main content area — offset by sidebar */}
-      <div className="workspace-content" style={{ flex:1, minWidth:0, marginLeft:isMobile?0:(sidebarExpanded?220:60), marginTop:isMobile?56:0, marginBottom:0, minHeight:"100vh", display:"flex", flexDirection:"column", background:T.bg }}>
+      <div className="workspace-content" style={{ flex:1, minWidth:0, marginLeft:isMobile?0:(sidebarExpanded?220:60), marginTop:60, marginBottom:0, minHeight:"100vh", display:"flex", flexDirection:"column", background:T.bg }}>
       <div style={{ maxWidth:960, margin:"0 auto", padding:isMobile?"12px 14px":isTablet?"16px 20px":"32px 36px", width:"100%", boxSizing:"border-box" }}>
 
         {workspaceWarning && <p className="workspace-warning" role="status">{workspaceWarning}</p>}
-        {/* ── Dashboard Header ── */}
-        {homeTab==="folders" && !user && (
-          <section className="guest-save-banner" aria-label="Guest session">
-            <div><strong>Guest session</strong><p>All study tools are free. Sign in to save this session and sync your progress. Guest work clears when you reload or close this tab.</p></div>
-            <button className="workspace-action" onClick={signInToSave} disabled={signInPending}>
-              {signInPending ? "Connecting…" : "Sign in to save"}
-            </button>
-            {signInError && <p role="alert">{signInError}</p>}
-          </section>
-        )}
-        {homeTab==="folders" && (
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:28, flexWrap:"wrap", gap:10 }}>
-            <div>
-              <h1 style={{ fontFamily:"'Fraunces Variable',serif", fontSize:isMobile?24:32, fontWeight:700, color:T.text, margin:"0 0 3px", letterSpacing:-.5 }}>Dashboard</h1>
-              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                <p style={{ fontSize:14, color:T.muted, margin:0 }}>Organize your study files and notes.</p>
-                {studyStreak > 1 && (
-                  <span style={{ display:"inline-flex", alignItems:"center", gap:4, background:"linear-gradient(135deg,#FF6B35,#FF4500)", color:"#fff", borderRadius:20, padding:"3px 10px", fontSize:12, fontWeight:700, boxShadow:"0 2px 8px rgba(255,107,53,.35)" }}>
-                    {studyStreak} day streak
-                  </span>
-                )}
-              </div>
-            </div>
-            {!isMobile && (
-              <button onClick={()=>setShowSearch(true)}
-                style={{ display:"flex", alignItems:"center", gap:10, background:T.surface, border:`1.5px solid ${T.border}`, borderRadius:8, padding:"9px 18px", cursor:"pointer", boxShadow:T.shadow }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                <span style={{ fontSize:13, color:T.muted }}>Search...</span>
-                <span style={{ fontSize:10, background:T.bg, border:`1px solid ${T.border}`, borderRadius:5, padding:"2px 6px", color:T.muted, fontWeight:700 }}>⌘K</span>
-              </button>
-            )}
-          </div>
-        )}
-
-        {homeTab === "folders" && (
-          <div className="study-tool-actions">
-            <button type="button" onClick={() => setShowHomeAI(true)}>Open AI assistant</button>
-            <button type="button" onClick={startCourse}>Build a course</button>
-          </div>
-        )}
-        {/* ── Quick actions ── */}
-        {homeTab==="folders" && (
-          <div className="quick-actions" style={{ display:"grid", gridTemplateColumns:isMobile?"repeat(2, minmax(0, 1fr))":isTablet?"repeat(3, minmax(0, 1fr))":"repeat(4, minmax(0, 1fr))", gap:12, marginBottom:32 }}>
-            {[
-              { grad:"#286a9b15", ic:"#286a9b", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#286a9b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>, label:"Blank document", sub:"Write your own notes", action:()=>{ const blankId=`blank_${Date.now()}`; const blankFile={id:blankId,name:"Untitled Document",type:"text/plain",_fileObj:null,notes:"",studyCards:[],_isBlank:true}; const inboxExists=folders.find(f=>f.id==="inbox"); const newFolders=inboxExists?folders.map(f=>f.id==="inbox"?{...f,files:[blankFile,...(f.files||[])]}:f):[...folders,{id:"inbox",name:"Inbox",color:"#286a9b",files:[blankFile]}]; setFoldersSave(newFolders); const newInbox=newFolders.find(f=>f.id==="inbox"); setActiveFile(blankFile); setActiveFolder(newInbox); setScreen("file"); setFileTab("notes"); } },
-              { grad:"#39696d15", ic:"#39696d", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#39696d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>, label:"Record audio", sub:"Upload an audio file", action:()=>setShowRecordModal(true) },
-              { grad:"#4A7C5915", ic:"#4A7C59", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4A7C59" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>, label:"Upload document", sub:"PDF, Word or PowerPoint", action:()=>setShowUploadModal(true) },
-              { grad:"#C45C5C15", ic:"#C45C5C", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C45C5C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.54C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg>, label:"Website link", sub:"YouTube or website link", action:()=>setShowWebLinkModal(true) },
-            ].map((a,i) => (
-              <button key={i} onClick={a.action}
-                style={{ display:"flex", alignItems:"center", gap:12, background:T.surface, border:`1.5px solid ${T.border}`, borderRadius:8, padding:isMobile?"10px":"12px", cursor:"pointer", textAlign:"left", minHeight:70, overflow:"hidden" }}
-                >
-                <div style={{ width:32, height:32, borderRadius:6, background:a.grad, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{a.icon}</div>
-                <div style={{ minWidth:0 }}>
-                  <p style={{ margin:0, fontSize:13, fontWeight:700, color:T.text }}>{a.label}</p>
-                  <p style={{ margin:0, fontSize:11, color:T.muted }}>{a.sub}</p>
-                </div>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft:"auto", flexShrink:0 }}><path d="M9 18l6-6-6-6"/></svg>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* ── My Notes header + New Folder button ── */}
-        {homeTab==="folders" && (
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
-            <div style={{ display:"flex", gap:4 }}>
-              <button onClick={()=>setHomeTab("folders")} style={{ background:homeTab==="folders"?T.text:"transparent", color:homeTab==="folders"?"#fff":T.muted, border:`1.5px solid ${homeTab==="folders"?T.text:T.border}`, borderRadius:8, padding:"5px 16px", fontSize:13, fontWeight:600, cursor:"pointer" }}>My Notes</button>
-            </div>
-            <button onClick={()=>setShowNewFolder(true)} className="btn-anim"
-              style={{ display:"flex", alignItems:"center", gap:6, background:"transparent", border:`1.5px solid ${T.border}`, borderRadius:10, padding:"6px 14px", fontSize:13, fontWeight:600, cursor:"pointer", color:T.text }}>
-              <Icon d={I.plus} size={14} color={T.text} sw={2.5}/> New Folder
-            </button>
-          </div>
-        )}
-
-        {homeTab==="about" && <AboutTab/>}
-        {homeTab==="settings" && <SettingsTab onToggleTheme={_toggleTheme} onClearCache={user ? clearFolderCache : undefined} files={folders.flatMap(folder => folder.files)} streak={studyStreak} />}
-
-        {homeTab==="folders" && folders.filter(f=>f.id!=="inbox").length===0 && !folders.find(f=>f.id==="inbox")?.files?.length && (
-          <div style={{ textAlign:"center", padding:"80px 0" }}>
-            <div style={{ width:80, height:80, background:C.accentL, borderRadius:24, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 20px" }}>
-              <Icon d={I.folder} size={36} color={C.accent}/>
-            </div>
-            <p style={{ fontSize:18, fontWeight:600, color:C.text, marginBottom:8 }}>No folders yet</p>
-            <p style={{ fontSize:14, color:C.muted, maxWidth:280, margin:"0 auto 24px" }}>Create a folder for each subject to organise your files</p>
-            <button onClick={()=>setShowNewFolder(true)} className="hov"
-              style={{ background:PRIMARY, color:primaryInk(PRIMARY, "#fff"), border:"none", borderRadius:10, padding:"10px 24px", fontSize:14, fontWeight:600, cursor:"pointer", boxShadow:"0 3px 12px rgba(22,86,76,.3)" }}>
-              Create First Folder
-            </button>
-          </div>
-        )}
-
-        {homeTab==="folders" && (folders.length > 0 || folders.find(f=>f.id==="inbox")?.files?.length > 0) && (
-          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-            {/* ── Inbox files (no folder) ── */}
-            {(() => {
-              const inbox = folders.find(f=>f.id==="inbox");
-              if (!inbox || !inbox.files?.length) return null;
-              return (
-                <div style={{ marginBottom:20 }}>
-                  <p style={{ fontSize:11, fontWeight:700, color:T.muted, margin:"0 0 10px", letterSpacing:.8, textTransform:"uppercase" }}>Recent uploads</p>
-                  <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                    {inbox.files.map((file,idx)=>{
-                      const fc = getFileColor(file);
-                      const ext = (file.name||"").split(".").pop().toUpperCase();
-                      const isYt = file.type==="text/youtube";
-                      const realFolders = folders.filter(f=>f.id!=="inbox");
-                      return (
-                        <div key={file.id} className="sq-card"
-                          style={{ display:"flex", alignItems:"center", gap:14, padding:"12px 16px", minWidth:0 }}>
-                          {/* Icon — clickable to open */}
-                          <div onClick={() => handleOpenFileFromSearch(file, inbox)}
-                            style={{ width:42, height:42, background:isYt?"#FEE2E2":fc.bg, borderRadius:12, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", flexShrink:0, cursor:"pointer" }}>
-                            {isYt ? <Icon d={I.link} size={18} color={C.accent} /> : <><Icon d={I.file} size={16} color={fc.accent}/><span style={{fontSize:7,fontWeight:800,color:fc.accent,marginTop:1}}>{ext.slice(0,4)}</span></>}
-                          </div>
-                          {/* Info — clickable to open */}
-                          <div onClick={() => handleOpenFileFromSearch(file, inbox)}
-                            style={{ flex:1, minWidth:0, cursor:"pointer" }}>
-                            <p style={{ margin:0, fontSize:13, fontWeight:600, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{file.name}</p>
-                            <p style={{ margin:0, fontSize:11, color:T.muted, marginTop:1 }}>{file.uploadedAt} · Click to open</p>
-                          </div>
-                          {/* Actions: Move + Rename + Delete */}
-                          <div style={{ display:"flex", gap:4, flexShrink:0 }} onClick={e=>e.stopPropagation()}>
-                            {realFolders.length > 0 && (
-                              <MoveFileDropdown
-                                file={file}
-                                folders={realFolders}
-                                T={T}
-                                onMove={(targetFolderId) => {
-                                  const updatedInbox = {...inbox, files:inbox.files.filter(fi=>fi.id!==file.id)};
-                                  const dest = folders.find(fo=>fo.id===targetFolderId);
-                                  const updatedDest = {...dest, files:[...dest.files, file]};
-                                  setFoldersSave(folders.map(fo=>fo.id==="inbox"?updatedInbox:fo.id===targetFolderId?updatedDest:fo));
-                                }}
-                              />
-                            )}
-                            {/* Rename */}
-                            <button onClick={()=>setRenamingItem({id:file.id,name:file.name,type:"file",scope:"inbox"})} title="Rename"
-                              style={{ display:"flex", alignItems:"center", justifyContent:"center", background:T.accentL, color:T.link, border:`1px solid ${T.accent}33`, borderRadius:8, padding:"5px 8px", cursor:"pointer" }}>
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                            </button>
-                            {/* Delete */}
-                            <button onClick={()=>setConfirmDelete({id:file.id,name:file.name,type:"file"})} title="Delete"
-                              style={{ display:"flex", alignItems:"center", justifyContent:"center", background:T.redL, color:T.red, border:`1px solid ${T.red}33`, borderRadius:8, padding:"5px 8px", cursor:"pointer" }}>
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4h6v2"/></svg>
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div style={{ height:1, background:T.border, margin:"16px 0 6px" }}/>
-                </div>
-              );
-            })()}
-            {/* ── Folders ── */}
-            <p style={{ fontSize:11, fontWeight:700, color:T.muted, margin:"0 0 10px", letterSpacing:.8, textTransform:"uppercase" }}>Folders</p>
-            {folders.filter(f=>f.id!=="inbox").map((folder,idx) => {
-              const fileCount = folder.files?.length || 0;
-              return (
-                <div key={folder.id} className="sq-card"
-                  onClick={() => { setActiveFolder(folder); setScreen("folder"); }}
-                  style={{ display:"flex", alignItems:"center", gap:14, padding:"14px 18px", cursor:"pointer", position:"relative" }}
-                  onMouseEnter={e=>{e.currentTarget.style.background=T.sidebarActive; e.currentTarget.style.borderColor=T.accentS;}}
-                  onMouseLeave={e=>{e.currentTarget.style.background=T.surface; e.currentTarget.style.borderColor=T.border;}}>
-                  {/* Colour dot + folder icon */}
-                  <div style={{ width:46, height:46, borderRadius:14, background:folder.color+"18", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, border:`1.5px solid ${folder.color}33` }}>
-                    <Icon d={I.folder} size={22} color={folder.color} />
-                  </div>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <p style={{ margin:0, fontSize:14, fontWeight:600, color:T.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{folder.name}</p>
-                    <p style={{ margin:0, fontSize:12, color:T.muted, marginTop:2 }}>
-                      <span style={{ display:"inline-flex", alignItems:"center", gap:4 }}>
-                        <span style={{ width:7, height:7, borderRadius:"50%", background:folder.color, display:"inline-block" }}/>
-                        {fileCount} file{fileCount!==1?"s":""} · Last opened recently
-                      </span>
-                    </p>
-                  </div>
-                  {/* 3-dot menu */}
-                  <div style={{ position:"relative" }} onClick={e=>e.stopPropagation()}>
-                    <button
-                      style={{ background:"none", border:"none", cursor:"pointer", color:T.muted, padding:"6px 8px", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center" }}
-                      onMouseEnter={e=>{e.currentTarget.style.background=T.bg;}}
-                      onMouseLeave={e=>{e.currentTarget.style.background="none";}}
-                      onClick={e=>{
-                        e.stopPropagation();
-                        const menu = e.currentTarget.nextSibling;
-                        menu.style.display = menu.style.display==="block" ? "none" : "block";
-                        const hide = () => { menu.style.display="none"; document.removeEventListener("click",hide); };
-                        setTimeout(()=>document.addEventListener("click",hide),0);
-                      }}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="5" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="19" r="1" fill="currentColor"/></svg>
-                    </button>
-                    <div style={{ display:"none", position:"absolute", right:0, top:32, zIndex:400, background:T.surface, border:`1.5px solid ${T.border}`, borderRadius:14, boxShadow:T.cardShadow, minWidth:140, padding:6, overflow:"hidden" }}>
-                      <button onClick={()=>setRenamingItem({id:folder.id,name:folder.name,type:"folder"})}
-                        style={{ display:"flex", alignItems:"center", gap:8, width:"100%", padding:"8px 12px", borderRadius:8, border:"none", background:"transparent", cursor:"pointer", fontSize:13, color:T.text }}
-                        onMouseEnter={e=>e.currentTarget.style.background=T.bg}
-                        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                        <Icon d={I.edit} size={14} color={T.muted}/> Rename
-                      </button>
-                      <button onClick={()=>setConfirmDelete({id:folder.id,name:folder.name,type:"folder"})}
-                        style={{ display:"flex", alignItems:"center", gap:8, width:"100%", padding:"8px 12px", borderRadius:8, border:"none", background:"transparent", cursor:"pointer", fontSize:13, color:T.red }}
-                        onMouseEnter={e=>e.currentTarget.style.background=T.redL}
-                        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                        <Icon d={I.trash} size={14} color={T.red}/> Delete
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        {homeTab === "folders" && <LibraryHome folders={folders} guest={isGuest} signIn={signInToSave}
+          signInPending={signInPending} signInError={signInError} createNote={createNote}
+          upload={() => setShowUploadModal(true)} record={() => setShowRecordModal(true)} addLink={() => setShowWebLinkModal(true)}
+          newFolder={() => setShowNewFolder(true)} openFile={handleOpenFileFromSearch}
+          openFolder={folder => { setActiveFolder(folder); setFolderTab("files"); setScreen("folder"); }}
+          rename={setRenamingItem} remove={setConfirmDelete}
+          move={(file, from, to) => setFoldersSave(foldersRef.current.map(folder => folder.id === from
+            ? { ...folder, files: folder.files.filter(item => item.id !== file.id) }
+            : folder.id === to ? { ...folder, files: [...folder.files, file] } : folder))} />}
+        {homeTab === "about" && <AboutTab />}
+        {homeTab === "settings" && <SettingsTab onToggleTheme={_toggleTheme} onClearCache={user ? clearFolderCache : undefined}
+          files={folders.flatMap(folder => folder.files)} streak={studyStreak} />}
 
       {renderAssistant()}
 
@@ -3427,18 +3130,13 @@ export default function App() {
         <WebLinkModal folders={folders} onClose={() => setShowWebLinkModal(false)}
           onGo={(folderId) => { setShowWebLinkModal(false); const found = folders.find(f=>f.id===folderId); if (found) { setActiveFolder(found); setScreen("folder"); }}}
           onNewFolder={() => { setShowWebLinkModal(false); setShowNewFolder(true); }}
-          onSaveDirect={(url) => {
-            const inbox = folders.find(f=>f.id==="inbox") || {id:"inbox",name:"Inbox",color:"#6B4E8A",files:[]};
-            const newDoc = { id:`fi${Date.now()}`, name:url.slice(0,60)||"Web / YouTube Notes",
-              type:"text/youtube", size:0, colorIndex:0, notes:"", studyCards:[],
-              uploadedAt:new Date().toLocaleDateString(), linkedFileIds:[], youtubeUrl:url };
-            setFoldersSave([{...inbox,files:[...inbox.files,newDoc]}, ...folders.filter(f=>f.id!=="inbox")]);
-            setShowWebLinkModal(false);
-            const restored = {...newDoc, _fileObj:null};
-            setActiveFile(restored);
-            setActiveFolder({...inbox,files:[...inbox.files,newDoc]});
-            setFileTab("youtube");
-            setScreen("file");
+          onSaveDirect={(url, targetId = "inbox") => {
+            const target = foldersRef.current.find(folder => folder.id === targetId) || { id: "inbox", name: "Inbox", color: "#286a9b", files: [] };
+            const file = { id: makeStudyId(), name: new URL(url).hostname, type: "text/youtube", size: 0, colorIndex: 0,
+              notes: "", studyCards: [], uploadedAt: new Date().toLocaleDateString(), linkedFileIds: [], youtubeUrl: url };
+            const folder = { ...target, files: [...target.files, file] };
+            setFoldersSave([folder, ...foldersRef.current.filter(item => item.id !== folder.id)]);
+            setShowWebLinkModal(false); setActiveFile(file); setActiveFolder(folder); setFileTab("youtube"); setScreen("file");
           }}
         />
       )}
@@ -3446,101 +3144,19 @@ export default function App() {
       </div>
       </div> {/* end main content */}
 
-      {showTutorial && <OnboardingTutorial onDone={() => setShowTutorial(false)} />}
-
-      {showNewFolder && (
-        <div onClick={()=>{setShowNewFolder(false);setNewName("");}} style={{ position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:800,display:"flex",alignItems:"center",justifyContent:"center",padding:24 }}>
-          <div onClick={e=>e.stopPropagation()} style={{ background:C.surface,borderRadius:24,padding:"28px 28px 24px",width:"100%",maxWidth:440,boxShadow:"0 24px 64px rgba(0,0,0,.18)",border:`1px solid ${C.border}` }}>
-            {/* Header */}
-            <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:22 }}>
-              <div style={{ width:42,height:42,background:"#286a9b15",borderRadius:14,display:"flex",alignItems:"center",justifyContent:"center" }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#286a9b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-              </div>
-              <div>
-                <h2 style={{ fontFamily:"'Fraunces Variable',serif",fontSize:20,fontWeight:700,color:C.text,margin:0 }}>New Folder</h2>
-                <p style={{ margin:0,fontSize:12,color:C.muted }}>Organise your study files</p>
-              </div>
-              <button onClick={()=>{setShowNewFolder(false);setNewName("");}} style={{ marginLeft:"auto",width:30,height:30,borderRadius:"50%",border:`1px solid ${C.border}`,background:C.bg,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:C.muted,fontSize:16 }}>×</button>
-            </div>
-
-            {/* Name input */}
-            <label style={{ fontSize:11,fontWeight:800,color:C.muted,display:"block",marginBottom:6,letterSpacing:.8,textTransform:"uppercase" }}>Folder Name</label>
-            <input autoFocus value={newName} onChange={e=>setNewName(e.target.value)}
-              onKeyDown={e=>{if(e.key==="Enter"&&newName.trim()){setFoldersSave([...folders,{id:`f${Date.now()}`,name:newName.trim(),color:newColor,files:[]}]);setShowNewFolder(false);setNewName("");}}}
-              placeholder="e.g. Biology, Maths, History…"
-              style={{ width:"100%",border:`1.5px solid ${C.border}`,borderRadius:12,padding:"11px 14px",fontSize:15,outline:"none",marginBottom:18,color:C.text,background:C.bg,boxSizing:"border-box",transition:"border-color .15s",fontFamily:"'DM Sans Variable',sans-serif" }}
-              onFocus={e=>e.target.style.borderColor=C.accent}
-              onBlur={e=>e.target.style.borderColor=C.border}/>
-
-            {/* Subject chips */}
-            <label style={{ fontSize:11,fontWeight:800,color:C.muted,display:"block",marginBottom:8,letterSpacing:.8,textTransform:"uppercase" }}>Subject</label>
-            <div style={{ display:"flex",flexWrap:"wrap",gap:6,marginBottom:18 }}>
-              {[
-                {label:"Physics",color:"#2563eb",name:"Physics"},
-                {label:"Math",color:"#7c3aed",name:"Math"},
-                {label:"Chemistry",color:"#16a34a",name:"Chemistry"},
-                {label:"Biology",color:"#059669",name:"Biology"},
-                {label:"STEM",color:"#0891b2",name:"STEM"},
-                {label:"Other",color:"#9b9590",name:""},
-              ].map(s=>(
-                <button key={s.label} onClick={()=>{if(s.name)setNewName(n=>n||s.name);setNewColor(s.color);}}
-                  style={{ padding:"7px 14px",borderRadius:8,border:`1.5px solid ${newColor===s.color?s.color:C.border}`,
-                    background:newColor===s.color?s.color+"18":"transparent",cursor:"pointer",
-                    fontSize:12,fontWeight:600,color:newColor===s.color?s.color:C.muted,transition:"all .12s" }}>
-                  {s.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Color swatches */}
-            <label style={{ fontSize:11,fontWeight:800,color:C.muted,display:"block",marginBottom:10,letterSpacing:.8,textTransform:"uppercase" }}>Colour</label>
-            <div style={{ marginBottom:22 }}>
-              <div style={{ display:"flex",gap:8,flexWrap:"wrap",alignItems:"center" }}>
-                {FOLDER_COLORS.map(col=>(
-                  <button key={col} className="color-swatch no-min-h" onClick={()=>{setNewColor(col);setShowFolderPicker(false);}}
-                    style={{ width:32,height:32,borderRadius:"50%",background:col,cursor:"pointer",flexShrink:0,
-                      border:`3px solid ${newColor===col?C.text:"transparent"}`,
-                      boxShadow:`0 2px 6px rgba(0,0,0,${newColor===col?".35":".12"})`,
-                      padding:0,minHeight:"unset" }}/>
-                ))}
-                <button className="no-min-h" onClick={()=>setShowFolderPicker(p=>!p)}
-                  style={{ width:32,height:32,borderRadius:"50%",cursor:"pointer",
-                    border:`2px dashed ${C.border}`,background:showFolderPicker?C.accent:"transparent",
-                    display:"flex",alignItems:"center",justifyContent:"center",
-                    fontSize:14,color:showFolderPicker?"#fff":C.muted,
-                    padding:0,minHeight:"unset",flexShrink:0 }}>
-                  {showFolderPicker?"×":"+"}
-                </button>
-              </div>
-              {showFolderPicker&&(
-                <div style={{ borderRadius:20,overflow:"hidden",boxShadow:"0 8px 40px rgba(0,0,0,.45)",background:"#18182a",marginTop:10 }}>
-                  <ColorPicker value={newColor} label="Folder Colour" onChange={col=>setNewColor(col)} onClose={()=>setShowFolderPicker(false)}/>
-                </div>
-              )}
-            </div>
-
-            {/* Folder preview chip */}
-            <div style={{ display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:newColor+"12",borderRadius:12,border:`1.5px solid ${newColor+"44"}`,marginBottom:22 }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={newColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-              <span style={{ fontSize:13,fontWeight:700,color:C.text }}>{newName.trim()||"My Folder"}</span>
-              <span style={{ fontSize:11,color:C.muted,marginLeft:"auto" }}>0 files</span>
-            </div>
-
-            {/* Buttons */}
-            <div style={{ display:"flex",gap:10 }}>
-              <button onClick={()=>{setShowNewFolder(false);setNewName("");}}
-                style={{ flex:1,padding:"12px",border:`1.5px solid ${C.border}`,borderRadius:8,background:"transparent",fontSize:14,fontWeight:600,cursor:"pointer",color:C.text }}>
-                Cancel
-              </button>
-              <button disabled={!newName.trim()}
-                onClick={()=>{setFoldersSave([...folders,{id:`f${Date.now()}`,name:newName.trim(),color:newColor,files:[]}]);setShowNewFolder(false);setNewName("");}}
-                style={{ flex:2,padding:"12px",background:newName.trim()?PRIMARY:C.border,color:primaryInk(newName.trim()?PRIMARY:C.border, newName.trim()?"#fff":C.muted),border:"none",borderRadius:8,fontSize:14,fontWeight:700,cursor:newName.trim()?"pointer":"not-allowed",boxShadow:newName.trim()?"0 3px 14px rgba(22,86,76,.35)":"none",transition:"all .15s" }}>
-                Create Folder
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {showNewFolder && <Modal onClose={() => { setShowNewFolder(false); setNewName(""); }}>
+        <form className="simple-workspace-form" onSubmit={event => {
+          event.preventDefault();
+          if (!newName.trim()) return;
+          setFoldersSave([...foldersRef.current, { id: makeStudyId(), name: newName.trim(), color: newColor, files: [] }]);
+          setShowNewFolder(false); setNewName("");
+        }}><h2>New folder</h2><p>Group notes and documents by subject.</p>
+          <label>Folder name<input autoFocus required maxLength={80} value={newName} onChange={event => setNewName(event.target.value)} placeholder="e.g. Physics" /></label>
+          <label>Folder color<input type="color" aria-label="Folder color" value={newColor} onChange={event => setNewColor(event.target.value)} /></label>
+          <footer><button type="button" className="quiet-button" onClick={() => { setShowNewFolder(false); setNewName(""); }}>Cancel</button>
+            <button type="submit" className="quiet-button is-primary">Create folder</button></footer>
+        </form>
+      </Modal>}
     </div>
   );
 }
@@ -3777,831 +3393,13 @@ function ColorPicker({ value, onChange, onClose, label="" }) {
 // ─── SKIN SHADE SLIDER ────────────────────────────────────────────────────────
 // Horizontal gradient slider: lighter ← → darker within one hue family.
 // When `base` changes, the slider position resets to the midpoint.
-function SkinSlider({ base, value, onChange }) {
-  const getHsv = b => hexToHsv(ensureHex(b));
 
-  // Map t ∈ [0,1] → hex:  0 = very light, 1 = very dark
-  const hexAt = (b, t) => {
-    const {h} = getHsv(b);
-    // saturation: 0.08 (pastel) → 0.82 (saturated dark)
-    // value:      0.98 (near white) → 0.22 (near black)
-    return hsvToHex(h, 0.08 + t*0.74, 0.98 - t*0.76);
-  };
 
-  // Infer t from a known hex (nearest match across 60 steps)
-  const inferT = (b, hex) => {
-    let best=0.5, bestD=99;
-    for(let i=0;i<=60;i++){
-      const t=i/60, a=getHsv(hexAt(b,t)), c=getHsv(ensureHex(hex));
-      const d=Math.abs(a.v-c.v)*1.4 + Math.abs(a.s-c.s)*0.6;
-      if(d<bestD){bestD=d;best=t;}
-    }
-    return best;
-  };
-
-  const [t, setT] = useState(() => inferT(base, value));
-  const prevBase  = useRef(base);
-  const barRef    = useRef(null);
-  const dragging  = useRef(false);
-
-  // Reset slider position when the user picks a new base swatch
-  useEffect(() => {
-    if (prevBase.current !== base) { prevBase.current=base; setT(0.4); }
-  }, [base]);
-
-  // Fire onChange whenever t moves
-  useEffect(() => { onChange(hexAt(base, t)); }, [t, base]);
-
-  const posFromEvent = (e, el) => {
-    const r = el.getBoundingClientRect();
-    const x = (e.touches?.[0]?.clientX ?? e.clientX) - r.left;
-    return Math.max(0, Math.min(1, x / r.width));
-  };
-
-  useEffect(() => {
-    const up   = () => { dragging.current=false; };
-    const move = e => { if(dragging.current && barRef.current) setT(posFromEvent(e,barRef.current)); };
-    window.addEventListener('mousemove',move);
-    window.addEventListener('mouseup',up);
-    window.addEventListener('touchmove',move,{passive:false});
-    window.addEventListener('touchend',up);
-    return()=>{
-      window.removeEventListener('mousemove',move);
-      window.removeEventListener('mouseup',up);
-      window.removeEventListener('touchmove',move);
-      window.removeEventListener('touchend',up);
-    };
-  },[]);
-
-  // Gradient: sample 8 stops for smooth transition
-  const stops = Array.from({length:8},(_,i)=>hexAt(base,i/7)).join(',');
-  const thumbColor = hexAt(base, t);
-
-  return (
-    <div style={{marginTop:10,marginBottom:4}}>
-      {/* Track */}
-      <div ref={barRef}
-        style={{position:'relative',height:26,borderRadius:13,
-          background:`linear-gradient(to right,${stops})`,
-          cursor:'pointer',
-          boxShadow:'inset 0 1px 4px rgba(0,0,0,.25), 0 1px 3px rgba(0,0,0,.12)'}}
-        onMouseDown={e=>{dragging.current=true; setT(posFromEvent(e,barRef.current)); e.preventDefault();}}
-        onTouchStart={e=>{dragging.current=true; setT(posFromEvent(e,barRef.current));}}>
-        {/* Thumb */}
-        <div style={{
-          position:'absolute',left:`${t*100}%`,top:'50%',
-          width:32,height:32,borderRadius:'50%',
-          background:thumbColor,
-          border:'3px solid #fff',
-          boxShadow:'0 2px 10px rgba(0,0,0,.45)',
-          transform:'translate(-50%,-50%)',
-          pointerEvents:'none',
-          transition:'background .05s',
-        }}/>
-      </div>
-      {/* Labels */}
-      <div style={{display:'flex',justifyContent:'space-between',marginTop:5,
-        fontSize:10,color:'#999',fontWeight:700,letterSpacing:.4}}>
-        <span>Lighter</span>
-        <span style={{background:thumbColor,color:'#fff',padding:'2px 8px',borderRadius:10,
-          fontSize:10,fontWeight:800,boxShadow:'0 1px 4px rgba(0,0,0,.3)'}}>{thumbColor.toUpperCase()}</span>
-        <span>Darker</span>
-      </div>
-    </div>
-  );
-}
-function shadeHex(hex, amt) {
-  const n = parseInt((hex||"#888888").replace('#',''), 16);
-  const clamp = v => Math.min(255, Math.max(0, v));
-  return `rgb(${clamp((n>>16&255)+amt)},${clamp((n>>8&255)+amt)},${clamp((n&255)+amt)})`;
-}
 // Unique ID per every field + size so header (36px) and modal (120px) SVGs never clash
-function avatarGid(ch, size) {
-  // Safe fallbacks for every field so gid is always a valid string
-  const str = [
-    ch.skin||"#FDDBB4", ch.hair||"#3D2B1F", ch.top||"#2C3E50", ch.eyes||"#2980B9",
-    ch.bg||"#dce8ff", ch.lipColor||"#d06060",
-    ch.hairStyle||0, ch.topStyle||0, ch.eyeShape||0,
-    ch.accessory||0, ch.eyebrow||0, ch.mouth||0,
-    ch.blush?1:0, ch.lips?1:0, ch.freckles?1:0,
-    ch.hat||0, ch.hatColor||"#E74C3C",
-    ch.glasses||0, ch.glassesColor||"#333333",
-    ch.facialHair||0, ch.necklace||0, ch.necklaceColor||"#f0c040",
-    ch.earring||0, ch.earringColor||"#f0c040",
-    size||40
-  ].join("|");
-  let h = 5381;
-  for (let i = 0; i < str.length; i++) { h = ((h << 5) + h) ^ str.charCodeAt(i); h = h >>> 0; }
-  return "av" + h.toString(36);
-}
+
 
 // ─── AVATAR ───────────────────────────────────────────────────────────────────
-function MiniAvatar({ character: ch, size = 40, uid = "" }) {
-  const s   = size;
-  const cx  = s * 0.5;
-  const sd  = shadeHex(ch.skin,  -30);
-  const sl  = shadeHex(ch.skin,   28);
-  const hd  = shadeHex(ch.hair,  -35);
-  const hl  = shadeHex(ch.hair,   30);
-  const td  = shadeHex(ch.top,   -28);
-  const tl  = shadeHex(ch.top,    28);
-  const bg  = ch.bg || "#dce8ff";
-  const gid = avatarGid(ch, s) + uid;
-
-  // ── Hair ──────────────────────────────────────────────────────────────────
-  const H = {
-    0: /* Buzz */ <path d={`M${s*.29} ${s*.315} Q${s*.3} ${s*.11} ${cx} ${s*.1} Q${s*.7} ${s*.11} ${s*.71} ${s*.315}`} fill={ch.hair}/>,
-    1: /* Side-part */ <>
-      <path d={`M${s*.28} ${s*.33} Q${s*.27} ${s*.1} ${cx} ${s*.08} Q${s*.73} ${s*.1} ${s*.72} ${s*.33}`} fill={hd}/>
-      <path d={`M${s*.28} ${s*.33} Q${s*.29} ${s*.12} ${cx} ${s*.1} Q${s*.71} ${s*.12} ${s*.72} ${s*.33}`} fill={ch.hair}/>
-      <path d={`M${s*.29} ${s*.19} Q${s*.39} ${s*.09} ${s*.63} ${s*.12}`} stroke={hd} strokeWidth={s*.016} fill="none" strokeLinecap="round"/>
-    </>,
-    2: /* Fringe */ <>
-      <path d={`M${s*.27} ${s*.35} Q${s*.25} ${s*.1} ${cx} ${s*.08} Q${s*.72} ${s*.1} ${s*.73} ${s*.32}`} fill={ch.hair}/>
-      <path d={`M${s*.29} ${s*.21} Q${s*.45} ${s*.06} ${s*.73} ${s*.19}`} fill={ch.hair}/>
-      <path d={`M${s*.29} ${s*.21} Q${s*.46} ${s*.11} ${s*.71} ${s*.21}`} fill={hd} opacity={.45}/>
-    </>,
-    3: /* Textured */ <>
-      <path d={`M${s*.26} ${s*.36} Q${s*.24} ${s*.09} ${cx} ${s*.07} Q${s*.76} ${s*.09} ${s*.74} ${s*.36}`} fill={hd}/>
-      <path d={`M${s*.27} ${s*.36} Q${s*.25} ${s*.11} ${cx} ${s*.09} Q${s*.75} ${s*.11} ${s*.73} ${s*.36}`} fill={ch.hair}/>
-      <path d={`M${s*.27} ${s*.3} Q${s*.24} ${s*.43} ${s*.27} ${s*.53}`} stroke={ch.hair} strokeWidth={s*.052} strokeLinecap="round" fill="none"/>
-      <path d={`M${s*.73} ${s*.3} Q${s*.76} ${s*.43} ${s*.73} ${s*.53}`} stroke={ch.hair} strokeWidth={s*.052} strokeLinecap="round" fill="none"/>
-    </>,
-    4: /* Long straight */ <>
-      <path d={`M${s*.27} ${s*.35} Q${s*.24} ${s*.09} ${cx} ${s*.07} Q${s*.76} ${s*.09} ${s*.73} ${s*.35}`} fill={hd}/>
-      <path d={`M${s*.28} ${s*.35} Q${s*.26} ${s*.11} ${cx} ${s*.09} Q${s*.74} ${s*.11} ${s*.72} ${s*.35}`} fill={ch.hair}/>
-      <path d={`M${s*.27} ${s*.28} C${s*.22} ${s*.45} ${s*.2} ${s*.65} ${s*.23} ${s*.9}`} stroke={ch.hair} strokeWidth={s*.082} strokeLinecap="round" fill="none"/>
-      <path d={`M${s*.73} ${s*.28} C${s*.78} ${s*.45} ${s*.8} ${s*.65} ${s*.77} ${s*.9}`} stroke={ch.hair} strokeWidth={s*.082} strokeLinecap="round" fill="none"/>
-      <path d={`M${s*.25} ${s*.29} C${s*.2} ${s*.46} ${s*.18} ${s*.66} ${s*.21} ${s*.91}`} stroke={hl} strokeWidth={s*.022} strokeLinecap="round" fill="none" opacity={.4}/>
-      <path d={`M${s*.75} ${s*.29} C${s*.8} ${s*.46} ${s*.82} ${s*.66} ${s*.79} ${s*.91}`} stroke={hl} strokeWidth={s*.022} strokeLinecap="round" fill="none" opacity={.4}/>
-    </>,
-    5: /* Wavy */ <>
-      <path d={`M${s*.27} ${s*.35} Q${s*.24} ${s*.09} ${cx} ${s*.07} Q${s*.76} ${s*.09} ${s*.73} ${s*.35}`} fill={ch.hair}/>
-      <path d={`M${s*.27} ${s*.27} C${s*.21} ${s*.4} ${s*.26} ${s*.54} ${s*.2} ${s*.68} C${s*.14} ${s*.82} ${s*.21} ${s*.93} ${s*.21} ${s*.98}`} stroke={ch.hair} strokeWidth={s*.088} strokeLinecap="round" fill="none"/>
-      <path d={`M${s*.27} ${s*.27} C${s*.21} ${s*.4} ${s*.26} ${s*.54} ${s*.2} ${s*.68} C${s*.14} ${s*.82} ${s*.21} ${s*.93} ${s*.21} ${s*.98}`} stroke={hl} strokeWidth={s*.024} strokeLinecap="round" fill="none" opacity={.38}/>
-      <path d={`M${s*.73} ${s*.27} C${s*.79} ${s*.4} ${s*.74} ${s*.54} ${s*.8} ${s*.68} C${s*.86} ${s*.82} ${s*.79} ${s*.93} ${s*.79} ${s*.98}`} stroke={ch.hair} strokeWidth={s*.088} strokeLinecap="round" fill="none"/>
-      <path d={`M${s*.73} ${s*.27} C${s*.79} ${s*.4} ${s*.74} ${s*.54} ${s*.8} ${s*.68} C${s*.86} ${s*.82} ${s*.79} ${s*.93} ${s*.79} ${s*.98}`} stroke={hl} strokeWidth={s*.024} strokeLinecap="round" fill="none" opacity={.38}/>
-    </>,
-    6: /* Ponytail */ <>
-      <path d={`M${s*.28} ${s*.35} Q${s*.26} ${s*.11} ${cx} ${s*.09} Q${s*.74} ${s*.11} ${s*.72} ${s*.35}`} fill={ch.hair}/>
-      <path d={`M${s*.28} ${s*.35} Q${s*.26} ${s*.13} ${cx} ${s*.11} Q${s*.74} ${s*.13} ${s*.72} ${s*.35}`} fill={hl} opacity={.28}/>
-      <path d={`M${s*.68} ${s*.18} C${s*.84} ${s*.23} ${s*.87} ${s*.4} ${s*.84} ${s*.57} C${s*.81} ${s*.71} ${s*.85} ${s*.82} ${s*.82} ${s*.9}`} stroke={ch.hair} strokeWidth={s*.072} strokeLinecap="round" fill="none"/>
-      <path d={`M${s*.68} ${s*.18} C${s*.84} ${s*.23} ${s*.87} ${s*.4} ${s*.84} ${s*.57} C${s*.81} ${s*.71} ${s*.85} ${s*.82} ${s*.82} ${s*.9}`} stroke={hl} strokeWidth={s*.02} strokeLinecap="round" fill="none" opacity={.42}/>
-      <circle cx={s*.755} cy={s*.21} r={s*.022} fill={hd}/>
-    </>,
-    7: /* Bun */ <>
-      <path d={`M${s*.28} ${s*.34} Q${s*.27} ${s*.15} ${cx} ${s*.13} Q${s*.73} ${s*.15} ${s*.72} ${s*.34}`} fill={ch.hair}/>
-      <circle cx={cx} cy={s*.082} r={s*.105} fill={hd}/>
-      <circle cx={cx} cy={s*.082} r={s*.088} fill={ch.hair}/>
-      <ellipse cx={s*.475} cy={s*.062} rx={s*.042} ry={s*.026} fill={hl} opacity={.48}/>
-      <path d={`M${s*.39} ${s*.14} Q${cx} ${s*.165} ${s*.61} ${s*.14}`} stroke={hd} strokeWidth={s*.016} fill="none"/>
-    </>,
-    8: /* Afro */ <>
-      <ellipse cx={cx} cy={s*.17} rx={s*.27} ry={s*.21} fill={hd}/>
-      {[...Array(20)].map((_,i) => {
-        const a = -Math.PI + (i/20)*Math.PI*2;
-        const r = s*(0.21 + (i%3)*0.018);
-        return <circle key={i} cx={cx+Math.cos(a)*r} cy={s*.19+Math.sin(a)*r*.72} r={s*.052} fill={i%3===0?hl:i%3===1?ch.hair:hd}/>;
-      })}
-      <ellipse cx={cx} cy={s*.2} rx={s*.2} ry={s*.16} fill={ch.hair}/>
-    </>,
-    9: /* Box braids */ <>
-      <path d={`M${s*.28} ${s*.35} Q${s*.26} ${s*.1} ${cx} ${s*.08} Q${s*.74} ${s*.1} ${s*.72} ${s*.35}`} fill={ch.hair}/>
-      {[...Array(8)].map((_,i) => {
-        const x = s*(0.29 + i*0.056);
-        const len = s*(0.36 + (i%3)*0.07);
-        return <g key={i}>
-          <rect x={x} y={s*.21} width={s*.03} height={len} rx={s*.015} fill={i%2===0?ch.hair:hd}/>
-          <ellipse cx={x+s*.015} cy={s*.21+len+s*.01} rx={s*.016} ry={s*.012} fill={hd}/>
-        </g>;
-      })}
-    </>,
-    10: /* Curly */ <>
-      <ellipse cx={cx} cy={s*.18} rx={s*.25} ry={s*.17} fill={hd}/>
-      {[...Array(24)].map((_,i) => {
-        const a = (i/24)*Math.PI*2;
-        const rx2 = 0.19+(i%4)*0.014;
-        const ry2 = 0.15+(i%3)*0.014;
-        return <circle key={i} cx={cx+Math.cos(a)*s*rx2} cy={s*.19+Math.sin(a)*s*ry2} r={s*.038} fill={i%2===0?ch.hair:hl}/>;
-      })}
-      <ellipse cx={cx} cy={s*.2} rx={s*.18} ry={s*.14} fill={ch.hair}/>
-    </>,
-    11: /* Locs */ <>
-      <path d={`M${s*.28} ${s*.35} Q${s*.26} ${s*.1} ${cx} ${s*.08} Q${s*.74} ${s*.1} ${s*.72} ${s*.35}`} fill={ch.hair}/>
-      {[...Array(10)].map((_,i) => {
-        const x = s*(0.27+i*0.052);
-        const h2 = s*(0.3+Math.sin(i*0.9)*0.09);
-        const w = s*.03;
-        return <g key={i}>
-          <rect x={x} y={s*.21} width={w} height={h2} rx={w/2} fill={i%2===0?ch.hair:hd}/>
-          <ellipse cx={x+w/2} cy={s*.21+h2+s*.012} rx={w*.55} ry={s*.013} fill={hd}/>
-        </g>;
-      })}
-    </>,
-    12: /* Faux hawk */ <>
-      <path d={`M${s*.28} ${s*.35} Q${s*.27} ${s*.17} ${cx} ${s*.15} Q${s*.73} ${s*.17} ${s*.72} ${s*.35}`} fill={ch.hair}/>
-      <path d={`M${s*.41} ${s*.17} C${s*.43} ${s*.03} ${s*.57} ${s*.03} ${s*.59} ${s*.17}`} fill={ch.hair}/>
-      <path d={`M${s*.43} ${s*.17} C${s*.45} ${s*.07} ${s*.55} ${s*.07} ${s*.57} ${s*.17}`} fill={hl} opacity={.42}/>
-    </>,
-    13: /* Space buns */ <>
-      <path d={`M${s*.28} ${s*.35} Q${s*.27} ${s*.16} ${cx} ${s*.14} Q${s*.73} ${s*.16} ${s*.72} ${s*.35}`} fill={ch.hair}/>
-      <circle cx={s*.34} cy={s*.1} r={s*.088} fill={hd}/><circle cx={s*.34} cy={s*.1} r={s*.072} fill={ch.hair}/>
-      <ellipse cx={s*.325} cy={s*.08} rx={s*.032} ry={s*.02} fill={hl} opacity={.48}/>
-      <circle cx={s*.66} cy={s*.1} r={s*.088} fill={hd}/><circle cx={s*.66} cy={s*.1} r={s*.072} fill={ch.hair}/>
-      <ellipse cx={s*.645} cy={s*.08} rx={s*.032} ry={s*.02} fill={hl} opacity={.48}/>
-    </>,
-    14: /* Mohawk — centre strip, shaved sides */ <>
-      {/* shaved side shadow */}
-      <ellipse cx={s*.28} cy={s*.26} rx={s*.08} ry={s*.14} fill={hd} opacity={.18}/>
-      <ellipse cx={s*.72} cy={s*.26} rx={s*.08} ry={s*.14} fill={hd} opacity={.18}/>
-      {/* centre strip */}
-      <path d={`M${s*.44} ${s*.56} L${s*.44} ${s*.14} Q${cx} ${s*.08} ${s*.56} ${s*.14} L${s*.56} ${s*.56}`} fill={ch.hair}/>
-      <path d={`M${s*.46} ${s*.56} L${s*.46} ${s*.15} Q${cx} ${s*.095} ${s*.54} ${s*.15} L${s*.54} ${s*.56}`} fill={hl} opacity={.25}/>
-      {/* spiky tips */}
-      {[-.04,-.02,0,.02,.04].map((ox,i)=><path key={i} d={`M${cx+s*ox} ${s*.08} L${cx+s*(ox-.018)} ${s*.14} L${cx+s*(ox+.018)} ${s*.14} Z`} fill={ch.hair}/>)}
-    </>,
-    15: /* Dreadlocks — thick rope-like strands */ <>
-      <path d={`M${s*.28} ${s*.35} Q${s*.27} ${s*.16} ${cx} ${s*.14} Q${s*.73} ${s*.16} ${s*.72} ${s*.35}`} fill={ch.hair}/>
-      <ellipse cx={cx} cy={s*.155} rx={s*.22} ry={s*.075} fill={ch.hair}/>
-      {/* rope strands left */}
-      {[.22,.28,.34].map((bx,i)=><>
-        <path key={"l"+i} d={`M${s*bx} ${s*.38} Q${s*(bx-.03)} ${s*.62} ${s*(bx-.01)} ${s*.82}`} stroke={ch.hair} strokeWidth={s*.038} fill="none" strokeLinecap="round"/>
-        <path key={"lh"+i} d={`M${s*bx} ${s*.38} Q${s*(bx-.03)} ${s*.62} ${s*(bx-.01)} ${s*.82}`} stroke={hl} strokeWidth={s*.012} fill="none" strokeLinecap="round" opacity={.22}/>
-      </>)}
-      {/* rope strands right */}
-      {[.78,.72,.66].map((bx,i)=><>
-        <path key={"r"+i} d={`M${s*bx} ${s*.38} Q${s*(bx+.03)} ${s*.62} ${s*(bx+.01)} ${s*.82}`} stroke={ch.hair} strokeWidth={s*.038} fill="none" strokeLinecap="round"/>
-        <path key={"rh"+i} d={`M${s*bx} ${s*.38} Q${s*(bx+.03)} ${s*.62} ${s*(bx+.01)} ${s*.82}`} stroke={hl} strokeWidth={s*.012} fill="none" strokeLinecap="round" opacity={.22}/>
-      </>)}
-    </>,
-    16: /* Slick back — sleek combed-back with sheen */ <>
-      <path d={`M${s*.28} ${s*.35} Q${s*.27} ${s*.15} ${cx} ${s*.13} Q${s*.73} ${s*.15} ${s*.72} ${s*.35}`} fill={ch.hair}/>
-      <ellipse cx={cx} cy={s*.15} rx={s*.22} ry={s*.07} fill={ch.hair}/>
-      {/* slick sheen lines */}
-      <path d={`M${s*.38} ${s*.18} Q${s*.42} ${s*.14} ${cx} ${s*.13}`} stroke={hl} strokeWidth={s*.014} fill="none" opacity={.45} strokeLinecap="round"/>
-      <path d={`M${s*.42} ${s*.22} Q${s*.46} ${s*.16} ${cx} ${s*.14}`} stroke={hl} strokeWidth={s*.01} fill="none" opacity={.3} strokeLinecap="round"/>
-      <path d={`M${s*.62} ${s*.18} Q${s*.58} ${s*.14} ${cx} ${s*.13}`} stroke={hl} strokeWidth={s*.014} fill="none" opacity={.45} strokeLinecap="round"/>
-    </>,
-  };
-
-  // ── Mouth ─────────────────────────────────────────────────────────────────
-  const MOUTH = {
-    0: <path d={`M${s*.41} ${s*.526} Q${cx} ${s*.576} ${s*.59} ${s*.526}`} stroke="#b06050" strokeWidth={s*.024} fill="none" strokeLinecap="round"/>,
-    1: <path d={`M${s*.41} ${s*.546} Q${cx} ${s*.5} ${s*.59} ${s*.546}`} stroke="#b06050" strokeWidth={s*.024} fill="none" strokeLinecap="round"/>,
-    2: <>
-      <path d={`M${s*.39} ${s*.52} Q${cx} ${s*.59} ${s*.61} ${s*.52}`} fill="#8B3A3A"/>
-      <path d={`M${s*.39} ${s*.52} Q${cx} ${s*.56} ${s*.61} ${s*.52}`} fill="white" opacity={.38}/>
-      <path d={`M${s*.39} ${s*.52} Q${cx} ${s*.59} ${s*.61} ${s*.52}`} stroke="#b06050" strokeWidth={s*.02} fill="none" strokeLinecap="round"/>
-    </>,
-    3: <path d={`M${s*.44} ${s*.526} Q${cx} ${s*.556} ${s*.56} ${s*.526}`} stroke="#b06050" strokeWidth={s*.022} fill="none" strokeLinecap="round"/>,
-    4: <>
-      <ellipse cx={cx} cy={s*.536} rx={s*.076} ry={s*.028} fill="#b06050"/>
-      <ellipse cx={cx} cy={s*.528} rx={s*.054} ry={s*.014} fill="white" opacity={.34}/>
-    </>,
-  };
-
-  // ── Brows ─────────────────────────────────────────────────────────────────
-  const BROW = {
-    0: <>
-      <path d={`M${s*.34} ${s*.312} Q${s*.405} ${s*.282} ${s*.465} ${s*.298}`} stroke={hd} strokeWidth={s*.025} fill="none" strokeLinecap="round"/>
-      <path d={`M${s*.535} ${s*.298} Q${s*.595} ${s*.282} ${s*.66} ${s*.312}`} stroke={hd} strokeWidth={s*.025} fill="none" strokeLinecap="round"/>
-    </>,
-    1: <>
-      <line x1={s*.34} y1={s*.302} x2={s*.465} y2={s*.308} stroke={hd} strokeWidth={s*.024} strokeLinecap="round"/>
-      <line x1={s*.535} y1={s*.308} x2={s*.66} y2={s*.302} stroke={hd} strokeWidth={s*.024} strokeLinecap="round"/>
-    </>,
-    2: <>
-      <path d={`M${s*.34} ${s*.308} Q${s*.405} ${s*.27} ${s*.465} ${s*.29}`} stroke={hd} strokeWidth={s*.034} fill="none" strokeLinecap="round"/>
-      <path d={`M${s*.535} ${s*.29} Q${s*.595} ${s*.27} ${s*.66} ${s*.308}`} stroke={hd} strokeWidth={s*.034} fill="none" strokeLinecap="round"/>
-    </>,
-    3: <>
-      <path d={`M${s*.34} ${s*.296} Q${s*.405} ${s*.318} ${s*.465} ${s*.308}`} stroke={hd} strokeWidth={s*.025} fill="none" strokeLinecap="round"/>
-      <path d={`M${s*.535} ${s*.308} Q${s*.595} ${s*.318} ${s*.66} ${s*.296}`} stroke={hd} strokeWidth={s*.025} fill="none" strokeLinecap="round"/>
-    </>,
-  };
-
-  // ── Eyes ──────────────────────────────────────────────────────────────────
-  const eye = (ex, ey) => {
-    const sh = ch.eyeShape || 0;
-    const W = sh===1 ? <ellipse cx={ex} cy={ey} rx={s*.062} ry={s*.042} fill="white"/>
-              : sh===2 ? <path d={`M${ex-s*.062} ${ey+s*.01} Q${ex} ${ey-s*.074} ${ex+s*.062} ${ey+s*.01} Q${ex} ${ey+s*.048} ${ex-s*.062} ${ey+s*.01}`} fill="white"/>
-              : <ellipse cx={ex} cy={ey} rx={s*.058} ry={s*.056} fill="white"/>;
-    return <>
-      {W}
-      <ellipse cx={ex} cy={ey} rx={s*.034} ry={s*.036} fill={ch.eyes}/>
-      <ellipse cx={ex} cy={ey} rx={s*.019} ry={s*.02} fill="#111" opacity={.88}/>
-      <circle cx={ex+s*.016} cy={ey-s*.017} r={s*.01} fill="white"/>
-      <circle cx={ex-s*.009} cy={ey+s*.012} r={s*.005} fill="white" opacity={.55}/>
-      {sh===2 && <path d={`M${ex-s*.055} ${ey+s*.008} Q${ex} ${ey-s*.076} ${ex+s*.055} ${ey+s*.008}`} stroke="#222" strokeWidth={s*.012} fill="none"/>}
-    </>;
-  };
-
-  // ── Nose ──────────────────────────────────────────────────────────────────
-  const nose = <>
-    <path d={`M${cx} ${s*.42} Q${s*.545} ${s*.462} ${s*.534} ${s*.496}`} stroke={sd} strokeWidth={s*.015} fill="none" opacity={.44}/>
-    <ellipse cx={s*.464} cy={s*.5} rx={s*.017} ry={s*.01} fill={sd} opacity={.27}/>
-    <ellipse cx={s*.536} cy={s*.5} rx={s*.017} ry={s*.01} fill={sd} opacity={.27}/>
-  </>;
-
-  // ── Hat styles (rendered on top of hair) ─────────────────────────────────
-  const hc  = ch.hatColor  || "#E74C3C";
-  const hcd = shadeHex(hc, -30);
-  const hcl = shadeHex(hc,  25);
-  const HAT = {
-    0: null,
-    1: /* Beanie */ <>
-      <path d={`M${s*.255} ${s*.325} Q${s*.26} ${s*.09} ${cx} ${s*.07} Q${s*.74} ${s*.09} ${s*.745} ${s*.325}`} fill={hcd}/>
-      <path d={`M${s*.26} ${s*.325} Q${s*.265} ${s*.095} ${cx} ${s*.075} Q${s*.735} ${s*.095} ${s*.74} ${s*.325}`} fill={hc}/>
-      <rect x={s*.238} y={s*.29} width={s*.524} height={s*.055} rx={s*.022} fill={hcd}/>
-      <ellipse cx={cx} cy={s*.29} rx={s*.262} ry={s*.028} fill={hcl} opacity={.35}/>
-      <circle cx={cx} cy={s*.062} r={s*.038} fill={hc}/>
-      <circle cx={cx} cy={s*.062} r={s*.025} fill={hcl} opacity={.5}/>
-    </>,
-    2: /* Baseball cap */ <>
-      <path d={`M${s*.255} ${s*.34} Q${s*.26} ${s*.11} ${cx} ${s*.09} Q${s*.74} ${s*.11} ${s*.745} ${s*.34}`} fill={hcd}/>
-      <path d={`M${s*.26} ${s*.34} Q${s*.265} ${s*.115} ${cx} ${s*.095} Q${s*.735} ${s*.115} ${s*.74} ${s*.34}`} fill={hc}/>
-      <rect x={s*.238} y={s*.294} width={s*.524} height={s*.05} rx={s*.02} fill={hcd}/>
-      <path d={`M${s*.21} ${s*.338} Q${cx} ${s*.382} ${s*.685} ${s*.338}`} fill={hcd}/>
-      <path d={`M${s*.21} ${s*.336} Q${cx} ${s*.375} ${s*.685} ${s*.336}`} fill={hcl} opacity={.25}/>
-      <ellipse cx={cx} cy={s*.08} rx={s*.048} ry={s*.032} fill={hcl} opacity={.45}/>
-    </>,
-    3: /* Cowboy hat */ <>
-      <ellipse cx={cx} cy={s*.3} rx={s*.34} ry={s*.048} fill={hcd}/>
-      <path d={`M${s*.31} ${s*.295} Q${s*.315} ${s*.09} ${cx} ${s*.075} Q${s*.685} ${s*.09} ${s*.69} ${s*.295}`} fill={hcd}/>
-      <path d={`M${s*.315} ${s*.295} Q${s*.32} ${s*.095} ${cx} ${s*.08} Q${s*.68} ${s*.095} ${s*.685} ${s*.295}`} fill={hc}/>
-      <path d={`M${s*.315} ${s*.295} Q${cx} ${s*.28} ${s*.685} ${s*.295}`} stroke={hcl} strokeWidth={s*.012} fill="none" opacity={.4}/>
-    </>,
-    4: /* Graduation cap */ <>
-      <rect x={s*.31} y={s*.145} width={s*.38} height={s*.085} rx={s*.018} fill={hc}/>
-      <path d={`M${s*.27} ${s*.185} Q${s*.285} ${s*.14} ${cx} ${s*.13} Q${s*.715} ${s*.14} ${s*.73} ${s*.185}`} fill={hcd}/>
-      <line x1={cx} y1={s*.145} x2={s*.32} y2={s*.27} stroke={hcd} strokeWidth={s*.014}/>
-      <circle cx={s*.31} cy={s*.28} r={s*.03} fill={hcd}/>
-    </>,
-    5: /* Crown — shifted to fit within circle clip */ <>
-      <path d={`M${s*.28} ${s*.33} L${s*.30} ${s*.215} L${s*.36} ${s*.27} L${cx} ${s*.18} L${s*.64} ${s*.27} L${s*.70} ${s*.215} L${s*.72} ${s*.33} Z`} fill={hc}/>
-      <path d={`M${s*.28} ${s*.33} L${s*.72} ${s*.33}`} stroke={hcd} strokeWidth={s*.02} fill="none"/>
-      <path d={`M${s*.28} ${s*.33} L${s*.72} ${s*.33}`} stroke={hcl} strokeWidth={s*.006} fill="none" opacity={.45}/>
-      {[s*.365, cx, s*.635].map((px,i)=><circle key={i} cx={px} cy={s*.245} r={s*.02} fill={i===1?"#fff":"#ffb3b3"}/>)}
-    </>,
-    6: /* Party hat */ <>
-      <path d={`M${cx} ${s*.06} L${s*.32} ${s*.32} Q${cx} ${s*.34} ${s*.68} ${s*.32} Z`} fill={hc}/>
-      <path d={`M${cx} ${s*.06} L${s*.32} ${s*.32} Q${cx} ${s*.34} ${s*.68} ${s*.32} Z`} fill="none" stroke={hcl} strokeWidth={s*.014} opacity={.5}/>
-      {[0,1,2].map(i=><circle key={i} cx={s*(.35+i*.15)} cy={s*(.26+i*.02)} r={s*.018} fill={["#fff","#ffcc00","#ff69b4"][i]}/>)}
-      <circle cx={cx} cy={s*.048} r={s*.03} fill={hcl}/>
-    </>,
-    7: /* Headband */ <>
-      <path d={`M${s*.268} ${s*.285} Q${cx} ${s*.23} ${s*.732} ${s*.285}`} stroke={hc} strokeWidth={s*.062} fill="none" strokeLinecap="round"/>
-      <path d={`M${s*.268} ${s*.285} Q${cx} ${s*.23} ${s*.732} ${s*.285}`} stroke={hcl} strokeWidth={s*.016} fill="none" strokeLinecap="round" opacity={.45}/>
-    </>,
-    8: /* Sunhat / bucket */ <>
-      <ellipse cx={cx} cy={s*.29} rx={s*.32} ry={s*.046} fill={hcd}/>
-      <path d={`M${s*.29} ${s*.284} Q${s*.295} ${s*.12} ${cx} ${s*.1} Q${s*.705} ${s*.12} ${s*.71} ${s*.284}`} fill={hcd}/>
-      <path d={`M${s*.295} ${s*.284} Q${s*.3} ${s*.125} ${cx} ${s*.105} Q${s*.7} ${s*.125} ${s*.705} ${s*.284}`} fill={hc}/>
-      <ellipse cx={cx} cy={s*.115} rx={s*.095} ry={s*.02} fill={hcl} opacity={.35}/>
-    </>,
-  };
-
-  // ── Glasses styles (colored, independent from old accessory) ─────────────
-  const gc  = ch.glassesColor || "#333333";
-  const gcl = shadeHex(gc,  28);
-  const GLASSES = {
-    0: null,
-    1: /* Classic round */ <>
-      <circle cx={s*.384} cy={s*.376} r={s*.068} fill="none" stroke={gc} strokeWidth={s*.022}/>
-      <circle cx={s*.616} cy={s*.376} r={s*.068} fill="none" stroke={gc} strokeWidth={s*.022}/>
-      <line x1={s*.452} y1={s*.376} x2={s*.548} y2={s*.376} stroke={gc} strokeWidth={s*.018}/>
-      <line x1={s*.316} y1={s*.362} x2={s*.272} y2={s*.358} stroke={gc} strokeWidth={s*.016}/>
-      <line x1={s*.684} y1={s*.362} x2={s*.728} y2={s*.358} stroke={gc} strokeWidth={s*.016}/>
-    </>,
-    2: /* Rectangular */ <>
-      <rect x={s*.302} y={s*.334} width={s*.148} height={s*.092} rx={s*.024} fill="none" stroke={gc} strokeWidth={s*.022}/>
-      <rect x={s*.55} y={s*.334} width={s*.148} height={s*.092} rx={s*.024} fill="none" stroke={gc} strokeWidth={s*.022}/>
-      <line x1={s*.45} y1={s*.38} x2={s*.55} y2={s*.38} stroke={gc} strokeWidth={s*.018}/>
-      <line x1={s*.302} y1={s*.362} x2={s*.265} y2={s*.36} stroke={gc} strokeWidth={s*.016}/>
-      <line x1={s*.698} y1={s*.362} x2={s*.735} y2={s*.36} stroke={gc} strokeWidth={s*.016}/>
-    </>,
-    3: /* Cat-eye */ <>
-      <path d={`M${s*.305} ${s*.418} Q${s*.305} ${s*.33} ${s*.39} ${s*.315} Q${s*.465} ${s*.308} ${s*.465} ${s*.385} Q${s*.465} ${s*.43} ${s*.38} ${s*.43} Z`} fill="none" stroke={gc} strokeWidth={s*.02}/>
-      <path d={`M${s*.535} ${s*.385} Q${s*.535} ${s*.308} ${s*.61} ${s*.315} Q${s*.695} ${s*.33} ${s*.695} ${s*.418} L${s*.62} ${s*.43} Q${s*.535} ${s*.43} ${s*.535} ${s*.385} Z`} fill="none" stroke={gc} strokeWidth={s*.02}/>
-      <line x1={s*.465} y1={s*.375} x2={s*.535} y2={s*.375} stroke={gc} strokeWidth={s*.018}/>
-      <line x1={s*.305} y1={s*.36} x2={s*.265} y2={s*.355} stroke={gc} strokeWidth={s*.016}/>
-      <line x1={s*.695} y1={s*.36} x2={s*.735} y2={s*.355} stroke={gc} strokeWidth={s*.016}/>
-    </>,
-    4: /* Sunglasses (dark lens) */ <>
-      <rect x={s*.298} y={s*.33} width={s*.155} height={s*.09} rx={s*.03} fill={gc} opacity={.82}/>
-      <rect x={s*.547} y={s*.33} width={s*.155} height={s*.09} rx={s*.03} fill={gc} opacity={.82}/>
-      <rect x={s*.298} y={s*.33} width={s*.155} height={s*.09} rx={s*.03} fill="none" stroke={gc} strokeWidth={s*.015}/>
-      <rect x={s*.547} y={s*.33} width={s*.155} height={s*.09} rx={s*.03} fill="none" stroke={gc} strokeWidth={s*.015}/>
-      <line x1={s*.453} y1={s*.375} x2={s*.547} y2={s*.375} stroke={gc} strokeWidth={s*.018}/>
-      <line x1={s*.298} y1={s*.358} x2={s*.26} y2={s*.354} stroke={gc} strokeWidth={s*.016}/>
-      <line x1={s*.702} y1={s*.358} x2={s*.74} y2={s*.354} stroke={gc} strokeWidth={s*.016}/>
-      {/* glare */}
-      <rect x={s*.31} y={s*.337} width={s*.044} height={s*.018} rx={s*.008} fill="#fff" opacity={.28}/>
-      <rect x={s*.559} y={s*.337} width={s*.044} height={s*.018} rx={s*.008} fill="#fff" opacity={.28}/>
-    </>,
-    5: /* Heart shaped — symmetrical */ <>
-      {/* Left heart lens */}
-      <path d={`M${s*.384} ${s*.348} C${s*.384} ${s*.332} ${s*.364} ${s*.322} ${s*.346} ${s*.33} C${s*.312} ${s*.34} ${s*.312} ${s*.384} ${s*.345} ${s*.404} C${s*.36} ${s*.422} ${s*.384} ${s*.43} ${s*.384} ${s*.43} C${s*.384} ${s*.43} ${s*.408} ${s*.422} ${s*.423} ${s*.404} C${s*.456} ${s*.384} ${s*.456} ${s*.34} ${s*.422} ${s*.33} C${s*.404} ${s*.322} ${s*.384} ${s*.332} ${s*.384} ${s*.348}`} fill="none" stroke={gc} strokeWidth={s*.019}/>
-      {/* Right heart lens */}
-      <path d={`M${s*.616} ${s*.348} C${s*.616} ${s*.332} ${s*.596} ${s*.322} ${s*.578} ${s*.33} C${s*.544} ${s*.34} ${s*.544} ${s*.384} ${s*.577} ${s*.404} C${s*.592} ${s*.422} ${s*.616} ${s*.43} ${s*.616} ${s*.43} C${s*.616} ${s*.43} ${s*.640} ${s*.422} ${s*.655} ${s*.404} C${s*.688} ${s*.384} ${s*.688} ${s*.34} ${s*.654} ${s*.33} C${s*.636} ${s*.322} ${s*.616} ${s*.332} ${s*.616} ${s*.348}`} fill="none" stroke={gc} strokeWidth={s*.019}/>
-      <line x1={s*.456} y1={s*.374} x2={s*.544} y2={s*.374} stroke={gc} strokeWidth={s*.018}/>
-      <line x1={s*.312} y1={s*.358} x2={s*.272} y2={s*.354} stroke={gc} strokeWidth={s*.016}/>
-      <line x1={s*.688} y1={s*.358} x2={s*.728} y2={s*.354} stroke={gc} strokeWidth={s*.016}/>
-    </>,
-    6: /* Aviator — teardrop lenses */ <>
-      <path d={`M${s*.353} ${s*.354} Q${s*.356} ${s*.314} ${s*.417} ${s*.314} Q${s*.468} ${s*.314} ${s*.468} ${s*.362} Q${s*.468} ${s*.41} ${s*.417} ${s*.414} Q${s*.358} ${s*.418} ${s*.353} ${s*.354} Z`} fill="rgba(0,0,0,.2)" stroke={gc} strokeWidth={s*.014}/>
-      <path d={`M${s*.353} ${s*.354} Q${s*.356} ${s*.314} ${s*.417} ${s*.314} Q${s*.468} ${s*.314} ${s*.468} ${s*.362} Q${s*.468} ${s*.41} ${s*.417} ${s*.414} Q${s*.358} ${s*.418} ${s*.353} ${s*.354} Z`} fill="rgba(255,255,255,.1)"/>
-      <path d={`M${s*.647} ${s*.354} Q${s*.644} ${s*.314} ${s*.583} ${s*.314} Q${s*.532} ${s*.314} ${s*.532} ${s*.362} Q${s*.532} ${s*.41} ${s*.583} ${s*.414} Q${s*.642} ${s*.418} ${s*.647} ${s*.354} Z`} fill="rgba(0,0,0,.2)" stroke={gc} strokeWidth={s*.014}/>
-      <path d={`M${s*.647} ${s*.354} Q${s*.644} ${s*.314} ${s*.583} ${s*.314} Q${s*.532} ${s*.314} ${s*.532} ${s*.362} Q${s*.532} ${s*.41} ${s*.583} ${s*.414} Q${s*.642} ${s*.418} ${s*.647} ${s*.354} Z`} fill="rgba(255,255,255,.1)"/>
-      <path d={`M${s*.468} ${s*.336} Q${cx} ${s*.326} ${s*.532} ${s*.336}`} stroke={gc} strokeWidth={s*.012} fill="none"/>
-      <line x1={s*.353} y1={s*.354} x2={s*.278} y2={s*.368} stroke={gc} strokeWidth={s*.013}/>
-      <line x1={s*.647} y1={s*.354} x2={s*.722} y2={s*.368} stroke={gc} strokeWidth={s*.013}/>
-    </>,
-    7: /* Monocle — single eye glass on right */ <>
-      <circle cx={s*.616} cy={s*.368} r={s*.062} fill="rgba(180,220,255,.2)" stroke={gc} strokeWidth={s*.017}/>
-      <ellipse cx={s*.602} cy={s*.355} rx={s*.024} ry={s*.016} fill="rgba(255,255,255,.4)"/>
-      <path d={`M${s*.678} ${s*.412} Q${s*.702} ${s*.452} ${s*.692} ${s*.524}`} stroke={gc} strokeWidth={s*.011} fill="none" opacity={.75}/>
-    </>,
-  };
-
-  // ── Facial hair ───────────────────────────────────────────────────────────
-  const FACIAL_HAIR = {
-    0: null,
-    1: /* Stubble — uses hair color blended with skin for natural look */ <>
-      {[[.39,.518],[.44,.532],[.50,.538],[.56,.532],[.61,.518],
-        [.41,.546],[.46,.558],[.50,.562],[.54,.558],[.59,.546],
-        [.43,.504],[.50,.508],[.57,.504]].map(([fx,fy],i)=>
-        <circle key={i} cx={s*fx} cy={s*fy} r={s*.0075} fill={hd} opacity={.38}/>
-      )}
-    </>,
-    2: /* Moustache */ <>
-      <path d={`M${s*.39} ${s*.506} Q${s*.44} ${s*.522} ${cx} ${s*.518} Q${s*.56} ${s*.522} ${s*.61} ${s*.506}`} fill={hd}/>
-      <path d={`M${s*.41} ${s*.51} Q${s*.455} ${s*.524} ${cx} ${s*.52} Q${s*.545} ${s*.524} ${s*.59} ${s*.51}`} fill={hl} opacity={.3}/>
-    </>,
-    3: /* Short beard */ <>
-      <path d={`M${s*.33} ${s*.49} Q${s*.32} ${s*.575} ${s*.36} ${s*.625} Q${cx} ${s*.66} ${s*.64} ${s*.625} Q${s*.68} ${s*.575} ${s*.67} ${s*.49}`} fill={hd} opacity={.72}/>
-      <path d={`M${s*.36} ${s*.49} Q${s*.355} ${s*.555} ${s*.375} ${s*.6} Q${cx} ${s*.63} ${s*.625} ${s*.6} Q${s*.645} ${s*.555} ${s*.64} ${s*.49}`} fill={hl} opacity={.2}/>
-    </>,
-    4: /* Full beard */ <>
-      <path d={`M${s*.28} ${s*.45} Q${s*.27} ${s*.6} ${s*.32} ${s*.68} Q${cx} ${s*.73} ${s*.68} ${s*.68} Q${s*.73} ${s*.6} ${s*.72} ${s*.45}`} fill={ch.hair} opacity={.9}/>
-      <path d={`M${s*.31} ${s*.45} Q${s*.305} ${s*.58} ${s*.345} ${s*.65} Q${cx} ${s*.7} ${s*.655} ${s*.65} Q${s*.695} ${s*.58} ${s*.69} ${s*.45}`} fill={hl} opacity={.22}/>
-      <path d={`M${s*.38} ${s*.505} Q${s*.44} ${s*.522} ${cx} ${s*.518} Q${s*.56} ${s*.522} ${s*.62} ${s*.505}`} fill={hd}/>
-    </>,
-    5: /* Goatee */ <>
-      <path d={`M${s*.42} ${s*.49} Q${s*.44} ${s*.556} ${cx} ${s*.572} Q${s*.56} ${s*.556} ${s*.58} ${s*.49}`} fill={hd} opacity={.78}/>
-      <path d={`M${s*.435} ${s*.505} Q${s*.455} ${s*.524} ${cx} ${s*.52} Q${s*.545} ${s*.524} ${s*.565} ${s*.505}`} fill={hd}/>
-    </>,
-  };
-
-  // ── Necklace styles ───────────────────────────────────────────────────────
-  const nc  = ch.necklaceColor || "#f0c040";
-  const ncd = shadeHex(nc, -25);
-  const ncl = shadeHex(nc,  22);
-  const NECKLACE = {
-    0: null,
-    1: /* Gold chain — sits just below neck */ <>
-      <path d={`M${s*.37} ${s*.67} Q${cx} ${s*.72} ${s*.63} ${s*.67}`} stroke={nc} strokeWidth={s*.013} fill="none" strokeLinecap="round"/>
-      <path d={`M${s*.37} ${s*.67} Q${cx} ${s*.715} ${s*.63} ${s*.67}`} stroke={ncl} strokeWidth={s*.005} fill="none" strokeLinecap="round" opacity={.5}/>
-      {[0,1,2,3,4].map(i=>{
-        const t = i/4;
-        const x = s*(0.37 + t*0.26);
-        const y = s*(0.67 + Math.sin(t*Math.PI)*0.05);
-        return <circle key={i} cx={x} cy={y} r={s*.011} fill={nc}/>;
-      })}
-    </>,
-    2: /* Pendant */ <>
-      <path d={`M${s*.38} ${s*.668} Q${cx} ${s*.706} ${s*.62} ${s*.668}`} stroke={nc} strokeWidth={s*.013} fill="none"/>
-      <circle cx={cx} cy={s*.712} r={s*.024} fill={nc}/>
-      <circle cx={cx} cy={s*.712} r={s*.015} fill={ncd}/>
-      <circle cx={cx-s*.006} cy={s*.706} r={s*.005} fill={ncl} opacity={.7}/>
-    </>,
-    3: /* Beads */ <>
-      {[0,1,2,3,4,5,6].map(i=>{
-        const t = i/6;
-        const x = s*(0.37 + t*0.26);
-        const y = s*(0.668 + Math.sin(t*Math.PI)*0.042);
-        return <circle key={i} cx={x} cy={y} r={s*.015} fill={i%2===0?nc:ncd}/>;
-      })}
-    </>,
-    4: /* Choker — thick band */ <>
-      <path d={`M${s*.36} ${s*.645} Q${cx} ${s*.625} ${s*.64} ${s*.645}`} stroke={nc} strokeWidth={s*.022} fill="none" strokeLinecap="round"/>
-      <path d={`M${s*.36} ${s*.645} Q${cx} ${s*.625} ${s*.64} ${s*.645}`} stroke="rgba(255,255,255,.3)" strokeWidth={s*.007} fill="none" strokeLinecap="round"/>
-    </>,
-    5: /* Pearl necklace — dots along curve */ <>
-      <path d={`M${s*.36} ${s*.66} Q${cx} ${s*.64} ${s*.64} ${s*.66}`} stroke={nc} strokeWidth={s*.006} fill="none" opacity={.4}/>
-      {[-.22,-.16,-.1,-.04,0,.04,.1,.16,.22].map((ox,i)=>{
-        const px=cx+s*ox; const py=s*(.648+Math.abs(ox)*.08);
-        return <><circle key={i} cx={px} cy={py} r={s*.013} fill={nc}/><ellipse key={"sh"+i} cx={px-s*.004} cy={py-s*.005} rx={s*.005} ry={s*.005} fill="rgba(255,255,255,.55)"/></>;
-      })}
-    </>,
-  };
-
-  // ── Earring styles ────────────────────────────────────────────────────────
-  const ec  = ch.earringColor || "#f0c040";
-  const ecd = shadeHex(ec, -20);
-  const EARRINGS = {
-    0: null,
-    1: /* Studs */ <>
-      <circle cx={s*.264} cy={s*.438} r={s*.02} fill={ec}/>
-      <circle cx={s*.736} cy={s*.438} r={s*.02} fill={ec}/>
-    </>,
-    2: /* Drops */ <>
-      <circle cx={s*.264} cy={s*.438} r={s*.016} fill={ec}/>
-      <ellipse cx={s*.264} cy={s*.462} rx={s*.01} ry={s*.02} fill={ecd}/>
-      <circle cx={s*.736} cy={s*.438} r={s*.016} fill={ec}/>
-      <ellipse cx={s*.736} cy={s*.462} rx={s*.01} ry={s*.02} fill={ecd}/>
-    </>,
-    3: /* Hoops */ <>
-      <circle cx={s*.264} cy={s*.444} r={s*.026} fill="none" stroke={ec} strokeWidth={s*.014}/>
-      <circle cx={s*.736} cy={s*.444} r={s*.026} fill="none" stroke={ec} strokeWidth={s*.014}/>
-    </>,
-    4: /* Stars */ <>
-      {[s*.264, s*.736].map((ex,i)=><g key={i} transform={`translate(${ex},${s*.445})`}>
-        {[0,1,2,3,4].map(pt=>{
-          const a = (pt*72-90)*Math.PI/180;
-          const a2 = ((pt*72+36)-90)*Math.PI/180;
-          const r1=s*.024,r2=s*.01;
-          return <path key={pt} d={`M${Math.cos(a)*r1} ${Math.sin(a)*r1}L${Math.cos(a2)*r2} ${Math.sin(a2)*r2}`} stroke={ec} strokeWidth={s*.008} fill="none"/>;
-        })}
-        <polygon points={[0,1,2,3,4].map(pt=>{const a=(pt*72-90)*Math.PI/180;return `${Math.cos(a)*s*.022},${Math.sin(a)*s*.022}`;}).join(' ')} fill={ec} opacity={.85}/>
-      </g>)}
-    </>,
-    5: /* Dangles — long teardrop chain */ <>
-      <ellipse cx={s*.267} cy={s*.39} rx={s*.014} ry={s*.014} fill={ec}/>
-      <line x1={s*.267} y1={s*.404} x2={s*.267} y2={s*.48} stroke={ec} strokeWidth={s*.008}/>
-      <ellipse cx={s*.267} cy={s*.494} rx={s*.018} ry={s*.024} fill={ec}/>
-      <ellipse cx={s*.267} cy={s*.488} rx={s*.008} ry={s*.009} fill="rgba(255,255,255,.45)"/>
-      <ellipse cx={s*.733} cy={s*.39} rx={s*.014} ry={s*.014} fill={ec}/>
-      <line x1={s*.733} y1={s*.404} x2={s*.733} y2={s*.48} stroke={ec} strokeWidth={s*.008}/>
-      <ellipse cx={s*.733} cy={s*.494} rx={s*.018} ry={s*.024} fill={ec}/>
-      <ellipse cx={s*.733} cy={s*.488} rx={s*.008} ry={s*.009} fill="rgba(255,255,255,.45)"/>
-    </>,
-    6: /* Crosses — stud with cross charm */ <>
-      <ellipse cx={s*.267} cy={s*.39} rx={s*.013} ry={s*.013} fill={ec}/>
-      <line x1={s*.267} y1={s*.406} x2={s*.267} y2={s*.44} stroke={ec} strokeWidth={s*.009}/>
-      <line x1={s*.255} y1={s*.42} x2={s*.279} y2={s*.42} stroke={ec} strokeWidth={s*.009}/>
-      <ellipse cx={s*.733} cy={s*.39} rx={s*.013} ry={s*.013} fill={ec}/>
-      <line x1={s*.733} y1={s*.406} x2={s*.733} y2={s*.44} stroke={ec} strokeWidth={s*.009}/>
-      <line x1={s*.721} y1={s*.42} x2={s*.745} y2={s*.42} stroke={ec} strokeWidth={s*.009}/>
-    </>,
-  };
-
-  // Legacy accessory field — no longer used (hat/glasses/earring/necklace replace it)
-  // Kept as empty map for backward compat only
-  const ACC = {};
-
-  // ── Body / outfit — topStyle 0-15 ────────────────────────────────────────
-  // All outfits use radial gradient (url(#b)) for 3-D depth + shadow overlay
-  const ts = ch.topStyle || 0;
-  const bodyPath = `M${s*.04} ${s*1.04} C${s*.1} ${s*.82} ${s*.25} ${s*.7} ${s*.36} ${s*.66} Q${cx} ${s*.63} ${s*.64} ${s*.66} C${s*.75} ${s*.7} ${s*.9} ${s*.82} ${s*.96} ${s*1.04} Z`;
-  const tankPath = `M${s*.04} ${s*1.04} C${s*.06} ${s*.84} ${s*.18} ${s*.72} ${s*.28} ${s*.67} Q${cx} ${s*.64} ${s*.72} ${s*.67} C${s*.82} ${s*.72} ${s*.94} ${s*.84} ${s*.96} ${s*1.04} Z`;
-  // Shared 3-D fabric shadow overlay — applied on top of all body shapes
-  const fabricShadow = <path d={bodyPath} fill="rgba(0,0,0,.07)" clipPath={`url(#c${gid})`} style={{mixBlendMode:"multiply"}}/>;
-  const body = <>
-    {/* Base body shape with 3-D gradient */}
-    {ts!==3 && ts!==9 && ts!==13 && <path d={bodyPath} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>}
-    {/* Fabric depth shadow on all styles */}
-    {ts!==3 && ts!==9 && ts!==13 && fabricShadow}
-
-    {/* ts 0 = T-Shirt — shoulder seam highlight for depth */}
-    {ts===0 && <>
-      <path d={`M${s*.36} ${s*.66} Q${s*.42} ${s*.64} ${cx} ${s*.635} Q${s*.58} ${s*.64} ${s*.64} ${s*.66}`} stroke={tl} strokeWidth={s*.012} fill="none" opacity={.5} clipPath={`url(#c${gid})`}/>
-    </>}
-
-    {ts===1 && /* Hoodie — 3-D hood, zip, kangaroo pocket */ <>
-      <ellipse cx={cx} cy={s*.88} rx={s*.09} ry={s*.055} fill={td} clipPath={`url(#c${gid})`}/>
-      <line x1={s*.47} y1={s*.66} x2={s*.455} y2={s*.91} stroke={td} strokeWidth={s*.017} clipPath={`url(#c${gid})`}/>
-      <line x1={s*.53} y1={s*.66} x2={s*.545} y2={s*.91} stroke={td} strokeWidth={s*.017} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.34} ${s*.66} Q${cx} ${s*.58} ${s*.66} ${s*.66}`} stroke={td} strokeWidth={s*.022} fill="none" clipPath={`url(#c${gid})`}/>
-      {/* hood inner shadow for depth */}
-      <path d={`M${s*.36} ${s*.66} Q${cx} ${s*.60} ${s*.64} ${s*.66}`} stroke="rgba(0,0,0,.15)" strokeWidth={s*.014} fill="none" clipPath={`url(#c${gid})`}/>
-    </>}
-
-    {ts===2 && /* Jacket — lapels with 3-D crease */ <>
-      <path d={`M${s*.5} ${s*.63} L${s*.41} ${s*.72} L${s*.36} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.5} ${s*.63} L${s*.59} ${s*.72} L${s*.64} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
-      {/* lapel crease highlights */}
-      <path d={`M${s*.5} ${s*.63} L${s*.43} ${s*.70}`} stroke={tl} strokeWidth={s*.01} opacity={.5} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.5} ${s*.63} L${s*.57} ${s*.70}`} stroke={tl} strokeWidth={s*.01} opacity={.5} clipPath={`url(#c${gid})`}/>
-      {[0,1,2].map(i=><circle key={i} cx={cx} cy={s*(.72+i*.09)} r={s*.013} fill={tl} clipPath={`url(#c${gid})`}/>)}
-    </>}
-
-    {ts===3 && /* Tank top — narrow straps with gradient */ <>
-      <path d={tankPath} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
-      <path d={tankPath} fill="rgba(0,0,0,.06)" clipPath={`url(#c${gid})`}/>
-      <rect x={s*.41} y={s*.57} width={s*.06} height={s*.1} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
-      <rect x={s*.53} y={s*.57} width={s*.06} height={s*.1} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
-      {/* strap highlight */}
-      <rect x={s*.43} y={s*.57} width={s*.02} height={s*.09} fill={tl} opacity={.3} clipPath={`url(#c${gid})`}/>
-      <rect x={s*.55} y={s*.57} width={s*.02} height={s*.09} fill={tl} opacity={.3} clipPath={`url(#c${gid})`}/>
-    </>}
-
-    {ts===4 && /* Suit + tie — detailed lapels */ <>
-      <path d={`M${s*.5} ${s*.63} L${s*.42} ${s*.73} L${s*.37} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.5} ${s*.63} L${s*.58} ${s*.73} L${s*.63} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
-      {/* lapel sheen */}
-      <path d={`M${s*.5} ${s*.63} L${s*.44} ${s*.71}`} stroke={tl} strokeWidth={s*.009} opacity={.45} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.5} ${s*.63} L${s*.56} ${s*.71}`} stroke={tl} strokeWidth={s*.009} opacity={.45} clipPath={`url(#c${gid})`}/>
-      {/* tie with knot */}
-      <path d={`M${s*.48} ${s*.66} L${s*.5} ${s*.76} L${s*.52} ${s*.66}`} fill="#c0392b" clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.5} ${s*.76} L${s*.49} ${s*.94} L${s*.5} ${s*.975} L${s*.51} ${s*.94} Z`} fill="#c0392b" clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.49} ${s*.77} L${s*.5} ${s*.82}`} stroke="#a93226" strokeWidth={s*.008} clipPath={`url(#c${gid})`}/>
-    </>}
-
-    {ts===5 && /* Crop top — ribbed hem */ <>
-      <rect x={s*.1} y={s*.76} width={s*.8} height={s*.3} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
-      <rect x={s*.1} y={s*.76} width={s*.8} height={s*.3} fill="rgba(0,0,0,.06)" clipPath={`url(#c${gid})`}/>
-      {/* rib lines */}
-      {[0,1,2].map(i=><line key={i} x1={s*.1} y1={s*(.775+i*.018)} x2={s*.9} y2={s*(.775+i*.018)} stroke={td} strokeWidth={s*.007} opacity={.3} clipPath={`url(#c${gid})`}/>)}
-    </>}
-
-    {ts===6 && /* Polo — collar + placket buttons */ <>
-      <path d={`M${s*.46} ${s*.645} L${s*.43} ${s*.70} L${s*.5} ${s*.685}`} fill={tl} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.54} ${s*.645} L${s*.57} ${s*.70} L${s*.5} ${s*.685}`} fill={tl} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.46} ${s*.648} L${s*.44} ${s*.694}`} stroke={td} strokeWidth={s*.008} opacity={.4} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.54} ${s*.648} L${s*.56} ${s*.694}`} stroke={td} strokeWidth={s*.008} opacity={.4} clipPath={`url(#c${gid})`}/>
-      {[0,1].map(i=><circle key={i} cx={cx} cy={s*(.73+i*.08)} r={s*.011} fill={td} clipPath={`url(#c${gid})`}/>)}
-    </>}
-
-    {ts===7 && /* Sport jersey — side stripes + number */ <>
-      <rect x={s*.04} y={s*.66} width={s*.08} height={s*.38} fill={tl} opacity={.7} clipPath={`url(#c${gid})`}/>
-      <rect x={s*.88} y={s*.66} width={s*.08} height={s*.38} fill={tl} opacity={.7} clipPath={`url(#c${gid})`}/>
-      <rect x={s*.41} y={s*.73} width={s*.18} height={s*.14} rx={s*.02} fill={td} clipPath={`url(#c${gid})`}/>
-      <text x={cx} y={s*.845} textAnchor="middle" fontSize={s*.09} fill={tl} fontWeight="900" fontFamily="sans-serif" clipPath={`url(#c${gid})`}>10</text>
-      {/* jersey mesh lines */}
-      {[0,1].map(i=><line key={i} x1={s*.14} y1={s*(.75+i*.1)} x2={s*.1} y2={s*(.75+i*.1)} stroke={tl} strokeWidth={s*.007} opacity={.4} clipPath={`url(#c${gid})`}/>)}
-    </>}
-
-    {ts===8 && /* Streetwear hoodie — oversized, zip, pocket */ <>
-      <path d={`M${s*.00} ${s*1.04} C${s*.04} ${s*.80} ${s*.22} ${s*.68} ${s*.34} ${s*.65} Q${cx} ${s*.62} ${s*.66} ${s*.65} C${s*.78} ${s*.68} ${s*.96} ${s*.80} ${s*1.0} ${s*1.04} Z`} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.00} ${s*1.04} C${s*.04} ${s*.80} ${s*.22} ${s*.68} ${s*.34} ${s*.65} Q${cx} ${s*.62} ${s*.66} ${s*.65} C${s*.78} ${s*.68} ${s*.96} ${s*.80} ${s*1.0} ${s*1.04} Z`} fill="rgba(0,0,0,.06)" clipPath={`url(#c${gid})`}/>
-      <line x1={cx} y1={s*.63} x2={cx} y2={s*.98} stroke={td} strokeWidth={s*.014} clipPath={`url(#c${gid})`}/>
-      {[0,1,2,3].map(i=><line key={i} x1={s*.495} y1={s*(.68+i*.07)} x2={s*.505} y2={s*(.68+i*.07)} stroke={tl} strokeWidth={s*.016} clipPath={`url(#c${gid})`}/>)}
-      <path d={`M${s*.36} ${s*.85} Q${cx} ${s*.82} ${s*.64} ${s*.85} L${s*.64} ${s*1.0} Q${cx} ${s*1.02} ${s*.36} ${s*1.0} Z`} fill={td} clipPath={`url(#c${gid})`}/>
-    </>}
-
-    {ts===9 && /* Dress — flared with waistband + sheen */ <>
-      <path d={`M${s*.3} ${s*.64} Q${cx} ${s*.61} ${s*.7} ${s*.64} L${s*.82} ${s*1.04} Q${cx} ${s*1.06} ${s*.18} ${s*1.04} Z`} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.3} ${s*.64} Q${cx} ${s*.61} ${s*.7} ${s*.64} L${s*.82} ${s*1.04} Q${cx} ${s*1.06} ${s*.18} ${s*1.04} Z`} fill="rgba(0,0,0,.05)" clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.32} ${s*.72} Q${cx} ${s*.70} ${s*.68} ${s*.72}`} stroke={td} strokeWidth={s*.018} fill="none" clipPath={`url(#c${gid})`}/>
-      {/* fabric sheen */}
-      <path d={`M${s*.38} ${s*.65} Q${s*.42} ${s*.72} ${s*.4} ${s*.9}`} stroke={tl} strokeWidth={s*.01} fill="none" opacity={.25} clipPath={`url(#c${gid})`}/>
-    </>}
-
-    {ts===10 && /* Blazer — lapels + pocket square + buttons */ <>
-      <path d={`M${s*.5} ${s*.63} L${s*.40} ${s*.74} L${s*.36} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.5} ${s*.63} L${s*.60} ${s*.74} L${s*.64} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.5} ${s*.63} L${s*.42} ${s*.72}`} stroke={tl} strokeWidth={s*.009} opacity={.5} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.5} ${s*.63} L${s*.58} ${s*.72}`} stroke={tl} strokeWidth={s*.009} opacity={.5} clipPath={`url(#c${gid})`}/>
-      <rect x={s*.38} y={s*.77} width={s*.07} height={s*.055} rx={s*.01} fill={tl} clipPath={`url(#c${gid})`}/>
-      {[0,1].map(i=><circle key={i} cx={cx} cy={s*(.77+i*.1)} r={s*.013} fill={tl} clipPath={`url(#c${gid})`}/>)}
-    </>}
-
-    {ts===11 && /* Graphic tee — bold chest print */ <>
-      <rect x={s*.38} y={s*.70} width={s*.24} height={s*.18} rx={s*.025} fill={td} clipPath={`url(#c${gid})`}/>
-      <circle cx={cx} cy={s*.79} r={s*.06} fill={tl} opacity={.7} clipPath={`url(#c${gid})`}/>
-      {/* star sparkle */}
-      <line x1={cx} y1={s*.745} x2={cx} y2={s*.835} stroke={tl} strokeWidth={s*.009} opacity={.6} clipPath={`url(#c${gid})`}/>
-      <line x1={s*.455} y1={s*.79} x2={s*.545} y2={s*.79} stroke={tl} strokeWidth={s*.009} opacity={.6} clipPath={`url(#c${gid})`}/>
-    </>}
-
-    {ts===12 && /* Varsity jacket — ribbed cuffs, chenille patch */ <>
-      {/* dark sleeves */}
-      <path d={`M${s*.04} ${s*1.04} C${s*.08} ${s*.82} ${s*.2} ${s*.70} ${s*.32} ${s*.67} L${s*.36} ${s*.66} L${s*.36} ${s*1.04} Z`} fill={td} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.96} ${s*1.04} C${s*.92} ${s*.82} ${s*.8} ${s*.70} ${s*.68} ${s*.67} L${s*.64} ${s*.66} L${s*.64} ${s*1.04} Z`} fill={td} clipPath={`url(#c${gid})`}/>
-      {/* ribbed hem */}
-      {[0,1,2].map(i=><line key={i} x1={s*.36} y1={s*(.97+i*.024)} x2={s*.64} y2={s*(.97+i*.024)} stroke={td} strokeWidth={s*.01} opacity={.4} clipPath={`url(#c${gid})`}/>)}
-      {/* snap buttons */}
-      {[0,1,2].map(i=><circle key={i} cx={cx} cy={s*(.71+i*.1)} r={s*.012} fill={td} clipPath={`url(#c${gid})`}/>)}
-      {/* letter patch */}
-      <rect x={s*.41} y={s*.74} width={s*.18} height={s*.14} rx={s*.025} fill={tl} opacity={.85} clipPath={`url(#c${gid})`}/>
-      <text x={cx} y={s*.845} textAnchor="middle" fontSize={s*.085} fill={td} fontWeight="900" fontFamily="serif" clipPath={`url(#c${gid})`}>V</text>
-    </>}
-
-    {ts===13 && /* Kimono/robe — wide collar, sash */ <>
-      <path d={`M${s*.2} ${s*.64} Q${cx} ${s*.60} ${s*.8} ${s*.64} L${s*.92} ${s*1.04} Q${cx} ${s*1.07} ${s*.08} ${s*1.04} Z`} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.2} ${s*.64} Q${cx} ${s*.60} ${s*.8} ${s*.64} L${s*.92} ${s*1.04} Q${cx} ${s*1.07} ${s*.08} ${s*1.04} Z`} fill="rgba(0,0,0,.05)" clipPath={`url(#c${gid})`}/>
-      {/* wide collar flaps */}
-      <path d={`M${s*.5} ${s*.62} L${s*.34} ${s*.78} L${s*.3} ${s*1.04}`} fill={tl} opacity={.7} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.5} ${s*.62} L${s*.66} ${s*.78} L${s*.7} ${s*1.04}`} fill={tl} opacity={.7} clipPath={`url(#c${gid})`}/>
-      {/* sash */}
-      <path d={`M${s*.3} ${s*.82} Q${cx} ${s*.79} ${s*.7} ${s*.82}`} stroke={td} strokeWidth={s*.025} fill="none" clipPath={`url(#c${gid})`}/>
-      {/* fabric sheen */}
-      <path d={`M${s*.38} ${s*.65} Q${s*.36} ${s*.78} ${s*.34} ${s*.95}`} stroke={tl} strokeWidth={s*.012} fill="none" opacity={.28} clipPath={`url(#c${gid})`}/>
-    </>}
-
-    {ts===14 && /* Turtleneck — ribbed collar */ <>
-      {/* turtleneck roll */}
-      <path d={`M${s*.38} ${s*.58} Q${cx} ${s*.55} ${s*.62} ${s*.58} L${s*.62} ${s*.68} Q${cx} ${s*.71} ${s*.38} ${s*.68} Z`} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
-      {/* rib lines on collar */}
-      {[0,1,2].map(i=><path key={i} d={`M${s*.38} ${s*(.595+i*.024)} Q${cx} ${s*(.565+i*.024)} ${s*.62} ${s*(.595+i*.024)}`} stroke={td} strokeWidth={s*.007} fill="none" opacity={.35} clipPath={`url(#c${gid})`}/>)}
-      {/* collar shadow */}
-      <path d={`M${s*.38} ${s*.68} Q${cx} ${s*.715} ${s*.62} ${s*.68}`} stroke="rgba(0,0,0,.12)" strokeWidth={s*.014} fill="none" clipPath={`url(#c${gid})`}/>
-    </>}
-
-    {ts===15 && /* Denim jacket — stitching + chest pockets */ <>
-      <path d={`M${s*.5} ${s*.63} L${s*.40} ${s*.74} L${s*.36} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.5} ${s*.63} L${s*.60} ${s*.74} L${s*.64} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
-      {/* stitch lines on lapels */}
-      <path d={`M${s*.425} ${s*.685} L${s*.38} ${s*.78}`} stroke={tl} strokeWidth={s*.007} strokeDasharray={`${s*.014} ${s*.01}`} opacity={.6} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.575} ${s*.685} L${s*.62} ${s*.78}`} stroke={tl} strokeWidth={s*.007} strokeDasharray={`${s*.014} ${s*.01}`} opacity={.6} clipPath={`url(#c${gid})`}/>
-      {/* chest pockets */}
-      <rect x={s*.36} y={s*.73} width={s*.09} height={s*.065} rx={s*.01} fill={td} clipPath={`url(#c${gid})`}/>
-      <rect x={s*.55} y={s*.73} width={s*.09} height={s*.065} rx={s*.01} fill={td} clipPath={`url(#c${gid})`}/>
-      {/* pocket stitching */}
-      <rect x={s*.36} y={s*.73} width={s*.09} height={s*.065} rx={s*.01} fill="none" stroke={tl} strokeWidth={s*.006} opacity={.5} clipPath={`url(#c${gid})`}/>
-      <rect x={s*.55} y={s*.73} width={s*.09} height={s*.065} rx={s*.01} fill="none" stroke={tl} strokeWidth={s*.006} opacity={.5} clipPath={`url(#c${gid})`}/>
-      {/* buttons */}
-      {[0,1].map(i=><circle key={i} cx={cx} cy={s*(.74+i*.1)} r={s*.012} fill={tl} clipPath={`url(#c${gid})`}/>)}
-    </>}
-
-    {/* Collar highlight on fitted styles */}
-    {ts!==3 && ts!==5 && ts!==9 && ts!==13 && ts!==14 && <path d={`M${s*.38} ${s*.645} Q${cx} ${s*.605} ${s*.62} ${s*.645}`} stroke={tl} strokeWidth={s*.017} fill="none" opacity={.44} clipPath={`url(#c${gid})`}/>}
-  </>;
-
-  return (
-    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`} style={{display:"block"}}>
-      <defs>
-        <radialGradient id={`f${gid}`} cx="38%" cy="32%" r="68%">
-          <stop offset="0%"   stopColor={sl}/>
-          <stop offset="55%"  stopColor={ch.skin}/>
-          <stop offset="100%" stopColor={sd}/>
-        </radialGradient>
-        <radialGradient id={`b${gid}`} cx="40%" cy="28%" r="72%">
-          <stop offset="0%"   stopColor={tl}/>
-          <stop offset="55%"  stopColor={ch.top}/>
-          <stop offset="100%" stopColor={td}/>
-        </radialGradient>
-        <radialGradient id={`g${gid}`} cx="50%" cy="45%" r="55%">
-          <stop offset="0%"   stopColor={shadeHex(bg,22)}/>
-          <stop offset="100%" stopColor={bg}/>
-        </radialGradient>
-        <clipPath id={`c${gid}`}><circle cx={cx} cy={cx} r={cx-0.5}/></clipPath>
-      </defs>
-
-      {/* Background */}
-      <circle cx={cx} cy={cx} r={cx} fill={`url(#g${gid})`}/>
-
-      {/* Body / outfit */}
-      {body}
-
-      {/* Neck */}
-      <path d={`M${s*.42} ${s*.566} L${s*.42} ${s*.656} Q${cx} ${s*.686} ${s*.58} ${s*.656} L${s*.58} ${s*.566}`}
-        fill={`url(#f${gid})`} clipPath={`url(#c${gid})`}/>
-      <ellipse cx={cx} cy={s*.656} rx={s*.09} ry={s*.022} fill={sd} opacity={.22} clipPath={`url(#c${gid})`}/>
-
-      {/* Ears */}
-      <ellipse cx={s*.274} cy={s*.395} rx={s*.038} ry={s*.052} fill={`url(#f${gid})`}/>
-      <ellipse cx={s*.279} cy={s*.395} rx={s*.018} ry={s*.03}  fill={sd} opacity={.28}/>
-      <ellipse cx={s*.726} cy={s*.395} rx={s*.038} ry={s*.052} fill={`url(#f${gid})`}/>
-      <ellipse cx={s*.721} cy={s*.395} rx={s*.018} ry={s*.03}  fill={sd} opacity={.28}/>
-
-      {/* Hair behind face */}
-      <g clipPath={`url(#c${gid})`}>{H[ch.hairStyle||0]}</g>
-
-      {/* Face */}
-      <ellipse cx={cx} cy={s*.386} rx={s*.209} ry={s*.233} fill={`url(#f${gid})`}/>
-      <ellipse cx={cx} cy={s*.386} rx={s*.209} ry={s*.233} fill="none" stroke={sd} strokeWidth={s*.01} opacity={.14}/>
-
-      {/* Blush */}
-      {ch.blush && <>
-        <ellipse cx={s*.322} cy={s*.466} rx={s*.06} ry={s*.032} fill="#ff85b3" opacity={.28}/>
-        <ellipse cx={s*.678} cy={s*.466} rx={s*.06} ry={s*.032} fill="#ff85b3" opacity={.28}/>
-      </>}
-
-      {/* Brows → Eyes → Nose → Mouth */}
-      {BROW[ch.eyebrow||0]}
-      {eye(s*.384, s*.37)}
-      {eye(s*.616, s*.37)}
-      {nose}
-      {MOUTH[ch.mouth||0]}
-
-      {/* Lip colour */}
-      {ch.lips && <ellipse cx={cx} cy={s*.526} rx={s*.058} ry={s*.018} fill={ch.lipColor||"#d06060"} opacity={.6}/>}
-
-      {/* Freckles */}
-      {ch.freckles && <>
-        {[[.38,.442],[.432,.47],[.5,.462],[.568,.47],[.62,.442],[.402,.422],[.598,.422]].map(([fx,fy],i)=>
-          <circle key={i} cx={s*fx} cy={s*fy} r={s*.009} fill={sd} opacity={.44}/>)}
-      </>}
-
-      {/* Facial hair (below accessories) */}
-      <g clipPath={`url(#c${gid})`}>{FACIAL_HAIR[ch.facialHair||0]}</g>
-
-      {/* Necklace */}
-      <g clipPath={`url(#c${gid})`}>{NECKLACE[ch.necklace||0]}</g>
-
-      {/* Earrings — inside clip so they stay within avatar circle */}
-      <g clipPath={`url(#c${gid})`}>{EARRINGS[ch.earring||0]}</g>
-
-      {/* Glasses */}
-      <g clipPath={`url(#c${gid})`}>{GLASSES[ch.glasses||0]}</g>
-
-      {/* Hat (topmost layer) */}
-      <g clipPath={`url(#c${gid})`}>{HAT[ch.hat||0]}</g>
-    </svg>
-  );
-}
+function MiniAvatar({ character, size = 40 }) { return <FriendlyAvatar character={character} size={size} />; }
 
 // ─── CHARACTER MODAL ─────────────────────────────────────────────────────────
 // Visual preview: every selector shows mini SVG avatars with the option applied
@@ -4609,682 +3407,28 @@ function MiniAvatar({ character: ch, size = 40, uid = "" }) {
 // Receives ch, field, vals, customColors, and all callbacks as props.
 // Never re-created on render — stable component identity = stable hooks.
 // ─── AVATAR ROW LABEL ────────────────────────────────────────────────────────
-function AvatarRow({ label, children }) {
-  return (
-    <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-      <p style={{ fontSize:10, fontWeight:800, color:"#aaa", letterSpacing:1.1,
-        margin:0, textTransform:"uppercase" }}>{label}</p>
-      <div>{children}</div>
-    </div>
-  );
-}
+
 
 // ─── AVATAR CHIP ─────────────────────────────────────────────────────────────
 // Pure top-level component — stable identity, no hooks issues.
-function AvatarChip({ ch, field, value, label, size=62, onApply }) {
-  const preview = { ...ch, [field]: value };
-  const sel = ch[field] === value;
-  const A = "#4361ee";
-  // Use CSS variable so size never gets stretched by flexbox on mobile
-  return (
-    <button
-      onClick={() => onApply(field, value)}
-      title={label}
-      style={{
-        display:"flex", flexDirection:"column", alignItems:"center", gap:5,
-        padding:"7px 6px 6px", borderRadius:8, border:"none", cursor:"pointer",
-        flexShrink:0, flexGrow:0,
-        width:size+14, minWidth:size+14, maxWidth:size+14, // fixed width — no stretch
-        background: sel ? "#eef1ff" : "#f5f6fa",
-        outline: sel ? `2.5px solid ${A}` : "2px solid transparent",
-        outlineOffset:2,
-        boxShadow: sel ? `0 0 0 1.5px #fff, 0 3px 12px rgba(67,97,238,.28)` : "0 1px 3px rgba(0,0,0,.07)",
-        transition:"background .12s, outline-color .12s, box-shadow .12s",
-      }}
-    >
-      <div style={{
-        width:size, height:size, minWidth:size, minHeight:size, // fixed — never squish
-        borderRadius:"50%", overflow:"hidden", flexShrink:0,
-        boxShadow: sel ? `0 0 0 2.5px ${A}, 0 2px 8px rgba(67,97,238,.3)` : "0 1px 4px rgba(0,0,0,.13)",
-      }}>
-        <MiniAvatar character={preview} size={size} uid={field+String(value)} />
-      </div>
-      <span style={{
-        fontSize:9, fontWeight:700, letterSpacing:.2, textAlign:"center",
-        lineHeight:1.25, width:size+6, display:"block",
-        whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
-        color: sel ? A : "#666",
-      }}>{label}</span>
-    </button>
-  );
-}
+
 
 // ─── AVATAR CHIP GRID ────────────────────────────────────────────────────────
-function AvatarChipGrid({ ch, field, items, size=62, onApply }) {
-  return (
-    <div style={{
-      display:"flex", flexWrap:"wrap", gap:8,
-      // On mobile ensure items never stretch — each chip has fixed width
-      alignItems:"flex-start",
-    }}>
-      {items.map((item, i) => {
-        const value = typeof item === "object" ? item.id : i;
-        const label = typeof item === "object" ? item.label : item;
-        return (
-          <AvatarChip key={i} ch={ch} field={field} value={value}
-            label={label} size={size} onApply={onApply} />
-        );
-      })}
-    </div>
-  );
-}
+
 
 // ─── AVATAR TOGGLE PAIR ───────────────────────────────────────────────────────
-function AvatarTogglePair({ ch, field, label, onEmoji, offLabel="Off", onApply }) {
-  const A = "#4361ee";
-  return (
-    <AvatarRow label={label}>
-      <div style={{ display:"flex", gap:10 }}>
-        {[false, true].map(val => {
-          const sel = !!ch[field] === val;
-          return (
-            <button key={String(val)} onClick={() => onApply(field, val)}
-              style={{
-                display:"flex", flexDirection:"column", alignItems:"center", gap:4,
-                padding:"7px 5px 5px", borderRadius:8, border:"none", cursor:"pointer",
-                background: sel ? "#eef1ff" : "#f5f6fa",
-                outline: sel ? `2.5px solid ${A}` : "2px solid transparent",
-                outlineOffset:2,
-                boxShadow: sel ? "0 2px 12px rgba(67,97,238,.28)" : "0 1px 3px rgba(0,0,0,.07)",
-                transition:"background .12s, outline-color .12s, box-shadow .12s",
-              }}>
-              <div style={{
-                width:66, height:66, borderRadius:"50%", overflow:"hidden",
-                boxShadow: sel ? `0 0 0 2.5px ${A}` : "0 1px 4px rgba(0,0,0,.14)",
-              }}>
-                <MiniAvatar character={{ ...ch, [field]: val }} size={66} uid={field+String(val)} />
-              </div>
-              <span style={{ fontSize:10, fontWeight:700, color: sel ? A : "#777" }}>
-                {val ? `${onEmoji} On` : offLabel}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </AvatarRow>
-  );
-}
+
 
 // ─── AVATAR SWATCHES ─────────────────────────────────────────────────────────
 // Top-level component with its own open/draft state.
 // Receives ch + callbacks as props — no stale closures.
-function AvatarSwatches({
-  ch, field, vals, sz=26, showCustom=true,
-  customColors, onApply, onApplyCustom, onRemoveCustom,
-}) {
-  const saved = customColors[field] || [];
-  const [open, setOpen] = useState(false);
-  // pickerSeed: the colour the picker opens with (state so picker re-renders correctly)
-  const [pickerSeed, setPickerSeed] = useState(() => ensureHex(ch[field] || vals[0] || "#888888"));
-  // latestRef: always holds the most recent dragged colour — no stale closure on Done
-  const latestRef = useRef(pickerSeed);
-  const A = "#4361ee";
 
-  const ring = (isSel) => ({
-    outline: isSel ? `3px solid ${A}` : "3px solid transparent",
-    outlineOffset: 2,
-    boxShadow: isSel
-      ? `0 0 0 1.5px #fff, 0 3px 10px rgba(67,97,238,.45)`
-      : "0 1px 4px rgba(0,0,0,.18)",
-    transition: "outline-color .1s, box-shadow .1s",
-  });
-
-  const handleOpen = () => {
-    // Seed picker with the current applied colour each time it opens
-    const seed = ensureHex(ch[field] || vals[0] || "#888888");
-    latestRef.current = seed;
-    setPickerSeed(seed);  // causes picker to remount with correct initial value
-    setOpen(o => !o);
-  };
-
-  // Each drag event: update avatar live + store latest in ref
-  const handleLivePick = (hex) => {
-    latestRef.current = hex;
-    onApply(field, hex);
-  };
-
-  // Done: read ref (latest drag position) — no stale closure possible
-  const handleDone = () => {
-    const finalHex = latestRef.current;
-    setOpen(false);
-    onApplyCustom(field, finalHex);
-  };
-
-  return (
-    <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-      {/* ── Swatch + saved row ── */}
-      <div style={{ display:"flex", flexWrap:"wrap", gap:7, alignItems:"center" }}>
-
-        {/* Built-in presets */}
-        {vals.map(v => (
-          <button key={v}
-            onClick={() => { onApply(field, v); setOpen(false); }}
-            style={{
-              width:sz, height:sz, minWidth:sz, minHeight:sz, // fixed — no stretch on mobile
-              borderRadius:"50%", background:v,
-              cursor:"pointer", flexShrink:0, flexGrow:0, border:"none", padding:0,
-              ...ring(ch[field] === v),
-            }}
-          />
-        ))}
-
-        {/* Saved custom colours */}
-        {showCustom && saved.map((v, i) => (
-          <div key={"c"+i} style={{ position:"relative", flexShrink:0 }}>
-            <button
-              onClick={() => { onApply(field, v); setOpen(false); }}
-              style={{
-                width:sz, height:sz, minWidth:sz, minHeight:sz,
-                borderRadius:"50%", background:v,
-                cursor:"pointer", flexShrink:0, flexGrow:0, border:"none", padding:0,
-                ...ring(ch[field] === v),
-              }}
-            />
-            {/* Remove button */}
-            <button
-              onClick={e => { e.stopPropagation(); onRemoveCustom(field, i); }}
-              style={{
-                position:"absolute", top:-4, right:-4,
-                width:14, height:14, borderRadius:"50%",
-                background:"#e74c3c", border:"2px solid #fff",
-                cursor:"pointer", fontSize:8, color:"#fff",
-                display:"flex", alignItems:"center", justifyContent:"center",
-                padding:0, lineHeight:1,
-              }}
-            >×</button>
-          </div>
-        ))}
-
-        {/* "+" — always last */}
-        {showCustom && (
-          <button
-            onClick={handleOpen}
-            title="Custom colour"
-            style={{
-              width:sz, height:sz, minWidth:sz, minHeight:sz,
-              borderRadius:"50%", flexShrink:0, flexGrow:0,
-              cursor:"pointer", border:"2px dashed #bbb",
-              background: open ? A : "rgba(67,97,238,.06)",
-              display:"flex", alignItems:"center", justifyContent:"center",
-              fontSize: sz > 22 ? 15 : 11,
-              color: open ? "#fff" : "#888",
-              transition:"background .14s, color .14s",
-            }}
-          >{open ? "×" : "+"}</button>
-        )}
-      </div>
-
-      {/* ── Inline colour picker ── */}
-      {open && (
-        <div style={{ borderRadius:16, overflow:"hidden", background:"#18182a",
-          boxShadow:"0 6px 32px rgba(0,0,0,.4)" }}>
-          <ColorPicker
-            value={pickerSeed}
-            onChange={handleLivePick}
-            onClose={handleDone}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ─── AVATAR SKIN SECTION ─────────────────────────────────────────────────────
-function AvatarSkinSection({
-  ch, skinBase, setSkinBase, customColors,
-  onApply, onApplyCustom, onRemoveCustom,
-}) {
-  // SKINS: single source of truth — swatches AND avatar use exactly these hex values
-  const SKINS = ["#FDDBB4","#F5C89A","#FFCBA4","#E8A87C","#D4956A","#C68642","#A0693A","#8D5524","#6B3A1F","#F4D6C8"];
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [pickerSeed, setPickerSeed] = useState(() => ensureHex(ch.skin || "#FDDBB4"));
-  const latestRef = useRef(pickerSeed);
-  const saved = customColors["skin"] || [];
-  const A = "#4361ee";
 
-  const ring = (isSel) => ({
-    outline: isSel ? `3px solid ${A}` : "3px solid transparent",
-    outlineOffset: 2,
-    boxShadow: isSel
-      ? `0 0 0 1.5px #fff, 0 2px 8px rgba(67,97,238,.4)`
-      : "0 1px 4px rgba(0,0,0,.15)",
-    transition: "outline-color .1s",
-  });
-
-  const handleOpen = () => {
-    const seed = ensureHex(ch.skin || "#FDDBB4");
-    latestRef.current = seed;
-    setPickerSeed(seed);
-    setPickerOpen(p => !p);
-  };
-
-  const handleLivePick = (hex) => { latestRef.current = hex; onApply("skin", hex); };
-  const handleDone = () => { setPickerOpen(false); onApplyCustom("skin", latestRef.current); };
-
-  return (
-    <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-      <p style={{ fontSize:10, fontWeight:800, color:"#aaa", letterSpacing:1.1,
-        margin:0, textTransform:"uppercase" }}>
-        Pick a skin tone, then adjust the shade.
-      </p>
-
-      <div style={{ display:"flex", flexWrap:"wrap", gap:7, alignItems:"center" }}>
-        {/* Base tone row */}
-        {SKINS.map(v => (
-          <button key={v}
-            onClick={() => {
-              setSkinBase(v);
-              setPickerOpen(false);
-              const { h } = hexToHsv(v);
-              const mid = hsvToHex(h, 0.15 + 0.5*0.70, 0.95 - 0.5*0.63);
-              onApply("skin", mid);
-            }}
-            style={{
-              width:32, height:32, borderRadius:"50%", background:v,
-              cursor:"pointer", border:"none", padding:0, flexShrink:0,
-              ...ring(skinBase === v),
-            }}
-          />
-        ))}
-
-        {/* Saved custom skin tones */}
-        {saved.map((v, i) => (
-          <div key={"cs"+i} style={{ position:"relative", flexShrink:0 }}>
-            <button
-              onClick={() => { onApply("skin", v); setPickerOpen(false); }}
-              style={{
-                width:32, height:32, borderRadius:"50%", background:v,
-                cursor:"pointer", border:"none", padding:0,
-                ...ring(ch.skin === v),
-              }}
-            />
-            <button
-              onClick={e => { e.stopPropagation(); onRemoveCustom("skin", i); }}
-              style={{
-                position:"absolute", top:-4, right:-4,
-                width:14, height:14, borderRadius:"50%",
-                background:"#e74c3c", border:"2px solid #fff",
-                cursor:"pointer", fontSize:8, color:"#fff",
-                display:"flex", alignItems:"center", justifyContent:"center",
-                padding:0, lineHeight:1,
-              }}
-            >×</button>
-          </div>
-        ))}
-
-        {/* + custom skin */}
-        <button onClick={handleOpen}
-          style={{
-            width:32, height:32, borderRadius:"50%", flexShrink:0,
-            border:"2px dashed #bbb",
-            background: pickerOpen ? A : "rgba(67,97,238,.06)",
-            cursor:"pointer", fontSize:14, color: pickerOpen ? "#fff" : "#888",
-            display:"flex", alignItems:"center", justifyContent:"center",
-          }}
-        >{pickerOpen ? "×" : "+"}</button>
-      </div>
-
-      {/* Shade slider — visible when a base is selected and picker is closed */}
-      {!pickerOpen && skinBase && (
-        <SkinSlider
-          base={skinBase}
-          value={ch.skin || "#FDDBB4"}
-          onChange={hex => onApply("skin", hex)}
-        />
-      )}
-
-      {/* Full colour picker */}
-      {pickerOpen && (
-        <div style={{ borderRadius:16, overflow:"hidden", background:"#18182a",
-          boxShadow:"0 6px 32px rgba(0,0,0,.4)" }}>
-          <ColorPicker value={pickerSeed} onChange={handleLivePick} onClose={handleDone} />
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ─── CHARACTER MODAL ──────────────────────────────────────────────────────────
-function CharacterModal({ character, onChange, onClose }) {
-  const ch = character;  // alias for readability — always current via prop
-
-  // ── Tabs ───────────────────────────────────────────────────────────────────
-  const [tab, setTab] = useState("face");
-
-  // ── Colour palettes ────────────────────────────────────────────────────────
-  const HAIRS   = ["#0d0d0d","#1a0a00","#2C1810","#4A2912","#7B4F2C","#B5651D","#C9A96E","#EDD9A3","#F2E6C8","#C0392B","#E74C3C","#F39C12","#8E44AD","#2980B9","#27AE60","#1ABC9C","#fd79a8","#00CED1","#FF6347","#808080"];
-  const EYES    = ["#1a3a5c","#2980B9","#74b9ff","#27AE60","#52BE80","#2d6a4f","#8B6914","#C8A84B","#2C2C2C","#6B4226","#C0392B","#8E44AD","#00b894"];
-  const TOPS    = ["#1a1a2e","#2C3E50","#34495E","#7f8c8d","#E74C3C","#C0392B","#E67E22","#F39C12","#27AE60","#16A085","#2980B9","#1abc9c","#8E44AD","#fd79a8","#FFFFFF","#ECF0F1"];
-  const LIP_C   = ["#C0392B","#E74C3C","#c0706a","#fd79a8","#8E44AD","#D35400","#FF1493","#DC143C"];
-  const BG      = ["#dce8ff","#e8f4ff","#dfe6e9","#ffeaa7","#d5f5e3","#f8d7e3","#e8daef","#ffddd2","#c8e6c9","#fff3e0","#1a1a2e","#2d3436","#6c5ce7","#00b894"];
-  const HAT_C   = ["#E74C3C","#2C3E50","#F39C12","#2980B9","#27AE60","#8E44AD","#1a1a2e","#ECF0F1","#fd79a8","#C0392B","#D35400","#16A085","#FF69B4","#800020"];
-  const GLASS_C = ["#333333","#1a1a2e","#8B4513","#C0392B","#2980B9","#27AE60","#8E44AD","#F39C12","#FFD700","#E0E0E0","#00CED1","#FF69B4"];
-  const JEWEL_C = ["#f0c040","#FFD700","#C0C0C0","#E8E8E8","#B87333","#E74C3C","#2980B9","#27AE60","#8E44AD","#FF69B4","#00CED1","#fff"];
-
-  // ── Option lists ───────────────────────────────────────────────────────────
-  const HAIR_NAMES    = ["Buzz","Side-part","Fringe","Textured","Long","Wavy","Ponytail","Bun","Afro","Box braids","Curly","Locs","Faux hawk","Space buns","Mohawk","Dreadlocks","Slick back"];
-  const EYE_S         = ["Round","Almond","Cat-eye"];
-  const BROWS         = ["Arched","Straight","Thick","Sad"];
-  const MOUTHS        = ["Smile","Frown","Open","Smirk","Neutral"];
-  const HAT_NAMES     = ["None","Beanie","Cap","Cowboy","Grad cap","Crown","Party hat","Headband","Bucket hat"];
-  const GLASS_NAMES   = ["None","Round","Rectangular","Cat-eye","Sunglasses","Heart","Aviator","Monocle"];
-  const FACIAL_NAMES  = ["None","Stubble","Moustache","Short beard","Full beard","Goatee"];
-  const NECKLACE_NAMES= ["None","Gold chain","Pendant","Beads","Choker","Pearl"];
-  const EARRING_NAMES = ["None","Studs","Drops","Hoops","Stars","Dangles","Crosses"];
-  const TOPS_S = [
-    {id:0,label:"T-Shirt"},{id:1,label:"Hoodie"},{id:2,label:"Jacket"},
-    {id:3,label:"Tank Top"},{id:4,label:"Suit & Tie"},{id:5,label:"Crop Top"},
-    {id:6,label:"Polo"},{id:7,label:"Jersey"},{id:8,label:"Streetwear"},
-    {id:9,label:"Dress"},{id:10,label:"Blazer"},{id:11,label:"Graphic Tee"},
-    {id:12,label:"Varsity"},{id:13,label:"Kimono"},{id:14,label:"Turtleneck"},{id:15,label:"Denim"},
-  ];
-  const TABS = [
-    {id:"face",  label:"FACE"},
-    {id:"hair",  label:"HAIR"},
-    {id:"fit",   label:"FIT"},
-    {id:"acc",   label:"ACCS"},
-    {id:"extra", label:"EXTRA"},
-  ];
-
-  // ── Custom colours — persisted per-field in localStorage ──────────────────
-  const CUSTOM_KEY = "classio_custom_colors_v1";
-  const [customColors, setCustomColors] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(CUSTOM_KEY) || "{}"); }
-    catch { return {}; }
-  });
-
-  // ── skinBase ───────────────────────────────────────────────────────────────
-  // SKINS: single source of truth — swatches AND avatar use exactly these hex values
-  const SKINS = ["#FDDBB4","#F5C89A","#FFCBA4","#E8A87C","#D4956A","#C68642","#A0693A","#8D5524","#6B3A1F","#F4D6C8"];
-  const [skinBase, setSkinBase] = useState(() => {
-    const cur = hexToHsv(ensureHex(ch.skin || "#FDDBB4"));
-    let best = SKINS[0], bestD = 999;
-    for (const s of SKINS) {
-      const b = hexToHsv(s);
-      const d = Math.abs(cur.h - b.h) + Math.abs(cur.s - b.s) * 0.4;
-      if (d < bestD) { bestD = d; best = s; }
-    }
-    return best;
-  });
-
-  // ── applyField: apply a single field change immediately ───────────────────
-  // Spread character (the prop) directly — never a stale copy
-  const applyField = (field, value) => onChange({ ...character, [field]: value });
-
-  // ── applyCustomColor: save to list + select immediately ───────────────────
-  const applyCustomColor = (field, hex) => {
-    setCustomColors(prev => {
-      const existing = prev[field] || [];
-      const deduped  = [hex, ...existing.filter(c => c.toLowerCase() !== hex.toLowerCase())].slice(0, 8);
-      const next = { ...prev, [field]: deduped };
-      try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(next)); } catch {}
-      return next;
-    });
-    onChange({ ...character, [field]: hex });
-  };
-
-  // ── removeCustomColor: delete saved colour by index ───────────────────────
-  const removeCustomColor = (field, idx) => {
-    setCustomColors(prev => {
-      const next = { ...prev, [field]: (prev[field] || []).filter((_, i) => i !== idx) };
-      try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(next)); } catch {}
-      return next;
-    });
-  };
-
-  // ── Shared props object for AvatarSwatches ────────────────────────────────
-  const swatchProps = { ch, customColors, onApply:applyField, onApplyCustom:applyCustomColor, onRemoveCustom:removeCustomColor };
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // RENDER
-  // ─────────────────────────────────────────────────────────────────────────
-  // Lock scroll without ANY layout shift or jitter
-  // Strategy: pad body right by scrollbar width so removing scrollbar doesn't shift content
-  useEffect(() => {
-    const html = document.documentElement;
-    const body = document.body;
-    // Measure scrollbar width BEFORE locking
-    const sbW = window.innerWidth - html.clientWidth;
-    const prevBodyPR  = body.style.paddingRight;
-    const prevHtmlOF  = html.style.overflow;
-    const prevBodyOF  = body.style.overflow;
-    // Apply: compensate for scrollbar removal + lock
-    body.style.paddingRight  = `${sbW}px`;
-    html.style.overflow      = "hidden";
-    body.style.overflow      = "hidden";
-    return () => {
-      body.style.paddingRight  = prevBodyPR;
-      html.style.overflow      = prevHtmlOF;
-      body.style.overflow      = prevBodyOF;
-    };
-  }, []);
-
-  return (
-    <div
-      onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
-      style={{
-        position:"fixed", inset:0, zIndex:9999,
-        background:"rgba(0,0,0,.55)",
-        display:"flex", alignItems:"center", justifyContent:"center",
-        padding:16,
-      }}
-    >
-      <div
-        onMouseDown={e => e.stopPropagation()}
-        onClick={e => e.stopPropagation()}
-        style={{
-          width:"100%", maxWidth:520,
-          height:`min(680px, calc(100dvh - 32px))`,
-          display:"flex", flexDirection:"column",
-          background:"#fff", borderRadius:22,
-          boxShadow:"0 24px 80px rgba(0,0,0,.38)",
-          overflow:"hidden",
-          position:"relative",
-          zIndex:1,
-        }}
-      >
-        {/* ── Header ── */}
-        <div style={{
-          flexShrink:0, display:"flex", alignItems:"center", gap:12,
-          padding:"14px 16px 12px", borderBottom:"1px solid #f0f0f0",
-        }}>
-          <div style={{
-            width:52, height:52, borderRadius:"50%", overflow:"hidden", flexShrink:0,
-            boxShadow:"0 2px 10px rgba(0,0,0,.14)", border:"2px solid #f0f0f0",
-          }}>
-            <MiniAvatar character={ch} size={52} />
-          </div>
-          <div style={{ flex:1, minWidth:0 }}>
-            <p style={{ fontFamily:"'Fraunces Variable',serif", fontSize:16, fontWeight:900,
-              color:"#111", margin:"0 0 5px", lineHeight:1.2 }}>My Avatar</p>
-            <input
-              value={ch.name || ""}
-              onChange={e => onChange({ ...ch, name: e.target.value })}
-              placeholder="Nickname…"
-              style={{
-                border:"1.5px solid #e5e5e5", borderRadius:20,
-                padding:"4px 12px", fontSize:12, fontWeight:700,
-                outline:"none", color:"#111", background:"#f8f8f8",
-                width:"100%", boxSizing:"border-box",
-              }}
-            />
-          </div>
-          <button onClick={onClose} style={{
-            flexShrink:0, width:30, height:30, borderRadius:"50%",
-            background:"#f0f0f0", border:"none", cursor:"pointer",
-            fontSize:17, fontWeight:900, color:"#555",
-            display:"flex", alignItems:"center", justifyContent:"center",
-          }}>×</button>
-        </div>
-
-        {/* ── Tab bar ── */}
-        <div style={{
-          flexShrink:0, display:"flex", background:"#fff",
-          borderBottom:"1px solid #f0f0f0",
-        }}>
-          {TABS.map(t => (
-            <button key={t.id}
-              onClick={() => setTab(t.id)}
-              style={{
-                flex:1, padding:"8px 2px 7px", border:"none", cursor:"pointer",
-                background:"#fff", fontWeight:800, fontSize:10,
-                letterSpacing:.3, lineHeight:1.5, whiteSpace:"nowrap",
-                color: tab === t.id ? "#4361ee" : "#bbb",
-                borderBottom:`2.5px solid ${tab === t.id ? "#4361ee" : "transparent"}`,
-                transition:"color .12s, border-color .12s",
-              }}
-            >{t.emoji}<br />{t.label}</button>
-          ))}
-        </div>
-
-        {/* ── Scrollable content ── */}
-        <div style={{
-          flex:1, minHeight:0, overflowY:"auto", overflowX:"hidden",
-          padding:"18px 18px 12px",
-          display:"flex", flexDirection:"column", gap:22,
-          WebkitOverflowScrolling:"touch",
-        }}>
-
-          {/* ══ FACE ══ */}
-          {tab === "face" && <>
-            <AvatarSkinSection
-              ch={ch} skinBase={skinBase} setSkinBase={setSkinBase}
-              customColors={customColors}
-              onApply={applyField} onApplyCustom={applyCustomColor} onRemoveCustom={removeCustomColor}
-            />
-            <AvatarRow label="Eye Shape">
-              <AvatarChipGrid ch={ch} field="eyeShape" items={EYE_S} size={60} onApply={applyField} />
-            </AvatarRow>
-            <AvatarRow label="Eye Colour">
-              <AvatarSwatches {...swatchProps} field="eyes" vals={EYES} sz={26} />
-            </AvatarRow>
-            <AvatarRow label="Eyebrows">
-              <AvatarChipGrid ch={ch} field="eyebrow" items={BROWS} size={58} onApply={applyField} />
-            </AvatarRow>
-            <AvatarRow label="Expression">
-              <AvatarChipGrid ch={ch} field="mouth" items={MOUTHS} size={58} onApply={applyField} />
-            </AvatarRow>
-            <AvatarRow label="Facial Hair">
-              <AvatarChipGrid ch={ch} field="facialHair" items={FACIAL_NAMES} size={58} onApply={applyField} />
-            </AvatarRow>
-          </>}
-
-          {/* ══ HAIR ══ */}
-          {tab === "hair" && <>
-            <AvatarRow label="Hair Style">
-              <AvatarChipGrid ch={ch} field="hairStyle" items={HAIR_NAMES} size={64} onApply={applyField} />
-            </AvatarRow>
-            <AvatarRow label="Hair Colour">
-              <AvatarSwatches {...swatchProps} field="hair" vals={HAIRS} sz={26} />
-            </AvatarRow>
-          </>}
-
-          {/* ══ FIT ══ */}
-          {tab === "fit" && <>
-            <AvatarRow label="Outfit Style">
-              <AvatarChipGrid ch={ch} field="topStyle" items={TOPS_S} size={66} onApply={applyField} />
-            </AvatarRow>
-            <AvatarRow label="Outfit Colour">
-              <AvatarSwatches {...swatchProps} field="top" vals={TOPS} sz={26} />
-            </AvatarRow>
-            <AvatarRow label="Background">
-              <AvatarSwatches {...swatchProps} field="bg" vals={BG} sz={26} />
-            </AvatarRow>
-          </>}
-
-          {/* ══ ACCESSORIES ══ */}
-          {tab === "acc" && <>
-            <AvatarRow label="Hat">
-              <AvatarChipGrid ch={ch} field="hat" items={HAT_NAMES} size={60} onApply={applyField} />
-            </AvatarRow>
-            {ch.hat > 0 && (
-              <AvatarRow label="Hat Colour">
-                <AvatarSwatches {...swatchProps} field="hatColor" vals={HAT_C} sz={26} />
-              </AvatarRow>
-            )}
-            <AvatarRow label="Glasses">
-              <AvatarChipGrid ch={ch} field="glasses" items={GLASS_NAMES} size={60} onApply={applyField} />
-            </AvatarRow>
-            {ch.glasses > 0 && (
-              <AvatarRow label="Glasses Colour">
-                <AvatarSwatches {...swatchProps} field="glassesColor" vals={GLASS_C} sz={26} />
-              </AvatarRow>
-            )}
-            <AvatarRow label="Earrings">
-              <AvatarChipGrid ch={ch} field="earring" items={EARRING_NAMES} size={60} onApply={applyField} />
-            </AvatarRow>
-            {ch.earring > 0 && (
-              <AvatarRow label="Earring Colour">
-                <AvatarSwatches {...swatchProps} field="earringColor" vals={JEWEL_C} sz={26} />
-              </AvatarRow>
-            )}
-            <AvatarRow label="Necklace">
-              <AvatarChipGrid ch={ch} field="necklace" items={NECKLACE_NAMES} size={60} onApply={applyField} />
-            </AvatarRow>
-            {ch.necklace > 0 && (
-              <AvatarRow label="Necklace Colour">
-                <AvatarSwatches {...swatchProps} field="necklaceColor" vals={JEWEL_C} sz={26} />
-              </AvatarRow>
-            )}
-          </>}
-
-          {/* ══ EXTRA ══ */}
-          {tab === "extra" && <>
-            <AvatarTogglePair ch={ch} field="blush"    label="Blush"      onApply={applyField} />
-            <AvatarTogglePair ch={ch} field="lips"     label="Lip Gloss"  onApply={applyField} />
-            {ch.lips && (
-              <AvatarRow label="Lip Colour">
-                <AvatarSwatches {...swatchProps} field="lipColor" vals={LIP_C} sz={26} />
-              </AvatarRow>
-            )}
-            <AvatarTogglePair ch={ch} field="freckles" label="Freckles"   onApply={applyField} />
-            <button
-              onClick={() => onChange({
-                skin:"#FDDBB4", hair:"#3D2B1F", hairStyle:0, eyes:"#2980B9",
-                top:"#2C3E50", bg:"#dce8ff", mouth:0, eyebrow:0, eyeShape:0,
-                accessory:0, topStyle:0, blush:false, lips:false, freckles:false,
-                lipColor:"#d06060", hat:0, hatColor:"#E74C3C", glasses:0,
-                glassesColor:"#333333", facialHair:0, necklace:0,
-                necklaceColor:"#f0c040", earring:0, earringColor:"#f0c040",
-                name:ch.name,
-              })}
-              style={{
-                padding:"8px 18px", background:"#f0f0f0", border:"none",
-                borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer",
-                color:"#555", alignSelf:"flex-start",
-              }}
-            >Reset to Default</button>
-          </>}
-
-        </div>
-
-        {/* ── Done button ── */}
-        <div style={{
-          flexShrink:0, padding:"10px 18px",
-          paddingBottom:"max(12px, env(safe-area-inset-bottom, 12px))",
-          borderTop:"1px solid #f0f0f0", background:"#fff",
-        }}>
-          <button onClick={e => { e.stopPropagation(); onClose(); }} style={{
-            width:"100%", background:"#111", color:"#fff",
-            border:"none", borderRadius:8, padding:"13px",
-            fontSize:14, fontWeight:900, cursor:"pointer", letterSpacing:.4,
-          }}>Done</button>
-        </div>
-
-      </div>
-    </div>
-  );
-}
+function CharacterModal(props) { return <AvatarEditor {...props} />; }
 // ─── LINK FILES BUTTON ────────────────────────────────────────────────────────
 function LinkBtn({ file, allFiles, onSave }) {
   const [open, setOpen] = useState(false);
@@ -5331,19 +3475,7 @@ function LinkBtn({ file, allFiles, onSave }) {
 }
 
 
-function Splash() {
-  return (
-    <div style={{ minHeight:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center" }}>
-      <style>{GS}</style>
-      <div style={{ textAlign:"center" }}>
-        <div style={{ width:56, height:56, background:C.accent, borderRadius:18, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 16px" }}>
-          <Icon d={I.sparkle} size={24} color="#fff" sw={2} />
-        </div>
-        <p style={{ fontSize:15, color:C.muted, fontFamily:"'DM Sans Variable',sans-serif" }}>Loading…</p>
-      </div>
-    </div>
-  );
-}
+function Splash() { return <WorkspaceFrame />; }
 
 // ─── FOLDER VIEW ──────────────────────────────────────────────────────────────
 // ─── FILE COLOR PICKER ───────────────────────────────────────────────────────
@@ -5396,239 +3528,84 @@ function FileColorPicker({ file, onPick }) {
   );
 }
 
-function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFile, activeTab }) {
+function FolderView({ folder, onOpenFile, onUpdate, allFolders = [], onMoveFile, guest }) {
   const [dragging, setDragging] = useState(false);
-  const tab = activeTab || "files";
-  const [editingName, setEditingName] = useState(false);
-  const [folderName, setFolderName] = useState(folder.name);
-  const [showFolderColorPicker, setShowFolderColorPicker] = useState(false);
-  const [folderFileRenaming, setFolderFileRenaming] = useState(null); // {id,name}
-  const fileInput = useRef();
-
-  const addFiles = (list) => {
-    const added = Array.from(list).map(f => {
-      const id = `fi${Date.now()}-${Math.random()}`;
-      FILE_STORE.set(id, f);
-      idbSave(id, f); // persist to IndexedDB so it survives page close
-      return {
-        id, name: f.name, type: f.type, size: f.size,
-        colorIndex: 0, notes: "", studyCards: [], uploadedAt: new Date().toLocaleDateString(),
-        linkedFileIds: [], _fileObj: f,
-      };
+  const [rename, setRename] = useState(null);
+  const [remove, setRemove] = useState(null);
+  const [appearance, setAppearance] = useState(null);
+  const fileInput = useRef(null);
+  const addFiles = list => {
+    const added = Array.from(list).map(blob => {
+      const id = makeStudyId();
+      FILE_STORE.set(id, blob);
+      if (!guest) idbSave(id, blob);
+      return { id, name: blob.name, type: blob.type, size: blob.size, colorIndex: 0, notes: "", studyCards: [],
+        uploadedAt: new Date().toLocaleDateString(), linkedFileIds: [], _fileObj: blob };
     });
     onUpdate({ ...folder, files: [...folder.files, ...added] });
   };
-
-
-  return (
-    <>
-    <div  style={{ minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans Variable',sans-serif" }}>
-      <style>{GS}</style>
-      {/* Top bar */}
-      <div className="app-header" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", height:64, display:"flex", alignItems:"center", gap:16 }}>
-        <button onClick={onBack} className="hov" style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14, fontWeight:500, padding:"6px 10px", borderRadius:8 }}>
-          <Icon d={I.back} size={16} color={C.muted} /> Back
-        </button>
-        <div style={{ width:1, height:20, background:C.border }} />
-        <div style={{ display:"flex", alignItems:"center", gap:10, flex:1 }}>
-          <div style={{ width:34, height:34, background:folder.color+"22", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center" }}>
-            <Icon d={I.folder} size={18} color={folder.color} />
-          </div>
-          {editingName
-            ? <input autoFocus value={folderName} onChange={e => setFolderName(e.target.value)}
-                onBlur={() => { setEditingName(false); onUpdate({...folder,name:folderName||folder.name}); }}
-                onKeyDown={e => { if(e.key==="Enter"){setEditingName(false);onUpdate({...folder,name:folderName||folder.name});} }}
-                style={{ fontSize:18, fontWeight:700, fontFamily:"'Fraunces Variable',serif", border:"none", borderBottom:`2px solid ${C.accent}`, outline:"none", background:"transparent", color:C.text, width:240 }} />
-            : <h1 onClick={() => setEditingName(true)} style={{ fontFamily:"'Fraunces Variable',serif", fontSize:20, fontWeight:700, color:C.text, cursor:"text" }} title="Click to rename">{folder.name}</h1>
-          }
-        </div>
-        <div style={{ display:"flex", gap:6, alignItems:"center", flexShrink:0 }}>
-          {FOLDER_COLORS.map(col => (
-            <button key={col} onClick={() => onUpdate({...folder,color:col})}
-              className="folder-color-btn no-min-h"
-              style={{ width:22, height:22, borderRadius:"50%", background:col, cursor:"pointer", flexShrink:0,
-                border:`3px solid ${folder.color===col?C.text:"transparent"}`,
-                boxShadow:`0 1px 3px rgba(0,0,0,${folder.color===col?".35":".12"})` }} />
-          ))}
-          <button onClick={() => setShowFolderColorPicker(p=>!p)}
-            className="folder-color-btn no-min-h"
-            style={{ width:22, height:22, borderRadius:"50%", cursor:"pointer",
-              border:"2px dashed #aaa", background:showFolderColorPicker?"#4361ee":"transparent",
-              display:"flex", alignItems:"center", justifyContent:"center",
-              fontSize:13, color:showFolderColorPicker?"#fff":"#888" }}>
-            {showFolderColorPicker?"×":"+"}
-          </button>
-        </div>
-      </div>
-      {/* Folder custom colour picker — slides open below topbar */}
-      {showFolderColorPicker && (
-        <div style={{ padding:"12px 24px 0", background:C.surface, borderBottom:`1px solid ${C.border}` }}>
-          <ColorPicker
-            value={folder.color || "#3D5A80"}
-            label="Folder Colour"
-            onChange={col => onUpdate({...folder, color:col})}
-            onClose={() => setShowFolderColorPicker(false)}
-          />
-        </div>
-      )}
-      {/* Tabs */}
-      {/* Tabs controlled by sidebar */}
-
-      <div className="page-inner" style={{ maxWidth:860, margin:"0 auto", padding:"32px 24px", overflow:"visible" }}>
-        {tab === "files" && (
-          <>
-            <div onDragOver={e=>{e.preventDefault();setDragging(true);}} onDragLeave={()=>setDragging(false)}
-              onDrop={e=>{e.preventDefault();setDragging(false);addFiles(e.dataTransfer.files);}}
-              onClick={()=>fileInput.current.click()}
-              style={{ border:`2px dashed ${dragging?"#286a9b":C.border}`, borderRadius:20, padding:"36px 24px", textAlign:"center", cursor:"pointer",
-                background:dragging?"#286a9b0d":C.surface,
-                marginBottom:24, transition:"all .2s", boxShadow:dragging?"0 0 0 3px #286a9b22":"none" }}>
-              <div style={{ width:52, height:52, background:dragging?"#286a9b15":C.accentL, borderRadius:16, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 14px", transition:"all .2s" }}>
-                <Icon d={I.upload} size={24} color={dragging?"#286a9b":C.accent} />
-              </div>
-              <p style={{ fontSize:15, fontWeight:700, color:dragging?"#286a9b":C.text, marginBottom:6 }}>
-                {dragging ? "Drop to upload" : "Drop files here or choose files"}
-              </p>
-              <p style={{ fontSize:12, color:C.muted, margin:0 }}>PDF, Word, PowerPoint, images, and more</p>
-              <input ref={fileInput} type="file" multiple style={{ display:"none" }} onChange={e=>addFiles(e.target.files)} />
-            </div>
-
-            {folder.files.length === 0
-              ? <div style={{ textAlign:"center", padding:"40px 0", color:C.muted }}><Icon d={I.file} size={40} color={C.border} /><p style={{ marginTop:12, fontSize:15 }}>No files yet</p></div>
-              : <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                  {folder.files.map((file,idx) => {
-                    const fc = getFileColor(file);
-                    const ext = (file.name||"").split(".").pop().toUpperCase();
-                    return (
-                      <div key={file.id} className="sq-card"
-                        style={{ padding:"14px 18px", minWidth:0 }}>
-                        <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-                          {/* File type icon with ext badge */}
-                          <div style={{ width:48, height:48, background:fc.bg, borderRadius:14, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", flexShrink:0, border:`1.5px solid ${fc.accent}22` }}>
-                            <Icon d={I.file} size={18} color={fc.accent} />
-                            <span style={{ fontSize:7, fontWeight:800, color:fc.accent, marginTop:2, letterSpacing:.5 }}>{ext.slice(0,4)}</span>
-                          </div>
-                          {/* File info */}
-                          <div style={{ flex:1, minWidth:0 }}>
-                            <p style={{ fontSize:14, fontWeight:600, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", margin:0 }}>{file.name}</p>
-                            <p style={{ fontSize:12, color:C.muted, margin:"3px 0 0", display:"flex", alignItems:"center", gap:6 }}>
-                              <span>{(file.size/1024).toFixed(1)} KB</span>
-                              <span style={{ color:C.border }}>·</span>
-                              <span>{file.uploadedAt}</span>
-                              {(file.linkedFileIds||[]).length > 0 && <>
-                                <span style={{ color:C.border }}>·</span>
-                                <span style={{ color:C.link, fontWeight:600 }}>{(file.linkedFileIds||[]).length} linked</span>
-                              </>}
-                            </p>
-                          </div>
-                          {/* Actions */}
-                          <div className="folder-file-actions" style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
-                            <FileColorPicker file={file}
-                              onPick={(patch) => onUpdate({...folder,files:folder.files.map(f=>f.id===file.id?{...f,...patch}:f)})}/>
-                            <LinkBtn file={file} allFiles={folder.files}
-                              onSave={ids => onUpdate({...folder,files:folder.files.map(f=>f.id===file.id?{...f,linkedFileIds:ids}:f)})} />
-                            <button onClick={() => onOpenFile(file)}
-                              style={{ display:"flex", alignItems:"center", gap:6, background:"#286a9b", color:"#fff", border:"none", borderRadius:10, padding:"8px 18px", fontSize:13, fontWeight:600, cursor:"pointer", boxShadow:"0 3px 10px rgba(22,86,76,.3)" }}>
-                              Open →
-                            </button>
-                            <FileActionsMenu
-                              file={file} folderId={folder.id} folders={allFolders||[]}
-                              onMove={(toFolderId) => { onUpdate({...folder,files:folder.files.filter(f=>f.id!==file.id)}); onMoveFile&&onMoveFile(file,toFolderId); }}
-                              onDelete={() => { idbDelete(file.id); FILE_STORE.delete(file.id); onUpdate({...folder,files:folder.files.filter(f=>f.id!==file.id)}); }}
-                              onRename={() => setFolderFileRenaming({id:file.id,name:file.name})}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-            }
-          </>
-        )}
-        {tab === "youtube" && <YouTubeTab file={{ id: folder.id + "_yt", name: folder.name, notes:"" }} onUpdate={() => {}} />}
-        {tab === "ai" && <AITab file={null} allFiles={folder.files} folder={folder} onUpdate={()=>{}} />}
-      </div>
+  const patchFile = (id, patch) => onUpdate({ ...folder, files: folder.files.map(file => file.id === id ? { ...file, ...patch } : file) });
+  return <section className="document-inner folder-workspace">
+    <header className="library-heading"><div><h1>{folder.name}</h1><p>{folder.files.length} files</p></div>
+      <div className="studio-controls"><button type="button" className="quiet-button is-primary" onClick={() => fileInput.current.click()}><UiIcon name="plus" />Upload</button>
+        <ActionMenu label="Folder options" items={[
+          { label: "Rename folder", run: () => setRename({ folder: true, name: folder.name }) },
+          { label: "Folder color", run: () => setAppearance(value => value === "folder" ? null : "folder") },
+        ]} /></div>
+    </header>
+    <input ref={fileInput} type="file" multiple hidden onChange={event => { addFiles(event.target.files); event.target.value = ""; }} />
+    {appearance === "folder" && <div className="folder-appearance"><label>Folder color<input type="color" aria-label="Folder color" value={/^#[\da-f]{6}$/i.test(folder.color || "") ? folder.color : "#286a9b"} onChange={event => onUpdate({ ...folder, color: event.target.value })} /></label>
+      <button type="button" className="quiet-button" onClick={() => setAppearance(null)}>Done</button></div>}
+    <div className={`folder-drop ${dragging ? "is-dragging" : ""}`} onDragOver={event => { event.preventDefault(); setDragging(true); }}
+      onDragLeave={() => setDragging(false)} onDrop={event => { event.preventDefault(); setDragging(false); addFiles(event.dataTransfer.files); }}>
+      <p>{dragging ? "Drop to upload" : "Drop documents here, or use Upload."}</p>
     </div>
-    {folderFileRenaming && (
-      <RenameDialog
-        title="Rename File"
-        defaultValue={folderFileRenaming.name}
-        placeholder="File name…"
-        onConfirm={(newName) => {
-          onUpdate({...folder, files:folder.files.map(f=>f.id===folderFileRenaming.id?{...f,name:newName}:f)});
-          setFolderFileRenaming(null);
-        }}
-        onCancel={() => setFolderFileRenaming(null)}
-      />
-    )}
-    </>
-  );
+    {!folder.files.length ? <div className="library-empty"><UiIcon name="folder" size={32} /><h2>No files in this folder</h2><p>Add documents or move notes here from your Library.</p></div>
+      : <div className="library-rows">{folder.files.map(file => <div key={file.id}>
+        <article className="library-row"><button className="library-open" onClick={() => onOpenFile(file)}><span className="library-file-icon" style={{ color: getFileColor(file).accent }}><UiIcon name={file.type === "text/youtube" ? "link" : "notes"} /></span>
+          <span><strong>{file.name}</strong><small>{file._isBlank ? "Note" : file.type === "text/youtube" ? "Link" : "Document"}{file.uploadedAt ? ` · ${file.uploadedAt}` : ""}</small></span></button>
+          <ActionMenu label={`Actions for ${file.name}`} items={[
+            { label: "Rename", run: () => setRename(file) },
+            ...(allFolders.some(item => item.id !== folder.id) ? [{ label: "Move to", items: allFolders.filter(item => item.id !== folder.id).map(item => ({ label: item.name, run: () => onMoveFile?.(file, item.id) })) }] : []),
+            { label: "Color and linked files", run: () => setAppearance(value => value === file.id ? null : file.id) },
+            { separator: true }, { label: "Delete", danger: true, run: () => setRemove(file) },
+          ]} />
+        </article>
+        {appearance === file.id && <div className="folder-appearance"><FileColorPicker file={file} onPick={patch => patchFile(file.id, patch)} />
+          <LinkBtn file={file} allFiles={folder.files} onSave={ids => patchFile(file.id, { linkedFileIds: ids })} />
+          <button type="button" className="quiet-button" onClick={() => setAppearance(null)}>Done</button></div>}
+      </div>)}</div>}
+    {rename && <RenameDialog title={rename.folder ? "Rename folder" : "Rename file"} defaultValue={rename.name} placeholder="Name"
+      onCancel={() => setRename(null)} onConfirm={name => { if (rename.folder) onUpdate({ ...folder, name }); else patchFile(rename.id, { name }); setRename(null); }} />}
+    {remove && <ConfirmDialog title={`Delete "${remove.name}"?`} message="This file will be removed from this workspace."
+      onCancel={() => setRemove(null)} onConfirm={() => { if (!guest) idbDelete(remove.id); FILE_STORE.delete(remove.id); onUpdate({ ...folder, files: folder.files.filter(file => file.id !== remove.id) }); setRemove(null); }} />}
+  </section>;
 }
 
+
 // ─── FILE VIEW ────────────────────────────────────────────────────────────────
-function FileView({ file, folder, allFiles, user, isGuest, onBack, onUpdate, activeTab, onTabChange }) {
+function FileView({ file, user, onUpdate, activeTab, onTabChange }) {
   const tab = activeTab || "view";
-  const setTab = onTabChange || (() => {});
-  const fc = getFileColor(file);
-
-  // Stop all audio whenever switching away from voice tab or leaving FileView
-  const stopAllAudio = () => {
+  const isBlank = file._isBlank || file.isBlankDoc || file.id.startsWith("blank_");
+  const selected = tab === "view" && isBlank ? file.defaultTab || "notes"
+    : tab === "view" && file.type === "text/youtube" ? "youtube" : tab;
+  const effective = ["learn", "ai"].includes(selected) ? "notes" : selected;
+  useEffect(() => () => {
     try { window.speechSynthesis?.cancel(); } catch {}
-    // Kill any playing HTML audio elements (Piper)
-    document.querySelectorAll("audio").forEach(a => { try { a.pause(); a.src = ""; } catch {} });
-  };
-
-  const handleTabChange = (newTab) => {
-    if (tab === "voice" && newTab !== "voice") stopAllAudio();
-    setTab(newTab);
-  };
-
-  const handleBack = () => {
-    stopAllAudio();
-    onBack();
-  };
-
-  // Stop audio when component unmounts (user navigates away entirely)
-  useEffect(() => { return () => stopAllAudio(); }, []);
-
-  return (
-    <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"'DM Sans Variable',sans-serif" }}>
-      <style>{GS}</style>
-      <div className="app-header" style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 24px", height:64, display:"flex", alignItems:"center", gap:10 }}>
-        <button onClick={handleBack} className="hov" style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14, fontWeight:500, padding:"6px 10px", borderRadius:8 }}>
-          <Icon d={I.back} size={16} color={C.muted} /> {folder.name}
-        </button>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.border} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <div style={{ width:26, height:26, background:fc.bg, borderRadius:7, display:"flex", alignItems:"center", justifyContent:"center" }}>
-            <Icon d={I.file} size={13} color={fc.accent} />
-          </div>
-          <span style={{ fontSize:15, fontWeight:600, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:360 }}>{file.name}</span>
-        </div>
-      </div>
-      {/* Tabs controlled by sidebar */}
-      {(() => {
-        const isBlank = file._isBlank || file.isBlankDoc || file.id.startsWith("blank_");
-        const effectiveTab = tab === "view" && isBlank ? file.defaultTab || "notes"
-          : tab === "view" && file.type === "text/youtube" ? "youtube" : tab;
-        if (effectiveTab === "view") return <ViewTab file={file} onUpdate={onUpdate} />;
-        return (
-          <div className="page-inner" style={{ maxWidth:900, margin:"0 auto", padding:"32px 24px", overflow:"visible" }}>
-            {effectiveTab==="learn" && <LearnMode key={file.id} file={file} onUpdate={onUpdate}
-              getFileText={() => extractFileText(file._fileObj || FILE_STORE.get(file.id))} />}
-            {effectiveTab==="notes" && <div key="notes" className="page-fade"><NotesTab key={file.id} file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} onTabChange={setTab} /></div>}
-            {effectiveTab==="voice" && <div key="voice" className="page-fade"><VoicePodcastTab file={file} onUpdate={onUpdate} user={user} /></div>}
-            {effectiveTab==="cards" && <div key="cards" className="page-fade"><CardsTab file={file} onUpdate={onUpdate} /></div>}
-            {effectiveTab==="ai"    && <div key="ai" className="page-fade"><AITab file={file} allFiles={allFiles} folder={folder} onUpdate={onUpdate} /></div>}
-            {effectiveTab==="game"  && <div key="game" className="page-fade"><GameTab file={file} /></div>}
-            {effectiveTab==="youtube" && <div key="yt" className="page-fade"><YouTubeTab file={file} onUpdate={onUpdate} /></div>}
-            {effectiveTab==="present" && <div key="present" className="page-fade"><PresentationTab file={file} onUpdate={onUpdate} /></div>}
-          </div>
-        );
-      })()}
-    </div>
-  );
+    document.querySelectorAll("audio").forEach(audio => { audio.pause(); });
+  }, [effective]);
+  return <div className="document-screen">
+    {effective === "view" ? <ViewTab file={file} onUpdate={onUpdate} /> : <div className="document-inner">
+      {effective === "notes" && <NotesTab key={file.id} file={file} onUpdate={onUpdate} user={user} />}
+      {effective === "voice" && <VoicePodcastTab file={file} onUpdate={onUpdate} user={user} />}
+      {["cards", "game"].includes(effective) && <section className="review-workspace"><nav className="workspace-tabs" aria-label="Review modes">
+        <button aria-pressed={effective === "cards"} onClick={() => onTabChange("cards")}>Flashcards</button>
+        <button aria-pressed={effective === "game"} onClick={() => onTabChange("game")}>Practice</button>
+      </nav><div className="review-content">{effective === "cards" ? <CardsTab file={file} onUpdate={onUpdate} /> : <GameTab file={file} />}</div></section>}
+      {effective === "youtube" && <YouTubeTab file={file} onUpdate={onUpdate} />}
+      {effective === "present" && <PresentationTab file={file} onUpdate={onUpdate} />}
+    </div>}
+  </div>;
 }
 function ViewTab({ file, onUpdate }) {
   const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
@@ -6680,11 +4657,10 @@ STRICT RULES — follow every single one:
                 </button>
               ) : (
                 <button onClick={stopVoice} disabled={processing} style={{ background:"#fff", color:C.red, border:`2px solid ${C.red}`, borderRadius:8, padding:"13px 38px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
-                  ⏹ Stop & Save
+                  Stop and save
                 </button>
               )}
             </div>
-          )}
 
           {/* Recordings list */}
           {/* Playback voice picker */}
@@ -7595,9 +5571,9 @@ function NotesTab({ file, onUpdate, user, onTabChange }) {
     const snapshot = await getDoc(doc(db, "users", user.uid, "savedNotes", file.id));
     return snapshot.data()?.notes || [];
   }, [file.id, user?.uid]);
-  return <NotesEditor file={file} fileObj={fileObj} onUpdate={onUpdate}
+  return <Suspense fallback={<div className="note-initial-frame" aria-busy="true" aria-label="Notes" />}><NotesEditor file={file} fileObj={fileObj} onUpdate={onUpdate}
     getFileText={() => extractFileText(fileObj)} readSavedNotes={readSavedNotes}
-    assistant={notes => <NotesTurboPanel file={file} notes={notes} lang="en-US" onTabChange={onTabChange} />} />;
+    /></Suspense>;
 }
 
 function NotesQASidebar({ file, notes, lang }) {
@@ -8534,7 +6510,7 @@ function YouTubeTab({ file, onUpdate }) {
   // Step 2: Get title via oEmbed (no API key, always works)
   const fetchTitle = async (vid) => {
     try {
-      const r = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${vid}&format=json`);
+      const r = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${vid}&format=json`, { signal: AbortSignal.timeout(5000) });
       if (!r.ok) return "";
       const d = await r.json();
       return d.title || "";
@@ -8561,15 +6537,13 @@ function YouTubeTab({ file, onUpdate }) {
         if (!vid) { setError("Invalid YouTube URL."); setLoading(false); return; }
         setStatus("Fetching transcript…");
         let { transcript, title: ytTitle } = await fetchTranscript(vid);
-        if (!ytTitle) { setStatus("Getting video info…"); ytTitle = await fetchTitle(vid); }
-        title = ytTitle || "YouTube Video";
         if (transcript && transcript.length > 200) {
+          if (!ytTitle) { setStatus("Getting video info…"); ytTitle = await fetchTitle(vid); }
+          title = ytTitle || "YouTube Video";
           content = transcript.slice(0, 16000);
           sourceLabel = "video transcript";
         } else {
-          content = null;
-          sourceLabel = "video title";
-          setStatus("No transcript — generating topic notes from title…");
+          throw new Error("The video transcript is unavailable. Paste its transcript below to generate notes.");
         }
       } else if (type === "wikipedia") {
         setStatus("Fetching Wikipedia article…");
@@ -8592,6 +6566,7 @@ function YouTubeTab({ file, onUpdate }) {
         sourceLabel = "webpage content";
       }
 
+      if (!content?.trim()) throw new Error("Could not read that source. Paste the source text below.");
       setStatus("Generating notes…");
 
       const modeGuide = mode === "simple"
@@ -8600,9 +6575,7 @@ function YouTubeTab({ file, onUpdate }) {
         : mode === "expert" ? "Graduate-level depth and technical detail."
         : "Detailed and comprehensive. Cover everything important.";
 
-      let notes;
-      if (content) {
-        notes = await callClaude(
+      const notes = await callClaude(
           `You are an expert note-taker. Generate structured study notes from the provided ${sourceLabel}.
 ${modeGuide}
 FORMAT: # Main Heading, ## Sub-heading, **bold** key terms, > definitions/formulas, - bullets.
@@ -8612,16 +6585,6 @@ Cover EVERY section. Only use content from the source.`,
           `Title: "${title}"\n\nSource (${sourceLabel}):\n${content}\n\nGenerate structured study notes.`,
           4000
         );
-      } else {
-        notes = await callClaude(
-          `You are an expert note-taker. Generate comprehensive study notes on the topic "${title}".
-Start with: "> Note: These notes cover the topic '${title}' — live video transcript was unavailable."
-Then cover the topic with # headings, **bold** key terms, - bullets, > definitions, [Image: term] tags.
-${modeGuide}`,
-          `Topic: "${title}". Generate detailed study notes from your knowledge.`,
-          3000
-        );
-      }
 
       setResult(notes);
     } catch(e) {
@@ -8631,10 +6594,13 @@ ${modeGuide}`,
   };
 
   const saveAll = async () => {
-    // 1. Save notes
+    if (saved || cardsLoading || !result) return;
+    // Keep rich text and embedded figures when appending link notes.
     const existing = file.notes || "";
-    const merged = existing ? existing + "\n\n---\nYOUTUBE NOTES\n\n" + result : result;
-    onUpdate({ ...file, notes: merged });
+    const merged = existing ? existing + "\n\n---\n\n" + result : result;
+    const mergedHtml = existing ? (file.notesHtml || markdownToNoteHtml(existing)) + markdownToNoteHtml("\n\n---\n\n" + result) : markdownToNoteHtml(result);
+    const next = { ...file, notes: merged, notesHtml: mergedHtml };
+    onUpdate(next);
     setSaved(true);
     // 2. Auto-generate flashcards from the notes
     setCardsLoading(true);
@@ -8644,10 +6610,11 @@ ${modeGuide}`,
         `Create 8 study flashcards from this content. JSON array format: [{"question":"…","answer":"…"}]\n\n${result.slice(0,8000)}`
       );
       const parsed = JSON.parse(raw.replace(/```json|```/g,"").trim());
-      const nc = parsed.map((c,i) => ({ id:Date.now()+i, ...c }));
+      if (!Array.isArray(parsed) || !parsed.length || parsed.some(card => typeof card.question !== "string" || typeof card.answer !== "string")) throw new Error("Incomplete flashcards");
+      const nc = parsed.slice(0, 20).map(card => ({ id: makeStudyId(), question: card.question.slice(0, 1000), answer: card.answer.slice(0, 3000) }));
       setYtCards(nc);
-      onUpdate({ ...file, notes: merged, studyCards: nc });
-    } catch(e) { console.warn("YT card gen failed:", e); }
+      onUpdate({ ...next, studyCards: [...(file.studyCards || []), ...nc] });
+    } catch(e) { setError("Notes saved. Flashcards could not be generated; try again from Review."); }
     setCardsLoading(false);
   };
 
@@ -8655,50 +6622,37 @@ ${modeGuide}`,
     <div>
       <div style={{ marginBottom:20 }}>
         <h2 style={{ fontFamily:"'Fraunces Variable',serif", fontSize:20, fontWeight:700, color:C.text, marginBottom:4 }}>Link Notes</h2>
-        <p style={{ fontSize:13, color:C.muted }}>Paste a public link to make study notes from a YouTube video, Wikipedia article or webpage.</p>
+        <p style={{ fontSize:13, color:C.muted }}>Make notes from a video transcript or readable webpage.</p>
       </div>
 
       <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:16, padding:"18px 20px", marginBottom:20 }}>
-        {/* Mode selector */}
-        <div style={{ marginBottom:14, display:"flex", gap:8, flexWrap:"wrap" }}>
-          {[
-            {id:"detailed",label:"Detailed",desc:"Full notes"},
-            {id:"simple",label:"Simple",desc:"Easy language"},
-            {id:"quick",label:"Quick",desc:"5 key points only"},
-            {id:"expert",label:"Expert",desc:"Deep technical"},
-          ].map(m => (
-            <button key={m.id} onClick={() => setMode(m.id)}
-              style={{ flex:"1 1 0", padding:"9px 12px", borderRadius:10, border:`1.5px solid ${mode===m.id?C.accent:C.border}`,
-                background:mode===m.id?"#286a9b15":"transparent", cursor:"pointer", textAlign:"left", transition:"all .15s" }}>
-              <p style={{ margin:"0 0 1px", fontSize:13, fontWeight:700, color:mode===m.id?C.link:C.text }}>{m.label}</p>
-              <p style={{ margin:0, fontSize:11, color:C.muted }}>{m.desc}</p>
-            </button>
-          ))}
-        </div>
+        <label className="link-note-style">Note style<select aria-label="Link note style" value={mode} onChange={event => setMode(event.target.value)}>
+          <option value="detailed">Detailed</option><option value="simple">Simple explanations</option><option value="quick">Five key points</option><option value="expert">Technical detail</option>
+        </select></label>
 
         {/* URL input */}
         <div style={{ display:"flex", gap:10 }}>
           <input
             value={url} onChange={e => { setUrl(e.target.value); setError(""); }}
             onKeyDown={e => { if (e.key==="Enter" && url.trim()) analyze(); }}
-            placeholder="Paste a public website or YouTube URL"
-            style={{ flex:1, border:`1.5px solid ${error?C.red:C.border}`, borderRadius:10, padding:"10px 14px",
+            aria-label="Source link" placeholder="Website or YouTube URL"
+            style={{ flex:1, minWidth:0, border:`1.5px solid ${error?C.red:C.border}`, borderRadius:10, padding:"10px 14px",
               fontSize:14, outline:"none", color:C.text, background:C.bg }}
           />
           <button onClick={analyze} disabled={loading || !url.trim()}
-            style={{ background:loading||!url.trim()?"#ccc":"linear-gradient(135deg,#DC2626,#c41c1c)", color:"#fff", border:"none", borderRadius:10,
+            style={{ background:"var(--app-accent)", color:"var(--app-on-accent)", border:"none", borderRadius:10,
               padding:"10px 20px", fontSize:14, fontWeight:700, cursor:loading||!url.trim()?"not-allowed":"pointer",
               display:"flex", alignItems:"center", gap:6, whiteSpace:"nowrap",
-              boxShadow:loading||!url.trim()?"none":"0 4px 14px rgba(220,38,38,.3)" }}>
+              boxShadow:"none" }}>
             {loading
               ? <><span style={{display:"flex",gap:3}}>{[0,1,2].map(i=><span key={i} style={{width:4,height:4,borderRadius:"50%",background:"#fff",animation:`bounce .9s ${i*0.15}s infinite`,display:"inline-block"}}/>)}</span>{status||"Working…"}</>
               : <><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Get Notes</>
             }
           </button>
         </div>
-        {error && <p style={{ fontSize:13, color:C.red, marginTop:8 }}>{error}</p>}
+        {error && <p role="alert" style={{ fontSize:13, color:C.red, marginTop:8 }}>{error}</p>}
         <p style={{ fontSize:11, color:C.muted, marginTop:10 }}>
-          Works with YouTube (any video, with or without transcript), Wikipedia articles, and any public webpage.
+          Uses an available YouTube transcript or readable webpage text. If access is blocked, paste the transcript or source text below.
         </p>
       </div>
 
@@ -8734,12 +6688,12 @@ Only include what's in the transcript.`,
               }} style={{ background:"transparent", border:`1.5px solid ${C.accent}`, color:C.link, borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
                 Generate Table
               </button>
-              <button onClick={saveAll} disabled={cardsLoading}
-                style={{ background:saved?"linear-gradient(135deg,#4A7C59,#4A9C69)":"#286a9b", color:"#fff",
+              <button onClick={saveAll} disabled={cardsLoading || saved}
+                style={{ background:"var(--app-accent)", color:"var(--app-on-accent)",
                   border:"none", borderRadius:10, padding:"8px 16px",
                   fontSize:13, fontWeight:700, cursor:cardsLoading?"not-allowed":"pointer",
                   display:"flex", alignItems:"center", gap:6 }}>
-                {cardsLoading ? "Making cards…" : saved ? "Saved + Cards" : "Save + Flashcards"}
+                {cardsLoading ? "Making cards…" : saved ? "Notes saved" : "Save and make flashcards"}
               </button>
               <button onClick={() => { setResult(""); setUrl(""); setError(""); setSaved(false); setYtTableData(null); }}
                 style={{ background:"none", border:`1.5px solid ${C.border}`, borderRadius:10, padding:"8px 14px", fontSize:13, color:C.muted, cursor:"pointer" }}>
@@ -8761,7 +6715,7 @@ Only include what's in the transcript.`,
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
           <div>
             <p style={{ fontSize:13, fontWeight:700, color:C.green, margin:0 }}>{ytCards.length} flashcards created</p>
-            <p style={{ fontSize:11, color:C.muted, margin:0 }}>Open the Study Cards tab to review them.</p>
+            <p style={{ fontSize:11, color:C.muted, margin:0 }}>Open Review to study these cards.</p>
           </div>
         </div>
       )}
@@ -8772,7 +6726,7 @@ Only include what's in the transcript.`,
             <svg width="26" height="26" viewBox="0 0 24 24" fill="#dc2626"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8z"/><polygon fill="#fff" points="9.75,15.5 15.5,12 9.75,8.5"/></svg>
           </div>
           <p style={{ fontSize:14, fontWeight:600, marginBottom:4 }}>Paste a YouTube link above</p>
-          <p style={{ fontSize:13 }}>When a video transcript is available, Classio uses it as the source.</p>
+          <p style={{ fontSize:13 }}>Video notes are based on the transcript. You can paste it if it is unavailable.</p>
         </div>
       )}
     </div>
@@ -9950,7 +7904,7 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
       {/* Header */}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18, flexWrap:"wrap", gap:10 }}>
         <div>
-          <h2 style={{ fontFamily:"'Fraunces Variable',serif", fontSize:24, fontWeight:800, color:C.text, margin:0 }}>AI Presentation</h2>
+          <h2 style={{ fontFamily:"'Fraunces Variable',serif", fontSize:24, fontWeight:800, color:C.text, margin:0 }}>Slides</h2>
           <p style={{ margin:"3px 0 0", fontSize:13, color:C.muted }}>Build a presentation from a topic or study file.</p>
         </div>
         <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
@@ -9992,19 +7946,11 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
       </div>}
       <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:16, padding:"18px 20px", marginBottom:18 }}>
         {/* Topic input + controls */}
-        <div className="studio-controls" style={{ marginBottom:8 }}>
-          <label>Design options <select value={optionCount} onChange={event => setOptionCount(Number(event.target.value))} disabled={!!proposedDeck}>
-            <option value="2">Two</option><option value="3">Three</option>
-          </select></label>
-          <label>Slide layout <select value={layout} onChange={event => {
-            const selected = event.target.value; setLayout(selected); onUpdate({ ...file, presentationLayout: selected });
-          }}>{deckDesigns.map(choice => <option key={choice.id} value={choice.id}>{choice.name}</option>)}</select></label>
-        </div>
         <div style={{ display:"flex", gap:10, marginBottom:14, flexWrap:"wrap" }}>
           <input value={topic} onChange={e=>setTopic(e.target.value)}
             onKeyDown={e=>{ if(e.key==="Enter") generate(); }}
-            placeholder="Enter any topic (e.g. 'Radioactivity', 'World War II', 'Climate Change')…"
-            style={{ flex:1, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 14px", fontSize:14, outline:"none", color:C.text, background:C.bg, fontFamily:"'DM Sans Variable',sans-serif", minWidth:220 }}
+            aria-label="Presentation topic" placeholder="Topic, or leave blank to use this file"
+            style={{ flex:"1 1 220px", border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 14px", fontSize:14, outline:"none", color:C.text, background:C.bg, fontFamily:"'DM Sans Variable',sans-serif", minWidth:0 }}
             onFocus={e=>e.target.style.borderColor=C.accent}
             onBlur={e=>e.target.style.borderColor=C.border}/>
           <div style={{ display:"flex", alignItems:"center", gap:6, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"8px 12px", background:C.bg }}>
@@ -10023,7 +7969,15 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
           </button>
         </div>
 
-        {/* Theme + layout options */}
+        <details className="deck-options"><summary>Design and slide options</summary>
+        <div className="studio-controls" style={{ marginBottom:8 }}>
+          <label>Design options <select value={optionCount} onChange={event => setOptionCount(Number(event.target.value))} disabled={!!proposedDeck}>
+            <option value="2">Two</option><option value="3">Three</option>
+          </select></label>
+          <label>Slide layout <select value={layout} onChange={event => {
+            const selected = event.target.value; setLayout(selected); onUpdate({ ...file, presentationLayout: selected });
+          }}>{deckDesigns.map(choice => <option key={choice.id} value={choice.id}>{choice.name}</option>)}</select></label>
+        </div>
         <div style={{ display:"flex", flexWrap:"wrap", gap:16, alignItems:"flex-start" }}>
           <div>
             <p style={{ fontSize:10, fontWeight:800, color:C.muted, letterSpacing:.8, textTransform:"uppercase", margin:"0 0 6px" }}>Theme</p>
@@ -10085,6 +8039,7 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
             </div>
           )}
         </div>
+        </details>
       </div>
 
       {/* Empty state */}
@@ -10093,14 +8048,7 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={C.border} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{marginBottom:14}}><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
           <p style={{ fontSize:16, fontWeight:600, color:C.text, marginBottom:6 }}>Start with any topic</p>
           <p style={{ fontSize:13, color:C.muted, marginBottom:16 }}>Enter a topic or choose a study file.</p>
-          <div style={{ display:"flex", gap:8, justifyContent:"center", flexWrap:"wrap" }}>
-            {["Photosynthesis","The Solar System","World War II","Climate Change","Algebra Basics"].map(s=>(
-              <button key={s} onClick={()=>setTopic(s)}
-                style={{ padding:"6px 14px", borderRadius:8, border:`1.5px solid ${C.border}`, background:C.bg, color:C.text, fontSize:12, fontWeight:600, cursor:"pointer" }}>
-                {s}
-              </button>
-            ))}
-          </div>
+
         </div>
       )}
 

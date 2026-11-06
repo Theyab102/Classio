@@ -21,7 +21,7 @@ export function parseLessonPlan(raw) {
   });
 }
 
-export default function LearnMode({ file, getFileText, onUpdate }) {
+export default function LearnMode({ file, getFileText, onUpdate, onUseAsNotes }) {
   const [topic, setTopic] = useState("");
   const [active, setActive] = useState(0);
   const [choice, setChoice] = useState(null);
@@ -75,17 +75,18 @@ export default function LearnMode({ file, getFileText, onUpdate }) {
 
   return (
     <section className="study-tool" aria-labelledby="learn-title">
-      <h2 id="learn-title">Learn Mode</h2>
-      <p>Build a short course from this file, your notes, or a topic. Each lesson ends with a knowledge check.</p>
+      <h2 id="learn-title">Lessons</h2>
+      <p>Turn your notes or a topic into short lessons with practice questions.</p>
       <form onSubmit={generate} className="study-tool-actions">
-        <label htmlFor="course-topic">Course topic</label>
+        <label htmlFor="course-topic">Topic</label>
         <input id="course-topic" placeholder="Optional if this file has study material" value={topic} onChange={event => setTopic(event.target.value)} />
-        <button type="submit" disabled={loading}>{loading ? "Building course…" : units.length ? "Build a new course" : "Build course"}</button>
+        <button type="submit" disabled={loading}>{loading ? "Generating…" : units.length ? "Generate new lessons" : "Generate lessons"}</button>
       </form>
       {error && <p role="alert">{error}</p>}
       {unit && (
         <>
           <p role="status">{completed.length} of {units.length} lessons completed</p>
+          {onUseAsNotes && <button type="button" onClick={() => onUseAsNotes(units.map(item => `## ${item.title}\n\n${item.lesson}`).join("\n\n"))}>Add lessons to notes</button>}
           <nav aria-label="Course lessons" className="study-tool-actions">
             {units.map((item, index) => <button key={index} type="button" aria-current={index === active ? "step" : undefined} onClick={() => select(index)}>{index + 1}. {item.title}{completed.includes(index) ? " (done)" : ""}</button>)}
           </nav>
