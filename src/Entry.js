@@ -2,16 +2,14 @@ import { lazy, Suspense, useState } from "react";
 import { checkBirthDate } from "./eligibility";
 import { LegalLinks, LegalPage, legalPages } from "./Legal";
 import "./entry.css";
+import { readAccess, rememberAccess } from "./access";
+import { ThemeSelector, useThemeMode } from "./theme";
+import WorkspaceBoundary from "./WorkspaceBoundary";
 
 const Workspace = lazy(() => import("./App"));
-const accessKey = "classio_access_v1";
-
-function readAccess() {
-  try { return sessionStorage.getItem(accessKey); }
-  catch { return null; }
-}
 
 export default function Entry() {
+  useThemeMode();
   const [access, setAccess] = useState(readAccess);
   const [screening, setScreening] = useState(false);
   const [error, setError] = useState("");
@@ -19,11 +17,11 @@ export default function Entry() {
   const page = legalPages[window.location.pathname.replace(/\/$/, "")];
   if (page) return <LegalPage page={page} />;
   if (access === "accepted") {
-    return <Suspense fallback={<p className="entry-loading" role="status">Loading Classio…</p>}><Workspace /></Suspense>;
+    return <WorkspaceBoundary><Suspense fallback={<p className="entry-loading" role="status">Opening your workspace…</p>}><Workspace /></Suspense></WorkspaceBoundary>;
   }
 
   function setDecision(decision) {
-    try { sessionStorage.setItem(accessKey, decision); } catch {}
+    rememberAccess(decision);
     setAccess(decision);
   }
 
@@ -42,10 +40,10 @@ export default function Entry() {
 
   return (
     <div className="entry-shell">
-      <header className="entry-header"><a className="entry-brand" href="/"><img src="/ClassioLogo.png" width="32" height="32" alt="" />Classio</a></header>
+      <header className="entry-header"><a className="entry-brand" href="/"><img src="/ClassioLogo.png" width="32" height="32" alt="" />Classio</a><ThemeSelector /></header>
       <main className="entry-main">
         <div className="entry-intro">
-          <p className="entry-kicker">Free study workspace</p>
+          <p className="entry-kicker">Free study workspace · Ages 13+</p>
           <h1>Keep your study files, notes and flashcards together.</h1>
           <p>Organize class materials in folders, turn a reading into revision notes, and test what you remember with flashcards and quizzes.</p>
           <ul className="entry-feature-list">
@@ -53,6 +51,7 @@ export default function Entry() {
             <li>Make notes from your own materials</li>
             <li>Review with flashcards and quizzes</li>
           </ul>
+          <p className="entry-session-note">Every study tool is free to use as a guest. Sign in with Google inside the workspace to save and sync progress. Guest work clears when you reload or close the session.</p>
         </div>
         <section className="entry-card" aria-labelledby="entry-step">
           {access === "blocked" ? (
@@ -72,7 +71,7 @@ export default function Entry() {
           ) : screening ? (
             <form onSubmit={submitBirthDate}>
               <h2 id="entry-step">Check eligibility</h2>
-              <p>Your date of birth stays in this form. Classio remembers the result in this tab.</p>
+              <p>Your date of birth stays in this form. Classio remembers the eligibility result in this browser.</p>
               <label htmlFor="birth-date">Date of birth</label>
               <input id="birth-date" name="birthDate" type="date" required onInput={() => setError("")} />
               {error && <p className="entry-error" role="alert">{error}</p>}

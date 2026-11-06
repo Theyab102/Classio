@@ -1,3 +1,4 @@
+import { ThemeSelector } from "./theme";
 const operator = process.env.REACT_APP_CLASSIO_OPERATOR || "Classio";
 const contactEmail = process.env.REACT_APP_CLASSIO_CONTACT_EMAIL;
 const copyrightEmail = process.env.REACT_APP_CLASSIO_COPYRIGHT_EMAIL || contactEmail;
@@ -18,11 +19,11 @@ export const legalPages = {
       <>
         <p>This policy explains how {operator} handles information when you visit Classio or use its study tools.</p>
         <h2>Eligibility</h2>
-        <p>Classio is intended for people aged 13 or older. The age check runs in your browser. Classio keeps the eligibility result and your terms acknowledgment in the current browser tab. It does not send or store your date of birth.</p>
+        <p>Classio is intended for people aged 13 or older. The age check runs in your browser. Classio keeps the eligibility result and your terms acknowledgment in this browser. It does not send or store your date of birth. An ineligible result can be checked again after one day.</p>
         <h2>Accounts and study materials</h2>
         <p>Google sign-in and Firebase process your account identifier and basic Google profile details. If you choose to sign in, Firebase may store your synced folder information, progress and study content. Guest work is kept for the open workspace session. Where group features are available, Firebase also stores shared group activity. Classio keeps original personal file uploads and some preferences in your browser. Files and messages shared with a study group can be accessed by people in the group.</p>
         <h2>Optional study tools</h2>
-        <p>When you use an AI tool, Classio sends the prompt, relevant study text, chat context, selected image or selected audio needed for the request to Groq through Classio’s server. To enforce short-lived AI request limits, the server stores a keyed hash of your connection’s IP address alongside a request count. Some tools also contact Wikimedia, YouTube, YouTubeTranscript or Pollinations to find media, read public links or generate an image you request. Live speech may use your browser’s speech provider. Downloading podcast audio sends the script to Classio’s Piper service on Hugging Face. Microphone and screen sharing require your browser’s permission.</p>
+        <p>When you use an AI tool, Classio sends the prompt, relevant study text, chat context, selected image or selected audio needed for the request to Groq or, on deployments where it is enabled, Google Gemini through Classio’s server. To enforce short-lived AI request limits, the server stores a keyed hash of your connection’s IP address alongside a request count. Some tools also contact Wikimedia, YouTube, YouTubeTranscript or Pollinations to find media, read public links or generate an image you request. Live speech may use your browser’s speech provider. Downloading podcast audio sends the script to Classio’s Piper service on Hugging Face. Microphone and screen sharing require your browser’s permission.</p>
         <h2>Hosting and tracking</h2>
         <p>Notes and presentation image searches send search terms to Wikimedia Commons. Displaying those images can contact Wikimedia’s image servers. Opening the separate Google Images search sends the search term to Google. When you view a PDF or extract a figure from it, Classio processes the PDF in your browser. Using AI on the PDF can send selected study text to the AI provider as described above.</p>
         <p>The hosting and authentication providers may process connection and security logs. Classio uses browser storage for features such as sign-in, settings and saved work. This version does not include ad tracking, Google Analytics or session replay. Its fonts are served with the app.</p>
@@ -86,7 +87,7 @@ export function LegalLinks() {
 export function LegalPage({ page }) {
   return (
     <div className="entry-shell">
-      <header className="entry-header"><a className="entry-brand" href="/"><img src="/ClassioLogo.png" width="32" height="32" alt="" />Classio</a></header>
+      <header className="entry-header"><a className="entry-brand" href="/"><img src="/ClassioLogo.png" width="32" height="32" alt="" />Classio</a><ThemeSelector /></header>
       <main className="legal-page">
         <h1>{page.title}</h1>
         {page.content}

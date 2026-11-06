@@ -1,4 +1,4 @@
-const { beforeEach, test } = require("node:test");
+const { beforeEach, after, test } = require("node:test");
 const assert = require("node:assert/strict");
 
 let requestQuota;
@@ -12,6 +12,9 @@ require.cache[quotaPath] = {
 };
 const study = require("../api/study");
 const { parseAudioRequest } = require("./study-request");
+const previousKey = process.env.GROQ_API_KEY;
+process.env.GROQ_API_KEY = "test-only-provider-key";
+after(() => { if (previousKey === undefined) delete process.env.GROQ_API_KEY; else process.env.GROQ_API_KEY = previousKey; });
 
 beforeEach(() => {
   requestQuota = {};

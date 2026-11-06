@@ -9,8 +9,23 @@ jest.mock("./App", () => ({ __esModule: true, default: () => mockWorkspace() }))
 
 beforeEach(() => {
   sessionStorage.clear();
+  localStorage.clear();
   window.history.replaceState({}, "", "/");
   mockWorkspace.mockImplementation(() => <p>Workspace loaded</p>);
+});
+
+test("remembers accepted eligibility when a returning visitor opens a new tab", async () => {
+  const page = render(<Entry />);
+  enterBirthDate("2000-01-01");
+  fireEvent.click(screen.getByRole("checkbox"));
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Open workspace" })); });
+  expect(await screen.findByText("Workspace loaded")).toBeInTheDocument();
+  page.unmount();
+  sessionStorage.clear();
+  render(<Entry />);
+  expect(await screen.findByText("Workspace loaded")).toBeInTheDocument();
+  expect(screen.queryByLabelText("Date of birth")).not.toBeInTheDocument();
+  expect(localStorage.getItem("classio_access_v2")).not.toContain("2000-01-01");
 });
 
 function enterBirthDate(value) {

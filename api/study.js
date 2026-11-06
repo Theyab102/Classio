@@ -1,30 +1,15 @@
 const { configured, reserveRequest } = require("../server/ai-quota");
 const { parseAudioRequest, parseStudyRequest } = require("../server/study-request");
 
-const GROQ_URL = "https://api.groq.com/openai/v1";
+const { availableProviders, generateStudy } = require("../server/ai-providers");
 
-async function studyResponse(input) {
-  if (input.audio) {
-    const form = new FormData();
-    form.set("model", "whisper-large-v3-turbo");
-    form.set("file", new Blob([Buffer.from(input.audio, "base64")]), input.filename);
-    return fetch(`${GROQ_URL}/audio/transcriptions`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
-      body: form,
-      signal: AbortSignal.timeout(30_000),
-    });
-  }
-
-  const model = input.vision
-    ? process.env.GROQ_VISION_MODEL || "qwen/qwen3.8-27b"
-    : process.env.GROQ_TEXT_MODEL || "openai/gpt-oss-120b";
-  return fetch(`${GROQ_URL}/chat/completions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
-    body: JSON.stringify({ model, messages: input.messages, max_completion_tokens: input.maxTokens }),
-    signal: AbortSignal.timeout(25_000),
-  });
+async function requestQuota(req, action) {
+  let timer;
+  try {
+    return await Promise.race([reserveRequest(req, action), new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error("QUOTA_TIMEOUT")), 8000);
+    })]);
+  } finally { clearTimeout(timer); }
 }
 
 module.exports = async function study(req, res) {
@@ -45,23 +30,28 @@ module.exports = async function study(req, res) {
   const audio = req.body?.kind === "audio";
   const input = audio ? parseAudioRequest(req.body) : parseStudyRequest(req.body);
   if (!input) return res.status(400).json({ error: "This request is invalid or too large. Check the file or shorten the input." });
-  if (!configured()) return res.status(503).json({ error: "AI study tools are unavailable." });
+  if (!configured() || !availableProviders().length) return res.status(503).json({ error: "AI is not connected on this deployment. You can still use and edit your workspace.", code: "AI_NOT_CONFIGURED" });
 
   try {
-    const quota = await reserveRequest(req, audio ? "audio" : "study");
+    const quota = await requestQuota(req, audio ? "audio" : "study");
     if (quota.unavailable) return res.status(503).json({ error: "AI study tools are temporarily unavailable." });
     if (quota.retryAfter) {
       res.setHeader("Retry-After", String(quota.retryAfter));
       return res.status(429).json({ error: "The free AI request limit was reached. Try again later." });
     }
-    const upstream = await studyResponse(input);
-    if (upstream.status === 429) return res.status(429).json({ error: "The free AI service is busy. Try again later." });
-    if (!upstream.ok) return res.status(502).json({ error: audio ? "The audio could not be transcribed." : "The AI service could not complete this request." });
-    const data = await upstream.json();
-    const text = audio ? data.text : data.choices?.[0]?.message?.content;
-    if (typeof text !== "string" || !text.trim()) return res.status(502).json({ error: "The AI service returned an empty response." });
-    return res.status(200).json({ text });
-  } catch {
-    return res.status(503).json({ error: "AI study tools are temporarily unavailable." });
+    const result = await generateStudy(input, { report: details => console.warn("study_provider", details) });
+    return res.status(200).json(result);
+  } catch (error) {
+    const code = error.code || "QUOTA_UNAVAILABLE";
+    console.error("study_request", { code });
+    const messages = {
+      CONTENT_BLOCKED: "The AI service could not answer this request. Rephrase it or use different study material.",
+      OUTPUT_LIMIT: "The answer was too long to finish. Ask for a shorter response or a smaller course.",
+    };
+    const status = error.status || 503;
+    if (status === 429) res.setHeader("Retry-After", "30");
+    return res.status(status).json({ error: messages[code] || (status === 429
+      ? "The free AI services are busy. Try again shortly."
+      : "The AI service could not complete this request. Your work is still open; try again shortly."), code });
   }
 };

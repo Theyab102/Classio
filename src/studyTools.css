@@ -3,7 +3,7 @@
 .study-tool p { line-height: 1.55; margin: .65rem 0; }
 .study-tool-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .6rem; margin: .9rem 0; }
 .study-tool-actions input { flex: 1 1 15rem; min-width: 0; padding: .55rem; border: 1px solid #82948d; border-radius: 6px; background: transparent; color: inherit; }
-.study-tool button, .study-tool-actions button, .study-tool-actions a { min-height: 36px; padding: .4rem .7rem; border: 1px solid #16564c; border-radius: 6px; background: #16564c; color: #fff; font: inherit; cursor: pointer; }
+.study-tool button, .study-tool-actions button, .study-tool-actions a { min-height: 36px; padding: .4rem .7rem; border: 1px solid #245f8c; border-radius: 6px; background: var(--app-accent); color: var(--app-on-accent); font: inherit; cursor: pointer; }
 .study-tool button:disabled, .study-tool-actions button:disabled { opacity: .7; cursor: wait; }
 .study-tool button[aria-current], .study-tool button[aria-pressed="true"] { outline: 2px solid #438975; outline-offset: 2px; }
 .study-lesson { border: 1px solid #82948d; border-radius: 8px; padding: 1rem; }

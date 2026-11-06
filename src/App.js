@@ -17,6 +17,9 @@ import { renderInkImage } from "./DocumentInk";
 import { AnnotatedDeckSlide, DeckDesignPicker, DeckSlide, deckDesigns, normalizeSlideTable, parseDeckResponse } from "./DeckDesign";
 import { getPdfFigures, isPdfFile, likelyStudyImage, prepareNoteImage, safeImageSource, searchStudyImages } from "./documentMedia";
 import { escapeHtml, sanitizeDocumentHtml } from "./safeContent";
+import { signInErrorMessage, withRestoreTimeout } from "./authErrors";
+import ResponsiveSidebar from "./ResponsiveSidebar";
+import { activeTheme, setThemePreference, useThemeMode } from "./theme";
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot, updateDoc, deleteDoc, serverTimestamp, query, orderBy, limit, getDocs, arrayUnion } from "firebase/firestore";
@@ -741,52 +744,35 @@ function useResponsive() {
 // ─── COLORS ───────────────────────────────────────────────────────────────────
 // ─── THEME SYSTEM ─────────────────────────────────────────────────────────────
 // ── Gradient helper used on buttons/bars ─────────────────────────────────────
-const PRIMARY = "#16564c";
+const PRIMARY = "#b8ddf8";
+function primaryInk(background, fallback) { return background === PRIMARY ? "#163b56" : fallback; }
 
 const THEMES = {
   light: {
-    bg:"#F8F7F4", surface:"#FFFFFF", border:"#EAE6E1", text:"#1A1714",
-    muted:"#625d57", accent:"#16564c", accentL:"#eaf3ef", accentS:"#b8d2c9",
-    warm:"#C17F5A", warmL:"#F5EDE5", green:"#4A7C59", greenL:"#E5F0E8",
-    purple:"#16564c", purpleL:"#EDE5F5", red:"#C45C5C", redL:"#F5E5E5",
-    sidebar:"#FFFFFF", sidebarActive:"#eaf3ef", navText:"#1A1714",
-    shadow:"0 2px 16px rgba(22,86,76,.07)", cardShadow:"0 4px 24px rgba(22,86,76,.10)",
-    grad: PRIMARY,
-    isDark:false,
+    bg:"#f7f9fc", surface:"#ffffff", border:"#d0dce6", text:"#1b2d3e", muted:"#536779",
+    accent:"#286a9b", link:"#245f8c", accentL:"#e5f3ff", accentS:"#b8ddf8",
+    warm:"#9b603c", warmL:"#f5ede5", green:"#3f714e", greenL:"#e5f0e8",
+    purple:"#286a9b", purpleL:"#e5f3ff", red:"#ac4049", redL:"#f5e5e5",
+    sidebar:"#ffffff", sidebarActive:"#e5f3ff", navText:"#1b2d3e",
+    shadow:"0 2px 16px rgba(25,70,110,.07)", cardShadow:"0 4px 24px rgba(25,70,110,.10)",
+    grad:PRIMARY, isDark:false,
   },
   dark: {
-    bg:"#1A1A15", surface:"#252520", border:"#2E2E28", text:"#EEECEA",
-    muted:"#b9b8ac", accent:"#86bba8", accentL:"#18362e", accentS:"#30584c",
-    warm:"#C17F5A", warmL:"#2A1F16", green:"#5A9C69", greenL:"#162218",
-    purple:"#9B7ECA", purpleL:"#261A35", red:"#D47070", redL:"#2A1616",
-    sidebar:"#131310", sidebarActive:"#252520", navText:"#EEECEA",
-    shadow:"0 2px 12px rgba(0,0,0,.6)", cardShadow:"0 4px 20px rgba(0,0,0,.55)",
-    grad: PRIMARY,
-    isDark:true,
+    bg:"#111c27", surface:"#1b2b3a", border:"#3b5266", text:"#eef5fc", muted:"#b5c8d8",
+    accent:"#286a9b", link:"#add8f8", accentL:"#203f59", accentS:"#527996",
+    warm:"#e1ae8e", warmL:"#382e29", green:"#94c6a1", greenL:"#203a2c",
+    purple:"#add8f8", purpleL:"#203f59", red:"#ffb1b8", redL:"#452c33",
+    sidebar:"#152332", sidebarActive:"#203f59", navText:"#eef5fc",
+    shadow:"0 2px 12px rgba(0,0,0,.35)", cardShadow:"0 4px 20px rgba(0,0,0,.3)",
+    grad:PRIMARY, isDark:true,
   },
 };
-let _isDark = false;
-try { _isDark = localStorage.getItem("classio_dark")==="true"; } catch {}
-if (_isDark && typeof document !== "undefined") { document.body.classList.add("classio-dark"); }
-let _themeCallbacks = [];
-function _getTheme() { return _isDark ? THEMES.dark : THEMES.light; }
-function _toggleTheme() {
-  _isDark = !_isDark;
-  try { localStorage.setItem("classio_dark", String(_isDark)); } catch {}
-  document.body.style.background = _getTheme().bg;
-  if (_isDark) document.body.classList.add("classio-dark"); else document.body.classList.remove("classio-dark");
-  _themeCallbacks.forEach(fn => fn());
-}
+function _getTheme() { return THEMES[activeTheme()]; }
+function _toggleTheme() { setThemePreference(activeTheme() === "dark" ? "light" : "dark"); }
 function useTheme() {
-  const [t, setT] = useState(() => _getTheme());
-  useEffect(() => {
-    const fn = () => setT(_getTheme());
-    _themeCallbacks.push(fn);
-    return () => { _themeCallbacks = _themeCallbacks.filter(f=>f!==fn); };
-  }, []);
-  return t;
+  const { resolved } = useThemeMode();
+  return THEMES[resolved];
 }
-// C = current theme (updated by re-renders via useTheme)
 let C = _getTheme();
 
 const FILE_COLORS = [
@@ -998,7 +984,7 @@ function MermaidBlock({ code }) {
 
   return (
     <div style={{ background:C.surface, border:`1.5px solid ${C.accentS}`, borderRadius:14, padding:"16px", margin:"8px 0", overflow:"auto" }}>
-      <p style={{ fontSize:10, fontWeight:700, color:C.accent, letterSpacing:.8, marginBottom:8 }}>DIAGRAM</p>
+      <p style={{ fontSize:10, fontWeight:700, color:C.link, letterSpacing:.8, marginBottom:8 }}>DIAGRAM</p>
       <div ref={ref} style={{ minHeight:60 }}/>
     </div>
   );
@@ -1288,10 +1274,12 @@ async function attachBlobs(raw) {
 }
 
 // ─── STANDALONE AI ASSISTANT ─────────────────────────────────────────────────
-function StandaloneAI({ onClose }) {
-  const [msgs, setMsgs] = useState([]);
+function StandaloneAI({ onClose, messages, onMessagesChange, pending, onPendingChange }) {
+  const msgs = messages;
+  const setMsgs = onMessagesChange;
   const [inp, setInp] = useState("");
-  const [loading, setLoading] = useState(false);
+  const loading = pending;
+  const setLoading = onPendingChange;
   const [attachedImage, setAttachedImage] = useState(null);
   const imgInputRef = useRef(null);
   const bottomRef = useRef(null);
@@ -1324,14 +1312,14 @@ function StandaloneAI({ onClose }) {
   return (
     <div style={{ position:"fixed", inset:0, zIndex:3000, background:"rgba(26,23,20,.55)",
       backdropFilter:"blur(4px)", display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <div style={{ background:C.bg, borderRadius:22, width:"100%", maxWidth:680,
-        height:"85vh", display:"flex", flexDirection:"column",
+      <div className="assistant-dialog" role="dialog" aria-modal="true" aria-label="AI Assistant" style={{ background:C.bg, borderRadius:10, width:"100%", maxWidth:680,
+        height:"min(85dvh, 780px)", maxHeight:"calc(100dvh - 32px)", display:"flex", flexDirection:"column",
         boxShadow:"0 24px 80px rgba(0,0,0,.2)", border:`1px solid ${C.border}` }}>
         {/* Header */}
         <div style={{ display:"flex", alignItems:"center", gap:12, padding:"16px 20px",
           borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
           <div style={{ width:40, height:40, borderRadius:12,
-            background:"#16564c",
+            background:"#286a9b",
             display:"flex", alignItems:"center", justifyContent:"center" }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8M12 5V3"/><circle cx="12" cy="3" r="1"/></svg>
           </div>
@@ -1339,7 +1327,7 @@ function StandaloneAI({ onClose }) {
             <p style={{ margin:0, fontSize:16, fontWeight:700, color:C.text }}>AI Assistant</p>
             <p style={{ margin:0, fontSize:12, color:C.muted }}>Ask anything · Attach images · Replies in your language</p>
           </div>
-          <button onClick={onClose} style={{ background:C.surface, border:`1px solid ${C.border}`,
+          <button aria-label="Close AI Assistant" onClick={onClose} style={{ background:C.surface, border:`1px solid ${C.border}`,
             borderRadius:"50%", width:32, height:32, cursor:"pointer", fontSize:18,
             color:C.muted, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
         </div>
@@ -1348,15 +1336,15 @@ function StandaloneAI({ onClose }) {
           display:"flex", flexDirection:"column", gap:12 }}>
           {msgs.length === 0 && (
             <div style={{ textAlign:"center", padding:"32px 16px" }}>
-              <div style={{ width:64, height:64, borderRadius:20, background:"#16564c", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 14px" }}>
+              <div style={{ width:64, height:64, borderRadius:20, background:"#286a9b", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 14px" }}>
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8M12 5V3"/><circle cx="12" cy="3" r="1"/></svg>
               </div>
               <p style={{ fontSize:17, fontWeight:700, color:C.text, marginBottom:8 }}>Classio AI</p>
               <p style={{ fontSize:13, color:C.muted, lineHeight:1.7, maxWidth:320, margin:"0 auto 24px" }}>
-                Ask me anything! Solve problems, explain concepts, or send a photo of a question.
+                Ask about a study topic or attach a question. Your conversation stays here while you use this workspace.
               </p>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, maxWidth:360, margin:"0 auto", textAlign:"left" }}>
-                {[["⬡","Photo of a question","Take a photo — I'll solve it"],
+                {[["⬡","Photo of a question","Upload a question image"],
                   ["∑","Math & Science","Step-by-step solutions"],
                   ["✎","Explain concepts","Clear simple explanations"],
                   ["◎","Any language","Reply in your language"]].map(([ic,ti,de])=>(
@@ -1375,7 +1363,7 @@ function StandaloneAI({ onClose }) {
               alignItems:"flex-end", gap:8 }}>
               {m.role==="assistant" && (
                 <div style={{ width:28,height:28,borderRadius:8,
-                  background:"#16564c",
+                  background:"#286a9b",
                   display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8"/></svg>
                 </div>
@@ -1394,7 +1382,7 @@ function StandaloneAI({ onClose }) {
           {loading && (
             <div style={{ display:"flex", alignItems:"flex-end", gap:8 }}>
               <div style={{ width:28,height:28,borderRadius:8,
-                background:"#16564c",
+                background:"#286a9b",
                 display:"flex",alignItems:"center",justifyContent:"center" }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8"/></svg>
               </div>
@@ -1414,7 +1402,7 @@ function StandaloneAI({ onClose }) {
             <img src={attachedImage.base64} alt="preview"
               style={{ width:44,height:44,objectFit:"cover",borderRadius:8,flexShrink:0 }}/>
             <div style={{ flex:1, minWidth:0 }}>
-              <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.accent }}>Image attached</p>
+              <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.link }}>Image attached</p>
               <p style={{ margin:0, fontSize:11, color:C.muted, overflow:"hidden",
                 textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{attachedImage.name}</p>
             </div>
@@ -1429,7 +1417,7 @@ function StandaloneAI({ onClose }) {
             style={{ flexShrink:0, width:44, height:44, borderRadius:8,
               border:`1.5px solid ${attachedImage?C.accent:C.border}`,
               background:attachedImage?C.accentL:C.bg, cursor:"pointer",
-              display:"flex", alignItems:"center", justifyContent:"center", color:attachedImage?C.accent:C.muted }}>
+              display:"flex", alignItems:"center", justifyContent:"center", color:attachedImage?C.link:C.muted }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
           </button>
           <input ref={imgInputRef} type="file" accept="image/*" style={{ display:"none" }}
@@ -1522,7 +1510,7 @@ function SettingsTab({ onToggleTheme, onClearCache, files, streak }) {
             <button key={o.v} onClick={()=>handleLang(o.v)}
               style={{ padding:"8px 16px", borderRadius:7, fontSize:13, fontWeight:600, cursor:"pointer", transition:"all .12s",
                 background: lang===o.v ? PRIMARY : "transparent",
-                color: lang===o.v ? "#fff" : T.muted,
+                color: primaryInk(lang===o.v ? PRIMARY : "transparent", lang===o.v ? "#fff" : T.muted),
                 border: `1.5px solid ${lang===o.v ? "transparent" : T.border}`,
                 boxShadow: lang===o.v ? "0 3px 10px rgba(22,86,76,.3)" : "none" }}>
               {o.label}
@@ -1530,7 +1518,7 @@ function SettingsTab({ onToggleTheme, onClearCache, files, streak }) {
           ))}
         </div>
         {lang !== "auto" && (
-          <p style={{ margin:"12px 0 0", fontSize:12, color:T.accent, fontWeight:600 }}>
+          <p style={{ margin:"12px 0 0", fontSize:12, color:T.link, fontWeight:600 }}>
             ✓ AI will always respond in {lang} regardless of input language
           </p>
         )}
@@ -1624,7 +1612,7 @@ function AboutTab() {
       <div style={{ textAlign:"center", padding:"36px 20px 28px",
         background:C.accentL,
         borderRadius:20, marginBottom:28, border:`1px solid ${C.accentS}` }}>
-        <div style={{ width:72,height:72,borderRadius:22,background:"#16564c",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",boxShadow:"0 8px 24px rgba(99,102,241,.3)" }}>
+        <div style={{ width:72,height:72,borderRadius:22,background:"#286a9b",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",boxShadow:"0 8px 24px rgba(99,102,241,.3)" }}>
           <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
             <path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 0 3-3h7z"/>
@@ -1643,7 +1631,7 @@ function AboutTab() {
             background:C.surface, border:`1px solid ${C.border}`, borderRadius:14, padding:"14px 16px" }}>
             <div style={{ width:32,height:32,borderRadius:10,background:PRIMARY,
               display:"flex",alignItems:"center",justifyContent:"center",
-              fontSize:14,fontWeight:800,color:"#fff",flexShrink:0,boxShadow:"0 3px 10px rgba(22,86,76,.3)" }}>{s.n}</div>
+              fontSize:14,fontWeight:800,color:primaryInk(PRIMARY, "#fff"),flexShrink:0,boxShadow:"0 3px 10px rgba(22,86,76,.3)" }}>{s.n}</div>
             <div>
               <p style={{ margin:"0 0 3px", fontSize:14, fontWeight:700, color:C.text }}>{s.title}</p>
               <p style={{ margin:0, fontSize:13, color:C.muted, lineHeight:1.5 }}>{s.desc}</p>
@@ -1739,7 +1727,7 @@ function OnboardingTutorial({ onDone }) {
         <div style={{ background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:12,
           padding:"10px 14px", marginBottom:22, display:"flex", alignItems:"flex-start", gap:8 }}>
           <span style={{flexShrink:0, display:"flex"}}><Icon d={I.lightbulb} size={16} color={C.accent} sw={2}/></span>
-          <p style={{ fontSize:13, color:C.accent, fontWeight:600, margin:0, lineHeight:1.5 }}>{s.tip}</p>
+          <p style={{ fontSize:13, color:C.link, fontWeight:600, margin:0, lineHeight:1.5 }}>{s.tip}</p>
         </div>
 
         {/* Buttons */}
@@ -1753,7 +1741,7 @@ function OnboardingTutorial({ onDone }) {
             border:"none", background:"none", cursor:"pointer",
             fontSize:13, fontWeight:600, color:C.muted }}>Skip</button>
           <button onClick={next} style={{ flex:1, padding:"11px", borderRadius:10,
-            border:"none", background:PRIMARY, color:"#fff", cursor:"pointer",
+            border:"none", background:PRIMARY, color:primaryInk(PRIMARY, "#fff"), cursor:"pointer",
             fontSize:14, fontWeight:700, boxShadow:"0 4px 14px rgba(22,86,76,.3)" }}>
             {isLast ? "Get Started" : "Next"}
           </button>
@@ -1768,20 +1756,20 @@ function OnboardingTutorial({ onDone }) {
 
 // ─── EXTRA GLOBAL CSS ─────────────────────────────────────────────────────────
 const DARK_CSS = `
-  body.classio-dark { background: #1A1A15 !important; color: #EEECEA !important; }
+  body.classio-dark { background: #111c27 !important; color: #eef5fc !important; }
   body.classio-dark ::-webkit-scrollbar-thumb { background: #2E2E28; }
   body.classio-dark button { color: inherit; }
-  body.classio-dark select { color: #EEECEA; background: #252520; }
-  body.classio-dark input { color: #EEECEA; }
+  body.classio-dark select { color: #eef5fc; background: #1b2b3a; }
+  body.classio-dark input { color: #eef5fc; }
 
   /* ── Gradient primary button ── */
   .btn-primary {
-    background: #16564c !important;
-    color:#fff !important; border:none !important;
+    background: #b8ddf8 !important;
+    color:#163b56 !important; border:none !important;
     box-shadow: 0 4px 14px rgba(22,86,76,.35) !important;
     transition: opacity .15s, transform .15s !important;
   }
-  .btn-primary:hover:not(:disabled) { opacity:.92; transform:translateY(-1px) scale(1.01); }
+  .btn-primary:hover:not(:disabled) { opacity:.92; transform:none; }
   .btn-primary:disabled { background: #ccc !important; box-shadow:none !important; }
 
   /* ── Squircle card ── */
@@ -1792,7 +1780,7 @@ const DARK_CSS = `
     transition:box-shadow .15s;
   }
   .sq-card:hover { box-shadow:0 8px 32px rgba(22,86,76,.16); }
-  body.classio-dark .sq-card { background:#252520; border-color:#2E2E28; box-shadow:0 4px 20px rgba(0,0,0,.5); }
+  body.classio-dark .sq-card { background:#1b2b3a; border-color:#2E2E28; box-shadow:0 4px 20px rgba(0,0,0,.5); }
 
   /* ── Animations ── */
   @keyframes cmdIn { from { opacity:0; transform:translateY(-14px) scale(.97); } to { opacity:1; transform:translateY(0) scale(1); } }
@@ -1815,7 +1803,7 @@ const DARK_CSS = `
   .fade-enter { animation: fadeIn .18s ease both; }
 
   /* ── Mastery pill badges ── */
-  .pill-new     { background:#EEF0FF; color:#16564c; border:1.5px solid #b8d2c9; border-radius:20px; padding:5px 14px; font-size:12px; font-weight:700; }
+  .pill-new     { background:#EEF0FF; color:#286a9b; border:1.5px solid #b8d2c9; border-radius:20px; padding:5px 14px; font-size:12px; font-weight:700; }
   .pill-learning{ background:#FFF8E6; color:#B45309; border:1.5px solid #FDE68A; border-radius:20px; padding:5px 14px; font-size:12px; font-weight:700; }
   .pill-mastered{ background:#E6F4EA; color:#2E7D32; border:1.5px solid #A8D5B0; border-radius:20px; padding:5px 14px; font-size:12px; font-weight:700; }
 
@@ -1929,8 +1917,6 @@ body { overflow-x:hidden; }
 function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacter, onToggleTheme, onOpenSearch, isMobile, user, isGuest, onSignOut, sidebarExpanded, onToggleSidebar, folderTab, onFolderTab, fileTab, onFileTab, folder, file }) {
   const T = useTheme();
   C = T; // keep C in sync
-  const expanded = sidebarExpanded;
-  const setExpanded = onToggleSidebar;
   const context = screen === "file" ? "document" : screen === "folder" ? "folder" : "dashboard";
   const activeTab = context === "document" ? fileTab : context === "folder" ? folderTab : null;
   const setActiveTab = context === "document" ? onFileTab : context === "folder" ? onFolderTab : null;
@@ -1961,230 +1947,15 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
     { id:"ai",      label:"AI Assistant",   icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8"/></svg> },
   ];
 
-  if (isMobile) {
-    // Mobile: bottom bar — shows context tabs when inside file/folder
-    if (context === "document") {
-      const mobileTabs = FILE_TABS.slice(0, 5); // View, Notes, Voice, Cards, AI
-      return (
-        <div className="bottom-nav" style={{ position:"fixed", bottom:0, left:0, right:0, height:56, background:T.sidebar, borderTop:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"space-around", zIndex:250, overflowX:"auto" }}>
-          <button onClick={() => onNavigate("home")} style={{ background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:T.muted, padding:"4px 6px", flexShrink:0 }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-            <span style={{ fontSize:8, fontWeight:600 }}>Back</span>
-          </button>
-          {mobileTabs.map(t => {
-            const isActive = fileTab === t.id;
-            return (
-              <button key={t.id} onClick={() => onFileTab && onFileTab(t.id)}
-                style={{ background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:isActive?T.accent:T.muted, padding:"4px 6px", flexShrink:0, position:"relative" }}>
-                {isActive && <div style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)", width:24, height:2.5, borderRadius:2, background:PRIMARY }}/>}
-                {t.icon}
-                <span style={{ fontSize:8, fontWeight:isActive?700:600 }}>{t.label.split(" ")[0]}</span>
-              </button>
-            );
-          })}
-          <button onClick={() => onFileTab && onFileTab("game")} style={{ background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:fileTab==="game"?T.accent:T.muted, padding:"4px 6px", flexShrink:0 }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4M8 10v4M15 12h.01M18 12h.01"/></svg>
-            <span style={{ fontSize:8, fontWeight:600 }}>Games</span>
-          </button>
-        </div>
-      );
-    }
-
-    if (context === "folder") {
-      return (
-        <div className="bottom-nav" style={{ position:"fixed", bottom:0, left:0, right:0, height:56, background:T.sidebar, borderTop:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"space-around", zIndex:250 }}>
-          <button onClick={() => onNavigate("home")} style={{ background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:T.muted, padding:"4px 8px" }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-            <span style={{ fontSize:8, fontWeight:600 }}>Back</span>
-          </button>
-          {FOLDER_TABS.map(t => {
-            const isActive = folderTab === t.id;
-            return (
-              <button key={t.id} onClick={() => onFolderTab && onFolderTab(t.id)}
-                style={{ background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:isActive?T.accent:T.muted, padding:"4px 8px" }}>
-                {t.icon}
-                <span style={{ fontSize:8, fontWeight:isActive?700:600 }}>{t.label.split(" ")[0]}</span>
-              </button>
-            );
-          })}
-          <button onClick={onOpenSearch} style={{ background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:T.muted, padding:"4px 8px" }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-            <span style={{ fontSize:8, fontWeight:600 }}>Search</span>
-          </button>
-        </div>
-      );
-    }
-
-    // Default mobile: dashboard nav
-    return (
-      <div style={{ position:"fixed", bottom:0, left:0, right:0, height:56, background:T.sidebar, borderTop:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"space-around", zIndex:250 }}>
-        {NAV.slice(0,3).map(n => {
-          const active =
-            (n.id==="home" && (screen==="home"||screen==="folder") && homeTab!=="about" && homeTab!=="settings") ||
-            (n.id==="guides" && homeTab==="about") ||
-            (n.id==="settings" && homeTab==="settings");
-          return (
-            <button key={n.id} onClick={()=>onNavigate(n.id)} style={{ background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:active?T.accent:T.muted, padding:"4px 8px" }}>
-              {n.icon}
-              <span style={{ fontSize:9, fontWeight:600 }}>{n.label}</span>
-            </button>
-          );
-        })}
-        <button onClick={onOpenSearch} style={{ background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2, color:T.muted, padding:"4px 8px" }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          <span style={{ fontSize:9, fontWeight:600 }}>Search</span>
-        </button>
-        <button onClick={onOpenCharacter} style={{ background:"none", border:"none", cursor:"pointer", padding:"4px 8px" }}>
-          <div style={{ width:30, height:30, borderRadius:"50%", overflow:"hidden", border:`2px solid ${T.border}` }}>
-            <MiniAvatar character={character||{}} size={30} />
-          </div>
-        </button>
-      </div>
-    );
-  }
-
-  // Desktop: slim icon sidebar
-  const sideW = expanded ? 220 : 60;
-
-  const NavBtn = ({ n }) => {
-    let active = false;
-    if (context === "dashboard") {
-      active = (n.id==="home" && homeTab!=="about" && homeTab!=="settings") ||
-               (n.id==="guides" && homeTab==="about") ||
-               (n.id==="settings" && homeTab==="settings");
-    } else { active = activeTab === n.id; }
-    const handleClick = () => { if (context === "dashboard") onNavigate(n.id); else if (setActiveTab) setActiveTab(n.id); };
-    return (
-      <button onClick={handleClick} title={n.label}
-        style={{ width:"100%", display:"flex", alignItems:"center", gap:12, padding:expanded?"9px 14px":"12px", borderRadius:10, border:"none", cursor:"pointer", position:"relative",
-          background:active?T.sidebarActive:"transparent", color:active?T.text:T.muted,
-          fontWeight:active?600:400, fontSize:14, transition:"all .12s", justifyContent:expanded?"flex-start":"center" }}
-        onMouseEnter={e=>{ if(!active){e.currentTarget.style.background=T.sidebarActive; e.currentTarget.style.color=T.text;}}}
-        onMouseLeave={e=>{ if(!active){e.currentTarget.style.background="transparent"; e.currentTarget.style.color=T.muted;}}}>
-        <span style={{ flexShrink:0, display:"flex" }}>{n.icon}</span>
-        {expanded && <span style={{ whiteSpace:"nowrap" }}>{n.label}</span>}
-      {active && expanded && <div style={{ width:6, height:6, borderRadius:"50%", background:PRIMARY, marginLeft:"auto", boxShadow:"0 0 6px #16564c88" }}/>}
-      {active && !expanded && <div style={{ position:"absolute", left:0, top:"50%", transform:"translateY(-50%)", width:3, height:20, borderRadius:"0 3px 3px 0", background:PRIMARY }}/>}
-      </button>
-    );
-  };
-
-  // ── Context tabs: shown in sidebar when inside a folder or file ──────────
-  const contextTabs = context === "document" ? FILE_TABS : context === "folder" ? FOLDER_TABS : null;
-
-  const CtxTabBtn = ({ t }) => {
-    const isActive = activeTab === t.id;
-    return (
-      <button onClick={() => setActiveTab && setActiveTab(t.id)} title={t.label}
-        style={{ width:"100%", display:"flex", alignItems:"center", gap:10,
-          padding: expanded ? "8px 12px" : "10px",
-          borderRadius:10, border:"none", cursor:"pointer", position:"relative",
-          background: isActive ? T.sidebarActive : "transparent",
-          color: isActive ? T.accent : T.muted,
-          fontWeight: isActive ? 700 : 400,
-          fontSize:13, transition:"all .12s",
-          justifyContent: expanded ? "flex-start" : "center" }}
-        onMouseEnter={e=>{ if(!isActive){e.currentTarget.style.background=T.sidebarActive; e.currentTarget.style.color=T.text;}}}
-        onMouseLeave={e=>{ if(!isActive){e.currentTarget.style.background="transparent"; e.currentTarget.style.color=T.muted;}}}>
-        <span style={{ flexShrink:0, display:"flex" }}>{t.icon}</span>
-        {expanded && <span style={{ whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{t.label}</span>}
-        {isActive && <div style={{ position:"absolute", left:0, top:"50%", transform:"translateY(-50%)", width:3, height:20, borderRadius:"0 3px 3px 0", background:PRIMARY }}/>}
-        {isActive && expanded && <div style={{ width:5, height:5, borderRadius:"50%", background:PRIMARY, marginLeft:"auto", flexShrink:0 }}/>}
-      </button>
-    );
-  };
-
-  return (
-    <div style={{ width:sideW, minWidth:sideW, height:"100vh", background:T.sidebar, borderRight:`1px solid ${T.border}`, display:"flex", flexDirection:"column", position:"fixed", left:0, top:0, zIndex:150, transition:"width .2s ease", overflow:"hidden" }}>
-      {/* Logo */}
-      <div style={{ padding:"16px 0 12px", display:"flex", flexDirection:"column", alignItems:"center", borderBottom:`1px solid ${T.border}`, cursor:"pointer" }} onClick={()=>setExpanded(e=>!e)}>
-        <div style={{ width:36, height:36, background:"#16564c", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <Icon d={I.sparkle} size={16} color="#fff" sw={2}/>
-        </div>
-        {expanded && <span style={{ fontFamily:"'Fraunces Variable',serif", fontSize:16, fontWeight:700, color:T.navText, marginTop:8 }}>Classio</span>}
-      </div>
-
-      {/* Search bar */}
-      <div style={{ padding:"10px 8px 4px" }}>
-        <button onClick={onOpenSearch} title="Search (⌘K)"
-          style={{ width:"100%", display:"flex", alignItems:"center", gap:8, background:T.bg, border:`1px solid ${T.border}`, borderRadius:10,
-            padding:expanded?"8px 12px":"10px", cursor:"pointer", justifyContent:expanded?"flex-start":"center" }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          {expanded && <><span style={{ fontSize:13, color:T.muted, flex:1 }}>Search…</span><span style={{ fontSize:10, color:T.muted, background:T.border, borderRadius:4, padding:"1px 5px" }}>⌘K</span></>}
-        </button>
-      </div>
-
-      {/* Nav — shows context tabs OR main nav */}
-      <nav style={{ flex:1, padding:"4px 8px", display:"flex", flexDirection:"column", gap:2, overflowY:"auto" }}>
-        {contextTabs ? (
-          <>
-            {/* Back to dashboard */}
-            <button onClick={() => onNavigate("home")} title="Dashboard"
-              style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:expanded?"7px 12px":"8px", borderRadius:10, border:"none", cursor:"pointer",
-                background:"transparent", color:T.muted, fontSize:12, fontWeight:600, transition:"all .12s",
-                justifyContent:expanded?"flex-start":"center", marginBottom:4 }}
-              onMouseEnter={e=>{e.currentTarget.style.background=T.sidebarActive;}}
-              onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-              {expanded && <span>Dashboard</span>}
-            </button>
-            {/* Context label */}
-            {expanded && (
-              <div style={{ padding:"4px 12px 8px" }}>
-                <p style={{ margin:0, fontSize:10, fontWeight:800, color:T.muted, letterSpacing:.8, textTransform:"uppercase" }}>
-                  {context === "document" ? (file?.name?.split(".")[0] || "Document") : (folder?.name || "Folder")}
-                </p>
-              </div>
-            )}
-            {/* Context-specific tabs */}
-            {contextTabs.map(t => <CtxTabBtn key={t.id} t={t} />)}
-
-            {/* Divider */}
-            <div style={{ height:1, background:T.border, margin:"8px 6px" }}/>
-            {/* Main nav still accessible below */}
-            {NAV.map(n => <NavBtn key={n.id} n={n} />)}
-          </>
-        ) : (
-          NAV.map(n => <NavBtn key={n.id} n={n} />)
-        )}
-      </nav>
-
-      {/* Bottom */}
-      <div style={{ padding:"8px 8px 16px", borderTop:`1px solid ${T.border}`, display:"flex", flexDirection:"column", gap:4 }}>
-        {/* Theme toggle */}
-        <button onClick={onToggleTheme}
-          style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"9px 12px", borderRadius:10, border:`1px solid ${T.border}`, cursor:"pointer",
-            background: T.isDark ? "#2a2a26" : T.accentL,
-            color: T.isDark ? "#e0c060" : T.accent,
-            fontSize:14, transition:"all .12s", justifyContent: expanded ? "flex-start" : "center" }}
-          title={T.isDark ? "Switch to light mode" : "Switch to dark mode"}
-          onMouseEnter={e=>{e.currentTarget.style.opacity=".85";}}
-          onMouseLeave={e=>{e.currentTarget.style.opacity="1";}}>
-          {T.isDark
-            ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-            : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-          }
-          {expanded && <span style={{ fontSize:13, fontWeight:600 }}>{T.isDark ? "Light mode" : "Dark mode"}</span>}
-        </button>
-        {/* User */}
-        <button onClick={onOpenCharacter}
-          style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"8px 12px", borderRadius:10, border:"none", cursor:"pointer", background:"transparent", justifyContent:expanded?"flex-start":"center" }}
-          onMouseEnter={e=>{e.currentTarget.style.background=T.sidebarActive;}}
-          onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
-          <div style={{ width:32, height:32, borderRadius:"50%", overflow:"hidden", border:`2px solid ${T.border}`, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
-            <MiniAvatar character={character||{}} size={32} />
-          </div>
-          {expanded && <div style={{ textAlign:"left", minWidth:0 }}>
-            <p style={{ margin:0, fontSize:13, fontWeight:600, color:T.navText, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{character?.name || (user?.displayName?.split(" ")[0]) || (isGuest?"Guest":"You")}</p>
-            <p style={{ margin:0, fontSize:11, color:T.muted }}>{isGuest?"Guest mode":"Student"}</p>
-          </div>}
-        </button>
-      </div>
-    </div>
-  );
+  return <ResponsiveSidebar mobile={isMobile} expanded={sidebarExpanded} onExpand={onToggleSidebar}
+    mainActive={context === "dashboard" ? homeTab === "about" ? "guides" : homeTab === "settings" ? "settings" : "home" : undefined}
+    main={[NAV[0], { id: "assistant", label: "AI Assistant", icon: <Icon d={I.sparkle} size={20} /> }, ...NAV.slice(1)]}
+    tabs={context === "document" ? FILE_TABS : context === "folder" ? FOLDER_TABS : []}
+    active={activeTab} onTab={setActiveTab} onNavigate={onNavigate} onSearch={onOpenSearch}
+    onCharacter={onOpenCharacter} avatar={<MiniAvatar character={character || {}} size={28} />}
+    account={character?.name || user?.displayName?.split(" ")[0]} guest={isGuest} onSignOut={onSignOut}
+    onToggleTheme={onToggleTheme} dark={T.isDark} documentName={file?.name || folder?.name} />;
 }
-
-
 
 // ── Audio Record Modal ────────────────────────────────────────────────────────
 function AudioRecordModal({ onClose, onSave, onSaveNote }) {
@@ -2347,7 +2118,7 @@ function AudioRecordModal({ onClose, onSave, onSaveNote }) {
         @keyframes arm-pulse-red { 0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.35),0 4px 20px rgba(220,38,38,.3)} 50%{box-shadow:0 0 0 20px rgba(220,38,38,.0),0 4px 20px rgba(220,38,38,.3)} }
         @keyframes arm-fadein { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
         @keyframes arm-spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
-        .arm-bar { border-radius:3px; background:#16564c; transition:height .1s ease; }
+        .arm-bar { border-radius:3px; background:#286a9b; transition:height .1s ease; }
       `}</style>
 
       {/* Header */}
@@ -2368,7 +2139,7 @@ function AudioRecordModal({ onClose, onSave, onSaveNote }) {
           <button onClick={phase === "recording" ? stopAndProcess : startRecording}
             style={{ width:88, height:88, borderRadius:"50%", border:"none", cursor:"pointer",
               background: phase === "recording" ? "linear-gradient(135deg,#dc2626,#b91c1c)" : PRIMARY,
-              color:"#fff", display:"flex", alignItems:"center", justifyContent:"center",
+              color:primaryInk(phase === "recording" ? "linear-gradient(135deg,#dc2626,#b91c1c)" : PRIMARY, "#fff"), display:"flex", alignItems:"center", justifyContent:"center",
               animation: phase === "recording" ? "arm-pulse-red 1.5s ease infinite" : "arm-pulse 2.5s ease infinite",
               transition:"background .25s, transform .15s",
               flexShrink:0 }}
@@ -2483,7 +2254,7 @@ function AudioRecordModal({ onClose, onSave, onSaveNote }) {
               Re-record
             </button>
             <button onClick={saveAsNote}
-              style={{ flex:2, padding:"10px", background:PRIMARY, color:"#fff", border:"none",
+              style={{ flex:2, padding:"10px", background:PRIMARY, color:primaryInk(PRIMARY, "#fff"), border:"none",
                 borderRadius:10, cursor:"pointer", fontSize:13, fontWeight:700,
                 boxShadow:"0 3px 10px rgba(22,86,76,.3)" }}>
               Save as Notes
@@ -2501,7 +2272,7 @@ function MoveFileDropdown({ file, folders, T, onMove }) {
   return (
     <div style={{ position:"relative", zIndex: open ? 1100 : "auto" }}>
       <button onClick={()=>setOpen(o=>!o)} title="Move to folder"
-        style={{ display:"flex", alignItems:"center", gap:4, background:T.accentL, color:T.accent, border:`1px solid ${T.accentS}`, borderRadius:8, padding:"5px 10px", fontSize:11, fontWeight:600, cursor:"pointer" }}>
+        style={{ display:"flex", alignItems:"center", gap:4, background:T.accentL, color:T.link, border:`1px solid ${T.accentS}`, borderRadius:8, padding:"5px 10px", fontSize:11, fontWeight:600, cursor:"pointer" }}>
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
         Move
       </button>
@@ -2597,7 +2368,7 @@ function DashboardDropZone({ onFilesAdded }) {
         </svg>
       </div>
       <div>
-        <p style={{margin:0,fontSize:13,fontWeight:600,color:dragging?T.accent:T.text}}>{dragging?"Drop to upload":"Drop files here or choose files"}</p>
+        <p style={{margin:0,fontSize:13,fontWeight:600,color:dragging?T.link:T.text}}>{dragging?"Drop to upload":"Drop files here or choose files"}</p>
         <p style={{margin:0,fontSize:11,color:T.muted}}>PDF, Word, PowerPoint, images or audio</p>
       </div>
     </div>
@@ -2903,6 +2674,9 @@ export default function App() {
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [homeTab, setHomeTab] = useState("folders");
   const [showHomeAI, setShowHomeAI] = useState(false);
+  const [assistantMessages, setAssistantMessages] = useState([]);
+  const [assistantPending, setAssistantPending] = useState(false);
+  const assistantEpoch = useRef(0);
   const [newName, setNewName] = useState("");
   const [newColor,       setNewColor]       = useState(FOLDER_COLORS[0]);
   const [showFolderPicker,setShowFolderPicker] = useState(false);
@@ -2991,7 +2765,7 @@ export default function App() {
       let warning = "";
       let remoteUnavailable = false;
       try {
-        const snap = await getDoc(doc(db, "users", account.uid));
+        const snap = await withRestoreTimeout(getDoc(doc(db, "users", account.uid)));
         if (snap.metadata.fromCache) throw new Error("Account could only be read from cache.");
         const remote = snap.data()?.folders;
         if (Array.isArray(remote)) {
@@ -3003,7 +2777,14 @@ export default function App() {
         warning = "Cloud sync is unavailable. Reload when you are back online to sync your workspace.";
       }
 
-      const restored = await attachBlobs(raw);
+      let restored;
+      try {
+        restored = await withRestoreTimeout(attachBlobs(raw));
+      } catch {
+        // Keep metadata accessible even if original uploads cannot be restored.
+        restored = raw.map(folder => ({ ...folder, files: (folder.files || []).map(file => ({ ...file, _fileObj: null })) }));
+        warning = "Original uploads could not be restored on this device. You can still use your notes and upload the files again.";
+      }
       if (!active || current !== revision) return;
       deferAccountSync.current = remoteUnavailable;
       const workspace = mergeSessionFolders(restored, guestFolders);
@@ -3100,6 +2881,9 @@ export default function App() {
     setActiveFolder(null);
     setActiveFile(null);
     setShowHomeAI(false);
+    setAssistantMessages([]);
+    setAssistantPending(false);
+    assistantEpoch.current++;
     setShowSearch(false);
     setShowCharacter(false);
     setShowRecordModal(false);
@@ -3116,10 +2900,10 @@ export default function App() {
     setSignInError("");
     saveGuestOnSignIn.current = true;
     try { await signInWithPopup(auth, googleProvider); }
-    catch {
+    catch (error) {
       saveGuestOnSignIn.current = false;
       setSignInPending(false);
-      setSignInError("Google sign-in could not finish. Your guest session is still open.");
+      setSignInError(signInErrorMessage(error));
     }
   }
 
@@ -3131,7 +2915,15 @@ export default function App() {
 
   if (user === undefined) return <Splash />;
 
+  function renderAssistant() {
+    const epoch = assistantEpoch.current;
+    return showHomeAI && <StandaloneAI onClose={() => setShowHomeAI(false)} messages={assistantMessages}
+      onMessagesChange={messages => { if (epoch === assistantEpoch.current) setAssistantMessages(messages); }}
+      pending={assistantPending} onPendingChange={pending => { if (epoch === assistantEpoch.current) setAssistantPending(pending); }} />;
+  }
+
   const handleNavigate2 = (id) => {
+    if (id==="assistant") { setShowHomeAI(true); return; }
     if (id==="home") { setHomeTab("folders"); setScreen("home"); setActiveFolder(null); setActiveFile(null); }
     else if (id==="guides") { setHomeTab("about"); setScreen("home"); setActiveFolder(null); setActiveFile(null); }
     else if (id==="settings") { setHomeTab("settings"); setScreen("home"); setActiveFolder(null); setActiveFile(null); }
@@ -3193,15 +2985,17 @@ export default function App() {
         fileTab={fileTab} onFileTab={setFileTab}
         folder={activeFolder} file={activeFile}
       />
+      {renderAssistant()}
       {showSearch && <CommandSearch folders={folders} onOpenFile={handleOpenFileFromSearch2} onClose={()=>setShowSearch(false)} />}
       {showCharacter && <CharacterModal character={character} onChange={c => { setCharacter(c); if (user) localStorage.setItem("classio_char", JSON.stringify(c)); }} onClose={() => setShowCharacter(false)} />}
-      <div style={{
+      <div className="workspace-content" style={{
         flex: 1,
-        marginLeft: isMobile ? 0 : isTablet ? 60 : (sidebarExpanded ? 220 : 60),
-        marginBottom: isMobile ? 56 : 0,
+        marginLeft: isMobile ? 0 : (sidebarExpanded ? 220 : 60),
+        marginTop: isMobile ? 56 : 0,
+        marginBottom: 0,
         minWidth: 0,
         overflow: "visible",
-        maxWidth: isMobile ? "100vw" : `calc(100vw - ${isMobile ? 0 : isTablet ? 60 : (sidebarExpanded ? 220 : 60)}px)`,
+        maxWidth: isMobile ? "100vw" : `calc(100vw - ${isMobile ? 0 : (sidebarExpanded ? 220 : 60)}px)`,
         boxSizing: "border-box",
       }}>
         {workspaceWarning && <p className="workspace-warning" role="status">{workspaceWarning}</p>}
@@ -3252,6 +3046,7 @@ export default function App() {
   }
 
   const handleNavigate = (id) => {
+    if (id==="assistant") { setShowHomeAI(true); return; }
     if (id==="home") { setHomeTab("folders"); setScreen("home"); }
     else if (id==="guides") { setHomeTab("about"); setScreen("home"); }
     else if (id==="settings") { setHomeTab("settings"); setScreen("home"); }
@@ -3259,7 +3054,7 @@ export default function App() {
 
   function startCourse() {
     const inbox = foldersRef.current.find(folder => folder.id === "inbox") ||
-      { id: "inbox", name: "Inbox", color: "#16564c", files: [] };
+      { id: "inbox", name: "Inbox", color: "#286a9b", files: [] };
     const file = { id: `blank_${makeStudyId()}`, name: "Untitled course", type: "text/plain", notes: "", studyCards: [], _isBlank: true, defaultTab: "learn" };
     const folder = { ...inbox, files: [...inbox.files, file] };
     setFoldersSave([folder, ...foldersRef.current.filter(item => item.id !== inbox.id)]);
@@ -3308,7 +3103,7 @@ export default function App() {
         onClose={() => setShowStudyGroupLobby(false)}
       />}
       {/* Main content area — offset by sidebar */}
-      <div style={{ flex:1, minWidth:0, marginLeft:isMobile?0:(sidebarExpanded?220:60), marginBottom:isMobile?56:0, minHeight:"100vh", display:"flex", flexDirection:"column", background:T.bg }}>
+      <div className="workspace-content" style={{ flex:1, minWidth:0, marginLeft:isMobile?0:(sidebarExpanded?220:60), marginTop:isMobile?56:0, marginBottom:0, minHeight:"100vh", display:"flex", flexDirection:"column", background:T.bg }}>
       <div style={{ maxWidth:960, margin:"0 auto", padding:isMobile?"12px 14px":isTablet?"16px 20px":"32px 36px", width:"100%", boxSizing:"border-box" }}>
 
         {workspaceWarning && <p className="workspace-warning" role="status">{workspaceWarning}</p>}
@@ -3356,7 +3151,7 @@ export default function App() {
         {homeTab==="folders" && (
           <div className="quick-actions" style={{ display:"grid", gridTemplateColumns:isMobile?"repeat(2, minmax(0, 1fr))":isTablet?"repeat(3, minmax(0, 1fr))":"repeat(4, minmax(0, 1fr))", gap:12, marginBottom:32 }}>
             {[
-              { grad:"#16564c15", ic:"#16564c", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16564c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>, label:"Blank document", sub:"Write your own notes", action:()=>{ const blankId=`blank_${Date.now()}`; const blankFile={id:blankId,name:"Untitled Document",type:"text/plain",_fileObj:null,notes:"",studyCards:[],_isBlank:true}; const inboxExists=folders.find(f=>f.id==="inbox"); const newFolders=inboxExists?folders.map(f=>f.id==="inbox"?{...f,files:[blankFile,...(f.files||[])]}:f):[...folders,{id:"inbox",name:"Inbox",color:"#16564c",files:[blankFile]}]; setFoldersSave(newFolders); const newInbox=newFolders.find(f=>f.id==="inbox"); setActiveFile(blankFile); setActiveFolder(newInbox); setScreen("file"); setFileTab("notes"); } },
+              { grad:"#286a9b15", ic:"#286a9b", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#286a9b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>, label:"Blank document", sub:"Write your own notes", action:()=>{ const blankId=`blank_${Date.now()}`; const blankFile={id:blankId,name:"Untitled Document",type:"text/plain",_fileObj:null,notes:"",studyCards:[],_isBlank:true}; const inboxExists=folders.find(f=>f.id==="inbox"); const newFolders=inboxExists?folders.map(f=>f.id==="inbox"?{...f,files:[blankFile,...(f.files||[])]}:f):[...folders,{id:"inbox",name:"Inbox",color:"#286a9b",files:[blankFile]}]; setFoldersSave(newFolders); const newInbox=newFolders.find(f=>f.id==="inbox"); setActiveFile(blankFile); setActiveFolder(newInbox); setScreen("file"); setFileTab("notes"); } },
               { grad:"#39696d15", ic:"#39696d", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#39696d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>, label:"Record audio", sub:"Upload an audio file", action:()=>setShowRecordModal(true) },
               { grad:"#4A7C5915", ic:"#4A7C59", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4A7C59" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>, label:"Upload document", sub:"PDF, Word or PowerPoint", action:()=>setShowUploadModal(true) },
               { grad:"#C45C5C15", ic:"#C45C5C", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C45C5C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.54C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg>, label:"Website link", sub:"YouTube or website link", action:()=>setShowWebLinkModal(true) },
@@ -3399,7 +3194,7 @@ export default function App() {
             <p style={{ fontSize:18, fontWeight:600, color:C.text, marginBottom:8 }}>No folders yet</p>
             <p style={{ fontSize:14, color:C.muted, maxWidth:280, margin:"0 auto 24px" }}>Create a folder for each subject to organise your files</p>
             <button onClick={()=>setShowNewFolder(true)} className="hov"
-              style={{ background:PRIMARY, color:"#fff", border:"none", borderRadius:10, padding:"10px 24px", fontSize:14, fontWeight:600, cursor:"pointer", boxShadow:"0 3px 12px rgba(22,86,76,.3)" }}>
+              style={{ background:PRIMARY, color:primaryInk(PRIMARY, "#fff"), border:"none", borderRadius:10, padding:"10px 24px", fontSize:14, fontWeight:600, cursor:"pointer", boxShadow:"0 3px 12px rgba(22,86,76,.3)" }}>
               Create First Folder
             </button>
           </div>
@@ -3451,7 +3246,7 @@ export default function App() {
                             )}
                             {/* Rename */}
                             <button onClick={()=>setRenamingItem({id:file.id,name:file.name,type:"file",scope:"inbox"})} title="Rename"
-                              style={{ display:"flex", alignItems:"center", justifyContent:"center", background:T.accentL, color:T.accent, border:`1px solid ${T.accent}33`, borderRadius:8, padding:"5px 8px", cursor:"pointer" }}>
+                              style={{ display:"flex", alignItems:"center", justifyContent:"center", background:T.accentL, color:T.link, border:`1px solid ${T.accent}33`, borderRadius:8, padding:"5px 8px", cursor:"pointer" }}>
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                             </button>
                             {/* Delete */}
@@ -3527,7 +3322,7 @@ export default function App() {
           </div>
         )}
 
-      {showHomeAI && <StandaloneAI onClose={() => setShowHomeAI(false)} />}
+      {renderAssistant()}
 
       {confirmDelete && (
         <ConfirmDialog
@@ -3658,8 +3453,8 @@ export default function App() {
           <div onClick={e=>e.stopPropagation()} style={{ background:C.surface,borderRadius:24,padding:"28px 28px 24px",width:"100%",maxWidth:440,boxShadow:"0 24px 64px rgba(0,0,0,.18)",border:`1px solid ${C.border}` }}>
             {/* Header */}
             <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:22 }}>
-              <div style={{ width:42,height:42,background:"#16564c15",borderRadius:14,display:"flex",alignItems:"center",justifyContent:"center" }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16564c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              <div style={{ width:42,height:42,background:"#286a9b15",borderRadius:14,display:"flex",alignItems:"center",justifyContent:"center" }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#286a9b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
               </div>
               <div>
                 <h2 style={{ fontFamily:"'Fraunces Variable',serif",fontSize:20,fontWeight:700,color:C.text,margin:0 }}>New Folder</h2>
@@ -3739,7 +3534,7 @@ export default function App() {
               </button>
               <button disabled={!newName.trim()}
                 onClick={()=>{setFoldersSave([...folders,{id:`f${Date.now()}`,name:newName.trim(),color:newColor,files:[]}]);setShowNewFolder(false);setNewName("");}}
-                style={{ flex:2,padding:"12px",background:newName.trim()?PRIMARY:C.border,color:newName.trim()?"#fff":C.muted,border:"none",borderRadius:8,fontSize:14,fontWeight:700,cursor:newName.trim()?"pointer":"not-allowed",boxShadow:newName.trim()?"0 3px 14px rgba(22,86,76,.35)":"none",transition:"all .15s" }}>
+                style={{ flex:2,padding:"12px",background:newName.trim()?PRIMARY:C.border,color:primaryInk(newName.trim()?PRIMARY:C.border, newName.trim()?"#fff":C.muted),border:"none",borderRadius:8,fontSize:14,fontWeight:700,cursor:newName.trim()?"pointer":"not-allowed",boxShadow:newName.trim()?"0 3px 14px rgba(22,86,76,.35)":"none",transition:"all .15s" }}>
                 Create Folder
               </button>
             </div>
@@ -3784,7 +3579,7 @@ function Header({ user, saveStatus, isGuest, onSignOut, character, onOpenCharact
           {/* AI Assistant */}
           <button onClick={onOpenAI}
             style={{ display:"flex", alignItems:"center", gap:6,
-              background:"#16564c",
+              background:"#286a9b",
               color:"#fff", border:"none", borderRadius:10, padding:isMobile?"6px 10px":"6px 14px",
               fontSize:13, fontWeight:700, cursor:"pointer",
               boxShadow:"0 2px 10px rgba(99,102,241,.4)" }}>
@@ -5501,7 +5296,7 @@ function LinkBtn({ file, allFiles, onSave }) {
   return (
     <>
       <button onClick={() => setOpen(true)} className="hov"
-        style={{ display:"flex", alignItems:"center", gap:5, background:linked.length>0?C.accentL:"none", color:C.accent, border:`1px solid ${C.border}`, borderRadius:8, padding:"5px 10px", fontSize:12, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap" }}>
+        style={{ display:"flex", alignItems:"center", gap:5, background:linked.length>0?C.accentL:"none", color:C.link, border:`1px solid ${C.border}`, borderRadius:8, padding:"5px 10px", fontSize:12, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap" }}>
         {linked.length > 0 ? `${linked.length} linked` : "Link files"}
       </button>
       {open && (
@@ -5519,7 +5314,7 @@ function LinkBtn({ file, allFiles, onSave }) {
                   }}
                     style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", borderRadius:10, border:`1.5px solid ${isLinked?C.accent:C.border}`, background:isLinked?C.accentL:"#fff", cursor:"pointer", textAlign:"left" }}>
                     <span style={{ fontSize:18 }}>{isLinked?"✓":"○"}</span>
-                    <span style={{ fontSize:13, fontWeight:600, color:isLinked?C.accent:C.text, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name}</span>
+                    <span style={{ fontSize:13, fontWeight:600, color:isLinked?C.link:C.text, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name}</span>
                   </button>
                 );
               })}
@@ -5685,13 +5480,13 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFi
             <div onDragOver={e=>{e.preventDefault();setDragging(true);}} onDragLeave={()=>setDragging(false)}
               onDrop={e=>{e.preventDefault();setDragging(false);addFiles(e.dataTransfer.files);}}
               onClick={()=>fileInput.current.click()}
-              style={{ border:`2px dashed ${dragging?"#16564c":C.border}`, borderRadius:20, padding:"36px 24px", textAlign:"center", cursor:"pointer",
-                background:dragging?"#16564c0d":C.surface,
-                marginBottom:24, transition:"all .2s", boxShadow:dragging?"0 0 0 3px #16564c22":"none" }}>
-              <div style={{ width:52, height:52, background:dragging?"#16564c15":C.accentL, borderRadius:16, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 14px", transition:"all .2s" }}>
-                <Icon d={I.upload} size={24} color={dragging?"#16564c":C.accent} />
+              style={{ border:`2px dashed ${dragging?"#286a9b":C.border}`, borderRadius:20, padding:"36px 24px", textAlign:"center", cursor:"pointer",
+                background:dragging?"#286a9b0d":C.surface,
+                marginBottom:24, transition:"all .2s", boxShadow:dragging?"0 0 0 3px #286a9b22":"none" }}>
+              <div style={{ width:52, height:52, background:dragging?"#286a9b15":C.accentL, borderRadius:16, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 14px", transition:"all .2s" }}>
+                <Icon d={I.upload} size={24} color={dragging?"#286a9b":C.accent} />
               </div>
-              <p style={{ fontSize:15, fontWeight:700, color:dragging?"#16564c":C.text, marginBottom:6 }}>
+              <p style={{ fontSize:15, fontWeight:700, color:dragging?"#286a9b":C.text, marginBottom:6 }}>
                 {dragging ? "Drop to upload" : "Drop files here or choose files"}
               </p>
               <p style={{ fontSize:12, color:C.muted, margin:0 }}>PDF, Word, PowerPoint, images, and more</p>
@@ -5722,7 +5517,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFi
                               <span>{file.uploadedAt}</span>
                               {(file.linkedFileIds||[]).length > 0 && <>
                                 <span style={{ color:C.border }}>·</span>
-                                <span style={{ color:C.accent, fontWeight:600 }}>{(file.linkedFileIds||[]).length} linked</span>
+                                <span style={{ color:C.link, fontWeight:600 }}>{(file.linkedFileIds||[]).length} linked</span>
                               </>}
                             </p>
                           </div>
@@ -5733,7 +5528,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFi
                             <LinkBtn file={file} allFiles={folder.files}
                               onSave={ids => onUpdate({...folder,files:folder.files.map(f=>f.id===file.id?{...f,linkedFileIds:ids}:f)})} />
                             <button onClick={() => onOpenFile(file)}
-                              style={{ display:"flex", alignItems:"center", gap:6, background:"#16564c", color:"#fff", border:"none", borderRadius:10, padding:"8px 18px", fontSize:13, fontWeight:600, cursor:"pointer", boxShadow:"0 3px 10px rgba(22,86,76,.3)" }}>
+                              style={{ display:"flex", alignItems:"center", gap:6, background:"#286a9b", color:"#fff", border:"none", borderRadius:10, padding:"8px 18px", fontSize:13, fontWeight:600, cursor:"pointer", boxShadow:"0 3px 10px rgba(22,86,76,.3)" }}>
                               Open →
                             </button>
                             <FileActionsMenu
@@ -5890,11 +5685,11 @@ ${text}`
       <div style={{ flex:1, display:"flex", overflow:"hidden" }}>
         <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", background:C.isDark?"#111110":"#2a2a26", padding:40 }}>
           <div style={{ background:C.surface, borderRadius:20, padding:"48px 56px", maxWidth:500, width:"100%", boxShadow:"0 8px 40px rgba(0,0,0,.3)", textAlign:"center", border:`1px solid ${C.border}` }}>
-            <div style={{ width:64, height:64, background:"#16564c15", borderRadius:18, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 20px" }}>
-              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#16564c" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            <div style={{ width:64, height:64, background:"#286a9b15", borderRadius:18, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 20px" }}>
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#286a9b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
             </div>
             <p style={{ fontSize:20, fontWeight:700, color:C.text, marginBottom:8, fontFamily:"'Fraunces Variable',serif" }}>Untitled Document</p>
-            <p style={{ fontSize:14, color:C.muted, marginBottom:28, lineHeight:1.6 }}>This is a blank notebook. Switch to the <strong style={{color:C.accent}}>Notes</strong> tab to write or generate AI notes.</p>
+            <p style={{ fontSize:14, color:C.muted, marginBottom:28, lineHeight:1.6 }}>This is a blank notebook. Switch to the <strong style={{color:C.link}}>Notes</strong> tab to write or generate AI notes.</p>
             <label style={{ display:"inline-flex", alignItems:"center", gap:8, background:"transparent", color:C.muted, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 20px", cursor:"pointer", fontSize:13, fontWeight:600 }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
               Upload a file instead
@@ -5934,7 +5729,7 @@ ${text}`
             </div>
           )}
           <button onClick={() => doExplain()} disabled={explaining}
-            style={{ display:"flex", alignItems:"center", gap:5, background:explaining?"#ccc":PRIMARY, color:"#fff", border:"none", borderRadius:7, padding:"6px 14px", fontSize:13, fontWeight:600, cursor:explaining?"default":"pointer", boxShadow:explaining?"none":"0 2px 8px rgba(22,86,76,.3)" }}>
+            style={{ display:"flex", alignItems:"center", gap:5, background:explaining?"#ccc":PRIMARY, color:primaryInk(explaining?"#ccc":PRIMARY, "#fff"), border:"none", borderRadius:7, padding:"6px 14px", fontSize:13, fontWeight:600, cursor:explaining?"default":"pointer", boxShadow:explaining?"none":"0 2px 8px rgba(22,86,76,.3)" }}>
             <Icon d={I.sparkle} size={12} color="#fff" sw={2} />{explaining?"Explaining…":"AI Explain"}
           </button>
       </div>
@@ -5993,7 +5788,7 @@ function ViewAIPanel({ file, explaining, explanation, showExplain, onHideExplain
       const sys = `You are a knowledgeable study assistant. ${fileText ? "Document content: " + fileText.slice(0,8000) : ""}
 Format responses with markdown: # headings, **bold** key terms, - bullet points, > for formulas/quotes.
 For comparisons/tables respond ONLY with JSON: {"TABLE":{"explanation":"...","columns":["A","B"],"rows":[["x","y"]]}}
-GRAPHS/CHARTS: If the user asks for a graph, chart, plot, scatter plot, or visualization of data, respond with ONLY valid JSON (no other text): {"GRAPH":{"type":"bar","title":"...","labels":["A","B","C"],"datasets":[{"label":"Series 1","data":[10,20,30],"backgroundColor":["#16564c","#39696d","#06b6d4"]}]}}
+GRAPHS/CHARTS: If the user asks for a graph, chart, plot, scatter plot, or visualization of data, respond with ONLY valid JSON (no other text): {"GRAPH":{"type":"bar","title":"...","labels":["A","B","C"],"datasets":[{"label":"Series 1","data":[10,20,30],"backgroundColor":["#286a9b","#39696d","#06b6d4"]}]}}
 Supported graph types: bar, line, pie, doughnut, scatter.
 If the user's request would clearly benefit from a visual (e.g. "show this as a graph", "compare these visually", "make a table"), proactively use the TABLE or GRAPH format even if not explicitly asked for JSON.
 NEVER use pipe-table markdown (| col | col |).`;
@@ -6046,7 +5841,7 @@ NEVER use pipe-table markdown (| col | col |).`;
       {explanation && msgs.length === 0 && (
         <div style={{ flex:1, overflowY:"auto", padding:"16px 20px" }}>
           <div style={{ background:T.isDark?"#222":"#2a2a2a", borderRadius:14, padding:"14px 16px" }}>
-            <p style={{ margin:"0 0 8px", fontSize:11, fontWeight:700, color:"#16564c", letterSpacing:.8, textTransform:"uppercase" }}>
+            <p style={{ margin:"0 0 8px", fontSize:11, fontWeight:700, color:C.link, letterSpacing:.8, textTransform:"uppercase" }}>
               {isPDF ? `Page ${pageNum} — Explanation` : "AI Explanation"}
             </p>
             <p style={{ margin:0, fontSize:13, lineHeight:1.75, color:"#ddd", whiteSpace:"pre-wrap" }}>{explanation}</p>
@@ -6060,7 +5855,7 @@ NEVER use pipe-table markdown (| col | col |).`;
           {msgs.map((m,i) => (
             <div key={i} style={{ display:"flex", justifyContent:m.role==="user"?"flex-end":"flex-start" }}>
               <div style={{ maxWidth:"90%", padding:"10px 14px", borderRadius:14, fontSize:13, lineHeight:1.65,
-                background:m.role==="user"?"#16564c":"rgba(255,255,255,.08)",
+                background:m.role==="user"?"#286a9b":"rgba(255,255,255,.08)",
                 color:m.role==="user"?"#fff":"#ddd",
                 borderBottomRightRadius:m.role==="user"?2:14,
                 borderBottomLeftRadius:m.role==="user"?14:2 }}>
@@ -6076,7 +5871,7 @@ NEVER use pipe-table markdown (| col | col |).`;
           ))}
           {loading && (
             <div style={{ alignSelf:"flex-start", padding:"10px 14px", background:"rgba(255,255,255,.08)", borderRadius:14 }}>
-              <div style={{ display:"flex", gap:4 }}>{[0,1,2].map(j=><span key={j} style={{width:6,height:6,borderRadius:"50%",background:"#16564c",animation:`bounce .8s ease-in-out ${j*0.15}s infinite`,display:"inline-block"}}/>)}</div>
+              <div style={{ display:"flex", gap:4 }}>{[0,1,2].map(j=><span key={j} style={{width:6,height:6,borderRadius:"50%",background:"#286a9b",animation:`bounce .8s ease-in-out ${j*0.15}s infinite`,display:"inline-block"}}/>)}</div>
             </div>
           )}
           <div ref={bottomRef}/>
@@ -6100,7 +5895,7 @@ NEVER use pipe-table markdown (| col | col |).`;
             </button>
             <button onClick={()=>send()} disabled={!inp.trim()||loading}
               style={{ width:34, height:34, borderRadius:"50%", border:"none",
-                background:inp.trim()&&!loading?"#16564c":"rgba(255,255,255,.15)",
+                background:inp.trim()&&!loading?"#286a9b":"rgba(255,255,255,.15)",
                 cursor:inp.trim()&&!loading?"pointer":"default",
                 display:"flex", alignItems:"center", justifyContent:"center" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -6222,7 +6017,7 @@ function ExcelViewer({ fileObj }) {
         <div style={{ display:"flex", background:"#f3f4f6", borderBottom:"1px solid #e5e7eb", overflowX:"auto" }}>
           {sheets.map((s, i) => (
             <button key={i} onClick={() => setActiveSheet(i)}
-              style={{ padding:"8px 18px", border:"none", background:activeSheet===i?"#fff":"transparent", borderBottom:activeSheet===i?`2px solid ${C.accent}`:"2px solid transparent", fontWeight:activeSheet===i?700:400, color:activeSheet===i?C.accent:C.muted, fontSize:13, cursor:"pointer", whiteSpace:"nowrap" }}>
+              style={{ padding:"8px 18px", border:"none", background:activeSheet===i?"#fff":"transparent", borderBottom:activeSheet===i?`2px solid ${C.accent}`:"2px solid transparent", fontWeight:activeSheet===i?700:400, color:activeSheet===i?C.link:C.muted, fontSize:13, cursor:"pointer", whiteSpace:"nowrap" }}>
               {s.name}
             </button>
           ))}
@@ -6380,18 +6175,18 @@ FORMATTING — strictly follow:
               <p style={{ fontSize:11, fontWeight:800, color:C.muted, letterSpacing:.8, marginBottom:12 }}>CHOOSE FILES FOR AI</p>
 
               {groups.length > 0 && <>
-                <p style={{ fontSize:11, fontWeight:700, color:C.accent, marginBottom:8 }}>LINKED PAIRS</p>
+                <p style={{ fontSize:11, fontWeight:700, color:C.link, marginBottom:8 }}>LINKED PAIRS</p>
                 {groups.map((grp, gi) => {
                   const allSel = grp.every(f => selectedFileIds.includes(f.id));
                   const someSel = grp.some(f => selectedFileIds.includes(f.id));
                   return (
                     <div key={gi} style={{ border:`2px solid ${allSel?C.accent:someSel?C.accentS:C.border}`, borderRadius:12, padding:"10px 12px", marginBottom:8, background:allSel?C.accentL:someSel?"#f0f5ff":"#fff" }}>
                       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
-                        <span style={{ fontSize:11, fontWeight:700, color:C.accent }}>Group {gi+1}</span>
+                        <span style={{ fontSize:11, fontWeight:700, color:C.link }}>Group {gi+1}</span>
                         <button onClick={() => {
                           const ids = grp.map(f=>f.id);
                           setSelectedFileIds(prev => allSel ? prev.filter(id=>!ids.includes(id)) : [...new Set([...prev,...ids])]);
-                        }} style={{ fontSize:11, fontWeight:700, background:allSel?C.accent:C.accentL, color:allSel?"#fff":C.accent, border:"none", borderRadius:8, padding:"3px 10px", cursor:"pointer" }}>
+                        }} style={{ fontSize:11, fontWeight:700, background:allSel?C.accent:C.accentL, color:allSel?"#fff":C.link, border:"none", borderRadius:8, padding:"3px 10px", cursor:"pointer" }}>
                           {allSel?"Deselect all":"Select all"}
                         </button>
                       </div>
@@ -6401,7 +6196,7 @@ FORMATTING — strictly follow:
                           <button key={f.id} onClick={() => setSelectedFileIds(prev => sel ? prev.filter(id=>id!==f.id) : [...prev, f.id])}
                             style={{ display:"flex", alignItems:"center", gap:8, width:"100%", padding:"6px 8px", borderRadius:8, border:`1.5px solid ${sel?C.accent:C.border}`, background:sel?C.accentL:"#f8f8f8", cursor:"pointer", textAlign:"left", marginBottom:4 }}>
                             <span style={{fontWeight:700}}>{sel?"✓":"○"}</span>
-                            <span style={{ fontSize:12, fontWeight:600, color:sel?C.accent:C.text, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name}</span>
+                            <span style={{ fontSize:12, fontWeight:600, color:sel?C.link:C.text, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name}</span>
                           </button>
                         );
                       })}
@@ -6418,21 +6213,21 @@ FORMATTING — strictly follow:
                     <button key={f.id} onClick={() => setSelectedFileIds(prev => sel ? prev.filter(id=>id!==f.id) : [...prev, f.id])}
                       style={{ display:"flex", alignItems:"center", gap:8, width:"100%", padding:"7px 10px", borderRadius:9, border:`1.5px solid ${sel?C.accent:C.border}`, background:sel?C.accentL:"#fff", cursor:"pointer", textAlign:"left", marginBottom:5 }}>
                       <span style={{fontWeight:700}}>{sel?"✓":"○"}</span>
-                      <span style={{ fontSize:13, fontWeight:600, color:sel?C.accent:C.text, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name}</span>
+                      <span style={{ fontSize:13, fontWeight:600, color:sel?C.link:C.text, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name}</span>
                     </button>
                   );
                 })}
               </>}
 
               {selectedFileIds.length > 0 && (
-                <p style={{ fontSize:11, color:C.accent, marginTop:8, fontWeight:700 }}>AI will read {selectedFileIds.length} file{selectedFileIds.length>1?"s":""}</p>
+                <p style={{ fontSize:11, color:C.link, marginTop:8, fontWeight:700 }}>AI will read {selectedFileIds.length} file{selectedFileIds.length>1?"s":""}</p>
               )}
             </div>
           );
         })()}
         {msgs.length === 0 && (
           <div style={{ textAlign:"center", padding:"24px 20px", color:C.muted }}>
-            <div style={{ width:52, height:52, borderRadius:16, background:"#16564c", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px" }}>
+            <div style={{ width:52, height:52, borderRadius:16, background:"#286a9b", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px" }}>
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8M12 5V3"/><circle cx="12" cy="3" r="1"/></svg>
             </div>
             <p style={{ fontSize:15, fontWeight:600, color:C.text, marginBottom:6 }}>AI Assistant</p>
@@ -6469,7 +6264,7 @@ FORMATTING — strictly follow:
           <img src={attachedImage.base64} alt="preview"
             style={{ width:48, height:48, objectFit:"cover", borderRadius:8, flexShrink:0 }} />
           <div style={{ flex:1, minWidth:0 }}>
-            <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.accent }}>Image attached</p>
+            <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.link }}>Image attached</p>
             <p style={{ margin:0, fontSize:11, color:C.muted, overflow:"hidden",
               textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{attachedImage.name}</p>
           </div>
@@ -6502,7 +6297,7 @@ FORMATTING — strictly follow:
             border:`1.5px solid ${attachedImage ? C.accent : C.border}`,
             background: attachedImage ? C.accentL : C.bg,
             cursor:"pointer", display:"flex",
-            alignItems:"center", justifyContent:"center", color:attachedImage?C.accent:C.muted }}>
+            alignItems:"center", justifyContent:"center", color:attachedImage?C.link:C.muted }}>
           <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
         </button>
         <input ref={imgInputRef} type="file" accept="image/*" style={{ display:"none" }}
@@ -6515,7 +6310,7 @@ FORMATTING — strictly follow:
             background:C.bg, color:C.text }} />
         <button onClick={send} disabled={(!inp.trim() && !attachedImage) || loading}
           style={{ flexShrink:0,
-            background:(inp.trim()||attachedImage)&&!loading?"#16564c":"#ccc",
+            background:(inp.trim()||attachedImage)&&!loading?"#286a9b":"#ccc",
             color:"#fff", border:"none", borderRadius:8, padding:"11px 20px",
             fontSize:14, fontWeight:700,
             boxShadow:(inp.trim()||attachedImage)&&!loading?"0 3px 10px rgba(22,86,76,.3)":"none",
@@ -6547,7 +6342,7 @@ function LangPicker({ value, onChange }) {
         style={{ display:"flex", alignItems:"center", gap:7, background:C.surface,
           border:`1.5px solid ${open ? C.accent : C.border}`, borderRadius:10,
           padding:"7px 12px", cursor:"pointer", fontSize:13, fontWeight:600,
-          color:open ? C.accent : C.text, transition:"all .15s",
+          color:open ? C.link : C.text, transition:"all .15s",
           boxShadow: open ? `0 0 0 3px ${C.accentS}` : "none" }}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
@@ -6570,11 +6365,11 @@ function LangPicker({ value, onChange }) {
               style={{ display:"block", width:"100%", textAlign:"left", padding:"8px 14px",
                 background: value===code ? C.accentL : "transparent",
                 border:"none", cursor:"pointer", fontSize:13, fontWeight:value===code?700:400,
-                color: value===code ? C.accent : C.text, transition:"background .1s" }}
+                color: value===code ? C.link : C.text, transition:"background .1s" }}
               onMouseEnter={e => { if(value!==code) e.target.style.background=C.bg; }}
               onMouseLeave={e => { if(value!==code) e.target.style.background="transparent"; }}>
               {label}
-              {value===code && <span style={{ marginLeft:"auto", float:"right", color:C.accent }}>✓</span>}
+              {value===code && <span style={{ marginLeft:"auto", float:"right", color:C.link }}>✓</span>}
             </button>
           ))}
         </div>
@@ -6897,7 +6692,7 @@ STRICT RULES — follow every single one:
             <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:14, flexWrap:"wrap" }}>
               <span style={{ fontSize:11, fontWeight:700, color:C.muted }}>Playback voice:</span>
               <button onClick={() => setShowPlaybackPicker(v => !v)}
-                style={{ display:"flex", alignItems:"center", gap:5, background:"#fff", border:`1.5px solid ${showPlaybackPicker?C.accent:C.border}`, borderRadius:8, padding:"5px 12px", fontSize:12, fontWeight:700, cursor:"pointer", color:showPlaybackPicker?C.accent:C.text }}>
+                style={{ display:"flex", alignItems:"center", gap:5, background:"#fff", border:`1.5px solid ${showPlaybackPicker?C.accent:C.border}`, borderRadius:8, padding:"5px 12px", fontSize:12, fontWeight:700, cursor:"pointer", color:showPlaybackPicker?C.link:C.text }}>
                 {GLOBAL_PERSONAS[playbackPersonaIdx]?.label} {GLOBAL_PERSONAS[playbackPersonaIdx]?.gender==="female"?"♀":GLOBAL_PERSONAS[playbackPersonaIdx]?.gender==="male"?"♂":"⚥"} ▾
               </button>
               {showPlaybackPicker && (
@@ -6937,7 +6732,7 @@ STRICT RULES — follow every single one:
                       </div>
                       <div style={{ display:"flex", gap:6 }}>
                         <button onClick={() => { const n=notes?notes+"\n\n---\n\n"+rec.text:rec.text; setNotes(n); onUpdate({...file,notes:n}); }}
-                          style={{ fontSize:11, fontWeight:700, padding:"5px 10px", borderRadius:8, border:`1px solid ${C.accentS}`, background:C.accentL, color:C.accent, cursor:"pointer" }}>+ Notes</button>
+                          style={{ fontSize:11, fontWeight:700, padding:"5px 10px", borderRadius:8, border:`1px solid ${C.accentS}`, background:C.accentL, color:C.link, cursor:"pointer" }}>+ Notes</button>
                         <button onClick={() => deleteRec(idx)}
                           style={{ padding:"5px 8px", borderRadius:8, border:`1px solid ${C.border}`, background:"#fff", color:C.muted, cursor:"pointer", display:"flex", alignItems:"center" }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
                       </div>
@@ -7005,7 +6800,7 @@ function ClassioTable({ data, onClose }) {
       chartInstance.current = new window.Chart(chartRef.current, {
         type:"bar",
         data:{ labels:chart.labels, datasets:[{ label:"Value", data:chart.values,
-          backgroundColor:"rgba(22,86,76,0.7)", borderColor:"#16564c", borderWidth:2, borderRadius:6 }] },
+          backgroundColor:"rgba(22,86,76,0.7)", borderColor:"#286a9b", borderWidth:2, borderRadius:6 }] },
         options:{ responsive:true, plugins:{ legend:{display:false} },
           scales:{ y:{ beginAtZero:true, grid:{color:"rgba(0,0,0,.06)"} } } }
       });
@@ -7018,11 +6813,11 @@ function ClassioTable({ data, onClose }) {
     <div style={{ background:C.surface, border:`1.5px solid ${C.accentS}`, borderRadius:16, overflow:"hidden", marginTop:16 }}>
       {/* Header */}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 14px", background:C.accentL, borderBottom:`1px solid ${C.accentS}` }}>
-        <span style={{ fontSize:12, fontWeight:700, color:C.accent, letterSpacing:.5 }}>AI GENERATED TABLE</span>
+        <span style={{ fontSize:12, fontWeight:700, color:C.link, letterSpacing:.5 }}>AI GENERATED TABLE</span>
         <div style={{ display:"flex", gap:6 }}>
           {chart && (
             <button onClick={()=>setShowChart(s=>!s)}
-              style={{ fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:8, border:`1.5px solid ${C.accent}`, background:showChart?C.accent:"transparent", color:showChart?"#fff":C.accent, cursor:"pointer" }}>
+              style={{ fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:8, border:`1.5px solid ${C.accent}`, background:showChart?C.accent:"transparent", color:showChart?"#fff":C.link, cursor:"pointer" }}>
               {showChart ? "Hide Chart" : "Chart"}
             </button>
           )}
@@ -7037,7 +6832,7 @@ function ClassioTable({ data, onClose }) {
           <thead>
             <tr>
               {columns.map((col,ci)=>(
-                <th key={ci} style={{ padding:"10px 14px", textAlign:"left", fontWeight:700, color:C.accent, background:C.accentL, borderBottom:`2px solid ${C.accentS}`, whiteSpace:"nowrap" }}>
+                <th key={ci} style={{ padding:"10px 14px", textAlign:"left", fontWeight:700, color:C.link, background:C.accentL, borderBottom:`2px solid ${C.accentS}`, whiteSpace:"nowrap" }}>
                   {col}
                 </th>
               ))}
@@ -7097,7 +6892,7 @@ function AIGeneratedImage({ prompt, style, onChangePrompt }) {
   if (failed) return (
     <div style={{ margin:"10px 0", borderRadius:10, background:C.redL||C.accentL, padding:"10px 14px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, border:`1px solid ${C.border}` }}>
       <span style={{ fontSize:12, color:C.muted }}>Couldn't generate image: {prompt}</span>
-      <button onClick={()=>generate()} style={{ fontSize:11, fontWeight:700, color:C.accent, background:"none", border:"none", cursor:"pointer" }}>Retry</button>
+      <button onClick={()=>generate()} style={{ fontSize:11, fontWeight:700, color:C.link, background:"none", border:"none", cursor:"pointer" }}>Retry</button>
     </div>
   );
 
@@ -7108,7 +6903,7 @@ function AIGeneratedImage({ prompt, style, onChangePrompt }) {
       <figcaption style={{ padding:"6px 12px", background:C.accentL, fontSize:11, color:C.muted, fontStyle:"italic", textAlign:"center", display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
         <span style={{ flex:1, textAlign:"left", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{prompt} <span style={{opacity:.6}}>· AI generated</span></span>
         <button onClick={()=>generate()} title="Regenerate"
-          style={{ flexShrink:0, display:"flex", alignItems:"center", gap:3, fontSize:10, fontWeight:700, color:C.accent, background:"none", border:"none", cursor:"pointer", padding:0 }}>
+          style={{ flexShrink:0, display:"flex", alignItems:"center", gap:3, fontSize:10, fontWeight:700, color:C.link, background:"none", border:"none", cursor:"pointer", padding:0 }}>
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
           Regenerate
         </button>
@@ -7154,7 +6949,7 @@ function NotesImageInsert({ file, onInsert }) {
       </button>
       <button onClick={()=>setShowAI(s=>!s)}
         style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:8,
-          border:`1.5px solid ${showAI?T.accent:T.border}`, background:showAI?T.accentL:"none", color:showAI?T.accent:T.muted, fontSize:12, fontWeight:600, cursor:"pointer" }}>
+          border:`1.5px solid ${showAI?T.accent:T.border}`, background:showAI?T.accentL:"none", color:showAI?T.link:T.muted, fontSize:12, fontWeight:600, cursor:"pointer" }}>
         <Icon d={I.sparkle} size={12} color={showAI?T.accent:T.muted}/>
         AI Generate
       </button>
@@ -7175,7 +6970,7 @@ function NotesImageInsert({ file, onInsert }) {
           <button onClick={()=>{ if(aiPrompt.trim()){ onInsert(`[AIImage: ${aiPrompt.trim()} | ${aiStyle}]`); setAiPrompt(""); setShowAI(false); } }}
             disabled={!aiPrompt.trim()}
             style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"7px", borderRadius:8, border:"none",
-              background:aiPrompt.trim()?"#16564c":"#ccc", color:"#fff", fontSize:12, fontWeight:700, cursor:aiPrompt.trim()?"pointer":"not-allowed" }}>
+              background:aiPrompt.trim()?"#286a9b":"#ccc", color:"#fff", fontSize:12, fontWeight:700, cursor:aiPrompt.trim()?"pointer":"not-allowed" }}>
             <Icon d={I.sparkle} size={11} color="#fff" sw={2}/> Insert
           </button>
         </div>
@@ -7212,7 +7007,7 @@ You MUST respond with ONLY this exact JSON format and nothing else — no markdo
 Do NOT use markdown pipe tables (|col|col|) — ONLY use the JSON TABLE format above.
 
 GRAPHS/CHARTS: If the user asks for a graph, chart, plot, or visualization of data, respond with ONLY valid JSON (no other text):
-{"GRAPH":{"type":"bar","title":"...","labels":["A","B","C"],"datasets":[{"label":"Series 1","data":[10,20,30],"backgroundColor":["#16564c","#39696d","#06b6d4"]}]}}
+{"GRAPH":{"type":"bar","title":"...","labels":["A","B","C"],"datasets":[{"label":"Series 1","data":[10,20,30],"backgroundColor":["#286a9b","#39696d","#06b6d4"]}]}}
 Supported graph types: bar, line, pie, doughnut.
 
 Otherwise respond normally with formatted text. Never use pipe-table markdown (| col | col |) under any circumstances.`;
@@ -7448,9 +7243,9 @@ function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
     const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|==[^=]+==)/g);
     return parts.map((p, pi) => {
       if (p.startsWith("**") && p.endsWith("**")) return <strong key={pi} style={{ fontWeight:700, color:C.text }}>{p.slice(2,-2)}</strong>;
-      if (p.startsWith("*") && p.endsWith("*") && p.length>2) return <em key={pi} style={{ fontStyle:"italic", color:C.accent }}>{p.slice(1,-1)}</em>;
-      if (p.startsWith("`") && p.endsWith("`")) return <code key={pi} style={{ background:C.accentL, color:C.accent, borderRadius:4, padding:"1px 6px", fontSize:12, fontFamily:"monospace" }}>{p.slice(1,-1)}</code>;
-      if (p.startsWith("==") && p.endsWith("==")) return <mark key={pi} style={{ background:C.accentL, color:C.accent, padding:"0 3px", borderRadius:3 }}>{p.slice(2,-2)}</mark>;
+      if (p.startsWith("*") && p.endsWith("*") && p.length>2) return <em key={pi} style={{ fontStyle:"italic", color:C.link }}>{p.slice(1,-1)}</em>;
+      if (p.startsWith("`") && p.endsWith("`")) return <code key={pi} style={{ background:C.accentL, color:C.link, borderRadius:4, padding:"1px 6px", fontSize:12, fontFamily:"monospace" }}>{p.slice(1,-1)}</code>;
+      if (p.startsWith("==") && p.endsWith("==")) return <mark key={pi} style={{ background:C.accentL, color:C.link, padding:"0 3px", borderRadius:3 }}>{p.slice(2,-2)}</mark>;
       return p;
     });
   };
@@ -7502,7 +7297,7 @@ function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
             <table style={{ width:"100%", borderCollapse:"collapse", fontSize:fs, tableLayout:"fixed" }}>
               <colgroup>{cols.map((_,ci)=><col key={ci} style={{ width:`${100/n}%` }}/>)}</colgroup>
               <thead>
-                <tr style={{ background:"#16564c" }}>
+                <tr style={{ background:"#286a9b" }}>
                   {cols.map((col,ci)=>(
                     <th key={ci} style={{ padding:pad, textAlign:"left", fontWeight:700, color:"#fff", fontSize:fs-1, wordBreak:"break-word", verticalAlign:"top", borderRight:ci<n-1?"1px solid rgba(255,255,255,.15)":"none" }}>{col}</th>
                   ))}
@@ -7512,7 +7307,7 @@ function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
                 {rows.map((row,ri)=>(
                   <tr key={ri} style={{ borderBottom:`1px solid ${C.border}`, background:ri%2===0?C.surface:"transparent" }}>
                     {row.map((cell,ci)=>(
-                      <td key={ci} style={{ padding:pad, color:ci===0?C.accent:C.text, fontWeight:ci===0?600:400, fontSize:fs, wordBreak:"break-word", verticalAlign:"top", lineHeight:1.5, borderRight:ci<n-1?`1px solid ${C.border}`:"none" }}>
+                      <td key={ci} style={{ padding:pad, color:ci===0?C.link:C.text, fontWeight:ci===0?600:400, fontSize:fs, wordBreak:"break-word", verticalAlign:"top", lineHeight:1.5, borderRight:ci<n-1?`1px solid ${C.border}`:"none" }}>
                         {renderInlineMarkup(cell)}
                       </td>
                     ))}
@@ -7558,7 +7353,7 @@ function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
 
       // ── ### tertiary ──────────────────────────────────────────────────────
       if (trimmed.startsWith("### ")) {
-        elements.push(<h4 key={key++} style={{ fontSize:14, fontWeight:700, color:C.accent, margin:"12px 0 4px" }}>{trimmed.slice(4)}</h4>);
+        elements.push(<h4 key={key++} style={{ fontSize:14, fontWeight:700, color:C.link, margin:"12px 0 4px" }}>{trimmed.slice(4)}</h4>);
         continue;
       }
 
@@ -7581,7 +7376,7 @@ function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
         const text = trimmed.replace(/^>+\s/, "");
         elements.push(
           <div key={key++} style={{ borderLeft:`3px solid ${C.accent}`, margin:"10px 0", padding:"7px 14px", borderRadius:"0 6px 6px 0" }}>
-            <span style={{ fontSize:14, color:C.accent, fontStyle:"italic", lineHeight:1.7 }}>{renderInlineMarkup(text)}</span>
+            <span style={{ fontSize:14, color:C.link, fontStyle:"italic", lineHeight:1.7 }}>{renderInlineMarkup(text)}</span>
           </div>
         );
         continue;
@@ -7591,7 +7386,7 @@ function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
       if (/[=+\-×÷±≈≥≤≠∝∞√]/.test(trimmed) && trimmed.length < 120 && !trimmed.includes("http")) {
         if (/^[A-Za-z0-9\s=+\-×÷±≈≥≤≠∝∞√()\[\].,;:α-ωΑ-Ω⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉⁻]+$/.test(trimmed)) {
           elements.push(
-            <div key={key++} style={{ background:C.accentL, border:`1px solid ${C.accentS}`, borderRadius:8, padding:"8px 16px", margin:"8px 0", fontFamily:"monospace", fontSize:14, color:C.accent }}>
+            <div key={key++} style={{ background:C.accentL, border:`1px solid ${C.accentS}`, borderRadius:8, padding:"8px 16px", margin:"8px 0", fontFamily:"monospace", fontSize:14, color:C.link }}>
               {trimmed}
             </div>
           );
@@ -7603,7 +7398,7 @@ function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
       if (trimmed.startsWith("- ")||trimmed.startsWith("• ")||trimmed.startsWith("· ")||trimmed.startsWith("* ")) {
         elements.push(
           <div key={key++} style={{ display:"flex", gap:9, marginBottom:4, alignItems:"flex-start" }}>
-            <span style={{ color:C.accent, flexShrink:0, fontWeight:900, marginTop:3, fontSize:14, lineHeight:1 }}>•</span>
+            <span style={{ color:C.link, flexShrink:0, fontWeight:900, marginTop:3, fontSize:14, lineHeight:1 }}>•</span>
             <span style={{ fontSize:14, color:C.text, lineHeight:1.75 }}>{renderInlineMarkup(trimmed.slice(2))}</span>
           </div>
         );
@@ -7615,7 +7410,7 @@ function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
       if (numM) {
         elements.push(
           <div key={key++} style={{ display:"flex", gap:9, marginBottom:4, alignItems:"flex-start" }}>
-            <span style={{ color:C.accent, flexShrink:0, fontWeight:700, minWidth:20, marginTop:3, fontSize:14 }}>{numM[1]}.</span>
+            <span style={{ color:C.link, flexShrink:0, fontWeight:700, minWidth:20, marginTop:3, fontSize:14 }}>{numM[1]}.</span>
             <span style={{ fontSize:14, color:C.text, lineHeight:1.75 }}>{renderInlineMarkup(numM[2])}</span>
           </div>
         );
@@ -7706,7 +7501,7 @@ function InlineChart({ data }) {
       }
       if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
       const ctx = canvasRef.current.getContext("2d");
-      const COLORS = ["#16564c","#39696d","#06b6d4","#10b981","#f59e0b","#ef4444","#16564c","#ec4899"];
+      const COLORS = ["#286a9b","#39696d","#06b6d4","#10b981","#f59e0b","#ef4444","#286a9b","#ec4899"];
       const processedDatasets = datasets.map((ds, di) => ({
         ...ds,
         backgroundColor: ds.backgroundColor || (type === "bar" || type === "line" ? COLORS[di % COLORS.length] + "cc" : labels.map((_, li) => COLORS[li % COLORS.length] + "cc")),
@@ -7757,7 +7552,7 @@ function InlineClassioTable({ data }) {
     <div style={{ margin:"14px 0", border:`1.5px solid ${C.accentS}`, borderRadius:12, overflow:"hidden", width:"100%" }}>
       <div style={{ background:C.accentL, padding:"5px 12px", display:"flex", alignItems:"center", gap:6 }}>
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg>
-        <span style={{ fontSize:10, fontWeight:800, color:C.accent, letterSpacing:.6 }}>AI TABLE</span>
+        <span style={{ fontSize:10, fontWeight:800, color:C.link, letterSpacing:.6 }}>AI TABLE</span>
       </div>
       {data.explanation && <p style={{ fontSize:11, color:C.muted, padding:"5px 12px 0", margin:0, lineHeight:1.4 }}>{data.explanation}</p>}
       <div style={{ width:"100%", overflowX:"auto" }}>
@@ -7768,7 +7563,7 @@ function InlineClassioTable({ data }) {
           <thead>
             <tr style={{ background:C.accentL }}>
               {columns.map((col,ci)=>(
-                <th key={ci} style={{ padding:cellPad, textAlign:"left", fontWeight:700, color:C.accent, borderBottom:`2px solid ${C.accentS}`, fontSize:fontSize-1, wordBreak:"break-word", verticalAlign:"top" }}>{col}</th>
+                <th key={ci} style={{ padding:cellPad, textAlign:"left", fontWeight:700, color:C.link, borderBottom:`2px solid ${C.accentS}`, fontSize:fontSize-1, wordBreak:"break-word", verticalAlign:"top" }}>{col}</th>
               ))}
             </tr>
           </thead>
@@ -7940,7 +7735,7 @@ function RichText({ text }) {
     const parts = str.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
     return parts.map((p, pi) => {
       if (p.startsWith("**") && p.endsWith("**")) return <strong key={pi} style={{ fontWeight:700 }}>{p.slice(2,-2)}</strong>;
-      if (p.startsWith("`") && p.endsWith("`")) return <code key={pi} style={{ background:T.isDark?"#2a2a3a":"#f0eeff", color:"#16564c", borderRadius:4, padding:"1px 6px", fontSize:12, fontFamily:"monospace" }}>{p.slice(1,-1)}</code>;
+      if (p.startsWith("`") && p.endsWith("`")) return <code key={pi} style={{ background:T.isDark?"#2a2a3a":"#f0eeff", color:C.link, borderRadius:4, padding:"1px 6px", fontSize:12, fontFamily:"monospace" }}>{p.slice(1,-1)}</code>;
       return p;
     });
   };
@@ -7960,7 +7755,7 @@ function RichText({ text }) {
       i++; continue;
     }
     if (trim.startsWith("### ")) {
-      els.push(<h4 key={i} style={{ fontSize:14, fontWeight:700, color:"#16564c", margin:"10px 0 3px" }}>{trim.slice(4)}</h4>);
+      els.push(<h4 key={i} style={{ fontSize:14, fontWeight:700, color:C.link, margin:"10px 0 3px" }}>{trim.slice(4)}</h4>);
       i++; continue;
     }
     if (trim.startsWith("|") && trim.endsWith("|")) {
@@ -7974,8 +7769,8 @@ function RichText({ text }) {
         const body = rows.slice(1);
         els.push(<div key={"t"+i} style={{ margin:"12px 0", overflowX:"auto", borderRadius:10, border:`1.5px solid ${T.border}` }}>
           <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
-            <thead><tr style={{ background:T.isDark?"#252520":"#f0eeff" }}>
-              {headers.map((h,ci) => <th key={ci} style={{ padding:"8px 12px", textAlign:"left", fontWeight:700, color:"#16564c", borderBottom:`2px solid ${T.border}`, whiteSpace:"nowrap" }}>{h}</th>)}
+            <thead><tr style={{ background:T.isDark?"#1b2b3a":"#f0eeff" }}>
+              {headers.map((h,ci) => <th key={ci} style={{ padding:"8px 12px", textAlign:"left", fontWeight:700, color:C.link, borderBottom:`2px solid ${T.border}`, whiteSpace:"nowrap" }}>{h}</th>)}
             </tr></thead>
             <tbody>{body.map((row,ri) => {
               const cells = parseRow(row);
@@ -7989,7 +7784,7 @@ function RichText({ text }) {
       continue;
     }
     if (trim.startsWith("> ")) {
-      els.push(<div key={i} style={{ borderLeft:"3px solid #16564c", padding:"8px 14px", margin:"8px 0", color:"#16564c", fontSize:14, lineHeight:1.65, fontStyle:"italic", background:T.isDark?"#16564c11":"#16564c08", borderRadius:"0 8px 8px 0" }}>{renderInline(trim.slice(2))}</div>);
+      els.push(<div key={i} style={{ borderLeft:"3px solid #286a9b", padding:"8px 14px", margin:"8px 0", color:C.link, fontSize:14, lineHeight:1.65, fontStyle:"italic", background:T.isDark?"#286a9b11":"#286a9b08", borderRadius:"0 8px 8px 0" }}>{renderInline(trim.slice(2))}</div>);
       i++; continue;
     }
     if (trim.match(/^[-*\u2022] /)) {
@@ -7997,7 +7792,7 @@ function RichText({ text }) {
       while (i < lines.length && lines[i].trim().match(/^[-*\u2022] /)) { bullets.push(lines[i].trim().replace(/^[-*\u2022] /,"")); i++; }
       els.push(<ul key={"ul"+i} style={{ margin:"6px 0", paddingLeft:0, listStyle:"none" }}>
         {bullets.map((b,bi) => <li key={bi} style={{ display:"flex", gap:8, alignItems:"flex-start", margin:"3px 0" }}>
-          <span style={{ color:"#16564c", fontWeight:700, flexShrink:0, marginTop:2 }}>•</span>
+          <span style={{ color:C.link, fontWeight:700, flexShrink:0, marginTop:2 }}>•</span>
           <span style={{ fontSize:14, color:T.text, lineHeight:1.65 }}>{renderInline(b)}</span>
         </li>)}
       </ul>);
@@ -8008,7 +7803,7 @@ function RichText({ text }) {
       while (i < lines.length && lines[i].trim().match(/^\d+\. /)) { items.push(lines[i].trim().replace(/^\d+\. /,"")); i++; }
       els.push(<ol key={"ol"+i} style={{ margin:"6px 0", paddingLeft:0, listStyle:"none" }}>
         {items.map((b,bi) => <li key={bi} style={{ display:"flex", gap:8, alignItems:"flex-start", margin:"3px 0" }}>
-          <span style={{ color:"#16564c", fontWeight:700, flexShrink:0, minWidth:20 }}>{bi+1}.</span>
+          <span style={{ color:C.link, fontWeight:700, flexShrink:0, minWidth:20 }}>{bi+1}.</span>
           <span style={{ fontSize:14, color:T.text, lineHeight:1.65 }}>{renderInline(b)}</span>
         </li>)}
       </ol>);
@@ -8080,7 +7875,7 @@ function ELI5Panel({ card }) {
         <button onClick={doELI5} className="no-min-h"
           style={{ display:"flex", alignItems:"center", gap:7, padding:"9px 16px",
             border:`2px solid ${T.accent}`, borderRadius:8,
-            background:T.accentL, color:T.accent, fontSize:13, fontWeight:700, cursor:"pointer", flexShrink:0 }}>
+            background:T.accentL, color:T.link, fontSize:13, fontWeight:700, cursor:"pointer", flexShrink:0 }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
           ELI5
         </button>
@@ -8095,7 +7890,7 @@ function ELI5Panel({ card }) {
             style={{ flex:1, border:`1px solid ${T.border}`, borderRadius:10, padding:"8px 12px", fontSize:13, outline:"none", color:T.text, background:T.bg, fontFamily:"inherit" }}/>
           <button onClick={() => { setOpen(true); sendAsk(); }} disabled={!askQ.trim()||sending}
             style={{ width:34, height:34, borderRadius:"50%", border:"none",
-              background:askQ.trim()&&!sending?"#16564c":T.border,
+              background:askQ.trim()&&!sending?"#286a9b":T.border,
               cursor:askQ.trim()&&!sending?"pointer":"not-allowed",
               display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -8124,7 +7919,7 @@ function ELI5Panel({ card }) {
               {msgs.map((m, i) => (
                 <div key={i} style={{ maxWidth: m.role==="user" ? "85%" : "100%", alignSelf: m.role==="user" ? "flex-end" : "flex-start" }}>
                   {m.role === "user" ? (
-                    <div style={{ background:"#16564c", color:"#fff", borderRadius:16, padding:"12px 18px", fontSize:14, lineHeight:1.6 }}>
+                    <div style={{ background:"#286a9b", color:"#fff", borderRadius:16, padding:"12px 18px", fontSize:14, lineHeight:1.6 }}>
                       {m.content}
                     </div>
                   ) : (
@@ -8157,7 +7952,7 @@ function ELI5Panel({ card }) {
                 autoFocus/>
               <button onClick={sendAsk} disabled={!askQ.trim()||sending}
                 style={{ width:38, height:38, borderRadius:"50%", border:"none",
-                  background:askQ.trim()&&!sending?"#16564c":"#ef4444",
+                  background:askQ.trim()&&!sending?"#286a9b":"#ef4444",
                   cursor:askQ.trim()&&!sending?"pointer":"default",
                   display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                 {sending
@@ -8306,8 +8101,8 @@ function CardsTab({ file, onUpdate }) {
     <div>
       {/* ── Turbo-style header with icon + count ── */}
       <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20 }}>
-        <div style={{ width:48, height:48, background:"#16564c15", borderRadius:16, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#16564c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/></svg>
+        <div style={{ width:48, height:48, background:"#286a9b15", borderRadius:16, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#286a9b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/></svg>
         </div>
         <div>
           <h2 style={{ fontFamily:"'Fraunces Variable',serif", fontSize:22, fontWeight:700, color:C.text, margin:0 }}>Study Cards</h2>
@@ -8319,7 +8114,7 @@ function CardsTab({ file, onUpdate }) {
             <Icon d={I.plus} size={13} color={C.text} sw={2.5}/> Add Card
           </button>
           <button onClick={()=>setShowCountPicker(p=>!p)} disabled={gen} className="hov"
-            style={{ display:"flex", alignItems:"center", gap:7, background:gen?"#ccc":"#16564c", color:"#fff", border:"none", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:gen?"not-allowed":"pointer", boxShadow:gen?"none":"0 3px 10px rgba(22,86,76,.3)" }}>
+            style={{ display:"flex", alignItems:"center", gap:7, background:gen?"#ccc":"#286a9b", color:"#fff", border:"none", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:gen?"not-allowed":"pointer", boxShadow:gen?"none":"0 3px 10px rgba(22,86,76,.3)" }}>
             {gen ? <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Generating…</> : <><Icon d={I.sparkle} size={13} color="#fff"/>AI Generate</>}
           </button>
         </div>
@@ -8341,7 +8136,7 @@ function CardsTab({ file, onUpdate }) {
         <span className="pill-new">{cards.filter(card => !known[card.id] && !starred[card.id]).length} New</span>
         <span className="pill-learning">{starredCount} Learning</span>
         <span className="pill-mastered">{knownCount} Mastered</span>
-        {cards.length > 0 && <span style={{ fontSize:12, color:C.accent, fontWeight:700, alignSelf:"center", marginLeft:4 }}>{progress}% mastered</span>}
+        {cards.length > 0 && <span style={{ fontSize:12, color:C.link, fontWeight:700, alignSelf:"center", marginLeft:4 }}>{progress}% mastered</span>}
         {(knownCount > 0 || starredCount > 0) && (
           <button onClick={resetProgress} style={{ fontSize:11, color:C.muted, background:"none", border:"none", cursor:"pointer", textDecoration:"underline", alignSelf:"center" }}>Reset</button>
         )}
@@ -8350,7 +8145,7 @@ function CardsTab({ file, onUpdate }) {
       {/* ── Progress bar ── */}
       {cards.length > 0 && (
         <div style={{ height:5, background:C.border, borderRadius:3, marginBottom:20, overflow:"hidden" }}>
-          <div style={{ height:"100%", width:`${progress}%`, background:"#16564c", borderRadius:3, transition:"width .4s" }}/>
+          <div style={{ height:"100%", width:`${progress}%`, background:"#286a9b", borderRadius:3, transition:"width .4s" }}/>
         </div>
       )}
 
@@ -8384,7 +8179,7 @@ function CardsTab({ file, onUpdate }) {
                 style={{ width:52, border:"none", outline:"none", fontSize:14, fontWeight:700, color:C.text, background:"transparent", textAlign:"center" }}/>
             </div>
             <button onClick={()=>generate(parseInt(cardCount)||8)} disabled={gen||!parseInt(cardCount)}
-              style={{ flex:1, background:gen?"#ccc":PRIMARY, color:"#fff", border:"none", borderRadius:10, padding:"10px 0", fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer", boxShadow:gen?"none":"0 3px 12px rgba(22,86,76,.3)", display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
+              style={{ flex:1, background:gen?"#ccc":PRIMARY, color:primaryInk(gen?"#ccc":PRIMARY, "#fff"), border:"none", borderRadius:10, padding:"10px 0", fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer", boxShadow:gen?"none":"0 3px 12px rgba(22,86,76,.3)", display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
               {gen ? <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Generating…</> : <><Icon d={I.sparkle} size={13} color="#fff"/> Generate {cardCount} Cards</>}
             </button>
           </div>
@@ -8443,7 +8238,7 @@ function CardsTab({ file, onUpdate }) {
               </div>
             </div>
             <div style={{ flexShrink:0, height:5, background:C.border }}>
-              <div style={{ height:"100%", width:`${pct}%`, background:"#16564c", transition:"width .35s ease" }}/>
+              <div style={{ height:"100%", width:`${pct}%`, background:"#286a9b", transition:"width .35s ease" }}/>
             </div>
             <div style={{ flexShrink:0, display:"flex", justifyContent:"center", gap:16, padding:"10px 28px 0", background:C.bg }}>
               <span className="pill-new">{(displayCards.length - Object.values(known).filter(Boolean).length - Object.values(starred).filter(Boolean).length)} New</span>
@@ -8466,9 +8261,9 @@ function CardsTab({ file, onUpdate }) {
                   <p style={{ fontSize:12, color:C.muted, marginTop:24 }}>Click to flip</p>
                 </div>
                 <div className="ql-side ql-back" style={{ background:C.accentL, border:`2px solid ${C.accentS}`, boxShadow:C.cardShadow }}>
-                  <p style={{ fontSize:11, fontWeight:800, letterSpacing:2, textTransform:"uppercase", color:C.accent, marginBottom:20 }}>ANSWER</p>
+                  <p style={{ fontSize:11, fontWeight:800, letterSpacing:2, textTransform:"uppercase", color:C.link, marginBottom:20 }}>ANSWER</p>
                   <p style={{ fontSize:clamp(card.answer?.length), color:C.text, lineHeight:1.65, fontWeight:500, maxWidth:640 }}>{card.answer}</p>
-                  <p style={{ fontSize:12, color:C.accent, marginTop:24 }}>Click to flip back</p>
+                  <p style={{ fontSize:12, color:C.link, marginTop:24 }}>Click to flip back</p>
                 </div>
               </div>
             </div>
@@ -8484,7 +8279,7 @@ function CardsTab({ file, onUpdate }) {
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>Don't Know
                   </button>
                   <button onClick={() => gradeCard(card.id, true)} className="no-min-h"
-                    style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 28px", borderRadius:8, border:"none", background:isKnown?C.green:"#16564c", color:"#fff", fontSize:14, fontWeight:700, cursor:"pointer", boxShadow:isKnown?`0 3px 12px ${C.green}55`:"0 3px 12px rgba(22,86,76,.35)" }}>
+                    style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 28px", borderRadius:8, border:"none", background:isKnown?C.green:"#286a9b", color:"#fff", fontSize:14, fontWeight:700, cursor:"pointer", boxShadow:isKnown?`0 3px 12px ${C.green}55`:"0 3px 12px rgba(22,86,76,.35)" }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Remembered
                   </button>
                 </div>
@@ -8527,7 +8322,7 @@ function CardsTab({ file, onUpdate }) {
                       <p style={{ fontSize:11, color:C.muted, marginTop:20 }}>Click to flip</p>
                     </div>
                     <div className="ql-side ql-back" style={{ background:C.accentL, border:`2px solid ${C.accentS}`, boxShadow:"0 4px 20px rgba(0,0,0,.09)" }}>
-                      <p style={{ fontSize:11, fontWeight:800, letterSpacing:2, textTransform:"uppercase", color:C.accent, marginBottom:16 }}>ANSWER</p>
+                      <p style={{ fontSize:11, fontWeight:800, letterSpacing:2, textTransform:"uppercase", color:C.link, marginBottom:16 }}>ANSWER</p>
                       <p style={{ fontSize:clamp(c?.answer?.length), color:C.text, lineHeight:1.65, fontWeight:500 }}>{c?.answer||""}</p>
                     </div>
                   </>);
@@ -8563,7 +8358,7 @@ function CardsTab({ file, onUpdate }) {
               </button>
             </div>
             <button onClick={()=>{setViewMode("study");setStudyIdx(0);setFlipped({});}} className="hov"
-              style={{ display:"flex", alignItems:"center", gap:8, background:"#16564c", color:"#fff", border:"none", borderRadius:8, padding:"10px 24px", fontSize:14, fontWeight:700, cursor:"pointer", boxShadow:"0 3px 14px rgba(22,86,76,.35)" }}>
+              style={{ display:"flex", alignItems:"center", gap:8, background:"#286a9b", color:"#fff", border:"none", borderRadius:8, padding:"10px 24px", fontSize:14, fontWeight:700, cursor:"pointer", boxShadow:"0 3px 14px rgba(22,86,76,.35)" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
               Start Studying
             </button>
@@ -8574,7 +8369,7 @@ function CardsTab({ file, onUpdate }) {
             {FILTER_OPTS.map(f=>(
               <button key={f.id} onClick={()=>{setFilter(f.id);setPreviewIdx(0);}}
                 style={{ padding:"6px 14px", borderRadius:8, border:`1.5px solid ${filter===f.id?C.accent:C.border}`,
-                  background:filter===f.id?C.accentL:"transparent", color:filter===f.id?C.accent:C.muted,
+                  background:filter===f.id?C.accentL:"transparent", color:filter===f.id?C.link:C.muted,
                   fontSize:12, fontWeight:700, cursor:"pointer", transition:"all .12s" }}>
                 {f.label}
               </button>
@@ -8874,8 +8669,8 @@ ${modeGuide}`,
           ].map(m => (
             <button key={m.id} onClick={() => setMode(m.id)}
               style={{ flex:"1 1 0", padding:"9px 12px", borderRadius:10, border:`1.5px solid ${mode===m.id?C.accent:C.border}`,
-                background:mode===m.id?"#16564c15":"transparent", cursor:"pointer", textAlign:"left", transition:"all .15s" }}>
-              <p style={{ margin:"0 0 1px", fontSize:13, fontWeight:700, color:mode===m.id?C.accent:C.text }}>{m.label}</p>
+                background:mode===m.id?"#286a9b15":"transparent", cursor:"pointer", textAlign:"left", transition:"all .15s" }}>
+              <p style={{ margin:"0 0 1px", fontSize:13, fontWeight:700, color:mode===m.id?C.link:C.text }}>{m.label}</p>
               <p style={{ margin:0, fontSize:11, color:C.muted }}>{m.desc}</p>
             </button>
           ))}
@@ -8936,11 +8731,11 @@ Only include what's in the transcript.`,
                 try { const d = await generateStructuredTable(result, url, "key concepts"); setYtTableData(d); }
                 catch(e) { alert("Table error: "+e.message); }
                 setCardsLoading(false);
-              }} style={{ background:"transparent", border:`1.5px solid ${C.accent}`, color:C.accent, borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+              }} style={{ background:"transparent", border:`1.5px solid ${C.accent}`, color:C.link, borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
                 Generate Table
               </button>
               <button onClick={saveAll} disabled={cardsLoading}
-                style={{ background:saved?"linear-gradient(135deg,#4A7C59,#4A9C69)":"#16564c", color:"#fff",
+                style={{ background:saved?"linear-gradient(135deg,#4A7C59,#4A9C69)":"#286a9b", color:"#fff",
                   border:"none", borderRadius:10, padding:"8px 16px",
                   fontSize:13, fontWeight:700, cursor:cardsLoading?"not-allowed":"pointer",
                   display:"flex", alignItems:"center", gap:6 }}>
@@ -9305,7 +9100,7 @@ RULES:
       {/* Saved notes selector — pick which note the podcast teaches */}
       {allSaved.length > 1 && (
         <div style={{ background:C.accentL, border:`1px solid ${C.accentS}`, borderRadius:12, padding:"10px 14px", marginBottom:12, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-          <span style={{ fontSize:12, fontWeight:700, color:C.accent, flexShrink:0 }}>Podcast from:</span>
+          <span style={{ fontSize:12, fontWeight:700, color:C.link, flexShrink:0 }}>Podcast from:</span>
           <select value={selectedNoteIdx} onChange={e => { setSelectedNoteIdx(+e.target.value); setNotes(allSaved[+e.target.value]?.text || ""); }}
             style={{ flex:1, border:`1.5px solid ${C.accentS}`, borderRadius:8, padding:"5px 10px", fontSize:12, color:C.text, background:C.surface, outline:"none", cursor:"pointer", minWidth:120 }}>
             {allSaved.map((n, i) => <option key={i} value={i}>{n.name}</option>)}
@@ -9333,7 +9128,7 @@ RULES:
           {(phase === "idle" || phase === "done") && (
             <button onClick={startPodcast} disabled={!notes.trim()}
               style={{ display:"flex", alignItems:"center", gap:7,
-                background:notes.trim()?PRIMARY:"#ccc", color:"#fff", border:"none",
+                background:notes.trim()?PRIMARY:"#ccc", color:primaryInk(notes.trim()?PRIMARY:"#ccc", "#fff"), border:"none",
                 borderRadius:10, padding:"10px 22px", fontSize:14, fontWeight:700,
                 cursor:notes.trim()?"pointer":"not-allowed",
                 boxShadow:notes.trim()?"0 4px 14px rgba(22,86,76,.35)":"none" }}>
@@ -9440,7 +9235,7 @@ RULES:
       <div style={{ display:"flex", alignItems:"center", gap:14 }}>
         <button onClick={listening ? stopMic : startMic}
           style={{ width:50, height:50, borderRadius:"50%", flexShrink:0, border:"none", cursor:"pointer",
-            background: listening ? "linear-gradient(135deg,#ef4444,#dc2626)" : "#16564c",
+            background: listening ? "linear-gradient(135deg,#ef4444,#dc2626)" : "#286a9b",
             boxShadow: listening ? "0 0 0 8px rgba(239,68,68,.15),0 4px 18px rgba(239,68,68,.35)" : "0 4px 16px rgba(124,58,237,.35)",
             display:"flex", alignItems:"center", justifyContent:"center", transition:"all .2s" }}>
           <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -9754,7 +9549,7 @@ Simple language, give an example, under 100 words. No markdown.`,
             width:54, height:54, borderRadius:"50%", flexShrink:0, border:"none", cursor:"pointer",
             background: listening
               ? "linear-gradient(135deg,#ef4444,#dc2626)"
-              : "#16564c",
+              : "#286a9b",
             boxShadow: listening
               ? "0 0 0 8px rgba(239,68,68,.18),0 4px 18px rgba(239,68,68,.4)"
               : "0 4px 18px rgba(124,58,237,.38)",
@@ -9859,8 +9654,8 @@ function PresentationTab({ file, onUpdate }) {
     { id:"ocean",  label:"Ocean",  bg:"#0c4a6e", accent:"#38bdf8", text:"#f0f9ff", sub:"#bae6fd", header:"#0e5a84", card:"rgba(255,255,255,.07)" },
     { id:"forest", label:"Forest", bg:"#14532d", accent:"#4ade80", text:"#f0fdf4", sub:"#bbf7d0", header:"#166534", card:"rgba(255,255,255,.07)" },
     { id:"sunset", label:"Sunset", bg:"#431407", accent:"#fb923c", text:"#fff7ed", sub:"#fed7aa", header:"#7c2d12", card:"rgba(255,255,255,.07)" },
-    { id:"minimal",label:"Minimal",bg:"#f8f9fa", accent:"#16564c", text:"#111827", sub:"#6b7280", header:"#16564c",  card:"rgba(0,0,0,.04)" },
-    { id:"dark",   label:"Dark",   bg:"#0f172a", accent:"#16564c", text:"#f1f5f9", sub:"#94a3b8", header:"#1e293b", card:"rgba(255,255,255,.05)" },
+    { id:"minimal",label:"Minimal",bg:"#f8f9fa", accent:"#286a9b", text:"#111827", sub:"#6b7280", header:"#286a9b",  card:"rgba(0,0,0,.04)" },
+    { id:"dark",   label:"Dark",   bg:"#0f172a", accent:"#286a9b", text:"#f1f5f9", sub:"#94a3b8", header:"#1e293b", card:"rgba(255,255,255,.05)" },
     { id:"rose",   label:"Rose",   bg:"#1c0010", accent:"#fb7185", text:"#fff1f2", sub:"#fecdd3", header:"#4c0519", card:"rgba(255,255,255,.07)" },
     { id:"slate",  label:"Slate",  bg:"#0f172a", accent:"#38bdf8", text:"#e2e8f0", sub:"#94a3b8", header:"#1e293b", card:"rgba(255,255,255,.06)" },
     { id:"amber",  label:"Amber",  bg:"#1c0a00", accent:"#f59e0b", text:"#fffbeb", sub:"#fde68a", header:"#451a03", card:"rgba(255,255,255,.07)" },
@@ -10175,7 +9970,7 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
               PDF
             </button>
             <button onClick={exportPPTX} disabled={exporting}
-              style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 16px", borderRadius:10, border:"none", background:"#16564c", color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", boxShadow:"0 3px 10px rgba(22,86,76,.3)" }}>
+              style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 16px", borderRadius:10, border:"none", background:"#286a9b", color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", boxShadow:"0 3px 10px rgba(22,86,76,.3)" }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
               {exporting ? "Exporting…" : "PPTX"}
             </button>
@@ -10223,7 +10018,7 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
               style={{ width:24,height:24,borderRadius:6,border:`1px solid ${C.border}`,background:C.surface,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",color:C.text,flexShrink:0 }}>+</button>
           </div>
           <button onClick={generate} disabled={generating}
-            style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 20px", borderRadius:10, border:"none", background:generating?"#ccc":"#16564c", color:"#fff", fontSize:14, fontWeight:700, cursor:generating?"not-allowed":"pointer", boxShadow:generating?"none":"0 3px 12px rgba(22,86,76,.3)", whiteSpace:"nowrap" }}>
+            style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 20px", borderRadius:10, border:"none", background:generating?"#ccc":"#286a9b", color:"#fff", fontSize:14, fontWeight:700, cursor:generating?"not-allowed":"pointer", boxShadow:generating?"none":"0 3px 12px rgba(22,86,76,.3)", whiteSpace:"nowrap" }}>
             {generating ? <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Generating…</> : <><Icon d={I.sparkle} size={12} color="#fff" sw={2}/> Generate</>}
           </button>
         </div>
@@ -10237,23 +10032,23 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
                 <button key={t.id} onClick={() => { setTheme(t.id); onUpdate({ ...file, presentationTheme: t.id }); }} title={t.label}
                   style={{ width:32, height:32, borderRadius:"50%",
                     background:t.bg, borderBottomColor:t.accent,
-                    border:`3px solid ${theme===t.id?"#16564c":"transparent"}`,
+                    border:`3px solid ${theme===t.id?"#286a9b":"transparent"}`,
                     cursor:"pointer", boxShadow:"0 2px 8px rgba(0,0,0,.25)",
                     transition:"all .15s", flexShrink:0, position:"relative",
                     transform:theme===t.id?"scale(1.15)":"scale(1)" }}>
-                  {theme===t.id && <div style={{ position:"absolute", inset:-4, borderRadius:"50%", border:"2px solid #16564c66" }}/>}
+                  {theme===t.id && <div style={{ position:"absolute", inset:-4, borderRadius:"50%", border:"2px solid #286a9b66" }}/>}
                 </button>
               ))}
               {customTheme && (
                 <button key="custom" onClick={() => { setTheme("custom"); onUpdate({ ...file, presentationTheme: "custom" }); }} title={customTheme.label}
                   style={{ width:32, height:32, borderRadius:"50%",
                     background:customTheme.bg, borderBottomColor:customTheme.accent,
-                    border:`3px solid ${theme==="custom"?"#16564c":"transparent"}`,
+                    border:`3px solid ${theme==="custom"?"#286a9b":"transparent"}`,
                     cursor:"pointer", boxShadow:"0 2px 8px rgba(0,0,0,.25)",
                     transition:"all .15s", flexShrink:0, position:"relative",
                     transform:theme==="custom"?"scale(1.15)":"scale(1)" }}>
-                  {theme==="custom" && <div style={{ position:"absolute", inset:-4, borderRadius:"50%", border:"2px solid #16564c66" }}/>}
-                  <span style={{ position:"absolute", bottom:-2, right:-2, width:12, height:12, borderRadius:"50%", background:"#16564c", color:"#fff", fontSize:8, fontWeight:900, display:"flex", alignItems:"center", justifyContent:"center", border:`1.5px solid ${C.surface}` }}>✦</span>
+                  {theme==="custom" && <div style={{ position:"absolute", inset:-4, borderRadius:"50%", border:"2px solid #286a9b66" }}/>}
+                  <span style={{ position:"absolute", bottom:-2, right:-2, width:12, height:12, borderRadius:"50%", background:"#286a9b", color:"#fff", fontSize:8, fontWeight:900, display:"flex", alignItems:"center", justifyContent:"center", border:`1.5px solid ${C.surface}` }}>✦</span>
                 </button>
               )}
             </div>
@@ -10267,7 +10062,7 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
                 onBlur={e=>e.target.style.borderColor=C.border}/>
               <button onClick={generateTheme} disabled={themeGenerating || !themePrompt.trim()}
                 style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 12px", borderRadius:8, border:"none",
-                  background:themeGenerating||!themePrompt.trim()?"#ccc":"#16564c",
+                  background:themeGenerating||!themePrompt.trim()?"#ccc":"#286a9b",
                   color:"#fff", fontSize:12, fontWeight:700, cursor:themeGenerating||!themePrompt.trim()?"not-allowed":"pointer", whiteSpace:"nowrap" }}>
                 {themeGenerating ? <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Generating…</> : <><Icon d={I.sparkle} size={11} color="#fff" sw={2}/> Generate Theme</>}
               </button>
@@ -10348,7 +10143,7 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                         </button>
                         <button onClick={()=>{ setEditIdx(isEditing?null:idx); setEditVal({...s}); }} className="no-min-h"
-                          style={{ padding:"0 10px", height:28, borderRadius:7, border:`1.5px solid ${isEditing?C.accent:C.border}`, background:isEditing?C.accentL:C.bg, cursor:"pointer", color:isEditing?C.accent:C.muted, fontSize:11, fontWeight:700, display:"flex", alignItems:"center", gap:4 }}>
+                          style={{ padding:"0 10px", height:28, borderRadius:7, border:`1.5px solid ${isEditing?C.accent:C.border}`, background:isEditing?C.accentL:C.bg, cursor:"pointer", color:isEditing?C.link:C.muted, fontSize:11, fontWeight:700, display:"flex", alignItems:"center", gap:4 }}>
                           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                           {isEditing?"Close":"Edit"}
                         </button>
@@ -10486,7 +10281,7 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
                               }}
                               disabled={aiImgGenerating}
                               style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", borderRadius:8, border:"none",
-                                background:aiImgGenerating?"#ccc":"#16564c",
+                                background:aiImgGenerating?"#ccc":"#286a9b",
                                 color:"#fff", fontSize:12, fontWeight:700, cursor:aiImgGenerating?"not-allowed":"pointer", whiteSpace:"nowrap" }}>
                               {aiImgGenerating ? <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Generating…</> : <><Icon d={I.sparkle} size={11} color="#fff" sw={2}/> {editVal.image && editVal.image.includes("pollinations") ? "Regenerate" : "Generate Image"}</>}
                             </button>
@@ -10547,7 +10342,7 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
                         const next = slides.map((item, index) => index === idx ? slide : item);
                         setSlides(next); onUpdate({ ...file, presentation:next }); setEditIdx(null);
                       }}
-                        style={{ flex:2, padding:"8px", background:"#16564c", color:"#fff", border:"none", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                        style={{ flex:2, padding:"8px", background:"#286a9b", color:"#fff", border:"none", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>
                         ✓ Save Changes
                       </button>
                       <button onClick={()=>setEditIdx(null)}
@@ -10660,12 +10455,12 @@ function GResults({ score, total, onBack, msg }) {
     <div style={{ maxWidth:420, margin:"0 auto", textAlign:"center", padding:"40px 0" }}>
       <div style={{ fontSize:56, marginBottom:16 }}>{pct>=80?"★":pct>=50?"↑":"↺"}</div>
       <h2 style={{ fontFamily:"'Fraunces Variable',serif", fontSize:28, fontWeight:700, color:C.text, marginBottom:6 }}>{msg||"Round Complete!"}</h2>
-      <p style={{ fontSize:48, fontWeight:700, color:C.accent, marginBottom:4 }}>{score}/{total}</p>
+      <p style={{ fontSize:48, fontWeight:700, color:C.link, marginBottom:4 }}>{score}/{total}</p>
       <p style={{ fontSize:16, color:C.muted, marginBottom:8 }}>{pct}% correct</p>
       <p style={{ fontSize:14, color:pct>=80?C.green:pct>=50?C.warm:C.red, fontWeight:600, marginBottom:32 }}>
         {pct>=80?"Excellent!":pct>=50?"Good effort! Keep studying.":"Keep practicing — you've got this!"}
       </p>
-      <button onClick={onBack} style={{ background:PRIMARY, color:"#fff", border:"none", borderRadius:8, padding:"13px 32px", fontSize:15, fontWeight:700, cursor:"pointer", boxShadow:"0 4px 14px rgba(22,86,76,.3)" }}>← Back to Games</button>
+      <button onClick={onBack} style={{ background:PRIMARY, color:primaryInk(PRIMARY, "#fff"), border:"none", borderRadius:8, padding:"13px 32px", fontSize:15, fontWeight:700, cursor:"pointer", boxShadow:"0 4px 14px rgba(22,86,76,.3)" }}>← Back to Games</button>
     </div>
   );
 }
@@ -10951,7 +10746,7 @@ function ScrambleGame({ deck, onBack }) {
             background: result==="correct"?"#f0fdf4": result==="wrong"?"#fff1f1":"#f0f4ff",
             border:`2px solid ${result==="correct"?"#16a34a":result==="wrong"?C.red:C.accentS}`,
             borderRadius:8, marginLeft:2, marginRight:2,
-            color: result==="correct"?"#16a34a": result==="wrong"?C.red: C.accent,
+            color: result==="correct"?"#16a34a": result==="wrong"?C.red: C.link,
             fontWeight:800, fontSize:17, letterSpacing:1,
             transition:"all .2s", verticalAlign:"middle"
           }}>
@@ -12330,8 +12125,8 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
   const TTS_SERVER = _TTS_SERVER_URL;
   // Voices available from server (matches server.py VOICES dict)
   const SERVER_VOICES = [
-    { id:"aria",  label:"Aria",  gender:"female", color:"#16564c", desc:"Warm & natural"   },
-    { id:"nova",  label:"Nova",  gender:"female", color:"#16564c", desc:"Bright & clear"   },
+    { id:"aria",  label:"Aria",  gender:"female", color:"#286a9b", desc:"Warm & natural"   },
+    { id:"nova",  label:"Nova",  gender:"female", color:"#286a9b", desc:"Bright & clear"   },
     { id:"jade",  label:"Jade",  gender:"female", color:"#0f766e", desc:"Calm & smooth"    },
     { id:"echo",  label:"Echo",  gender:"male",   color:"#2563eb", desc:"Deep & confident" },
     { id:"atlas", label:"Atlas", gender:"male",   color:"#ea580c", desc:"Bold & clear"     },
@@ -12686,13 +12481,13 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
       {loading ? (
         <div style={{ padding:"48px 24px", textAlign:"center" }}>
           <div style={{ display:"flex", justifyContent:"center", gap:5, marginBottom:16 }}>
-            {[0,1,2,3].map(i => <span key={i} style={{ width:5, height:28, background:"#16564c", borderRadius:3, display:"inline-block", animation:`ppbar 0.9s ease-in-out ${i*0.15}s infinite` }}/>)}
+            {[0,1,2,3].map(i => <span key={i} style={{ width:5, height:28, background:"#286a9b", borderRadius:3, display:"inline-block", animation:`ppbar 0.9s ease-in-out ${i*0.15}s infinite` }}/>)}
           </div>
           <p style={{ color:"#a5b4fc", fontSize:14, fontWeight:600 }}>Generating podcast script…</p>
         </div>
       ) : !script ? (
         <div style={{ padding:"40px 24px", textAlign:"center" }}>
-          <p style={{ color:"#16564c", fontSize:14 }}>Generate a script to start the podcast.</p>
+          <p style={{ color:C.link, fontSize:14 }}>Generate a script to start the podcast.</p>
         </div>
       ) : (
         <>
@@ -12700,9 +12495,9 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
           <div style={{ padding:"18px 20px 0", display:"flex", alignItems:"flex-start", justifyContent:"space-between" }}>
             <div>
               <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}>
-                <p style={{ fontSize:10, fontWeight:800, color:"#16564c", letterSpacing:1.5, textTransform:"uppercase" }}>Study Podcast</p>
+                <p style={{ fontSize:10, fontWeight:800, color:C.link, letterSpacing:1.5, textTransform:"uppercase" }}>Study Podcast</p>
                 {usePiper && (
-                  <span style={{ fontSize:9, background:"#16564c", color:"#fff", borderRadius:6, padding:"1px 7px", fontWeight:800, letterSpacing:.5 }}>
+                  <span style={{ fontSize:9, background:"#286a9b", color:"#fff", borderRadius:6, padding:"1px 7px", fontWeight:800, letterSpacing:.5 }}>
                     PIPER
                   </span>
                 )}
@@ -12727,7 +12522,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
           {piperLoading && (
             <div style={{ margin:"12px 20px 0", background:"rgba(99,102,241,.15)", border:"1px solid rgba(99,102,241,.3)", borderRadius:10, padding:"10px 14px", display:"flex", alignItems:"center", gap:10 }}>
               <div style={{ display:"flex", gap:3 }}>
-                {[0,1,2].map(i => <span key={i} style={{ width:4, height:14, background:"#16564c", borderRadius:2, display:"inline-block", animation:`ppbar 0.8s ease-in-out ${i*0.15}s infinite` }}/>)}
+                {[0,1,2].map(i => <span key={i} style={{ width:4, height:14, background:"#286a9b", borderRadius:2, display:"inline-block", animation:`ppbar 0.8s ease-in-out ${i*0.15}s infinite` }}/>)}
               </div>
               <p style={{ color:"#a5b4fc", fontSize:12, margin:0 }}>Generating audio… if slow, the server just restarted and is downloading voices. Wait ~60s then try again.</p>
             </div>
@@ -12751,7 +12546,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
             {/* Progress bar */}
             <div onClick={handleSeekBar} onTouchStart={handleSeekBar}
               style={{ height:6, background:"rgba(255,255,255,.1)", borderRadius:3, cursor:"pointer", marginBottom:16, position:"relative", userSelect:"none" }}>
-              <div style={{ height:"100%", width:`${progress*100}%`, background:"#16564c", borderRadius:3, transition:"width .15s linear" }}/>
+              <div style={{ height:"100%", width:`${progress*100}%`, background:"#286a9b", borderRadius:3, transition:"width .15s linear" }}/>
               <div style={{ position:"absolute", top:"50%", left:`${progress*100}%`, transform:"translate(-50%,-50%)", width:13, height:13, borderRadius:"50%", background:"#fff", boxShadow:"0 0 6px rgba(99,102,241,.8)", pointerEvents:"none" }}/>
             </div>
 
@@ -12769,7 +12564,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
 
               {/* Play / Pause */}
               <button onClick={isPlaying ? handlePause : handlePlay} disabled={piperLoading}
-                style={{ width:60, height:60, borderRadius:"50%", background: piperLoading ? "rgba(99,102,241,.4)" : "#16564c", border:"none", color:"#fff", cursor: piperLoading ? "not-allowed" : "pointer", boxShadow:"0 6px 24px rgba(99,102,241,.5)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                style={{ width:60, height:60, borderRadius:"50%", background: piperLoading ? "rgba(99,102,241,.4)" : "#286a9b", border:"none", color:"#fff", cursor: piperLoading ? "not-allowed" : "pointer", boxShadow:"0 6px 24px rgba(99,102,241,.5)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                 {piperLoading
                   ? <div style={{ display:"flex", gap:3 }}>{[0,1,2].map(i=><span key={i} style={{ width:3, height:12, background:"#fff", borderRadius:2, animation:`ppbar 0.8s ease-in-out ${i*0.15}s infinite` }}/>)}</div>
                   : isPlaying
@@ -12790,7 +12585,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
 
               {/* Voice picker toggle */}
               <button onClick={() => setShowPicker(v => !v)}
-                style={{ width:36, height:36, borderRadius:"50%", background:showPicker?"rgba(99,102,241,.5)":"rgba(255,255,255,.08)", border:`1.5px solid ${showPicker?"#16564c":"rgba(255,255,255,.15)"}`, color:"#a5b4fc", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                style={{ width:36, height:36, borderRadius:"50%", background:showPicker?"rgba(99,102,241,.5)":"rgba(255,255,255,.08)", border:`1.5px solid ${showPicker?"#286a9b":"rgba(255,255,255,.15)"}`, color:"#a5b4fc", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
                   <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
@@ -12805,7 +12600,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
               <span style={{ fontSize:9, fontWeight:800, color:"#4b5563", marginRight:2, letterSpacing:1 }}>SPEED</span>
               {SPEEDS.map(s => (
                 <button key={s} onClick={() => changeSpeed(s)}
-                  style={{ padding:"3px 8px", borderRadius:8, border:`1.5px solid ${speed===s?"#16564c":"rgba(255,255,255,.12)"}`, background:speed===s?"#16564c":"transparent", color:speed===s?"#fff":"#818cf8", fontSize:11, fontWeight:700, cursor:"pointer" }}>
+                  style={{ padding:"3px 8px", borderRadius:8, border:`1.5px solid ${speed===s?"#286a9b":"rgba(255,255,255,.12)"}`, background:speed===s?"#286a9b":"transparent", color:speed===s?"#fff":"#818cf8", fontSize:11, fontWeight:700, cursor:"pointer" }}>
                   {s}×
                 </button>
               ))}
@@ -12820,8 +12615,8 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
                 <div style={{ display:"flex", gap:4, marginBottom:10, background:"rgba(255,255,255,.05)", borderRadius:10, padding:3 }}>
                   <button onClick={switchToPiper}
                     style={{ flex:1, padding:"5px 0", borderRadius:8, border:"none", cursor:"pointer", fontSize:10, fontWeight:800,
-                      background:usePiper?"#16564c":"transparent",
-                      color:usePiper?"#fff":"#16564c" }}>
+                      background:usePiper?"#286a9b":"transparent",
+                      color:usePiper?"#fff":"#286a9b" }}>
                     PIPER Neural
                   </button>
                   <button onClick={switchToBrowser}
@@ -12877,7 +12672,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
                 <>
                   <span style={{ width:10, height:10, borderRadius:"50%", background:serverVoice.color, display:"inline-block", boxShadow:`0 0 6px ${serverVoice.color}` }}/>
                   <span style={{ fontSize:11, color:"#c7d2fe", fontWeight:700 }}>{serverVoice.label}</span>
-                  <span style={{ fontSize:11, color:"#16564c" }}>· {serverVoice.gender==="female"?"♀":"♂"} · {serverVoice.desc}</span>
+                  <span style={{ fontSize:11, color:C.link }}>· {serverVoice.gender==="female"?"♀":"♂"} · {serverVoice.desc}</span>
                   <span style={{ fontSize:9, background:"#31544c", color:"#c7d2fe", borderRadius:6, padding:"1px 7px", fontWeight:800 }}>PIPER</span>
                   {!piperReady && !piperLoading && <span style={{ fontSize:9, color:"#f59e0b" }}>▶ Press play to generate</span>}
                 </>
@@ -12885,7 +12680,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
                 <>
                   <span style={{ width:10, height:10, borderRadius:"50%", background:persona.color, display:"inline-block", boxShadow:`0 0 6px ${persona.color}` }}/>
                   <span style={{ fontSize:11, color:"#c7d2fe", fontWeight:700 }}>{persona.label}</span>
-                  <span style={{ fontSize:11, color:"#16564c" }}>· {persona.gender==="female"?"♀":persona.gender==="male"?"♂":"◇"} · {persona.desc}</span>
+                  <span style={{ fontSize:11, color:C.link }}>· {persona.gender==="female"?"♀":persona.gender==="male"?"♂":"◇"} · {persona.desc}</span>
                 </>
               )}
             </div>
@@ -12894,7 +12689,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
           {/* No server banner */}
           {!usePiper && (
             <div style={{ margin:"0 12px 12px", background:"rgba(99,102,241,.08)", border:"1px dashed rgba(99,102,241,.3)", borderRadius:10, padding:"8px 12px", textAlign:"center" }}>
-              <p style={{ color:"#16564c", fontSize:11, margin:0 }}>
+              <p style={{ color:C.link, fontSize:11, margin:0 }}>
                 Browser voices are available on this device.
               </p>
             </div>
@@ -12902,7 +12697,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
 
           {/* Script viewer */}
           <details style={{ borderTop:"1px solid rgba(255,255,255,.06)" }}>
-            <summary style={{ padding:"10px 20px", color:"#16564c", fontSize:12, fontWeight:700, cursor:"pointer", userSelect:"none", letterSpacing:.5 }}>READ SCRIPT</summary>
+            <summary style={{ padding:"10px 20px", color:C.link, fontSize:12, fontWeight:700, cursor:"pointer", userSelect:"none", letterSpacing:.5 }}>READ SCRIPT</summary>
             <div style={{ padding:"0 20px 20px", maxHeight:200, overflowY:"auto" }}>
               <p style={{ fontSize:13, color:"#c7d2fe", lineHeight:1.9, whiteSpace:"pre-wrap" }}>{script}</p>
             </div>
@@ -13092,7 +12887,7 @@ Be conversational. Under 120 words. No markdown, no asterisks.`,
             width:48, height:48, borderRadius:"50%", flexShrink:0, border:"none", cursor:loading?"not-allowed":"pointer",
             background: listening
               ? "linear-gradient(135deg,#ef4444,#dc2626)"
-              : "#16564c",
+              : "#286a9b",
             boxShadow: listening
               ? "0 0 0 6px rgba(239,68,68,.25), 0 4px 16px rgba(239,68,68,.4)"
               : "0 4px 16px rgba(99,102,241,.5)",
@@ -13128,8 +12923,8 @@ Be conversational. Under 120 words. No markdown, no asterisks.`,
 // ─── MODAL ────────────────────────────────────────────────────────────────────
 function Modal({ children, onClose }) {
   return (
-    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.35)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
-      <div onClick={e=>e.stopPropagation()} style={{ background:C.surface, borderRadius:20, padding:"28px 32px", width:"100%", maxWidth:460, boxShadow:"0 24px 64px rgba(0,0,0,.18)", border:`1px solid ${C.border}`, position:"relative" }}>
+    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.35)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:C.surface, borderRadius:20, padding:"28px 32px", width:"100%", maxWidth:460, maxHeight:"calc(100dvh - 32px)", overflowY:"auto", boxShadow:"0 24px 64px rgba(0,0,0,.18)", border:`1px solid ${C.border}`, position:"relative" }}>
         <button onClick={onClose} style={{ position:"absolute", top:16, right:16, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:20, lineHeight:1, padding:"2px 6px", borderRadius:6 }}>×</button>
         {children}
       </div>
@@ -13187,7 +12982,7 @@ function SGAvatar({ character, displayName, size = 36, isHost = false, isSelf = 
       </div>
       <span style={{
         fontSize: 9, fontWeight: 700,
-        color: isSelf ? C.accent : C.muted,
+        color: isSelf ? C.link : C.muted,
         maxWidth: 50, textAlign: "center",
         overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
       }}>
@@ -13393,7 +13188,7 @@ function SGChatMessage({ msg, isSelf }) {
         boxShadow: isSelf ? "0 2px 8px rgba(61,90,128,.25)" : "none",
       }}>
         {!isSelf && (
-          <p style={{ margin: "0 0 3px", fontSize: 10, fontWeight: 700, color: C.accent, letterSpacing: .3 }}>
+          <p style={{ margin: "0 0 3px", fontSize: 10, fontWeight: 700, color: C.link, letterSpacing: .3 }}>
             {(msg.displayName || "User").split(" ")[0]}
           </p>
         )}
@@ -13716,7 +13511,7 @@ function SGSharedContent({ content, presenterName, isHost, db, groupId }) {
       <div style={{ flexShrink:0, display:"flex", alignItems:"center", gap:8,
         padding:"8px 16px", background:C.accentL, borderBottom:`1px solid ${C.accentS}` }}>
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><polyline points="17 2 12 7 7 2"/></svg>
-        <span style={{ fontSize:13, fontWeight:700, color:C.accent }}>
+        <span style={{ fontSize:13, fontWeight:700, color:C.link }}>
           {presenterName || content.sharedBy} is presenting
         </span>
         <span style={{ marginLeft:"auto", fontSize:11, color:C.muted }}>
@@ -13789,7 +13584,7 @@ function SGSharedContent({ content, presenterName, isHost, db, groupId }) {
                   borderRadius:16, padding:20, cursor:"pointer", minHeight:120,
                   display:"flex", flexDirection:"column", gap:8, transition:"all .18s" }}>
                 <p style={{ margin:0, fontSize:10, fontWeight:700,
-                  color:flipped[i]?C.accent:C.muted, textTransform:"uppercase", letterSpacing:1 }}>
+                  color:flipped[i]?C.link:C.muted, textTransform:"uppercase", letterSpacing:1 }}>
                   {flipped[i]?"Answer":`Card ${i+1}`}
                 </p>
                 <p style={{ margin:0, fontSize:14, color:C.text, lineHeight:1.5, flex:1 }}>
@@ -13949,7 +13744,7 @@ function SGScreenShareHost({ groupId, db, user, onStop, registerStop }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={{ padding: "10px 14px", borderRadius: 10,
             background: C.accentL, border: `1px solid ${C.accentS}` }}>
-            <p style={{ margin: 0, fontSize: 13, color: C.accent, fontWeight: 700, marginBottom: 4 }}>
+            <p style={{ margin: 0, fontSize: 13, color: C.link, fontWeight: 700, marginBottom: 4 }}>
               How it works
             </p>
             <p style={{ margin: 0, fontSize: 12, color: C.muted, lineHeight: 1.6 }}>
@@ -14372,7 +14167,7 @@ function SGAIFlashcardGen({ groupId, db, user, groupFile, onClose }) {
             {[{id:"ai",label:"AI Generate"},{id:"manual",label:"Manual"}].map(t=>(
               <button key={t.id} onClick={()=>setTab(t.id)} style={{
                 flex:1, padding:"7px", borderRadius:8, border:"none", cursor:"pointer",
-                background:tab===t.id?C.surface:"transparent", color:tab===t.id?C.accent:C.muted,
+                background:tab===t.id?C.surface:"transparent", color:tab===t.id?C.link:C.muted,
                 fontSize:12, fontWeight:700, boxShadow:tab===t.id?"0 1px 4px rgba(0,0,0,.08)":"none",
               }}>{t.label}</button>
             ))}
@@ -14384,7 +14179,7 @@ function SGAIFlashcardGen({ groupId, db, user, groupFile, onClose }) {
                   border:`1px solid ${C.accentS}`, display:"flex", alignItems:"center", gap:8 }}>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                   <div style={{ flex:1, minWidth:0 }}>
-                    <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.accent }}>Using group file</p>
+                    <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.link }}>Using group file</p>
                     <p style={{ margin:0, fontSize:11, color:C.muted, overflow:"hidden",
                       textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{groupFile.name}</p>
                   </div>
@@ -14411,7 +14206,7 @@ function SGAIFlashcardGen({ groupId, db, user, groupFile, onClose }) {
                 ))}
               </div>
               <button onClick={generate} disabled={gen||(!groupFile&&!topic.trim())} style={{
-                background:gen||(!groupFile&&!topic.trim())?"#ccc":PRIMARY, color:"#fff", border:"none", borderRadius:8,
+                background:gen||(!groupFile&&!topic.trim())?"#ccc":PRIMARY, color:primaryInk(gen||(!groupFile&&!topic.trim())?"#ccc":PRIMARY, "#fff"), border:"none", borderRadius:8,
                 padding:"12px", fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer",
                 display:"flex", alignItems:"center", justifyContent:"center", gap:8,
                 opacity:(!groupFile&&!topic.trim())?.5:1, boxShadow:"0 4px 14px rgba(22,86,76,.3)",
@@ -14427,7 +14222,7 @@ function SGAIFlashcardGen({ groupId, db, user, groupFile, onClose }) {
               <input value={manualA} onChange={e=>setManualA(e.target.value)} placeholder="Answer"
                 onKeyDown={e=>e.key==="Enter"&&addManual()} style={{ ...inp, marginBottom:4 }} />
               <button onClick={addManual} style={{ background:C.accentL, border:`1px solid ${C.accentS}`,
-                borderRadius:9, padding:"8px", fontSize:12, fontWeight:700, color:C.accent,
+                borderRadius:9, padding:"8px", fontSize:12, fontWeight:700, color:C.link,
                 cursor:"pointer", marginBottom:8 }}>+ Add Card ({cards.length})</button>
             </div>
           )}
@@ -14552,7 +14347,7 @@ Math: proper notation (1×10⁻¹⁰ not words, H₂O not words). Units: standar
               border:`1px solid ${C.accentS}`, display:"flex", alignItems:"center", gap:8 }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
               <div style={{ flex:1, minWidth:0 }}>
-                <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.accent }}>Using group file</p>
+                <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.link }}>Using group file</p>
                 <p style={{ margin:0, fontSize:11, color:C.muted, overflow:"hidden",
                   textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{groupFile.name}</p>
               </div>
@@ -14574,14 +14369,14 @@ Math: proper notation (1×10⁻¹⁰ not words, H₂O not words). Units: standar
                   border:`1.5px solid ${style===s.id?C.accentS:C.border}`,
                   borderRadius:10, padding:"10px", cursor:"pointer", textAlign:"left",
                 }}>
-                  <p style={{ margin:"0 0 2px", fontSize:12, fontWeight:700, color:style===s.id?C.accent:C.text }}>{s.label}</p>
+                  <p style={{ margin:"0 0 2px", fontSize:12, fontWeight:700, color:style===s.id?C.link:C.text }}>{s.label}</p>
                   <p style={{ margin:0, fontSize:10, color:C.muted }}>{s.desc}</p>
                 </button>
               ))}
             </div>
           </div>
           <button onClick={generate} disabled={gen||(!groupFile&&!topic.trim())} style={{
-            background:gen||(!groupFile&&!topic.trim())?"#ccc":PRIMARY, color:"#fff", border:"none", borderRadius:8,
+            background:gen||(!groupFile&&!topic.trim())?"#ccc":PRIMARY, color:primaryInk(gen||(!groupFile&&!topic.trim())?"#ccc":PRIMARY, "#fff"), border:"none", borderRadius:8,
             padding:"12px", fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer",
             display:"flex", alignItems:"center", justifyContent:"center", gap:8,
             opacity:(!groupFile&&!topic.trim())?.5:1, boxShadow:"0 4px 14px rgba(22,86,76,.3)",
@@ -15236,7 +15031,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
                     eliminated:[], teamScores:{} },
                 });
               }} style={{ flex:1, background:C.accentL, border:`1px solid ${C.accentS}`,
-                color:C.accent, borderRadius:8, padding:"11px",
+                color:C.link, borderRadius:8, padding:"11px",
                 fontSize:13, fontWeight:700, cursor:"pointer" }}>Play Again</button>
               <button onClick={endGame} style={{ flex:1, background:C.bg,
                 border:`1px solid ${C.border}`, color:C.muted, borderRadius:8,
@@ -15291,7 +15086,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
       <div style={{ flex:1, overflowY:"auto", padding:16, display:"flex", flexDirection:"column", gap:12 }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
           <span style={{ fontSize:14, fontWeight:700, color:C.text }}>Memory Match</span>
-          <span style={{ color:C.accent, fontSize:12, fontWeight:700 }}>Score: {myScore} pts</span>
+          <span style={{ color:C.link, fontSize:12, fontWeight:700 }}>Score: {myScore} pts</span>
         </div>
         <p style={{ color:C.muted, fontSize:12, margin:0 }}>Match each question to its answer</p>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
@@ -15319,7 +15114,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
                   fontWeight:600, lineHeight:1.4, cursor:matched?"default":"pointer",
                   background: matched?C.greenL : picked?C.accentL : C.surface,
                   border:`2px solid ${matched?C.green:picked?C.accent:C.border}`,
-                  color: matched?C.green:picked?C.accent:C.text,
+                  color: matched?C.green:picked?C.link:C.text,
                   opacity: matched?.7:1, transition:"all .12s",
                   textDecoration: matched?"line-through":"none",
                 }}>
@@ -15382,7 +15177,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
             padding:"4px 10px", fontSize:11, fontWeight:700, color:C.warm }}>
             Rapid fire. The first correct answer earns the most points.
           </div>
-          <span style={{ color:C.accent, fontSize:12, fontWeight:700 }}>Score: {myScore}</span>
+          <span style={{ color:C.link, fontSize:12, fontWeight:700 }}>Score: {myScore}</span>
         </div>
         <ProgressBar gameState={gameState} myScore={myScore} hideScore />
         <div style={{ background:C.surface, borderRadius:14, padding:"18px", border:`1px solid ${C.border}` }}>
@@ -15399,7 +15194,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
                   cursor:localAnswer!==null?"default":"pointer",
                   fontWeight:700, fontSize:13, textAlign:"left", lineHeight:1.4,
                   background:correct?C.greenL:wrong?C.redL:chosen?C.accentL:"#fff",
-                  color:correct?C.green:wrong?C.red:chosen?C.accent:C.text,
+                  color:correct?C.green:wrong?C.red:chosen?C.link:C.text,
                   border:`1.5px solid ${correct?C.green:wrong?C.red:chosen?C.accent:C.border}`,
                   transition:"all .12s", boxShadow:"0 1px 4px rgba(0,0,0,.06)" }}>
                 <span style={{ opacity:.5, marginRight:6 }}>{["A","B","C","D"][i]}.</span>{opt}
@@ -15429,7 +15224,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
             </div>
             <span style={{ fontSize:16, fontWeight:800, color:timerColor, minWidth:24 }}>{timeLeft}</span>
           </div>
-          <span style={{ color:C.accent, fontSize:12, fontWeight:700 }}>Score: {myScore}</span>
+          <span style={{ color:C.link, fontSize:12, fontWeight:700 }}>Score: {myScore}</span>
         </div>
         <div style={{ background:C.surface, borderRadius:14, padding:"18px", border:`1px solid ${C.border}` }}>
           <p style={{ color:C.text, fontSize:16, fontWeight:700, margin:0, lineHeight:1.5 }}>{q.question}</p>
@@ -15449,7 +15244,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
                   background: isTimeout && opt===q.answer ? C.greenL :
                                correct?C.greenL:wrong?C.redL:chosen?C.accentL:"#fff",
                   color: isTimeout && opt===q.answer ? C.green :
-                         correct?C.green:wrong?C.red:chosen?C.accent:C.text,
+                         correct?C.green:wrong?C.red:chosen?C.link:C.text,
                   border: `1.5px solid ${(isTimeout&&opt===q.answer)||correct?C.green:wrong?C.red:chosen?C.accent:C.border}`,
                   boxShadow:"0 1px 4px rgba(0,0,0,.06)",
                   transition:"all .12s" }}>
@@ -15486,7 +15281,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
           <div style={{ display:"flex", gap:8 }}>
             {Object.entries(tScores).map(([team,score])=>(
               <span key={team} style={{ fontSize:12, fontWeight:700,
-                color: team==="team0"?C.accent:C.red }}>{team==="team0"?"●":"●"} {score}</span>
+                color: team==="team0"?C.link:C.red }}>{team==="team0"?"●":"●"} {score}</span>
             ))}
           </div>
         </div>
@@ -15548,7 +15343,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
                 cursor:localAnswer!==null?"default":"pointer",
                 fontWeight:700, fontSize:13, textAlign:"left", lineHeight:1.4,
                 background:correct?C.greenL:wrong?C.redL:chosen?C.accentL:"#fff",
-                color:correct?C.green:wrong?C.red:chosen?C.accent:C.text,
+                color:correct?C.green:wrong?C.red:chosen?C.link:C.text,
                 boxShadow:"0 1px 4px rgba(0,0,0,.06)",
                 transition:"all .12s" }}>
               <span style={{ opacity:.5, marginRight:6 }}>{["A","B","C","D"][i]}.</span>{opt}
@@ -15577,7 +15372,7 @@ function ProgressBar({ gameState, myScore, hideScore }) {
           width:`${(((gameState?.questionIndex||0)+1)/(gameState?.questions?.length||1))*100}%`,
           transition:"width .3s" }} />
       </div>
-      {!hideScore && <span style={{ color:C.accent, fontSize:12, fontWeight:700, flexShrink:0 }}>
+      {!hideScore && <span style={{ color:C.link, fontSize:12, fontWeight:700, flexShrink:0 }}>
         {myScore} pts
       </span>}
     </div>
@@ -15762,7 +15557,7 @@ function SGGameLauncher({ group, db, groupId, user, groupFile, onClose }) {
               display: "flex", alignItems: "center", gap: 10 }}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: C.accent }}>AI questions from group file</p>
+                <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: C.link }}>AI questions from group file</p>
                 <p style={{ margin: 0, fontSize: 11, color: C.muted,
                   overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{groupFile.name}</p>
               </div>
@@ -16318,7 +16113,7 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
           background: C.accentL, border: `1px solid ${C.accentS}`,
           borderRadius: 8, padding: "4px 10px",
           fontSize: 12, fontWeight: 800, cursor: "pointer",
-          color: copied ? C.green : C.accent,
+          color: copied ? C.green : C.link,
           fontFamily: "monospace", letterSpacing: 1.5, flexShrink: 0,
         }}>
           {copied ? "✓ Copied" : groupId}
@@ -16382,7 +16177,7 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
                         background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:12 }}>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                         <div style={{ flex:1, minWidth:0 }}>
-                          <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.accent }}>Study file loaded</p>
+                          <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.link }}>Study file loaded</p>
                           <p style={{ margin:0, fontSize:11, color:C.muted, overflow:"hidden",
                             textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{groupFile.name}</p>
                         </div>
@@ -16442,7 +16237,7 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
                         background:C.accentL, border:`1.5px solid ${C.accentS}`, borderRadius:12 }}>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                         <div style={{ flex:1, minWidth:0 }}>
-                          <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.accent }}>
+                          <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.link }}>
                             Host's study file
                           </p>
                           <p style={{ margin:0, fontSize:11, color:C.muted, overflow:"hidden",
@@ -16482,7 +16277,7 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
                     <div style={{ width:48, height:48, borderRadius:14, background:C.accent,
                       display:"flex", alignItems:"center", justifyContent:"center" }}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="15" rx="2"/><polyline points="17 2 12 7 7 2"/></svg></div>
                     <div style={{ textAlign:"center" }}>
-                      <p style={{ margin:"0 0 3px", fontSize:14, fontWeight:800, color:C.accent }}>Present</p>
+                      <p style={{ margin:"0 0 3px", fontSize:14, fontWeight:800, color:C.link }}>Present</p>
                       <p style={{ margin:0, fontSize:11, color:C.muted, lineHeight:1.3 }}>Notes, cards, whiteboard, file</p>
                     </div>
                   </button>
@@ -16513,7 +16308,7 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
                 <p style={{ margin: "0 0 4px", fontSize: 10, fontWeight: 700,
                   color: C.muted, letterSpacing: .8, textTransform: "uppercase" }}>Invite Code</p>
                 <p style={{ margin: 0, fontSize: 26, fontWeight: 900,
-                  color: C.accent, fontFamily: "monospace", letterSpacing: 5 }}>{groupId}</p>
+                  color: C.link, fontFamily: "monospace", letterSpacing: 5 }}>{groupId}</p>
                 <p style={{ margin: "3px 0 0", fontSize: 11, color: C.muted }}>Share with friends to join</p>
               </div>
 
@@ -16558,7 +16353,7 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
               <button key={t.id} onClick={() => setPanel(t.id)} style={{
                 flex: 1, padding: "10px 6px", border: "none", cursor: "pointer",
                 background: panel === t.id ? C.accentL : "transparent",
-                color: panel === t.id ? C.accent : C.muted,
+                color: panel === t.id ? C.link : C.muted,
                 fontSize: 11, fontWeight: 700, letterSpacing: .3,
                 borderBottom: `2px solid ${panel === t.id ? C.accent : "transparent"}`,
                 transition: "all .12s",
@@ -16640,10 +16435,10 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
                           <span style={{ fontSize: 10, color: C.warm, display:"flex", alignItems:"center", gap:2 }}><svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><path d="M2 20h20v2H2zM3 8l4 8h10l4-8-6 4-3-6-3 6-6-4z"/></svg>Host</span>
                         )}
                         {group?.presenterUid === m.uid && m.uid !== group?.hostUid && (
-                          <span style={{ fontSize: 10, color: C.accent }}>Can Present</span>
+                          <span style={{ fontSize: 10, color: C.link }}>Can Present</span>
                         )}
                         {group?.sharedContent?.sharedByUid === m.uid && (
-                          <span style={{ fontSize: 10, color: C.accent, display:"flex", alignItems:"center", gap:2 }}><span style={{width:6,height:6,borderRadius:"50%",background:C.red,display:"inline-block"}}></span>Live</span>
+                          <span style={{ fontSize: 10, color: C.link, display:"flex", alignItems:"center", gap:2 }}><span style={{width:6,height:6,borderRadius:"50%",background:C.red,display:"inline-block"}}></span>Live</span>
                         )}
                         {inVoice && (
                           <span style={{ fontSize:10, color:isSpeaking?C.green:C.muted }}>
@@ -16668,7 +16463,7 @@ function StudyGroupRoom({ groupId, user, character, db, onLeave }) {
                         } style={{
                           flexShrink:0, fontSize:10, fontWeight:700, cursor:"pointer",
                           background:C.accentL, border:`1px solid ${C.accentS}`,
-                          color:C.accent, borderRadius:8, padding:"4px 8px",
+                          color:C.link, borderRadius:8, padding:"4px 8px",
                         }}>Present</button>
                       )
                     )}

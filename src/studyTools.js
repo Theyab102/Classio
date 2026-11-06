@@ -1,15 +1,28 @@
 export async function sendStudyRequest(payload, signal) {
-  const response = await fetch("/api/study", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-    signal,
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || typeof data.text !== "string") {
-    throw new Error(data.error || "AI study tools are unavailable.");
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  if (signal?.aborted) cancel();
+  signal?.addEventListener("abort", cancel, { once: true });
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, 55000);
+  try {
+    const response = await fetch("/api/study", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload), signal: controller.signal,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || typeof data.text !== "string" || !data.text.trim()) {
+      throw new Error(data.error || "The AI service could not finish this request. Your work is still open.");
+    }
+    return data.text;
+  } catch (error) {
+    if (timedOut) throw new Error("The AI service took too long. Try a shorter request or try again shortly.");
+    if (!signal?.aborted && error instanceof TypeError) throw new Error("Could not reach the study service. Check your connection and try again.");
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", cancel);
   }
-  return data.text;
 }
 
 export const MAX_AUDIO_BYTES = 2_800_000;

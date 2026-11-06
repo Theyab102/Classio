@@ -1,2 +1,19 @@
 * { box-sizing: border-box; }
 body { margin: 0; font-family: "DM Sans Variable", system-ui, sans-serif; }
+
+:root {
+  --app-bg:#f7f9fc; --app-surface:#fff; --app-text:#1b2d3e; --app-muted:#536779;
+  --app-border:#d0dce6; --app-border-strong:#899eaf; --app-accent:#b8ddf8;
+  --app-accent-border:#8cbddb; --app-on-accent:#163b56; --app-link:#245f8c; --app-error:#a52d36;
+  color-scheme:light;
+}
+:root[data-theme=dark] {
+  --app-bg:#111c27; --app-surface:#1b2b3a; --app-text:#eef5fc; --app-muted:#b5c8d8;
+  --app-border:#3b5266; --app-border-strong:#718a9f; --app-accent:#b8ddf8;
+  --app-accent-border:#83b5d9; --app-on-accent:#163b56; --app-link:#a9d9ff; --app-error:#ffb1b8;
+  color-scheme:dark;
+}
+body { background:var(--app-bg); color:var(--app-text); }
+button { border-radius:6px; }
+button, input, select, textarea { touch-action:manipulation; }
+img, video { max-width:100%; }

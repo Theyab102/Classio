@@ -1,5 +1,5 @@
-.notes-studio,.document-viewer,.deck-studio { --studio-bg:#f3f4f0; --studio-paper:#fff; --studio-ink:#24332f; --studio-muted:#53645e; --studio-rule:#cdd9d3; --studio-accent:#16564c; color:var(--studio-ink); min-width:0; }
-.classio-dark :is(.notes-studio,.document-viewer,.deck-studio) { --studio-bg:#20231f; --studio-paper:#292e29; --studio-ink:#eef3ed; --studio-muted:#bcc9c0; --studio-rule:#46534a; --studio-accent:#9bd1bb; }
+.notes-studio,.document-viewer,.deck-studio { --studio-bg:#f3f4f0; --studio-paper:#fff; --studio-ink:#24332f; --studio-muted:#53645e; --studio-rule:#cdd9d3; --studio-accent:#245f8c; color:var(--studio-ink); min-width:0; }
+.classio-dark :is(.notes-studio,.document-viewer,.deck-studio) { --studio-bg:#20231f; --studio-paper:#292e29; --studio-ink:#eef3ed; --studio-muted:#bcc9c0; --studio-rule:#46534a; --studio-accent:#add8f8; }
 .studio-header { display:flex; align-items:center; justify-content:space-between; gap:.75rem; margin-bottom:.75rem; flex-wrap:wrap; }
 .studio-header h2 { font:700 clamp(1.6rem,4vw,2.2rem) "Fraunces Variable",Georgia,serif; }
 .studio-eyebrow { font-size:.75rem; font-weight:750; letter-spacing:.09em; text-transform:uppercase; color:var(--studio-muted); }
@@ -29,7 +29,7 @@
 .classio-note-content table,.native-slide-table { border-collapse:collapse; table-layout:fixed; width:100%; margin:.65em 0; }
 .classio-note-content :is(td,th),.native-slide-table :is(td,th) { border:1px solid var(--studio-rule); padding:.35em .55em; text-align:start; vertical-align:top; position:relative; }
 .classio-note-content th,.native-slide-table th { background:var(--studio-bg); font-weight:750; }
-.classio-note-content .selectedCell::after { content:""; position:absolute; inset:0; background:#7eb8a33d; pointer-events:none; }
+.classio-note-content .selectedCell::after { content:""; position:absolute; inset:0; background:#8cc4f33d; pointer-events:none; }
 .classio-note-content .column-resize-handle { background:var(--studio-accent); position:absolute; right:-2px; width:4px; top:0; bottom:-2px; pointer-events:none; }
 .classio-note-content .ProseMirror-selectednode { outline:2px solid var(--studio-accent); }
 .classio-note-content pre { white-space:pre-wrap; background:var(--studio-bg); padding:.6rem; }

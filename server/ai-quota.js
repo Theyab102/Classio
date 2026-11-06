@@ -16,7 +16,7 @@ function requester(req) {
 }
 
 function configured() {
-  return Boolean(process.env.GROQ_API_KEY && process.env.FIREBASE_SERVICE_ACCOUNT_JSON &&
+  return Boolean(process.env.FIREBASE_SERVICE_ACCOUNT_JSON &&
     (process.env.AI_RATE_LIMIT_SECRET || "").length >= 32);
 }
 
