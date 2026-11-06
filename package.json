@@ -36,7 +36,8 @@
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "test:rules": "firebase emulators:exec --project demo-classio --only firestore,storage \"node --test tests/firebase-rules.test.cjs\"",
-    "test:browser": "node tests/browser-smoke.cjs"
+    "test:browser": "node tests/browser-smoke.cjs",
+    "test:ui": "node tests/calm-ui-browser.cjs"
   },
   "eslintConfig": {
     "extends": [

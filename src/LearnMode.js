@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { sendStudyRequest, makeStudyId } from './studyTools';
 import { auth, accountHeaders } from './firebase';
+import { getReplyLanguage } from './locale';
 import { requestJson } from './apiClient';
 import courseSchema from './shared/course-schema.js';
 import './studyTools.css';
@@ -38,7 +39,7 @@ export default function LearnMode({ file, getFileText, onUpdate }) {
       const source = (file.notes || await getFileText().catch(() => '') || '').slice(0, 20000);
       const subject = topic.trim() || file.name;
       if (!source && !topic.trim()) throw new Error('Enter a topic or add study material first.');
-      const args = { fileId: file.id, topic: subject, difficulty, lessons, objectives, instructions, sourceText: source };
+      const args = { fileId: file.id, topic: subject, difficulty, lessons, objectives, instructions, sourceText: source, language:getReplyLanguage() };
       let course;
       setStatus('Building lessons and knowledge checks…');
       if (auth.currentUser) {

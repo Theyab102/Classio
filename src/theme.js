@@ -1,8 +1,8 @@
 import { useSyncExternalStore } from 'react';
 
 export const THEMES = {
-  light: { bg: '#f8fafc', surface: '#ffffff', border: '#dbe4ef', text: '#17243b', muted: '#52627a', accent: '#1d4ed8', accentL: '#eff6ff', accentS: '#bfdbfe', warm: '#996122', warmL: '#fff6e5', green: '#27734b', greenL: '#eaf7ef', purple: '#1d4ed8', purpleL: '#eff6ff', red: '#b42335', redL: '#fff0f1', sidebar: '#ffffff', sidebarActive: '#eaf2ff', navText: '#17243b', shadow: '0 2px 16px #1d4ed809', cardShadow: '0 8px 28px #1e3a5f0a', grad: '#1d4ed8', isDark: false },
-  dark: { bg: '#0f172a', surface: '#1e293b', border: '#3b4a63', text: '#f1f5f9', muted: '#b8c6da', accent: '#93c5fd', accentL: '#172e50', accentS: '#395d8a', warm: '#e6b873', warmL: '#352b1e', green: '#86d9ab', greenL: '#153a2b', purple: '#93c5fd', purpleL: '#172e50', red: '#fda4af', redL: '#431e2a', sidebar: '#152035', sidebarActive: '#233753', navText: '#f1f5f9', shadow: '0 2px 16px #0003', cardShadow: '0 8px 28px #0003', grad: '#1d4ed8', isDark: true },
+  light: { bg:'#f2f2f2', surface:'#ffffff', border:'#d3dfe3', text:'#183a44', muted:'#526b74', accent:'#2b6777', accentL:'#e7eff3', accentS:'#c8d8e4', warm:'#885b2b', warmL:'#faf1e4', green:'#276c5c', greenL:'#e5f3ee', purple:'#2b6777', purpleL:'#e7eff3', red:'#b42335', redL:'#fff0f1', sidebar:'#ffffff', sidebarActive:'#e2edf1', navText:'#183a44', shadow:'0 2px 16px #2b677708', cardShadow:'0 6px 24px #2b67770c', grad:'#2b6777', isDark:false },
+  dark: { bg:'#11282f', surface:'#1b373f', border:'#49656d', text:'#f4f8f9', muted:'#bbced4', accent:'#a6d6d1', accentL:'#25464f', accentS:'#547680', warm:'#e2bd85', warmL:'#393124', green:'#8bd4b9', greenL:'#1e4439', purple:'#a6d6d1', purpleL:'#25464f', red:'#fda4af', redL:'#431e2a', sidebar:'#152f37', sidebarActive:'#284953', navText:'#f4f8f9', shadow:'0 2px 16px #0002', cardShadow:'0 6px 24px #0003', grad:'#2b6777', isDark:true },
 };
 let dark = false;
 try { const saved = localStorage.getItem('classio_dark'); dark = saved === null ? window.matchMedia?.('(prefers-color-scheme: dark)').matches : saved === 'true'; } catch {}

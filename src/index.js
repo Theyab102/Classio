@@ -5,6 +5,7 @@ import "@fontsource-variable/fraunces";
 import "./index.css";
 import Entry from "./Entry";
 import "./theme";
+import "./locale";
 import "./workspace.css";
 
 createRoot(document.getElementById("root")).render(

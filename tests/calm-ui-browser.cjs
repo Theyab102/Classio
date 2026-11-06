@@ -1,0 +1,198 @@
+const { chromium } = require('playwright-core');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const output = path.resolve(process.env.CLASSIO_TEST_OUTPUT || 'test-results');
+fs.mkdirSync(output,{recursive:true});
+const base = process.env.CLASSIO_TEST_URL || 'http://127.0.0.1:3000';
+// The AI-success responses below are explicit browser fixtures, not live-provider verification.
+(async()=>{
+  const browser=await chromium.launch({executablePath:process.env.CLASSIO_BROWSER_PATH || '/usr/bin/chromium',headless:true,args:['--no-sandbox']});
+  let activePage;
+  try {
+    const context=await browser.newContext({viewport:{width:1440,height:1000},colorScheme:'light'});
+    const page=activePage=await context.newPage(); const errors=[];
+    page.on('pageerror',e=>errors.push(e.message));
+    await page.goto(base);
+    await page.getByRole('button',{name:'Get started',exact:true}).click();
+    await page.getByLabel('Date of birth').fill('2000-01-01');
+    await page.getByRole('button',{name:'Continue',exact:true}).click();
+    await page.getByRole('checkbox').check();
+    await page.getByRole('button',{name:'Open workspace',exact:true}).click();
+    await page.getByRole('heading',{name:'Dashboard',exact:true}).waitFor();
+    await page.getByRole('button',{name:'Skip',exact:true}).click();
+    await page.getByRole('button',{name:'Skip',exact:true}).waitFor({state:'hidden'});
+    assert.equal(await page.getByRole('button',{name:'Open AI assistant',exact:true}).count(),0);
+    assert.equal(await page.getByRole('button',{name:'AI Assistant',exact:true}).count(),1);
+    assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--theme-accent').trim()),'#2b6777');
+    await page.screenshot({path:path.join(output,'calm-dashboard-light.png')});
+    await page.getByRole('button',{name:'AI Assistant',exact:true}).click();
+    const assistant=page.getByRole('dialog',{name:'AI Assistant',exact:true});
+    await assistant.waitFor();
+    const assistantBox=await assistant.boundingBox();
+    assert(Math.abs(assistantBox.x-(1440-assistantBox.width)/2)<2,'Assistant centered');
+    await page.getByRole('button',{name:'Close dialog',exact:true}).click();
+    console.log('PASS palette, single navigation Assistant, centered dialogs');
+
+    await page.getByRole('button',{name:/^Upload document/}).click();
+    await page.getByRole('dialog').locator('input[type=file]').setInputFiles({name:'Energy.txt',mimeType:'text/plain',buffer:Buffer.from('Energy is conserved. Kinetic energy depends on the mass and speed of an object. Potential energy can be stored by raising an object above the ground.')});
+    await page.getByText('Energy.txt',{exact:true}).first().click();
+    await page.getByRole('button',{name:'Notes',exact:true}).click();
+    const editor=page.getByRole('textbox',{name:'Study notes',exact:true});
+    await editor.fill('My original sentence stays here.');
+    const before=await editor.boundingBox();
+    const originalFont=await editor.locator('p').first().evaluate(node=>getComputedStyle(node).fontSize);
+    let requestBody;
+    await page.route('**/api/study',async route=>{
+      if(route.request().method()!=='POST')return route.continue();
+      requestBody=route.request().postDataJSON();
+      await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({text:'# Energy notes\n\nEnergy is conserved. Kinetic energy depends on mass and speed.\n\n- Raising an object stores potential energy.',provider:'test-fixture',fallback:false})});
+    });
+    await page.getByRole('button',{name:'Generate AI notes',exact:true}).click();
+    await editor.getByRole('heading',{name:'Energy notes',exact:true}).waitFor();
+    assert((await editor.innerText()).includes('My original sentence stays here.'));
+    assert(requestBody.messages.at(-1).content.includes('Kinetic energy depends on the mass and speed'));
+    assert.equal(await page.locator('.notes-ai-sidebar,.ai-draft,.note-ai-draft').count(),0);
+    assert.equal(await page.getByRole('textbox',{name:'Study notes',exact:true}).count(),1);
+    const after=await editor.boundingBox();assert(Math.abs(before.width-after.width)<2);
+    const generatedFont=await editor.locator('p').filter({hasText:'Energy is conserved.'}).evaluate(node=>getComputedStyle(node).fontSize);
+    assert.equal(generatedFont,originalFont);
+    assert.equal(await page.locator('.note-generation-options').getAttribute('open'),null);
+    assert.equal(await page.locator('.note-more-tools').getAttribute('open'),null);
+    await page.waitForFunction(()=>!document.querySelector('.generate-notes-button').disabled);
+    await page.screenshot({path:path.join(output,'calm-notes-light.png'),fullPage:true});
+    await page.getByRole('button',{name:'View File',exact:true}).click();
+    await page.getByRole('button',{name:'Notes',exact:true}).click();
+    await editor.getByRole('heading',{name:'Energy notes',exact:true}).waitFor();
+    assert((await editor.innerText()).includes('My original sentence stays here.'));
+    // Use a second supplied transcript and check it reaches the actual request format.
+    await page.getByText('Generation options',{exact:true}).click();
+    await page.getByLabel('Source text or transcript',{exact:true}).fill('A supplied transcript explains that energy transfers between objects.');
+    await page.getByRole('button',{name:'Generate AI notes',exact:true}).click();
+    await page.getByRole('button',{name:'Generate AI notes',exact:true}).waitFor();
+    assert(requestBody.messages.at(-1).content.includes('A supplied transcript explains'));
+    await page.getByText('Generation options',{exact:true}).click();
+    await page.unroute('**/api/study');
+    const preserved=await editor.innerText();
+    await page.getByRole('button',{name:'Generate AI notes',exact:true}).click();
+    await page.getByRole('alert').filter({hasText:'AI is not configured'}).waitFor();
+    assert.equal(await editor.innerText(),preserved);
+    console.log('PASS file/pasted source to real request format, fixture output in normal editor, same size, preserved writing, navigation recall, actual configuration error preserves notes');
+
+    await page.getByRole('button',{name:'Dashboard',exact:true}).first().click();
+    await page.getByRole('button',{name:/^Website link/}).click();
+    await page.getByLabel('URL',{exact:true}).fill('https://youtu.be/dQw4w9WgXcQ?si=fixture');
+    await page.getByRole('button',{name:/Save to Dashboard/}).click();
+    await page.getByRole('region',{name:'Saved YouTube video'}).waitFor();
+    await page.getByRole('button',{name:'Notes',exact:true}).click();
+    await page.route('**/transcript/dQw4w9WgXcQ',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({success:true,transcript:'An explicitly available caption fixture describes how energy transfers between objects.'})}));
+    await page.route('**/api/study',async route=>{
+      if(route.request().method()!=='POST')return route.continue();requestBody=route.request().postDataJSON();
+      await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({text:'Energy transfers between objects.',provider:'test-fixture'})});
+    });
+    await page.getByRole('button',{name:'Generate AI notes',exact:true}).click();
+    await page.getByRole('textbox',{name:'Study notes',exact:true}).getByText('Energy transfers between objects.',{exact:true}).waitFor();
+    assert(requestBody.messages.at(-1).content.includes('An explicitly available caption fixture'));
+    await page.waitForFunction(()=>!document.querySelector('.generate-notes-button').disabled);
+    await page.unroute('**/api/study');await page.unroute('**/transcript/dQw4w9WgXcQ');
+    console.log('PASS saved YouTube link to caption-backed note generation with explicit caption and AI fixtures');
+
+    await page.getByRole('button',{name:'Your avatar',exact:true}).click();
+    const avatar=page.getByRole('dialog',{name:'Your Classio character',exact:true});
+    await avatar.waitFor();
+    const avatarBox=await avatar.boundingBox(); assert(Math.abs(avatarBox.x-(1440-avatarBox.width)/2)<2);
+    const livePreview=avatar.locator('.avatar-stage .classio-avatar');
+    const firstPreview=await livePreview.innerHTML();
+    await avatar.getByLabel('Nickname',{exact:true}).fill('Noura');
+    assert.equal(await avatar.getByLabel('Nickname').evaluate(node=>node===document.activeElement),true);
+    await avatar.getByRole('button',{name:'Heart',exact:true}).click();
+    assert.notEqual(await livePreview.innerHTML(),firstPreview);
+    await avatar.getByRole('button',{name:'Broad',exact:true}).click();
+    await avatar.getByRole('tab',{name:'Hair',exact:true}).click();
+    await avatar.getByRole('button',{name:'Bun',exact:true}).click();
+    await avatar.getByRole('tab',{name:'Accessories',exact:true}).click();
+    await avatar.getByRole('button',{name:'Aviator',exact:true}).click();
+    await avatar.getByRole('tab',{name:'Face',exact:true}).click();
+    await page.screenshot({path:path.join(output,'calm-avatar-light.png')});
+    await avatar.getByRole('button',{name:'Done',exact:true}).click();
+    const config=await page.evaluate(()=>JSON.parse(localStorage.getItem('classio_char:guest')));
+    assert.equal(config.hairStyle,7);assert.equal(config.faceShape,3);assert.equal(config.nose,3);assert.equal(config.glasses,6);assert.equal(config.name,'Noura');
+    await page.reload();await page.getByRole('heading',{name:'Dashboard',exact:true}).waitFor();
+    await page.getByRole('button',{name:'Your avatar',exact:true}).click();
+    assert.equal(await page.getByLabel('Nickname',{exact:true}).inputValue(),'Noura');
+    await page.getByRole('button',{name:'Done',exact:true}).click();
+    console.log('PASS live avatar customization, nickname focus, legacy config preservation and browser refresh recall');
+
+    await page.getByRole('button',{name:'Settings',exact:true}).click();
+    await page.getByLabel('AI response language',{exact:true}).selectOption('Arabic');
+    await page.getByLabel('Interface language',{exact:true}).selectOption('ar');
+    await page.getByRole('heading',{name:'الإعدادات',exact:true}).waitFor();
+    assert.equal(await page.evaluate(()=>document.documentElement.dir),'rtl');
+    await page.screenshot({path:path.join(output,'calm-settings-arabic.png'),fullPage:true});
+    await page.reload();await page.getByRole('heading',{name:'الرئيسية',exact:true}).waitFor();
+    await page.getByRole('button',{name:'الإعدادات',exact:true}).click();
+    assert.equal(await page.getByLabel('لغة الواجهة',{exact:true}).inputValue(),'ar');
+    assert.equal(await page.getByLabel('لغة إجابات الذكاء الاصطناعي',{exact:true}).inputValue(),'Arabic');
+    await page.getByRole('button',{name:'مساعد الدراسة',exact:true}).click();
+    await page.getByRole('dialog',{name:'مساعد الدراسة',exact:true}).waitFor();
+    await page.getByLabel('رسالتك',{exact:true}).fill('Explain energy.');
+    await page.route('**/api/study',async route=>{
+      if(route.request().method()!=='POST')return route.continue();requestBody=route.request().postDataJSON();
+      await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({text:'الطاقة محفوظة.',provider:'test-fixture'})});
+    });
+    await page.getByRole('button',{name:'إرسال',exact:true}).click();
+    await page.getByText('الطاقة محفوظة.',{exact:true}).waitFor();
+    assert(requestBody.messages[0].content.includes('Respond in Arabic'));
+    await page.unroute('**/api/study');
+    await page.getByRole('button',{name:'إغلاق النافذة',exact:true}).click();
+    await page.getByLabel('لغة الواجهة',{exact:true}).selectOption('en');
+    await page.getByLabel('AI response language',{exact:true}).selectOption('auto');
+    assert.equal(await page.evaluate(()=>document.documentElement.dir),'ltr');
+    await page.getByRole('button',{name:'Switch to dark mode',exact:true}).click();
+    await page.getByRole('button',{name:'Your avatar',exact:true}).click();
+    await page.screenshot({path:path.join(output,'calm-avatar-dark.png')});
+    await page.getByRole('button',{name:'Done',exact:true}).click();
+    await page.reload();await page.getByRole('heading',{name:'Dashboard',exact:true}).waitFor();
+    assert.equal(await page.evaluate(()=>document.documentElement.dataset.theme),'dark');
+    await page.screenshot({path:path.join(output,'calm-dashboard-dark.png')});
+    await page.getByRole('button',{name:'Switch to light mode',exact:true}).click();
+    const state=await context.storageState();
+    assert.deepEqual(errors,[]);await context.close();
+    console.log('PASS Arabic Settings and Assistant, RTL/LTR switch, language persistence, request language, dark theme refresh');
+
+    for(const viewport of [{width:320,height:740},{width:390,height:844},{width:844,height:390},{width:768,height:1024},{width:1024,height:768},{width:1366,height:900}]) {
+      const c=await browser.newContext({viewport,storageState:state,hasTouch:viewport.width<=1024,reducedMotion:'reduce'});
+      const p=activePage=await c.newPage();const problems=[];p.on('pageerror',e=>problems.push(e.message));
+      await p.goto(base);await p.getByRole('heading',{name:'Dashboard',exact:true}).waitFor();
+      const noOverflow=()=>p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1);
+      assert(await noOverflow(),`Dashboard ${viewport.width}`);
+      async function navigate(name) {
+        const toggle=p.getByRole('button',{name:/^(Open navigation menu|فتح قائمة التنقل)$/,exact:true});
+        if(await toggle.count())await toggle.click();
+        await p.getByRole('button',{name,exact:true}).click();
+      }
+      await navigate('Your avatar');
+      const d=p.getByRole('dialog');await d.waitFor();const bounds=await d.boundingBox();
+      assert(bounds.x>=-1&&bounds.y>=-1&&bounds.x+bounds.width<=viewport.width+1&&bounds.y+bounds.height<=viewport.height+1,'Avatar within viewport');
+      for(const name of ['Hair','Eyes','Expression','Outfit','Accessories','Face']){await d.getByRole('tab',{name,exact:true}).click();await d.getByRole('tab',{name,exact:true,selected:true}).waitFor();}
+      assert.equal(await d.locator('.avatar-stage .avatar-eyes').evaluate(node=>getComputedStyle(node).animationName),'none');
+      await d.getByRole('button',{name:'Done',exact:true}).click();
+      await navigate('Settings');
+      await p.getByLabel('Interface language',{exact:true}).selectOption('ar');
+      assert(await noOverflow(),`Arabic Settings ${viewport.width}`);
+      await navigate('الرئيسية');
+      assert(await noOverflow(),`Arabic dashboard ${viewport.width}`);
+      if(viewport.width===390)await p.screenshot({path:path.join(output,'calm-phone-arabic.png'),fullPage:true});
+      await navigate('شخصيتك');
+      await p.getByRole('tab',{name:'الإكسسوارات',exact:true}).click();
+      assert(await noOverflow(),`Arabic avatar ${viewport.width}`);
+      await p.keyboard.press('Escape');
+      await p.getByRole('dialog').waitFor({state:'hidden'});
+      assert.equal(await p.evaluate(()=>document.body.style.overflow),'');
+      assert.deepEqual(problems,[]);
+      console.log(`PASS ${viewport.width}x${viewport.height}: English/Arabic navigation, Settings, all avatar tabs, viewport fit, Escape, reduced motion`);
+      await c.close();
+    }
+  } catch(error) { if(activePage&&!activePage.isClosed())await activePage.screenshot({path:path.join(output,'calm-failure.png'),fullPage:true}).catch(()=>{});throw error; }
+  finally{await browser.close();}
+})().catch(error=>{console.error(error);process.exitCode=1;});

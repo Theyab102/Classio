@@ -1,12 +1,20 @@
 import { requestJson } from './apiClient';
+import { getReplyLanguage, replyLanguages } from './locale';
 
 export async function sendStudyRequest(payload, signal) {
   const { accountHeaders } = await import('./firebase');
   let preferences = {};
   try { preferences = JSON.parse(localStorage.getItem('classio_ai_preferences') || '{}'); } catch {}
+  const { replyLanguage, ...request } = payload;
+  const selectedLanguage=replyLanguages.includes(replyLanguage)?replyLanguage:getReplyLanguage();
+  if(request.messages && selectedLanguage!=='auto') {
+    const instruction=`Respond in ${selectedLanguage}, unless the learner explicitly requests a different response language. Preserve the source's facts.`;
+    const system=request.messages.findIndex(message=>message.role==='system');
+    request.messages=system<0 ? [{role:'system',content:instruction},...request.messages] : request.messages.map((message,index)=>index===system?{...message,content:message.content+'\n\n'+instruction}:message);
+  }
   const data = await requestJson('/api/study', {
     headers: await accountHeaders(),
-    body: { provider: preferences.provider || 'auto', allowFallback: preferences.allowFallback === true, ...payload },
+    body: { provider: preferences.provider || 'auto', allowFallback: preferences.allowFallback === true, ...request },
     signal,
   });
   if (typeof data.text !== 'string') throw new Error('The AI returned no usable text. Please retry.');

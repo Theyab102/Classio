@@ -3,9 +3,9 @@
 .study-tool p { line-height: 1.55; margin: .65rem 0; }
 .study-tool-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .6rem; margin: .9rem 0; }
 .study-tool-actions input { flex: 1 1 15rem; min-width: 0; padding: .55rem; border: 1px solid var(--theme-border, #dbe4ef); border-radius: 6px; background: transparent; color: inherit; }
-.study-tool button, .study-tool-actions button, .study-tool-actions a { min-height: 36px; padding: .4rem .7rem; border: 1px solid #1d4ed8; border-radius: 6px; background: #1d4ed8; color: #fff; font: inherit; cursor: pointer; }
+.study-tool button, .study-tool-actions button, .study-tool-actions a { min-height: 36px; padding: .4rem .7rem; border: 1px solid #2b6777; border-radius: 6px; background: #2b6777; color: #fff; font: inherit; cursor: pointer; }
 .study-tool button:disabled, .study-tool-actions button:disabled { opacity: .7; cursor: wait; }
-.study-tool button[aria-current], .study-tool button[aria-pressed="true"] { outline: 2px solid #60a5fa; outline-offset: 2px; }
+.study-tool button[aria-current], .study-tool button[aria-pressed="true"] { outline: 2px solid #52ab98; outline-offset: 2px; }
 .study-lesson { border: 1px solid var(--theme-border, #dbe4ef); border-radius: 8px; padding: 1rem; }
 .study-lesson-text { white-space: pre-wrap; }
 .guest-save-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .7rem; margin-bottom: 1rem; padding: .8rem; border: 1px solid var(--theme-border, #dbe4ef); border-radius: 8px; }

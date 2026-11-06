@@ -5,6 +5,10 @@ import katex from "katex";
 import "katex/dist/katex.min.css";
 import { LegalLinks } from "./Legal";
 import LearnMode from "./LearnMode";
+import Avatar, { avatarDefaults } from "./Avatar";
+import AvatarEditor from "./AvatarEditor";
+import LanguageSettings from "./LanguageSettings";
+import { getReplyLanguage, setLanguages, translate as tr, useLocale } from "./locale";
 import ChatAssistant from "./ChatAssistant";
 import Dialog from "./Dialog";
 import AISettings from "./AISettings";
@@ -31,8 +35,6 @@ import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot, upda
 
 // ─── FIREBASE ─────────────────────────────────────────────────────────────────
 // Language session — persists across tabs
-let _sessionLang = null;
-try { const s = localStorage.getItem("classio_lang"); _sessionLang = (s && s !== "auto") ? s : null; } catch {}
 
 function _detectLang(text) {
   if (!text) return "English";
@@ -149,7 +151,7 @@ Return ONLY valid JSON, no markdown:
 
 function callClaudeChat(system, messages) {
   const lastUser = messages.slice().reverse().find(message => message.role === "user");
-  const lang = _sessionLang || _detectLang(typeof lastUser?.content === "string" ? lastUser.content : "");
+  const lang = (getReplyLanguage() === 'auto' ? null : getReplyLanguage()) || _detectLang(typeof lastUser?.content === "string" ? lastUser.content : "");
   const instruction = `${system || ""}\n\nRespond in ${lang} unless the user requests a translation.`;
   return requestStudyAI([{ role: "system", content: instruction }, ...messages.slice(-60)], 1200);
 }
@@ -737,7 +739,7 @@ function useResponsive() {
 // ─── COLORS ───────────────────────────────────────────────────────────────────
 // ─── THEME SYSTEM ─────────────────────────────────────────────────────────────
 // ── Gradient helper used on buttons/bars ─────────────────────────────────────
-const PRIMARY = "#1d4ed8";
+const PRIMARY = "#2b6777";
 
 // C = current theme (updated by re-renders via useTheme)
 let C = _getTheme();
@@ -1278,17 +1280,10 @@ function StandaloneAI({ onClose, onCreateCourse }) {
 function SettingsTab({ onToggleTheme, onClearCache, files, streak, onImportLegacyAvatar }) {
   const T = useTheme();
   C = T;
-  const [lang, setLang] = useState(() => { try { return localStorage.getItem("classio_lang") || "auto"; } catch { return "auto"; } });
-
-  const handleLang = (v) => {
-    setLang(v);
-    try { localStorage.setItem("classio_lang", v); } catch {}
-  };
-
   const Section = ({ title, children }) => (
     <div className="sq-card" style={{ marginBottom:16, overflow:"hidden" }}>
       <div style={{ padding:"12px 20px", borderBottom:`1px solid ${T.border}` }}>
-        <p style={{ margin:0, fontSize:11, fontWeight:800, color:T.muted, letterSpacing:1, textTransform:"uppercase" }}>{title}</p>
+        <p style={{ margin:0, fontSize:11, fontWeight:800, color:T.muted, letterSpacing:1, textTransform:"uppercase" }}>{tr(title)}</p>
       </div>
       <div style={{ padding:"16px 20px" }}>{children}</div>
     </div>
@@ -1297,8 +1292,8 @@ function SettingsTab({ onToggleTheme, onClearCache, files, streak, onImportLegac
   const Row = ({ label, sub, children }) => (
     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:16, padding:"6px 0" }}>
       <div>
-        <p style={{ margin:0, fontSize:14, fontWeight:600, color:T.text }}>{label}</p>
-        {sub && <p style={{ margin:0, fontSize:12, color:T.muted, marginTop:2 }}>{sub}</p>}
+        <p style={{ margin:0, fontSize:14, fontWeight:600, color:T.text }}>{tr(label)}</p>
+        {sub && <p style={{ margin:0, fontSize:12, color:T.muted, marginTop:2 }}>{tr(sub)}</p>}
       </div>
       {children}
     </div>
@@ -1307,16 +1302,16 @@ function SettingsTab({ onToggleTheme, onClearCache, files, streak, onImportLegac
   return (
     <div style={{ paddingBottom:40 }}>
       <div style={{ marginBottom:28 }}>
-        <h1 style={{ fontFamily:"'Fraunces Variable',serif", fontSize:28, fontWeight:700, color:T.text, margin:"0 0 4px", letterSpacing:-.5 }}>Settings</h1>
-        <p style={{ fontSize:14, color:T.muted, margin:0 }}>Manage your Classio preferences</p>
+        <h1 style={{ fontFamily:"'Fraunces Variable',serif", fontSize:28, fontWeight:700, color:T.text, margin:"0 0 4px", letterSpacing:-.5 }}>{tr('Settings')}</h1>
+        <p style={{ fontSize:14, color:T.muted, margin:0 }}>{tr('Manage your Classio preferences')}</p>
       </div>
 
       <Section title="AI provider & privacy"><AISettings /></Section>
-      {onImportLegacyAvatar && <Section title="Previous avatar"><p style={{ color:T.muted, lineHeight:1.5 }}>An avatar saved before account syncing can be imported from this browser. Only import it if it belongs to you.</p><button type="button" onClick={onImportLegacyAvatar}>Import previous avatar</button></Section>}
+      {onImportLegacyAvatar && <Section title="Previous avatar"><p style={{ color:T.muted, lineHeight:1.5 }}>{tr("An avatar saved before account syncing can be imported from this browser. Only import it if it belongs to you.")}</p><button className="settings-secondary-button" type="button" onClick={onImportLegacyAvatar}>{tr("Import previous avatar")}</button></Section>}
       {/* Appearance */}
       <Section title="Appearance">
-        <Row label={T.isDark ? "Dark Mode" : "Light Mode"} sub={`Currently using ${T.isDark?"dark":"light"} theme`}>
-          <button onClick={onToggleTheme} style={{
+        <Row label={T.isDark ? "Dark Mode" : "Light Mode"} sub={`${T.isDark?"Dark theme is active":"Light theme is active"}`}>
+          <button onClick={onToggleTheme} type="button" role="switch" aria-label={tr("Dark mode")} aria-checked={T.isDark} style={{
             width:52, height:28, borderRadius:8, border:"none", cursor:"pointer", position:"relative", flexShrink:0,
             background: T.isDark ? PRIMARY : T.border, transition:"background .25s",
           }}>
@@ -1327,40 +1322,10 @@ function SettingsTab({ onToggleTheme, onClearCache, files, streak, onImportLegac
         </Row>
       </Section>
 
-      {/* Language */}
-      <Section title="AI Response Language">
-        <p style={{ margin:"0 0 14px", fontSize:13, color:T.muted, lineHeight:1.6 }}>
-          Control which language the AI always responds in. "Auto" detects from your input.
-        </p>
-        <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
-          {[
-            { v:"auto",    label:"Auto detect" },
-            { v:"English", label:"English" },
-            { v:"Arabic",  label:"العربية" },
-            { v:"French",  label:"Français" },
-            { v:"Spanish", label:"Español" },
-            { v:"German",  label:"Deutsch" },
-            { v:"Chinese", label:"中文" },
-          ].map(o=>(
-            <button key={o.v} onClick={()=>handleLang(o.v)}
-              style={{ padding:"8px 16px", borderRadius:7, fontSize:13, fontWeight:600, cursor:"pointer", transition:"all .12s",
-                background: lang===o.v ? PRIMARY : "transparent",
-                color: lang===o.v ? "#fff" : T.muted,
-                border: `1.5px solid ${lang===o.v ? "transparent" : T.border}`,
-                boxShadow: lang===o.v ? "0 3px 10px rgba(29,78,216,.3)" : "none" }}>
-              {o.label}
-            </button>
-          ))}
-        </div>
-        {lang !== "auto" && (
-          <p style={{ margin:"12px 0 0", fontSize:12, color:T.accent, fontWeight:600 }}>
-            ✓ AI will always respond in {lang} regardless of input language
-          </p>
-        )}
-      </Section>
+      <Section title={tr('Language & region')}><LanguageSettings /></Section>
 
       <Section title="AI study tools">
-        <p style={{ fontSize:13, lineHeight:1.6 }}>Guests and signed-in users can use AI. Groq processes the study text, images and audio you submit for the selected tool.</p>
+        <p style={{ fontSize:13, lineHeight:1.6 }}>{tr("Your selected AI provider processes the study material you submit. Choose a provider and response language above.")}</p>
       </Section>
 
       {/* Study activity */}
@@ -1378,7 +1343,7 @@ function SettingsTab({ onToggleTheme, onClearCache, files, streak, onImportLegac
             <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
               {stats.map(s=>(
                 <div key={s.label} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 14px", background:T.bg, borderRadius:12, border:`1px solid ${T.border}` }}>
-                  <span style={{ fontSize:13, color:T.text, fontWeight:500 }}>{s.label}</span>
+                  <span style={{ fontSize:13, color:T.text, fontWeight:500 }}>{tr(s.label)}</span>
                   <span style={{ fontSize:14, fontWeight:700, color:s.color }}>{s.value}</span>
                 </div>
               ))}
@@ -1398,11 +1363,11 @@ function SettingsTab({ onToggleTheme, onClearCache, files, streak, onImportLegac
       {/* Data */}
       <Section title="Data & Storage">
         <p style={{ margin:"0 0 14px", fontSize:13, color:T.muted, lineHeight:1.6 }}>
-          With Google sign-in, notes and folder details can sync to your account. Original personal files are kept in this browser. This control clears the cached folder list.
+          {tr("With Google sign-in and cloud storage configured, files and supported study work sync to your account across devices. Guest documents stay in this session. This control clears only the cached folder list.")}
         </p>
         <button onClick={onClearCache} disabled={!onClearCache}
           style={{ background:T.redL, color:T.red, border:`1px solid ${T.red}44`, borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
-          Clear Local Cache
+          {tr("Clear Local Cache")}
         </button>
       </Section>
 
@@ -1410,9 +1375,9 @@ function SettingsTab({ onToggleTheme, onClearCache, files, streak, onImportLegac
       {/* About */}
       <Section title="About">
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-          {[["App","Classio"],["Stack","React · Firebase · Groq"]].map(([k,v])=>(
+          {[["App","Classio"],["Stack","React · Firebase · Groq / Gemini"]].map(([k,v])=>(
             <div key={k} style={{ display:"flex", justifyContent:"space-between" }}>
-              <span style={{ fontSize:14, color:T.muted }}>{k}</span>
+              <span style={{ fontSize:14, color:T.muted }}>{tr(k)}</span>
               <span style={{ fontSize:14, fontWeight:600, color:T.text }}>{v}</span>
             </div>
           ))}
@@ -1434,20 +1399,20 @@ function AboutTab() {
     { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>, title:"Voice Notes", desc:"Record yourself or a lecture — the app transcribes it into written notes automatically." },
     { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>, title:"AI Podcast", desc:"Turn any file into a spoken podcast. Two AI hosts discuss your material so you can learn while listening." },
     { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ea580c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>, title:"Annotations", desc:"Highlight and annotate any file directly inside the app. Add comments and review them later." },
-    { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0694a2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>, title:"16 Languages", desc:"Full support for Arabic, French, Spanish, German, Chinese, Japanese, and 10 more. The AI always replies in the language you write in." },
+    { icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0694a2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>, title:"Your language", desc:"English and Arabic workspace navigation, plus 14 AI response languages. Choose both independently in Settings." },
   ];
   const steps = [
     { n:"1", title:"Create a folder", desc:"Tap New Folder and name it after a subject such as physics or maths." },
     { n:"2", title:"Upload your file", desc:"Open the folder, upload your study material: PDF, PowerPoint, Word doc, or image." },
     { n:"3", title:"Generate with AI", desc:"Open the file and go to the AI tab to instantly create notes, flashcards, or a quiz game." },
-    { n:"5", title:"Ask about your studies", desc:"Hit the AI Assistant button on the home screen to ask any question or send a photo of a problem." },
+    { n:"5", title:"Ask about your studies", desc:"Open AI Assistant in the navigation to ask any question or send a photo of a problem." },
   ];
   return (
     <div style={{ paddingBottom:40 }}>
       <div style={{ textAlign:"center", padding:"36px 20px 28px",
         background:C.accentL,
         borderRadius:20, marginBottom:28, border:`1px solid ${C.accentS}` }}>
-        <div style={{ width:72,height:72,borderRadius:22,background:"#1d4ed8",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",boxShadow:"0 8px 24px rgba(99,102,241,.3)" }}>
+        <div style={{ width:72,height:72,borderRadius:22,background:"#2b6777",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",boxShadow:"0 8px 24px rgba(99,102,241,.3)" }}>
           <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
             <path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 0 3-3h7z"/>
@@ -1466,7 +1431,7 @@ function AboutTab() {
             background:C.surface, border:`1px solid ${C.border}`, borderRadius:14, padding:"14px 16px" }}>
             <div style={{ width:32,height:32,borderRadius:10,background:PRIMARY,
               display:"flex",alignItems:"center",justifyContent:"center",
-              fontSize:14,fontWeight:800,color:"#fff",flexShrink:0,boxShadow:"0 3px 10px rgba(29,78,216,.3)" }}>{s.n}</div>
+              fontSize:14,fontWeight:800,color:"#fff",flexShrink:0,boxShadow:"0 3px 10px rgba(43,103,119,.3)" }}>{s.n}</div>
             <div>
               <p style={{ margin:"0 0 3px", fontSize:14, fontWeight:700, color:C.text }}>{s.title}</p>
               <p style={{ margin:0, fontSize:13, color:C.muted, lineHeight:1.5 }}>{s.desc}</p>
@@ -1511,7 +1476,7 @@ function AboutTab() {
 const TUTORIAL_STEPS = [
   { icon:I.folder, title:"Create Subject Folders", desc:"Organise your study material by subject. Create a folder for Physics, Maths, Biology.", tip:"Tap + New Folder on the home screen to get started." },
   { icon:I.file, title:"Upload Your Files", desc:"Upload PDFs, PowerPoints, Word docs, or images. Classio reads them and unlocks all AI features for that file.", tip:"Supports PDF, PPTX, DOCX, images and more." },
-  { icon:I.notes, title:"AI Notes", desc:"Open any file and go to the Notes tab. The AI generates structured study notes automatically. Ask the assistant panel any question about your notes.", tip:"The AI assistant on the right is always open — ask it anything." },
+  { icon:I.notes, title:"AI Notes", desc:"Open any file and go to the Notes tab. Use Generate AI notes to add source-based notes in the same editor.", tip:"Extra generation options stay collapsed until you need them." },
   { icon:I.cards, title:"Study Cards", desc:"The Study Cards tab generates flashcards from your file. Flip through one at a time in Study mode, or browse the grid. Mark cards as known to track progress.", tip:"Press Space to flip a card, and arrow keys to navigate." },
   { icon:I.mic, title:"AI Podcast", desc:"Voice and Podcast tab, then AI Podcast. The AI explains your notes out loud like a personal tutor. Tap the mic button to ask questions any time — it pauses and answers, then continues.", tip:"The podcast remembers where it was and resumes from that exact point." },
   { icon:I.game, title:"Game Mode and More", desc:"Make studying fun with Game Mode — quiz games, matching, and more all generated from your notes. Use the YouTube tab to turn any video into study notes and flashcards.", tip:"Everything is powered by your own uploaded content." },
@@ -1578,7 +1543,7 @@ function OnboardingTutorial({ onDone }) {
             fontSize:13, fontWeight:600, color:C.muted }}>Skip</button>
           <button onClick={next} style={{ flex:1, padding:"11px", borderRadius:10,
             border:"none", background:PRIMARY, color:"#fff", cursor:"pointer",
-            fontSize:14, fontWeight:700, boxShadow:"0 4px 14px rgba(29,78,216,.3)" }}>
+            fontSize:14, fontWeight:700, boxShadow:"0 4px 14px rgba(43,103,119,.3)" }}>
             {isLast ? "Get Started" : "Next"}
           </button>
         </div>
@@ -1592,17 +1557,17 @@ function OnboardingTutorial({ onDone }) {
 
 // ─── EXTRA GLOBAL CSS ─────────────────────────────────────────────────────────
 const DARK_CSS = `
-  body.classio-dark { background: #0f172a !important; color: #f1f5f9 !important; }
-  body.classio-dark ::-webkit-scrollbar-thumb { background: #3b4a63; }
+  body.classio-dark { background: #11282f !important; color: #f4f8f9 !important; }
+  body.classio-dark ::-webkit-scrollbar-thumb { background: #49656d; }
   body.classio-dark button { color: inherit; }
-  body.classio-dark select { color: #f1f5f9; background: #1e293b; }
-  body.classio-dark input { color: #f1f5f9; }
+  body.classio-dark select { color: #f4f8f9; background: #1b373f; }
+  body.classio-dark input { color: #f4f8f9; }
 
   /* ── Gradient primary button ── */
   .btn-primary {
-    background: #1d4ed8 !important;
+    background: #2b6777 !important;
     color:#fff !important; border:none !important;
-    box-shadow: 0 4px 14px rgba(29,78,216,.35) !important;
+    box-shadow: 0 4px 14px rgba(43,103,119,.35) !important;
     transition: opacity .15s, transform .15s !important;
   }
   .btn-primary:hover:not(:disabled) { opacity:.92; transform:translateY(-1px) scale(1.01); }
@@ -1611,12 +1576,12 @@ const DARK_CSS = `
   /* ── Squircle card ── */
   .sq-card {
     background:#fff; border-radius:20px;
-    box-shadow:0 4px 24px rgba(29,78,216,.10);
+    box-shadow:0 4px 24px rgba(43,103,119,.10);
     border:1px solid #EAE6E1;
     transition:box-shadow .15s;
   }
-  .sq-card:hover { box-shadow:0 8px 32px rgba(29,78,216,.16); }
-  body.classio-dark .sq-card { background:#1e293b; border-color:#3b4a63; box-shadow:0 4px 20px rgba(0,0,0,.5); }
+  .sq-card:hover { box-shadow:0 8px 32px rgba(43,103,119,.16); }
+  body.classio-dark .sq-card { background:#1b373f; border-color:#49656d; box-shadow:0 4px 20px rgba(0,0,0,.5); }
 
   /* ── Animations ── */
   @keyframes cmdIn { from { opacity:0; transform:translateY(-14px) scale(.97); } to { opacity:1; transform:translateY(0) scale(1); } }
@@ -1639,7 +1604,7 @@ const DARK_CSS = `
   .fade-enter { animation: fadeIn .18s ease both; }
 
   /* ── Mastery pill badges ── */
-  .pill-new     { background:#EEF0FF; color:#1d4ed8; border:1.5px solid #b8d2c9; border-radius:20px; padding:5px 14px; font-size:12px; font-weight:700; }
+  .pill-new     { background:#EEF0FF; color:#2b6777; border:1.5px solid #b8d2c9; border-radius:20px; padding:5px 14px; font-size:12px; font-weight:700; }
   .pill-learning{ background:#FFF8E6; color:#B45309; border:1.5px solid #FDE68A; border-radius:20px; padding:5px 14px; font-size:12px; font-weight:700; }
   .pill-mastered{ background:#E6F4EA; color:#2E7D32; border:1.5px solid #A8D5B0; border-radius:20px; padding:5px 14px; font-size:12px; font-weight:700; }
 
@@ -1702,7 +1667,7 @@ body { max-width:100vw; overflow-x:hidden; box-sizing:border-box; }
   }
 }
 /* ── sq-card: remove transform hover (creates stacking context) ─── */
-.sq-card:hover { box-shadow:0 8px 32px rgba(29,78,216,.16) !important; transform:none !important; }
+.sq-card:hover { box-shadow:0 8px 32px rgba(43,103,119,.16) !important; transform:none !important; }
 
 /* ── Phone portrait ── */
 @media(max-width:480px) and (orientation:portrait){
@@ -1751,6 +1716,7 @@ body { overflow-x:hidden; }
 
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
 function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacter, onToggleTheme, onOpenSearch, isMobile, user, isGuest, onSignOut, sidebarExpanded, onToggleSidebar, folderTab, onFolderTab, fileTab, onFileTab, folder, file }) {
+  const { t } = useLocale();
   const T = useTheme();
   C = T; // keep C in sync
   const expanded = sidebarExpanded;
@@ -1783,11 +1749,11 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
   const FOLDER_TABS = [
     { id:"files",   label:"Files",          icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> },
     { id:"youtube", label:"YouTube",        icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.54C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg> },
-    { id:"ai",      label:"AI Assistant",   icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8"/></svg> },
+    { id:"ai",      label:"Ask about folder",   icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8"/></svg> },
   ];
 
-  if (isMobile) return <MobileNavigation navigation={NAV}
-    contextTabs={context === 'document' ? FILE_TABS : context === 'folder' ? FOLDER_TABS : null}
+  if (isMobile) return <MobileNavigation navigation={NAV.map(item=>({...item,label:t(item.label)}))}
+    contextTabs={(context === 'document' ? FILE_TABS : context === 'folder' ? FOLDER_TABS : []).map(item=>({...item,label:t(item.label)}))}
     onNavigate={onNavigate} onTab={setActiveTab} activeTab={activeTab} onSearch={onOpenSearch}
     onProfile={onOpenCharacter} onTheme={onToggleTheme} onSignOut={onSignOut} />;
 
@@ -1803,15 +1769,15 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
     } else { active = activeTab === n.id; }
     const handleClick = () => onNavigate(n.id);
     return (
-      <button onClick={handleClick} title={n.label}
+      <button onClick={handleClick} title={t(n.label)}
         style={{ width:"100%", display:"flex", alignItems:"center", gap:12, padding:expanded?"9px 14px":"12px", borderRadius:10, border:"none", cursor:"pointer", position:"relative",
           background:active?T.sidebarActive:"transparent", color:active?T.text:T.muted,
           fontWeight:active?600:400, fontSize:14, transition:"all .12s", justifyContent:expanded?"flex-start":"center" }}
         onMouseEnter={e=>{ if(!active){e.currentTarget.style.background=T.sidebarActive; e.currentTarget.style.color=T.text;}}}
         onMouseLeave={e=>{ if(!active){e.currentTarget.style.background="transparent"; e.currentTarget.style.color=T.muted;}}}>
         <span style={{ flexShrink:0, display:"flex" }}>{n.icon}</span>
-        {expanded && <span style={{ whiteSpace:"nowrap" }}>{n.label}</span>}
-      {active && expanded && <div style={{ width:6, height:6, borderRadius:"50%", background:PRIMARY, marginLeft:"auto", boxShadow:"0 0 6px #1d4ed888" }}/>}
+        {expanded && <span style={{ whiteSpace:"nowrap" }}>{t(n.label)}</span>}
+      {active && expanded && <div style={{ width:6, height:6, borderRadius:"50%", background:PRIMARY, marginInlineStart:"auto", boxShadow:"0 0 6px #2b677788" }}/>}
       {active && !expanded && <div style={{ position:"absolute", left:0, top:"50%", transform:"translateY(-50%)", width:3, height:20, borderRadius:"0 3px 3px 0", background:PRIMARY }}/>}
       </button>
     );
@@ -1823,7 +1789,7 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
   const CtxTabBtn = ({ t }) => {
     const isActive = activeTab === t.id;
     return (
-      <button onClick={() => setActiveTab && setActiveTab(t.id)} title={t.label}
+      <button onClick={() => setActiveTab && setActiveTab(t.id)} title={tr(t.label)}
         style={{ width:"100%", display:"flex", alignItems:"center", gap:10,
           padding: expanded ? "8px 12px" : "10px",
           borderRadius:10, border:"none", cursor:"pointer", position:"relative",
@@ -1835,18 +1801,18 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
         onMouseEnter={e=>{ if(!isActive){e.currentTarget.style.background=T.sidebarActive; e.currentTarget.style.color=T.text;}}}
         onMouseLeave={e=>{ if(!isActive){e.currentTarget.style.background="transparent"; e.currentTarget.style.color=T.muted;}}}>
         <span style={{ flexShrink:0, display:"flex" }}>{t.icon}</span>
-        {expanded && <span style={{ whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{t.label}</span>}
+        {expanded && <span style={{ whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{tr(t.label)}</span>}
         {isActive && <div style={{ position:"absolute", left:0, top:"50%", transform:"translateY(-50%)", width:3, height:20, borderRadius:"0 3px 3px 0", background:PRIMARY }}/>}
-        {isActive && expanded && <div style={{ width:5, height:5, borderRadius:"50%", background:PRIMARY, marginLeft:"auto", flexShrink:0 }}/>}
+        {isActive && expanded && <div style={{ width:5, height:5, borderRadius:"50%", background:PRIMARY, marginInlineStart:"auto", flexShrink:0 }}/>}
       </button>
     );
   };
 
   return (
-    <div style={{ width:sideW, minWidth:sideW, height:"100dvh", background:T.sidebar, borderRight:`1px solid ${T.border}`, display:"flex", flexDirection:"column", position:"fixed", left:0, top:0, zIndex:150, transition:"width .2s ease", overflow:"hidden" }}>
+    <div style={{ width:sideW, minWidth:sideW, height:"100dvh", background:T.sidebar, borderRight:`1px solid ${T.border}`, display:"flex", flexDirection:"column", position:"fixed", insetInlineStart:0, top:0, zIndex:150, transition:"width .2s ease", overflow:"hidden" }}>
       {/* Logo */}
       <div style={{ padding:"16px 0 12px", display:"flex", flexDirection:"column", alignItems:"center", borderBottom:`1px solid ${T.border}`, cursor:"pointer" }} onClick={()=>setExpanded(e=>!e)}>
-        <div style={{ width:36, height:36, background:"#1d4ed8", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center" }}>
+        <div style={{ width:36, height:36, background:"#2b6777", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center" }}>
           <Icon d={I.sparkle} size={16} color="#fff" sw={2}/>
         </div>
         {expanded && <span style={{ fontFamily:"'Fraunces Variable',serif", fontSize:16, fontWeight:700, color:T.navText, marginTop:8 }}>Classio</span>}
@@ -1858,7 +1824,7 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
           style={{ width:"100%", display:"flex", alignItems:"center", gap:8, background:T.bg, border:`1px solid ${T.border}`, borderRadius:10,
             padding:expanded?"8px 12px":"10px", cursor:"pointer", justifyContent:expanded?"flex-start":"center" }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          {expanded && <><span style={{ fontSize:13, color:T.muted, flex:1 }}>Search…</span><span style={{ fontSize:10, color:T.muted, background:T.border, borderRadius:4, padding:"1px 5px" }}>⌘K</span></>}
+          {expanded && <><span style={{ fontSize:13, color:T.muted, flex:1 }}>{tr("Search")}…</span><span style={{ fontSize:10, color:T.muted, background:T.border, borderRadius:4, padding:"1px 5px" }}>⌘K</span></>}
         </button>
       </div>
 
@@ -1867,14 +1833,14 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
         {contextTabs ? (
           <>
             {/* Back to dashboard */}
-            <button onClick={() => onNavigate("home")} title="Dashboard"
+            <button onClick={() => onNavigate("home")} title={tr("Dashboard")}
               style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:expanded?"7px 12px":"8px", borderRadius:10, border:"none", cursor:"pointer",
                 background:"transparent", color:T.muted, fontSize:12, fontWeight:600, transition:"all .12s",
                 justifyContent:expanded?"flex-start":"center", marginBottom:4 }}
               onMouseEnter={e=>{e.currentTarget.style.background=T.sidebarActive;}}
               onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-              {expanded && <span>Dashboard</span>}
+              {expanded && <span>{tr('Dashboard')}</span>}
             </button>
             {/* Context label */}
             {expanded && (
@@ -1900,35 +1866,35 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
       {/* Bottom */}
       <div style={{ flexShrink:0, padding:"8px 8px 16px", borderTop:`1px solid ${T.border}`, display:"flex", flexDirection:"column", gap:4 }}>
         {/* Theme toggle */}
-        <button onClick={onToggleTheme}
+        <button onClick={onToggleTheme} aria-label={tr(T.isDark ? "Switch to light mode" : "Switch to dark mode")}
           style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"9px 12px", borderRadius:10, border:`1px solid ${T.border}`, cursor:"pointer",
-            background: T.isDark ? "#2a2a26" : T.accentL,
-            color: T.isDark ? "#e0c060" : T.accent,
+            background: T.accentL,
+            color: T.accent,
             fontSize:14, transition:"all .12s", justifyContent: expanded ? "flex-start" : "center" }}
-          title={T.isDark ? "Switch to light mode" : "Switch to dark mode"}
+          title={tr(T.isDark ? "Switch to light mode" : "Switch to dark mode")}
           onMouseEnter={e=>{e.currentTarget.style.opacity=".85";}}
           onMouseLeave={e=>{e.currentTarget.style.opacity="1";}}>
           {T.isDark
             ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
             : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
           }
-          {expanded && <span style={{ fontSize:13, fontWeight:600 }}>{T.isDark ? "Light mode" : "Dark mode"}</span>}
+          {expanded && <span style={{ fontSize:13, fontWeight:600 }}>{tr(T.isDark ? "Light mode" : "Dark mode")}</span>}
         </button>
-        <button type="button" onClick={onSignOut} aria-label={isGuest ? 'Exit guest session' : 'Sign out'} title={isGuest ? 'Exit guest session' : 'Sign out'}
+        <button type="button" onClick={onSignOut} aria-label={tr(isGuest ? 'Exit guest session' : 'Sign out')} title={tr(isGuest ? 'Exit guest session' : 'Sign out')}
           style={{ display:'flex', alignItems:'center', justifyContent:expanded?'flex-start':'center', gap:10, minHeight:40, padding:'8px 12px', background:'transparent', color:T.muted, border:0, borderRadius:10, cursor:'pointer' }}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 4H4v16h5M14 8l4 4-4 4M8 12h10" /></svg>{expanded && <span>{isGuest ? 'Exit guest session' : 'Sign out'}</span>}
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 4H4v16h5M14 8l4 4-4 4M8 12h10" /></svg>{expanded && <span>{tr(isGuest ? 'Exit guest session' : 'Sign out')}</span>}
         </button>
         {/* User */}
-        <button onClick={onOpenCharacter} aria-label="Your avatar"
+        <button onClick={onOpenCharacter} aria-label={tr("Your avatar")}
           style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"8px 12px", borderRadius:10, border:"none", cursor:"pointer", background:"transparent", justifyContent:expanded?"flex-start":"center" }}
           onMouseEnter={e=>{e.currentTarget.style.background=T.sidebarActive;}}
           onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
           <div style={{ width:32, height:32, borderRadius:"50%", overflow:"hidden", border:`2px solid ${T.border}`, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}>
             <MiniAvatar character={character||{}} size={32} />
           </div>
-          {expanded && <div style={{ textAlign:"left", minWidth:0 }}>
-            <p style={{ margin:0, fontSize:13, fontWeight:600, color:T.navText, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{character?.name || (user?.displayName?.split(" ")[0]) || (isGuest?"Guest":"You")}</p>
-            <p style={{ margin:0, fontSize:11, color:T.muted }}>{isGuest?"Guest mode":"Student"}</p>
+          {expanded && <div style={{ textAlign:"start", minWidth:0 }}>
+            <p style={{ margin:0, fontSize:13, fontWeight:600, color:T.navText, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{character?.name || (user?.displayName?.split(" ")[0]) || (tr(isGuest?"Guest":"You"))}</p>
+            <p style={{ margin:0, fontSize:11, color:T.muted }}>{tr(isGuest?"Guest mode":"Student")}</p>
           </div>}
         </button>
       </div>
@@ -2095,11 +2061,11 @@ function AudioRecordModal({ onClose, onSave, onSaveNote }) {
   return (
     <Modal onClose={onClose}>
       <style>{`
-        @keyframes arm-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(29,78,216,.4),0 4px 20px rgba(29,78,216,.3)} 50%{box-shadow:0 0 0 16px rgba(29,78,216,.0),0 4px 20px rgba(29,78,216,.3)} }
+        @keyframes arm-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(43,103,119,.4),0 4px 20px rgba(43,103,119,.3)} 50%{box-shadow:0 0 0 16px rgba(43,103,119,.0),0 4px 20px rgba(43,103,119,.3)} }
         @keyframes arm-pulse-red { 0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.35),0 4px 20px rgba(220,38,38,.3)} 50%{box-shadow:0 0 0 20px rgba(220,38,38,.0),0 4px 20px rgba(220,38,38,.3)} }
         @keyframes arm-fadein { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
         @keyframes arm-spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
-        .arm-bar { border-radius:3px; background:#1d4ed8; transition:height .1s ease; }
+        .arm-bar { border-radius:3px; background:#2b6777; transition:height .1s ease; }
       `}</style>
 
       {/* Header */}
@@ -2237,7 +2203,7 @@ function AudioRecordModal({ onClose, onSave, onSaveNote }) {
             <button onClick={saveAsNote}
               style={{ flex:2, padding:"10px", background:PRIMARY, color:"#fff", border:"none",
                 borderRadius:10, cursor:"pointer", fontSize:13, fontWeight:700,
-                boxShadow:"0 3px 10px rgba(29,78,216,.3)" }}>
+                boxShadow:"0 3px 10px rgba(43,103,119,.3)" }}>
               Save as Notes
             </button>
           </div>
@@ -2637,6 +2603,7 @@ function WebLinkModal({ folders, onClose, onGo, onNewFolder, onSaveDirect }) {
 }
 
 export default function App() {
+  useLocale();
   const { isMobile, isTablet } = useResponsive();
   const [showTutorial, setShowTutorial] = useState(() => {
     try { return !localStorage.getItem("classio_onboarded"); } catch { return false; }
@@ -2661,7 +2628,7 @@ export default function App() {
   const [activeStudyGroup, setActiveStudyGroup] = useState(null); // group doc id
   const [showStudyGroupLobby, setShowStudyGroupLobby] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
-  const [sidebarExpanded, setSidebarExpanded] = useState(false);
+  const [sidebarExpanded, setSidebarExpanded] = useState(() => { try { const saved=localStorage.getItem('classio_sidebar_expanded'); return saved===null?window.innerWidth>=1100:saved==='true'; } catch {return true;} });
   const [folderTab, setFolderTab] = useState("files");
   const [fileTab, setFileTab] = useState("view");
 
@@ -2698,7 +2665,7 @@ export default function App() {
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, []);
-  const DEFAULT_CHAR = { skin:"#FDDBB4", hair:"#3D2B1F", hairStyle:0, eyes:"#2980B9", top:"#2C3E50", bg:"#dce8ff", mouth:0, eyebrow:0, eyeShape:0, accessory:0, topStyle:0, blush:false, lips:false, freckles:false, lipColor:"#d06060", hat:0, hatColor:"#E74C3C", glasses:0, glassesColor:"#333333", facialHair:0, necklace:0, necklaceColor:"#f0c040", earring:0, earringColor:"#f0c040", name:"" };
+  const DEFAULT_CHAR = avatarDefaults;
   const [character, setCharacter] = useState(() => {
     try { return { ...DEFAULT_CHAR, ...(JSON.parse(localStorage.getItem("classio_char:" + (auth.currentUser?.uid || "guest")) || "null") || {}) }; }
     catch { return { skin:"#FDDBB4", hair:"#3D2B1F", hairStyle:0, eyes:"#3D5A80", top:"#3D5A80", name:"" }; }
@@ -2957,9 +2924,14 @@ export default function App() {
       if (auth.currentUser?.uid === user.uid && snapshot.exists()) setCharacter(snapshot.data().character || DEFAULT_CHAR);
     }, () => setWorkspaceWarning('Avatar sync is unavailable. Local changes are kept.'));
     const stopTheme = onSnapshot(doc(db, 'users', user.uid, 'profile', 'preferences'), snapshot => {
-      if (auth.currentUser?.uid === user.uid && ['light', 'dark'].includes(snapshot.data()?.theme)) setTheme(snapshot.data().theme);
+      if(auth.currentUser?.uid!==user.uid)return;
+      const value=snapshot.data();
+      if (['light','dark'].includes(value?.theme)) setTheme(value.theme);
+      if(value?.interfaceLanguage || value?.replyLanguage)setLanguages({interfaceLanguage:value.interfaceLanguage,replyLanguage:value.replyLanguage},{remote:true});
     }, () => {});
-    return () => { stopAvatar(); stopTheme(); };
+    const syncLanguage=event=>{if(auth.currentUser?.uid===user.uid)setDoc(doc(db,'users',user.uid,'profile','preferences'),event.detail,{merge:true}).catch(()=>setWorkspaceWarning('Language preferences are saved on this device. Account sync is unavailable.'));};
+    window.addEventListener('classio-language-change',syncLanguage);
+    return () => { stopAvatar(); stopTheme(); window.removeEventListener('classio-language-change',syncLanguage); };
   }, [user?.uid]);
 
   function saveCharacter(value) {
@@ -2973,6 +2945,8 @@ export default function App() {
     if (user) setDoc(doc(db, 'users', user.uid, 'profile', 'preferences'), { theme: _getTheme().isDark ? 'dark' : 'light' }, { merge: true })
       .catch(() => setWorkspaceWarning('Theme is saved on this device. Account syncing is unavailable.'));
   }
+
+  useEffect(() => { try { localStorage.setItem('classio_sidebar_expanded', String(sidebarExpanded)); } catch {} }, [sidebarExpanded]);
 
   if (user === undefined) return <Splash />;
 
@@ -3044,12 +3018,12 @@ export default function App() {
       {showCharacter && <CharacterModal character={character} onChange={saveCharacter} onClose={() => setShowCharacter(false)} />}
       <div style={{
         flex: 1,
-        marginLeft: isMobile ? 0 : isTablet ? 60 : (sidebarExpanded ? 220 : 60),
+        marginInlineStart: isMobile ? 0 : (sidebarExpanded ? 220 : 60),
         marginTop: isMobile ? 56 : 0,
         marginBottom: 0,
         minWidth: 0,
         overflow: "visible",
-        maxWidth: isMobile ? "100vw" : `calc(100vw - ${isMobile ? 0 : isTablet ? 60 : (sidebarExpanded ? 220 : 60)}px)`,
+        maxWidth: isMobile ? "100vw" : `calc(100vw - ${isMobile ? 0 : (sidebarExpanded ? 220 : 60)}px)`,
         boxSizing: "border-box",
       }}>
         {workspaceWarning && <div className="workspace-warning" role="status">{workspaceWarning}{(cloudPending.current || pendingUploads.current.length > 0) && <button type="button" onClick={retryCloudSync}>Retry sync</button>}</div>}
@@ -3108,7 +3082,7 @@ export default function App() {
 
   function startCourse() {
     const inbox = foldersRef.current.find(folder => folder.id === "inbox") ||
-      { id: "inbox", name: "Inbox", color: "#1d4ed8", files: [] };
+      { id: "inbox", name: "Inbox", color: "#2b6777", files: [] };
     const file = { id: `blank_${makeStudyId()}`, name: "Untitled course", type: "text/plain", notes: "", studyCards: [], _isBlank: true, defaultTab: "learn" };
     const folder = { ...inbox, files: [...inbox.files, file] };
     setFoldersSave([folder, ...foldersRef.current.filter(item => item.id !== inbox.id)]);
@@ -3157,16 +3131,16 @@ export default function App() {
         onClose={() => setShowStudyGroupLobby(false)}
       />}
       {/* Main content area — offset by sidebar */}
-      <div style={{ flex:1, minWidth:0, marginLeft:isMobile?0:(sidebarExpanded?220:60), marginTop:isMobile?56:0, marginBottom:0, minHeight:"100vh", display:"flex", flexDirection:"column", background:T.bg }}>
+      <div style={{ flex:1, minWidth:0, marginInlineStart:isMobile?0:(sidebarExpanded?220:60), marginTop:isMobile?56:0, marginBottom:0, minHeight:"100vh", display:"flex", flexDirection:"column", background:T.bg }}>
       <div style={{ maxWidth:960, margin:"0 auto", padding:isMobile?"12px 14px":isTablet?"16px 20px":"32px 36px", width:"100%", boxSizing:"border-box" }}>
 
         {workspaceWarning && <div className="workspace-warning" role="status">{workspaceWarning}{(cloudPending.current || pendingUploads.current.length > 0) && <button type="button" onClick={retryCloudSync}>Retry sync</button>}</div>}
         {/* ── Dashboard Header ── */}
         {homeTab==="folders" && !user && (
           <section className="guest-save-banner" aria-label="Guest session">
-            <div><strong>Guest session</strong><p>All study tools are free. Sign in to save this session and sync your progress. Guest documents clear on refresh. Assistant drafts stay in this tab until you close it.</p></div>
+            <div><strong>{tr('Guest session')}</strong><p>{tr("All study tools are free. Sign in to save this session and sync your progress. Guest documents clear on refresh. Assistant drafts stay in this tab until you close it.")}</p></div>
             <button className="workspace-action" onClick={signInToSave} disabled={signInPending}>
-              {signInPending ? "Connecting…" : "Sign in to save"}
+              {signInPending ? '…' : tr('Sign in to save')}
             </button>
             {signInError && <p role="alert">{signInError}</p>}
           </section>
@@ -3174,9 +3148,9 @@ export default function App() {
         {homeTab==="folders" && (
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:28, flexWrap:"wrap", gap:10 }}>
             <div>
-              <h1 style={{ fontFamily:"'Fraunces Variable',serif", fontSize:isMobile?24:32, fontWeight:700, color:T.text, margin:"0 0 3px", letterSpacing:-.5 }}>Dashboard</h1>
+              <h1 style={{ fontFamily:"'Fraunces Variable',serif", fontSize:isMobile?24:32, fontWeight:700, color:T.text, margin:"0 0 3px", letterSpacing:-.5 }}>{tr('Dashboard')}</h1>
               <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                <p style={{ fontSize:14, color:T.muted, margin:0 }}>Organize your study files and notes.</p>
+                <p style={{ fontSize:14, color:T.muted, margin:0 }}>{tr('Organize your study files and notes.')}</p>
                 {studyStreak > 1 && (
                   <span style={{ display:"inline-flex", alignItems:"center", gap:4, background:"linear-gradient(135deg,#FF6B35,#FF4500)", color:"#fff", borderRadius:20, padding:"3px 10px", fontSize:12, fontWeight:700, boxShadow:"0 2px 8px rgba(255,107,53,.35)" }}>
                     {studyStreak} day streak
@@ -3197,15 +3171,14 @@ export default function App() {
 
         {homeTab === "folders" && (
           <div className="study-tool-actions">
-            <button type="button" onClick={() => setShowHomeAI(true)}>Open AI assistant</button>
-            <button type="button" onClick={startCourse}>Build a course</button>
+            <button type="button" onClick={startCourse}>{tr('Build a course')}</button>
           </div>
         )}
         {/* ── Quick actions ── */}
         {homeTab==="folders" && (
           <div className="quick-actions" style={{ display:"grid", gridTemplateColumns:isMobile?"repeat(2, minmax(0, 1fr))":isTablet?"repeat(3, minmax(0, 1fr))":"repeat(4, minmax(0, 1fr))", gap:12, marginBottom:32 }}>
             {[
-              { grad:C.accentL, ic:C.accent, icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>, label:"Blank document", sub:"Write your own notes", action:()=>{ const blankId=`blank_${Date.now()}`; const blankFile={id:blankId,name:"Untitled Document",type:"text/plain",_fileObj:null,notes:"",studyCards:[],_isBlank:true}; const inboxExists=folders.find(f=>f.id==="inbox"); const newFolders=inboxExists?folders.map(f=>f.id==="inbox"?{...f,files:[blankFile,...(f.files||[])]}:f):[...folders,{id:"inbox",name:"Inbox",color:"#1d4ed8",files:[blankFile]}]; setFoldersSave(newFolders); const newInbox=newFolders.find(f=>f.id==="inbox"); setActiveFile(blankFile); setActiveFolder(newInbox); setScreen("file"); setFileTab("notes"); } },
+              { grad:C.accentL, ic:C.accent, icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>, label:"Blank document", sub:"Write your own notes", action:()=>{ const blankId=`blank_${Date.now()}`; const blankFile={id:blankId,name:"Untitled Document",type:"text/plain",_fileObj:null,notes:"",studyCards:[],_isBlank:true}; const inboxExists=folders.find(f=>f.id==="inbox"); const newFolders=inboxExists?folders.map(f=>f.id==="inbox"?{...f,files:[blankFile,...(f.files||[])]}:f):[...folders,{id:"inbox",name:"Inbox",color:"#2b6777",files:[blankFile]}]; setFoldersSave(newFolders); const newInbox=newFolders.find(f=>f.id==="inbox"); setActiveFile(blankFile); setActiveFolder(newInbox); setScreen("file"); setFileTab("notes"); } },
               { grad:C.accentL, ic:C.accent, icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>, label:"Record audio", sub:"Upload an audio file", action:()=>setShowRecordModal(true) },
               { grad:C.accentL, ic:C.accent, icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>, label:"Upload document", sub:"PDF, Word or PowerPoint", action:()=>setShowUploadModal(true) },
               { grad:C.accentL, ic:C.accent, icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.54C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/></svg>, label:"Website link", sub:"YouTube or website link", action:()=>setShowWebLinkModal(true) },
@@ -3215,8 +3188,8 @@ export default function App() {
                 >
                 <div style={{ width:32, height:32, borderRadius:6, background:a.grad, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{a.icon}</div>
                 <div style={{ minWidth:0 }}>
-                  <p style={{ margin:0, fontSize:13, fontWeight:700, color:T.text }}>{a.label}</p>
-                  <p style={{ margin:0, fontSize:11, color:T.muted }}>{a.sub}</p>
+                  <p style={{ margin:0, fontSize:13, fontWeight:700, color:T.text }}>{tr(a.label)}</p>
+                  <p style={{ margin:0, fontSize:11, color:T.muted }}>{tr(a.sub)}</p>
                 </div>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft:"auto", flexShrink:0 }}><path d="M9 18l6-6-6-6"/></svg>
               </button>
@@ -3228,11 +3201,11 @@ export default function App() {
         {homeTab==="folders" && (
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
             <div style={{ display:"flex", gap:4 }}>
-              <button onClick={()=>setHomeTab("folders")} style={{ background:homeTab==="folders"?T.text:"transparent", color:homeTab==="folders"?T.bg:T.muted, border:`1.5px solid ${homeTab==="folders"?T.text:T.border}`, borderRadius:8, padding:"5px 16px", fontSize:13, fontWeight:600, cursor:"pointer" }}>My Notes</button>
+              <button onClick={()=>setHomeTab("folders")} style={{ background:homeTab==="folders"?T.text:"transparent", color:homeTab==="folders"?T.bg:T.muted, border:`1.5px solid ${homeTab==="folders"?T.text:T.border}`, borderRadius:8, padding:"5px 16px", fontSize:13, fontWeight:600, cursor:"pointer" }}>{tr('My Notes')}</button>
             </div>
             <button onClick={()=>setShowNewFolder(true)} className="btn-anim"
               style={{ display:"flex", alignItems:"center", gap:6, background:"transparent", border:`1.5px solid ${T.border}`, borderRadius:10, padding:"6px 14px", fontSize:13, fontWeight:600, cursor:"pointer", color:T.text }}>
-              <Icon d={I.plus} size={14} color={T.text} sw={2.5}/> New Folder
+              <Icon d={I.plus} size={14} color={T.text} sw={2.5}/> {tr("New Folder")}
             </button>
           </div>
         )}
@@ -3245,11 +3218,11 @@ export default function App() {
             <div style={{ width:80, height:80, background:C.accentL, borderRadius:24, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 20px" }}>
               <Icon d={I.folder} size={36} color={C.accent}/>
             </div>
-            <p style={{ fontSize:18, fontWeight:600, color:C.text, marginBottom:8 }}>No folders yet</p>
-            <p style={{ fontSize:14, color:C.muted, maxWidth:280, margin:"0 auto 24px" }}>Create a folder for each subject to organise your files</p>
+            <p style={{ fontSize:18, fontWeight:600, color:C.text, marginBottom:8 }}>{tr('No folders yet')}</p>
+            <p style={{ fontSize:14, color:C.muted, maxWidth:280, margin:"0 auto 24px" }}>{tr('Create a folder for each subject to organise your files')}</p>
             <button onClick={()=>setShowNewFolder(true)} className="hov"
-              style={{ background:PRIMARY, color:"#fff", border:"none", borderRadius:10, padding:"10px 24px", fontSize:14, fontWeight:600, cursor:"pointer", boxShadow:"0 3px 12px rgba(29,78,216,.3)" }}>
-              Create First Folder
+              style={{ background:PRIMARY, color:"#fff", border:"none", borderRadius:10, padding:"10px 24px", fontSize:14, fontWeight:600, cursor:"pointer", boxShadow:"0 3px 12px rgba(43,103,119,.3)" }}>
+              {tr("Create First Folder")}
             </button>
           </div>
         )}
@@ -3507,18 +3480,18 @@ export default function App() {
           <div onClick={e=>e.stopPropagation()} style={{ background:C.surface,borderRadius:24,padding:"28px 28px 24px",width:"100%",maxWidth:440,boxShadow:"0 24px 64px rgba(0,0,0,.18)",border:`1px solid ${C.border}` }}>
             {/* Header */}
             <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:22 }}>
-              <div style={{ width:42,height:42,background:"#1d4ed815",borderRadius:14,display:"flex",alignItems:"center",justifyContent:"center" }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              <div style={{ width:42,height:42,background:"#2b677715",borderRadius:14,display:"flex",alignItems:"center",justifyContent:"center" }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2b6777" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
               </div>
               <div>
-                <h2 style={{ fontFamily:"'Fraunces Variable',serif",fontSize:20,fontWeight:700,color:C.text,margin:0 }}>New Folder</h2>
+                <h2 style={{ fontFamily:"'Fraunces Variable',serif",fontSize:20,fontWeight:700,color:C.text,margin:0 }}>{tr('New Folder')}</h2>
                 <p style={{ margin:0,fontSize:12,color:C.muted }}>Organise your study files</p>
               </div>
               <button onClick={()=>{setShowNewFolder(false);setNewName("");}} style={{ marginLeft:"auto",width:30,height:30,borderRadius:"50%",border:`1px solid ${C.border}`,background:C.bg,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:C.muted,fontSize:16 }}>×</button>
             </div>
 
             {/* Name input */}
-            <label style={{ fontSize:11,fontWeight:800,color:C.muted,display:"block",marginBottom:6,letterSpacing:.8,textTransform:"uppercase" }}>Folder Name</label>
+            <label style={{ fontSize:11,fontWeight:800,color:C.muted,display:"block",marginBottom:6,letterSpacing:.8,textTransform:"uppercase" }}>{tr("Folder Name")}</label>
             <input autoFocus value={newName} onChange={e=>setNewName(e.target.value)}
               onKeyDown={e=>{if(e.key==="Enter"&&newName.trim()){setFoldersSave([...folders,{id:`f${Date.now()}`,name:newName.trim(),color:newColor,files:[]}]);setShowNewFolder(false);setNewName("");}}}
               placeholder="e.g. Biology, Maths, History…"
@@ -3588,7 +3561,7 @@ export default function App() {
               </button>
               <button disabled={!newName.trim()}
                 onClick={()=>{setFoldersSave([...folders,{id:`f${Date.now()}`,name:newName.trim(),color:newColor,files:[]}]);setShowNewFolder(false);setNewName("");}}
-                style={{ flex:2,padding:"12px",background:newName.trim()?PRIMARY:C.border,color:newName.trim()?"#fff":C.muted,border:"none",borderRadius:8,fontSize:14,fontWeight:700,cursor:newName.trim()?"pointer":"not-allowed",boxShadow:newName.trim()?"0 3px 14px rgba(29,78,216,.35)":"none",transition:"all .15s" }}>
+                style={{ flex:2,padding:"12px",background:newName.trim()?PRIMARY:C.border,color:newName.trim()?"#fff":C.muted,border:"none",borderRadius:8,fontSize:14,fontWeight:700,cursor:newName.trim()?"pointer":"not-allowed",boxShadow:newName.trim()?"0 3px 14px rgba(43,103,119,.35)":"none",transition:"all .15s" }}>
                 Create Folder
               </button>
             </div>
@@ -3633,7 +3606,7 @@ function Header({ user, saveStatus, isGuest, onSignOut, character, onOpenCharact
           {/* AI Assistant */}
           <button onClick={onOpenAI}
             style={{ display:"flex", alignItems:"center", gap:6,
-              background:"#1d4ed8",
+              background:"#2b6777",
               color:"#fff", border:"none", borderRadius:10, padding:isMobile?"6px 10px":"6px 14px",
               fontSize:13, fontWeight:700, cursor:"pointer",
               boxShadow:"0 2px 10px rgba(99,102,241,.4)" }}>
@@ -3828,1516 +3801,12 @@ function ColorPicker({ value, onChange, onClose, label="" }) {
   );
 }
 
-// ─── SKIN SHADE SLIDER ────────────────────────────────────────────────────────
-// Horizontal gradient slider: lighter ← → darker within one hue family.
-// When `base` changes, the slider position resets to the midpoint.
-function SkinSlider({ base, value, onChange }) {
-  const getHsv = b => hexToHsv(ensureHex(b));
-
-  // Map t ∈ [0,1] → hex:  0 = very light, 1 = very dark
-  const hexAt = (b, t) => {
-    const {h} = getHsv(b);
-    // saturation: 0.08 (pastel) → 0.82 (saturated dark)
-    // value:      0.98 (near white) → 0.22 (near black)
-    return hsvToHex(h, 0.08 + t*0.74, 0.98 - t*0.76);
-  };
-
-  // Infer t from a known hex (nearest match across 60 steps)
-  const inferT = (b, hex) => {
-    let best=0.5, bestD=99;
-    for(let i=0;i<=60;i++){
-      const t=i/60, a=getHsv(hexAt(b,t)), c=getHsv(ensureHex(hex));
-      const d=Math.abs(a.v-c.v)*1.4 + Math.abs(a.s-c.s)*0.6;
-      if(d<bestD){bestD=d;best=t;}
-    }
-    return best;
-  };
-
-  const [t, setT] = useState(() => inferT(base, value));
-  const prevBase  = useRef(base);
-  const barRef    = useRef(null);
-  const dragging  = useRef(false);
-
-  // Reset slider position when the user picks a new base swatch
-  useEffect(() => {
-    if (prevBase.current !== base) { prevBase.current=base; setT(0.4); }
-  }, [base]);
-
-  // Fire onChange whenever t moves
-  useEffect(() => { onChange(hexAt(base, t)); }, [t, base]);
-
-  const posFromEvent = (e, el) => {
-    const r = el.getBoundingClientRect();
-    const x = (e.touches?.[0]?.clientX ?? e.clientX) - r.left;
-    return Math.max(0, Math.min(1, x / r.width));
-  };
-
-  useEffect(() => {
-    const up   = () => { dragging.current=false; };
-    const move = e => { if(dragging.current && barRef.current) setT(posFromEvent(e,barRef.current)); };
-    window.addEventListener('mousemove',move);
-    window.addEventListener('mouseup',up);
-    window.addEventListener('touchmove',move,{passive:false});
-    window.addEventListener('touchend',up);
-    return()=>{
-      window.removeEventListener('mousemove',move);
-      window.removeEventListener('mouseup',up);
-      window.removeEventListener('touchmove',move);
-      window.removeEventListener('touchend',up);
-    };
-  },[]);
-
-  // Gradient: sample 8 stops for smooth transition
-  const stops = Array.from({length:8},(_,i)=>hexAt(base,i/7)).join(',');
-  const thumbColor = hexAt(base, t);
-
-  return (
-    <div style={{marginTop:10,marginBottom:4}}>
-      {/* Track */}
-      <div ref={barRef}
-        style={{position:'relative',height:26,borderRadius:13,
-          background:`linear-gradient(to right,${stops})`,
-          cursor:'pointer',
-          boxShadow:'inset 0 1px 4px rgba(0,0,0,.25), 0 1px 3px rgba(0,0,0,.12)'}}
-        onMouseDown={e=>{dragging.current=true; setT(posFromEvent(e,barRef.current)); e.preventDefault();}}
-        onTouchStart={e=>{dragging.current=true; setT(posFromEvent(e,barRef.current));}}>
-        {/* Thumb */}
-        <div style={{
-          position:'absolute',left:`${t*100}%`,top:'50%',
-          width:32,height:32,borderRadius:'50%',
-          background:thumbColor,
-          border:'3px solid #fff',
-          boxShadow:'0 2px 10px rgba(0,0,0,.45)',
-          transform:'translate(-50%,-50%)',
-          pointerEvents:'none',
-          transition:'background .05s',
-        }}/>
-      </div>
-      {/* Labels */}
-      <div style={{display:'flex',justifyContent:'space-between',marginTop:5,
-        fontSize:10,color:'#999',fontWeight:700,letterSpacing:.4}}>
-        <span>Lighter</span>
-        <span style={{background:thumbColor,color:'#fff',padding:'2px 8px',borderRadius:10,
-          fontSize:10,fontWeight:800,boxShadow:'0 1px 4px rgba(0,0,0,.3)'}}>{thumbColor.toUpperCase()}</span>
-        <span>Darker</span>
-      </div>
-    </div>
-  );
-}
-function shadeHex(hex, amt) {
-  const n = parseInt((hex||"#888888").replace('#',''), 16);
-  const clamp = v => Math.min(255, Math.max(0, v));
-  return `rgb(${clamp((n>>16&255)+amt)},${clamp((n>>8&255)+amt)},${clamp((n&255)+amt)})`;
-}
-// Unique ID per every field + size so header (36px) and modal (120px) SVGs never clash
-function avatarGid(ch, size) {
-  // Safe fallbacks for every field so gid is always a valid string
-  const str = [
-    ch.skin||"#FDDBB4", ch.hair||"#3D2B1F", ch.top||"#2C3E50", ch.eyes||"#2980B9",
-    ch.bg||"#dce8ff", ch.lipColor||"#d06060",
-    ch.hairStyle||0, ch.topStyle||0, ch.eyeShape||0,
-    ch.accessory||0, ch.eyebrow||0, ch.mouth||0,
-    ch.blush?1:0, ch.lips?1:0, ch.freckles?1:0,
-    ch.hat||0, ch.hatColor||"#E74C3C",
-    ch.glasses||0, ch.glassesColor||"#333333",
-    ch.facialHair||0, ch.necklace||0, ch.necklaceColor||"#f0c040",
-    ch.earring||0, ch.earringColor||"#f0c040",
-    size||40
-  ].join("|");
-  let h = 5381;
-  for (let i = 0; i < str.length; i++) { h = ((h << 5) + h) ^ str.charCodeAt(i); h = h >>> 0; }
-  return "av" + h.toString(36);
-}
-
 // ─── AVATAR ───────────────────────────────────────────────────────────────────
-function MiniAvatar({ character: ch, size = 40, uid = "" }) {
-  const s   = size;
-  const cx  = s * 0.5;
-  const sd  = shadeHex(ch.skin,  -30);
-  const sl  = shadeHex(ch.skin,   28);
-  const hd  = shadeHex(ch.hair,  -35);
-  const hl  = shadeHex(ch.hair,   30);
-  const td  = shadeHex(ch.top,   -28);
-  const tl  = shadeHex(ch.top,    28);
-  const bg  = ch.bg || "#dce8ff";
-  const gid = avatarGid(ch, s) + uid;
-
-  // ── Hair ──────────────────────────────────────────────────────────────────
-  const H = {
-    0: /* Buzz */ <path d={`M${s*.29} ${s*.315} Q${s*.3} ${s*.11} ${cx} ${s*.1} Q${s*.7} ${s*.11} ${s*.71} ${s*.315}`} fill={ch.hair}/>,
-    1: /* Side-part */ <>
-      <path d={`M${s*.28} ${s*.33} Q${s*.27} ${s*.1} ${cx} ${s*.08} Q${s*.73} ${s*.1} ${s*.72} ${s*.33}`} fill={hd}/>
-      <path d={`M${s*.28} ${s*.33} Q${s*.29} ${s*.12} ${cx} ${s*.1} Q${s*.71} ${s*.12} ${s*.72} ${s*.33}`} fill={ch.hair}/>
-      <path d={`M${s*.29} ${s*.19} Q${s*.39} ${s*.09} ${s*.63} ${s*.12}`} stroke={hd} strokeWidth={s*.016} fill="none" strokeLinecap="round"/>
-    </>,
-    2: /* Fringe */ <>
-      <path d={`M${s*.27} ${s*.35} Q${s*.25} ${s*.1} ${cx} ${s*.08} Q${s*.72} ${s*.1} ${s*.73} ${s*.32}`} fill={ch.hair}/>
-      <path d={`M${s*.29} ${s*.21} Q${s*.45} ${s*.06} ${s*.73} ${s*.19}`} fill={ch.hair}/>
-      <path d={`M${s*.29} ${s*.21} Q${s*.46} ${s*.11} ${s*.71} ${s*.21}`} fill={hd} opacity={.45}/>
-    </>,
-    3: /* Textured */ <>
-      <path d={`M${s*.26} ${s*.36} Q${s*.24} ${s*.09} ${cx} ${s*.07} Q${s*.76} ${s*.09} ${s*.74} ${s*.36}`} fill={hd}/>
-      <path d={`M${s*.27} ${s*.36} Q${s*.25} ${s*.11} ${cx} ${s*.09} Q${s*.75} ${s*.11} ${s*.73} ${s*.36}`} fill={ch.hair}/>
-      <path d={`M${s*.27} ${s*.3} Q${s*.24} ${s*.43} ${s*.27} ${s*.53}`} stroke={ch.hair} strokeWidth={s*.052} strokeLinecap="round" fill="none"/>
-      <path d={`M${s*.73} ${s*.3} Q${s*.76} ${s*.43} ${s*.73} ${s*.53}`} stroke={ch.hair} strokeWidth={s*.052} strokeLinecap="round" fill="none"/>
-    </>,
-    4: /* Long straight */ <>
-      <path d={`M${s*.27} ${s*.35} Q${s*.24} ${s*.09} ${cx} ${s*.07} Q${s*.76} ${s*.09} ${s*.73} ${s*.35}`} fill={hd}/>
-      <path d={`M${s*.28} ${s*.35} Q${s*.26} ${s*.11} ${cx} ${s*.09} Q${s*.74} ${s*.11} ${s*.72} ${s*.35}`} fill={ch.hair}/>
-      <path d={`M${s*.27} ${s*.28} C${s*.22} ${s*.45} ${s*.2} ${s*.65} ${s*.23} ${s*.9}`} stroke={ch.hair} strokeWidth={s*.082} strokeLinecap="round" fill="none"/>
-      <path d={`M${s*.73} ${s*.28} C${s*.78} ${s*.45} ${s*.8} ${s*.65} ${s*.77} ${s*.9}`} stroke={ch.hair} strokeWidth={s*.082} strokeLinecap="round" fill="none"/>
-      <path d={`M${s*.25} ${s*.29} C${s*.2} ${s*.46} ${s*.18} ${s*.66} ${s*.21} ${s*.91}`} stroke={hl} strokeWidth={s*.022} strokeLinecap="round" fill="none" opacity={.4}/>
-      <path d={`M${s*.75} ${s*.29} C${s*.8} ${s*.46} ${s*.82} ${s*.66} ${s*.79} ${s*.91}`} stroke={hl} strokeWidth={s*.022} strokeLinecap="round" fill="none" opacity={.4}/>
-    </>,
-    5: /* Wavy */ <>
-      <path d={`M${s*.27} ${s*.35} Q${s*.24} ${s*.09} ${cx} ${s*.07} Q${s*.76} ${s*.09} ${s*.73} ${s*.35}`} fill={ch.hair}/>
-      <path d={`M${s*.27} ${s*.27} C${s*.21} ${s*.4} ${s*.26} ${s*.54} ${s*.2} ${s*.68} C${s*.14} ${s*.82} ${s*.21} ${s*.93} ${s*.21} ${s*.98}`} stroke={ch.hair} strokeWidth={s*.088} strokeLinecap="round" fill="none"/>
-      <path d={`M${s*.27} ${s*.27} C${s*.21} ${s*.4} ${s*.26} ${s*.54} ${s*.2} ${s*.68} C${s*.14} ${s*.82} ${s*.21} ${s*.93} ${s*.21} ${s*.98}`} stroke={hl} strokeWidth={s*.024} strokeLinecap="round" fill="none" opacity={.38}/>
-      <path d={`M${s*.73} ${s*.27} C${s*.79} ${s*.4} ${s*.74} ${s*.54} ${s*.8} ${s*.68} C${s*.86} ${s*.82} ${s*.79} ${s*.93} ${s*.79} ${s*.98}`} stroke={ch.hair} strokeWidth={s*.088} strokeLinecap="round" fill="none"/>
-      <path d={`M${s*.73} ${s*.27} C${s*.79} ${s*.4} ${s*.74} ${s*.54} ${s*.8} ${s*.68} C${s*.86} ${s*.82} ${s*.79} ${s*.93} ${s*.79} ${s*.98}`} stroke={hl} strokeWidth={s*.024} strokeLinecap="round" fill="none" opacity={.38}/>
-    </>,
-    6: /* Ponytail */ <>
-      <path d={`M${s*.28} ${s*.35} Q${s*.26} ${s*.11} ${cx} ${s*.09} Q${s*.74} ${s*.11} ${s*.72} ${s*.35}`} fill={ch.hair}/>
-      <path d={`M${s*.28} ${s*.35} Q${s*.26} ${s*.13} ${cx} ${s*.11} Q${s*.74} ${s*.13} ${s*.72} ${s*.35}`} fill={hl} opacity={.28}/>
-      <path d={`M${s*.68} ${s*.18} C${s*.84} ${s*.23} ${s*.87} ${s*.4} ${s*.84} ${s*.57} C${s*.81} ${s*.71} ${s*.85} ${s*.82} ${s*.82} ${s*.9}`} stroke={ch.hair} strokeWidth={s*.072} strokeLinecap="round" fill="none"/>
-      <path d={`M${s*.68} ${s*.18} C${s*.84} ${s*.23} ${s*.87} ${s*.4} ${s*.84} ${s*.57} C${s*.81} ${s*.71} ${s*.85} ${s*.82} ${s*.82} ${s*.9}`} stroke={hl} strokeWidth={s*.02} strokeLinecap="round" fill="none" opacity={.42}/>
-      <circle cx={s*.755} cy={s*.21} r={s*.022} fill={hd}/>
-    </>,
-    7: /* Bun */ <>
-      <path d={`M${s*.28} ${s*.34} Q${s*.27} ${s*.15} ${cx} ${s*.13} Q${s*.73} ${s*.15} ${s*.72} ${s*.34}`} fill={ch.hair}/>
-      <circle cx={cx} cy={s*.082} r={s*.105} fill={hd}/>
-      <circle cx={cx} cy={s*.082} r={s*.088} fill={ch.hair}/>
-      <ellipse cx={s*.475} cy={s*.062} rx={s*.042} ry={s*.026} fill={hl} opacity={.48}/>
-      <path d={`M${s*.39} ${s*.14} Q${cx} ${s*.165} ${s*.61} ${s*.14}`} stroke={hd} strokeWidth={s*.016} fill="none"/>
-    </>,
-    8: /* Afro */ <>
-      <ellipse cx={cx} cy={s*.17} rx={s*.27} ry={s*.21} fill={hd}/>
-      {[...Array(20)].map((_,i) => {
-        const a = -Math.PI + (i/20)*Math.PI*2;
-        const r = s*(0.21 + (i%3)*0.018);
-        return <circle key={i} cx={cx+Math.cos(a)*r} cy={s*.19+Math.sin(a)*r*.72} r={s*.052} fill={i%3===0?hl:i%3===1?ch.hair:hd}/>;
-      })}
-      <ellipse cx={cx} cy={s*.2} rx={s*.2} ry={s*.16} fill={ch.hair}/>
-    </>,
-    9: /* Box braids */ <>
-      <path d={`M${s*.28} ${s*.35} Q${s*.26} ${s*.1} ${cx} ${s*.08} Q${s*.74} ${s*.1} ${s*.72} ${s*.35}`} fill={ch.hair}/>
-      {[...Array(8)].map((_,i) => {
-        const x = s*(0.29 + i*0.056);
-        const len = s*(0.36 + (i%3)*0.07);
-        return <g key={i}>
-          <rect x={x} y={s*.21} width={s*.03} height={len} rx={s*.015} fill={i%2===0?ch.hair:hd}/>
-          <ellipse cx={x+s*.015} cy={s*.21+len+s*.01} rx={s*.016} ry={s*.012} fill={hd}/>
-        </g>;
-      })}
-    </>,
-    10: /* Curly */ <>
-      <ellipse cx={cx} cy={s*.18} rx={s*.25} ry={s*.17} fill={hd}/>
-      {[...Array(24)].map((_,i) => {
-        const a = (i/24)*Math.PI*2;
-        const rx2 = 0.19+(i%4)*0.014;
-        const ry2 = 0.15+(i%3)*0.014;
-        return <circle key={i} cx={cx+Math.cos(a)*s*rx2} cy={s*.19+Math.sin(a)*s*ry2} r={s*.038} fill={i%2===0?ch.hair:hl}/>;
-      })}
-      <ellipse cx={cx} cy={s*.2} rx={s*.18} ry={s*.14} fill={ch.hair}/>
-    </>,
-    11: /* Locs */ <>
-      <path d={`M${s*.28} ${s*.35} Q${s*.26} ${s*.1} ${cx} ${s*.08} Q${s*.74} ${s*.1} ${s*.72} ${s*.35}`} fill={ch.hair}/>
-      {[...Array(10)].map((_,i) => {
-        const x = s*(0.27+i*0.052);
-        const h2 = s*(0.3+Math.sin(i*0.9)*0.09);
-        const w = s*.03;
-        return <g key={i}>
-          <rect x={x} y={s*.21} width={w} height={h2} rx={w/2} fill={i%2===0?ch.hair:hd}/>
-          <ellipse cx={x+w/2} cy={s*.21+h2+s*.012} rx={w*.55} ry={s*.013} fill={hd}/>
-        </g>;
-      })}
-    </>,
-    12: /* Faux hawk */ <>
-      <path d={`M${s*.28} ${s*.35} Q${s*.27} ${s*.17} ${cx} ${s*.15} Q${s*.73} ${s*.17} ${s*.72} ${s*.35}`} fill={ch.hair}/>
-      <path d={`M${s*.41} ${s*.17} C${s*.43} ${s*.03} ${s*.57} ${s*.03} ${s*.59} ${s*.17}`} fill={ch.hair}/>
-      <path d={`M${s*.43} ${s*.17} C${s*.45} ${s*.07} ${s*.55} ${s*.07} ${s*.57} ${s*.17}`} fill={hl} opacity={.42}/>
-    </>,
-    13: /* Space buns */ <>
-      <path d={`M${s*.28} ${s*.35} Q${s*.27} ${s*.16} ${cx} ${s*.14} Q${s*.73} ${s*.16} ${s*.72} ${s*.35}`} fill={ch.hair}/>
-      <circle cx={s*.34} cy={s*.1} r={s*.088} fill={hd}/><circle cx={s*.34} cy={s*.1} r={s*.072} fill={ch.hair}/>
-      <ellipse cx={s*.325} cy={s*.08} rx={s*.032} ry={s*.02} fill={hl} opacity={.48}/>
-      <circle cx={s*.66} cy={s*.1} r={s*.088} fill={hd}/><circle cx={s*.66} cy={s*.1} r={s*.072} fill={ch.hair}/>
-      <ellipse cx={s*.645} cy={s*.08} rx={s*.032} ry={s*.02} fill={hl} opacity={.48}/>
-    </>,
-    14: /* Mohawk — centre strip, shaved sides */ <>
-      {/* shaved side shadow */}
-      <ellipse cx={s*.28} cy={s*.26} rx={s*.08} ry={s*.14} fill={hd} opacity={.18}/>
-      <ellipse cx={s*.72} cy={s*.26} rx={s*.08} ry={s*.14} fill={hd} opacity={.18}/>
-      {/* centre strip */}
-      <path d={`M${s*.44} ${s*.56} L${s*.44} ${s*.14} Q${cx} ${s*.08} ${s*.56} ${s*.14} L${s*.56} ${s*.56}`} fill={ch.hair}/>
-      <path d={`M${s*.46} ${s*.56} L${s*.46} ${s*.15} Q${cx} ${s*.095} ${s*.54} ${s*.15} L${s*.54} ${s*.56}`} fill={hl} opacity={.25}/>
-      {/* spiky tips */}
-      {[-.04,-.02,0,.02,.04].map((ox,i)=><path key={i} d={`M${cx+s*ox} ${s*.08} L${cx+s*(ox-.018)} ${s*.14} L${cx+s*(ox+.018)} ${s*.14} Z`} fill={ch.hair}/>)}
-    </>,
-    15: /* Dreadlocks — thick rope-like strands */ <>
-      <path d={`M${s*.28} ${s*.35} Q${s*.27} ${s*.16} ${cx} ${s*.14} Q${s*.73} ${s*.16} ${s*.72} ${s*.35}`} fill={ch.hair}/>
-      <ellipse cx={cx} cy={s*.155} rx={s*.22} ry={s*.075} fill={ch.hair}/>
-      {/* rope strands left */}
-      {[.22,.28,.34].map((bx,i)=><>
-        <path key={"l"+i} d={`M${s*bx} ${s*.38} Q${s*(bx-.03)} ${s*.62} ${s*(bx-.01)} ${s*.82}`} stroke={ch.hair} strokeWidth={s*.038} fill="none" strokeLinecap="round"/>
-        <path key={"lh"+i} d={`M${s*bx} ${s*.38} Q${s*(bx-.03)} ${s*.62} ${s*(bx-.01)} ${s*.82}`} stroke={hl} strokeWidth={s*.012} fill="none" strokeLinecap="round" opacity={.22}/>
-      </>)}
-      {/* rope strands right */}
-      {[.78,.72,.66].map((bx,i)=><>
-        <path key={"r"+i} d={`M${s*bx} ${s*.38} Q${s*(bx+.03)} ${s*.62} ${s*(bx+.01)} ${s*.82}`} stroke={ch.hair} strokeWidth={s*.038} fill="none" strokeLinecap="round"/>
-        <path key={"rh"+i} d={`M${s*bx} ${s*.38} Q${s*(bx+.03)} ${s*.62} ${s*(bx+.01)} ${s*.82}`} stroke={hl} strokeWidth={s*.012} fill="none" strokeLinecap="round" opacity={.22}/>
-      </>)}
-    </>,
-    16: /* Slick back — sleek combed-back with sheen */ <>
-      <path d={`M${s*.28} ${s*.35} Q${s*.27} ${s*.15} ${cx} ${s*.13} Q${s*.73} ${s*.15} ${s*.72} ${s*.35}`} fill={ch.hair}/>
-      <ellipse cx={cx} cy={s*.15} rx={s*.22} ry={s*.07} fill={ch.hair}/>
-      {/* slick sheen lines */}
-      <path d={`M${s*.38} ${s*.18} Q${s*.42} ${s*.14} ${cx} ${s*.13}`} stroke={hl} strokeWidth={s*.014} fill="none" opacity={.45} strokeLinecap="round"/>
-      <path d={`M${s*.42} ${s*.22} Q${s*.46} ${s*.16} ${cx} ${s*.14}`} stroke={hl} strokeWidth={s*.01} fill="none" opacity={.3} strokeLinecap="round"/>
-      <path d={`M${s*.62} ${s*.18} Q${s*.58} ${s*.14} ${cx} ${s*.13}`} stroke={hl} strokeWidth={s*.014} fill="none" opacity={.45} strokeLinecap="round"/>
-    </>,
-  };
-
-  // ── Mouth ─────────────────────────────────────────────────────────────────
-  const MOUTH = {
-    0: <path d={`M${s*.41} ${s*.526} Q${cx} ${s*.576} ${s*.59} ${s*.526}`} stroke="#b06050" strokeWidth={s*.024} fill="none" strokeLinecap="round"/>,
-    1: <path d={`M${s*.41} ${s*.546} Q${cx} ${s*.5} ${s*.59} ${s*.546}`} stroke="#b06050" strokeWidth={s*.024} fill="none" strokeLinecap="round"/>,
-    2: <>
-      <path d={`M${s*.39} ${s*.52} Q${cx} ${s*.59} ${s*.61} ${s*.52}`} fill="#8B3A3A"/>
-      <path d={`M${s*.39} ${s*.52} Q${cx} ${s*.56} ${s*.61} ${s*.52}`} fill="white" opacity={.38}/>
-      <path d={`M${s*.39} ${s*.52} Q${cx} ${s*.59} ${s*.61} ${s*.52}`} stroke="#b06050" strokeWidth={s*.02} fill="none" strokeLinecap="round"/>
-    </>,
-    3: <path d={`M${s*.44} ${s*.526} Q${cx} ${s*.556} ${s*.56} ${s*.526}`} stroke="#b06050" strokeWidth={s*.022} fill="none" strokeLinecap="round"/>,
-    4: <>
-      <ellipse cx={cx} cy={s*.536} rx={s*.076} ry={s*.028} fill="#b06050"/>
-      <ellipse cx={cx} cy={s*.528} rx={s*.054} ry={s*.014} fill="white" opacity={.34}/>
-    </>,
-  };
-
-  // ── Brows ─────────────────────────────────────────────────────────────────
-  const BROW = {
-    0: <>
-      <path d={`M${s*.34} ${s*.312} Q${s*.405} ${s*.282} ${s*.465} ${s*.298}`} stroke={hd} strokeWidth={s*.025} fill="none" strokeLinecap="round"/>
-      <path d={`M${s*.535} ${s*.298} Q${s*.595} ${s*.282} ${s*.66} ${s*.312}`} stroke={hd} strokeWidth={s*.025} fill="none" strokeLinecap="round"/>
-    </>,
-    1: <>
-      <line x1={s*.34} y1={s*.302} x2={s*.465} y2={s*.308} stroke={hd} strokeWidth={s*.024} strokeLinecap="round"/>
-      <line x1={s*.535} y1={s*.308} x2={s*.66} y2={s*.302} stroke={hd} strokeWidth={s*.024} strokeLinecap="round"/>
-    </>,
-    2: <>
-      <path d={`M${s*.34} ${s*.308} Q${s*.405} ${s*.27} ${s*.465} ${s*.29}`} stroke={hd} strokeWidth={s*.034} fill="none" strokeLinecap="round"/>
-      <path d={`M${s*.535} ${s*.29} Q${s*.595} ${s*.27} ${s*.66} ${s*.308}`} stroke={hd} strokeWidth={s*.034} fill="none" strokeLinecap="round"/>
-    </>,
-    3: <>
-      <path d={`M${s*.34} ${s*.296} Q${s*.405} ${s*.318} ${s*.465} ${s*.308}`} stroke={hd} strokeWidth={s*.025} fill="none" strokeLinecap="round"/>
-      <path d={`M${s*.535} ${s*.308} Q${s*.595} ${s*.318} ${s*.66} ${s*.296}`} stroke={hd} strokeWidth={s*.025} fill="none" strokeLinecap="round"/>
-    </>,
-  };
-
-  // ── Eyes ──────────────────────────────────────────────────────────────────
-  const eye = (ex, ey) => {
-    const sh = ch.eyeShape || 0;
-    const W = sh===1 ? <ellipse cx={ex} cy={ey} rx={s*.062} ry={s*.042} fill="white"/>
-              : sh===2 ? <path d={`M${ex-s*.062} ${ey+s*.01} Q${ex} ${ey-s*.074} ${ex+s*.062} ${ey+s*.01} Q${ex} ${ey+s*.048} ${ex-s*.062} ${ey+s*.01}`} fill="white"/>
-              : <ellipse cx={ex} cy={ey} rx={s*.058} ry={s*.056} fill="white"/>;
-    return <>
-      {W}
-      <ellipse cx={ex} cy={ey} rx={s*.034} ry={s*.036} fill={ch.eyes}/>
-      <ellipse cx={ex} cy={ey} rx={s*.019} ry={s*.02} fill="#111" opacity={.88}/>
-      <circle cx={ex+s*.016} cy={ey-s*.017} r={s*.01} fill="white"/>
-      <circle cx={ex-s*.009} cy={ey+s*.012} r={s*.005} fill="white" opacity={.55}/>
-      {sh===2 && <path d={`M${ex-s*.055} ${ey+s*.008} Q${ex} ${ey-s*.076} ${ex+s*.055} ${ey+s*.008}`} stroke="#222" strokeWidth={s*.012} fill="none"/>}
-    </>;
-  };
-
-  // ── Nose ──────────────────────────────────────────────────────────────────
-  const nose = <>
-    <path d={`M${cx} ${s*.42} Q${s*.545} ${s*.462} ${s*.534} ${s*.496}`} stroke={sd} strokeWidth={s*.015} fill="none" opacity={.44}/>
-    <ellipse cx={s*.464} cy={s*.5} rx={s*.017} ry={s*.01} fill={sd} opacity={.27}/>
-    <ellipse cx={s*.536} cy={s*.5} rx={s*.017} ry={s*.01} fill={sd} opacity={.27}/>
-  </>;
-
-  // ── Hat styles (rendered on top of hair) ─────────────────────────────────
-  const hc  = ch.hatColor  || "#E74C3C";
-  const hcd = shadeHex(hc, -30);
-  const hcl = shadeHex(hc,  25);
-  const HAT = {
-    0: null,
-    1: /* Beanie */ <>
-      <path d={`M${s*.255} ${s*.325} Q${s*.26} ${s*.09} ${cx} ${s*.07} Q${s*.74} ${s*.09} ${s*.745} ${s*.325}`} fill={hcd}/>
-      <path d={`M${s*.26} ${s*.325} Q${s*.265} ${s*.095} ${cx} ${s*.075} Q${s*.735} ${s*.095} ${s*.74} ${s*.325}`} fill={hc}/>
-      <rect x={s*.238} y={s*.29} width={s*.524} height={s*.055} rx={s*.022} fill={hcd}/>
-      <ellipse cx={cx} cy={s*.29} rx={s*.262} ry={s*.028} fill={hcl} opacity={.35}/>
-      <circle cx={cx} cy={s*.062} r={s*.038} fill={hc}/>
-      <circle cx={cx} cy={s*.062} r={s*.025} fill={hcl} opacity={.5}/>
-    </>,
-    2: /* Baseball cap */ <>
-      <path d={`M${s*.255} ${s*.34} Q${s*.26} ${s*.11} ${cx} ${s*.09} Q${s*.74} ${s*.11} ${s*.745} ${s*.34}`} fill={hcd}/>
-      <path d={`M${s*.26} ${s*.34} Q${s*.265} ${s*.115} ${cx} ${s*.095} Q${s*.735} ${s*.115} ${s*.74} ${s*.34}`} fill={hc}/>
-      <rect x={s*.238} y={s*.294} width={s*.524} height={s*.05} rx={s*.02} fill={hcd}/>
-      <path d={`M${s*.21} ${s*.338} Q${cx} ${s*.382} ${s*.685} ${s*.338}`} fill={hcd}/>
-      <path d={`M${s*.21} ${s*.336} Q${cx} ${s*.375} ${s*.685} ${s*.336}`} fill={hcl} opacity={.25}/>
-      <ellipse cx={cx} cy={s*.08} rx={s*.048} ry={s*.032} fill={hcl} opacity={.45}/>
-    </>,
-    3: /* Cowboy hat */ <>
-      <ellipse cx={cx} cy={s*.3} rx={s*.34} ry={s*.048} fill={hcd}/>
-      <path d={`M${s*.31} ${s*.295} Q${s*.315} ${s*.09} ${cx} ${s*.075} Q${s*.685} ${s*.09} ${s*.69} ${s*.295}`} fill={hcd}/>
-      <path d={`M${s*.315} ${s*.295} Q${s*.32} ${s*.095} ${cx} ${s*.08} Q${s*.68} ${s*.095} ${s*.685} ${s*.295}`} fill={hc}/>
-      <path d={`M${s*.315} ${s*.295} Q${cx} ${s*.28} ${s*.685} ${s*.295}`} stroke={hcl} strokeWidth={s*.012} fill="none" opacity={.4}/>
-    </>,
-    4: /* Graduation cap */ <>
-      <rect x={s*.31} y={s*.145} width={s*.38} height={s*.085} rx={s*.018} fill={hc}/>
-      <path d={`M${s*.27} ${s*.185} Q${s*.285} ${s*.14} ${cx} ${s*.13} Q${s*.715} ${s*.14} ${s*.73} ${s*.185}`} fill={hcd}/>
-      <line x1={cx} y1={s*.145} x2={s*.32} y2={s*.27} stroke={hcd} strokeWidth={s*.014}/>
-      <circle cx={s*.31} cy={s*.28} r={s*.03} fill={hcd}/>
-    </>,
-    5: /* Crown — shifted to fit within circle clip */ <>
-      <path d={`M${s*.28} ${s*.33} L${s*.30} ${s*.215} L${s*.36} ${s*.27} L${cx} ${s*.18} L${s*.64} ${s*.27} L${s*.70} ${s*.215} L${s*.72} ${s*.33} Z`} fill={hc}/>
-      <path d={`M${s*.28} ${s*.33} L${s*.72} ${s*.33}`} stroke={hcd} strokeWidth={s*.02} fill="none"/>
-      <path d={`M${s*.28} ${s*.33} L${s*.72} ${s*.33}`} stroke={hcl} strokeWidth={s*.006} fill="none" opacity={.45}/>
-      {[s*.365, cx, s*.635].map((px,i)=><circle key={i} cx={px} cy={s*.245} r={s*.02} fill={i===1?"#fff":"#ffb3b3"}/>)}
-    </>,
-    6: /* Party hat */ <>
-      <path d={`M${cx} ${s*.06} L${s*.32} ${s*.32} Q${cx} ${s*.34} ${s*.68} ${s*.32} Z`} fill={hc}/>
-      <path d={`M${cx} ${s*.06} L${s*.32} ${s*.32} Q${cx} ${s*.34} ${s*.68} ${s*.32} Z`} fill="none" stroke={hcl} strokeWidth={s*.014} opacity={.5}/>
-      {[0,1,2].map(i=><circle key={i} cx={s*(.35+i*.15)} cy={s*(.26+i*.02)} r={s*.018} fill={["#fff","#ffcc00","#ff69b4"][i]}/>)}
-      <circle cx={cx} cy={s*.048} r={s*.03} fill={hcl}/>
-    </>,
-    7: /* Headband */ <>
-      <path d={`M${s*.268} ${s*.285} Q${cx} ${s*.23} ${s*.732} ${s*.285}`} stroke={hc} strokeWidth={s*.062} fill="none" strokeLinecap="round"/>
-      <path d={`M${s*.268} ${s*.285} Q${cx} ${s*.23} ${s*.732} ${s*.285}`} stroke={hcl} strokeWidth={s*.016} fill="none" strokeLinecap="round" opacity={.45}/>
-    </>,
-    8: /* Sunhat / bucket */ <>
-      <ellipse cx={cx} cy={s*.29} rx={s*.32} ry={s*.046} fill={hcd}/>
-      <path d={`M${s*.29} ${s*.284} Q${s*.295} ${s*.12} ${cx} ${s*.1} Q${s*.705} ${s*.12} ${s*.71} ${s*.284}`} fill={hcd}/>
-      <path d={`M${s*.295} ${s*.284} Q${s*.3} ${s*.125} ${cx} ${s*.105} Q${s*.7} ${s*.125} ${s*.705} ${s*.284}`} fill={hc}/>
-      <ellipse cx={cx} cy={s*.115} rx={s*.095} ry={s*.02} fill={hcl} opacity={.35}/>
-    </>,
-  };
-
-  // ── Glasses styles (colored, independent from old accessory) ─────────────
-  const gc  = ch.glassesColor || "#333333";
-  const gcl = shadeHex(gc,  28);
-  const GLASSES = {
-    0: null,
-    1: /* Classic round */ <>
-      <circle cx={s*.384} cy={s*.376} r={s*.068} fill="none" stroke={gc} strokeWidth={s*.022}/>
-      <circle cx={s*.616} cy={s*.376} r={s*.068} fill="none" stroke={gc} strokeWidth={s*.022}/>
-      <line x1={s*.452} y1={s*.376} x2={s*.548} y2={s*.376} stroke={gc} strokeWidth={s*.018}/>
-      <line x1={s*.316} y1={s*.362} x2={s*.272} y2={s*.358} stroke={gc} strokeWidth={s*.016}/>
-      <line x1={s*.684} y1={s*.362} x2={s*.728} y2={s*.358} stroke={gc} strokeWidth={s*.016}/>
-    </>,
-    2: /* Rectangular */ <>
-      <rect x={s*.302} y={s*.334} width={s*.148} height={s*.092} rx={s*.024} fill="none" stroke={gc} strokeWidth={s*.022}/>
-      <rect x={s*.55} y={s*.334} width={s*.148} height={s*.092} rx={s*.024} fill="none" stroke={gc} strokeWidth={s*.022}/>
-      <line x1={s*.45} y1={s*.38} x2={s*.55} y2={s*.38} stroke={gc} strokeWidth={s*.018}/>
-      <line x1={s*.302} y1={s*.362} x2={s*.265} y2={s*.36} stroke={gc} strokeWidth={s*.016}/>
-      <line x1={s*.698} y1={s*.362} x2={s*.735} y2={s*.36} stroke={gc} strokeWidth={s*.016}/>
-    </>,
-    3: /* Cat-eye */ <>
-      <path d={`M${s*.305} ${s*.418} Q${s*.305} ${s*.33} ${s*.39} ${s*.315} Q${s*.465} ${s*.308} ${s*.465} ${s*.385} Q${s*.465} ${s*.43} ${s*.38} ${s*.43} Z`} fill="none" stroke={gc} strokeWidth={s*.02}/>
-      <path d={`M${s*.535} ${s*.385} Q${s*.535} ${s*.308} ${s*.61} ${s*.315} Q${s*.695} ${s*.33} ${s*.695} ${s*.418} L${s*.62} ${s*.43} Q${s*.535} ${s*.43} ${s*.535} ${s*.385} Z`} fill="none" stroke={gc} strokeWidth={s*.02}/>
-      <line x1={s*.465} y1={s*.375} x2={s*.535} y2={s*.375} stroke={gc} strokeWidth={s*.018}/>
-      <line x1={s*.305} y1={s*.36} x2={s*.265} y2={s*.355} stroke={gc} strokeWidth={s*.016}/>
-      <line x1={s*.695} y1={s*.36} x2={s*.735} y2={s*.355} stroke={gc} strokeWidth={s*.016}/>
-    </>,
-    4: /* Sunglasses (dark lens) */ <>
-      <rect x={s*.298} y={s*.33} width={s*.155} height={s*.09} rx={s*.03} fill={gc} opacity={.82}/>
-      <rect x={s*.547} y={s*.33} width={s*.155} height={s*.09} rx={s*.03} fill={gc} opacity={.82}/>
-      <rect x={s*.298} y={s*.33} width={s*.155} height={s*.09} rx={s*.03} fill="none" stroke={gc} strokeWidth={s*.015}/>
-      <rect x={s*.547} y={s*.33} width={s*.155} height={s*.09} rx={s*.03} fill="none" stroke={gc} strokeWidth={s*.015}/>
-      <line x1={s*.453} y1={s*.375} x2={s*.547} y2={s*.375} stroke={gc} strokeWidth={s*.018}/>
-      <line x1={s*.298} y1={s*.358} x2={s*.26} y2={s*.354} stroke={gc} strokeWidth={s*.016}/>
-      <line x1={s*.702} y1={s*.358} x2={s*.74} y2={s*.354} stroke={gc} strokeWidth={s*.016}/>
-      {/* glare */}
-      <rect x={s*.31} y={s*.337} width={s*.044} height={s*.018} rx={s*.008} fill="#fff" opacity={.28}/>
-      <rect x={s*.559} y={s*.337} width={s*.044} height={s*.018} rx={s*.008} fill="#fff" opacity={.28}/>
-    </>,
-    5: /* Heart shaped — symmetrical */ <>
-      {/* Left heart lens */}
-      <path d={`M${s*.384} ${s*.348} C${s*.384} ${s*.332} ${s*.364} ${s*.322} ${s*.346} ${s*.33} C${s*.312} ${s*.34} ${s*.312} ${s*.384} ${s*.345} ${s*.404} C${s*.36} ${s*.422} ${s*.384} ${s*.43} ${s*.384} ${s*.43} C${s*.384} ${s*.43} ${s*.408} ${s*.422} ${s*.423} ${s*.404} C${s*.456} ${s*.384} ${s*.456} ${s*.34} ${s*.422} ${s*.33} C${s*.404} ${s*.322} ${s*.384} ${s*.332} ${s*.384} ${s*.348}`} fill="none" stroke={gc} strokeWidth={s*.019}/>
-      {/* Right heart lens */}
-      <path d={`M${s*.616} ${s*.348} C${s*.616} ${s*.332} ${s*.596} ${s*.322} ${s*.578} ${s*.33} C${s*.544} ${s*.34} ${s*.544} ${s*.384} ${s*.577} ${s*.404} C${s*.592} ${s*.422} ${s*.616} ${s*.43} ${s*.616} ${s*.43} C${s*.616} ${s*.43} ${s*.640} ${s*.422} ${s*.655} ${s*.404} C${s*.688} ${s*.384} ${s*.688} ${s*.34} ${s*.654} ${s*.33} C${s*.636} ${s*.322} ${s*.616} ${s*.332} ${s*.616} ${s*.348}`} fill="none" stroke={gc} strokeWidth={s*.019}/>
-      <line x1={s*.456} y1={s*.374} x2={s*.544} y2={s*.374} stroke={gc} strokeWidth={s*.018}/>
-      <line x1={s*.312} y1={s*.358} x2={s*.272} y2={s*.354} stroke={gc} strokeWidth={s*.016}/>
-      <line x1={s*.688} y1={s*.358} x2={s*.728} y2={s*.354} stroke={gc} strokeWidth={s*.016}/>
-    </>,
-    6: /* Aviator — teardrop lenses */ <>
-      <path d={`M${s*.353} ${s*.354} Q${s*.356} ${s*.314} ${s*.417} ${s*.314} Q${s*.468} ${s*.314} ${s*.468} ${s*.362} Q${s*.468} ${s*.41} ${s*.417} ${s*.414} Q${s*.358} ${s*.418} ${s*.353} ${s*.354} Z`} fill="rgba(0,0,0,.2)" stroke={gc} strokeWidth={s*.014}/>
-      <path d={`M${s*.353} ${s*.354} Q${s*.356} ${s*.314} ${s*.417} ${s*.314} Q${s*.468} ${s*.314} ${s*.468} ${s*.362} Q${s*.468} ${s*.41} ${s*.417} ${s*.414} Q${s*.358} ${s*.418} ${s*.353} ${s*.354} Z`} fill="rgba(255,255,255,.1)"/>
-      <path d={`M${s*.647} ${s*.354} Q${s*.644} ${s*.314} ${s*.583} ${s*.314} Q${s*.532} ${s*.314} ${s*.532} ${s*.362} Q${s*.532} ${s*.41} ${s*.583} ${s*.414} Q${s*.642} ${s*.418} ${s*.647} ${s*.354} Z`} fill="rgba(0,0,0,.2)" stroke={gc} strokeWidth={s*.014}/>
-      <path d={`M${s*.647} ${s*.354} Q${s*.644} ${s*.314} ${s*.583} ${s*.314} Q${s*.532} ${s*.314} ${s*.532} ${s*.362} Q${s*.532} ${s*.41} ${s*.583} ${s*.414} Q${s*.642} ${s*.418} ${s*.647} ${s*.354} Z`} fill="rgba(255,255,255,.1)"/>
-      <path d={`M${s*.468} ${s*.336} Q${cx} ${s*.326} ${s*.532} ${s*.336}`} stroke={gc} strokeWidth={s*.012} fill="none"/>
-      <line x1={s*.353} y1={s*.354} x2={s*.278} y2={s*.368} stroke={gc} strokeWidth={s*.013}/>
-      <line x1={s*.647} y1={s*.354} x2={s*.722} y2={s*.368} stroke={gc} strokeWidth={s*.013}/>
-    </>,
-    7: /* Monocle — single eye glass on right */ <>
-      <circle cx={s*.616} cy={s*.368} r={s*.062} fill="rgba(180,220,255,.2)" stroke={gc} strokeWidth={s*.017}/>
-      <ellipse cx={s*.602} cy={s*.355} rx={s*.024} ry={s*.016} fill="rgba(255,255,255,.4)"/>
-      <path d={`M${s*.678} ${s*.412} Q${s*.702} ${s*.452} ${s*.692} ${s*.524}`} stroke={gc} strokeWidth={s*.011} fill="none" opacity={.75}/>
-    </>,
-  };
-
-  // ── Facial hair ───────────────────────────────────────────────────────────
-  const FACIAL_HAIR = {
-    0: null,
-    1: /* Stubble — uses hair color blended with skin for natural look */ <>
-      {[[.39,.518],[.44,.532],[.50,.538],[.56,.532],[.61,.518],
-        [.41,.546],[.46,.558],[.50,.562],[.54,.558],[.59,.546],
-        [.43,.504],[.50,.508],[.57,.504]].map(([fx,fy],i)=>
-        <circle key={i} cx={s*fx} cy={s*fy} r={s*.0075} fill={hd} opacity={.38}/>
-      )}
-    </>,
-    2: /* Moustache */ <>
-      <path d={`M${s*.39} ${s*.506} Q${s*.44} ${s*.522} ${cx} ${s*.518} Q${s*.56} ${s*.522} ${s*.61} ${s*.506}`} fill={hd}/>
-      <path d={`M${s*.41} ${s*.51} Q${s*.455} ${s*.524} ${cx} ${s*.52} Q${s*.545} ${s*.524} ${s*.59} ${s*.51}`} fill={hl} opacity={.3}/>
-    </>,
-    3: /* Short beard */ <>
-      <path d={`M${s*.33} ${s*.49} Q${s*.32} ${s*.575} ${s*.36} ${s*.625} Q${cx} ${s*.66} ${s*.64} ${s*.625} Q${s*.68} ${s*.575} ${s*.67} ${s*.49}`} fill={hd} opacity={.72}/>
-      <path d={`M${s*.36} ${s*.49} Q${s*.355} ${s*.555} ${s*.375} ${s*.6} Q${cx} ${s*.63} ${s*.625} ${s*.6} Q${s*.645} ${s*.555} ${s*.64} ${s*.49}`} fill={hl} opacity={.2}/>
-    </>,
-    4: /* Full beard */ <>
-      <path d={`M${s*.28} ${s*.45} Q${s*.27} ${s*.6} ${s*.32} ${s*.68} Q${cx} ${s*.73} ${s*.68} ${s*.68} Q${s*.73} ${s*.6} ${s*.72} ${s*.45}`} fill={ch.hair} opacity={.9}/>
-      <path d={`M${s*.31} ${s*.45} Q${s*.305} ${s*.58} ${s*.345} ${s*.65} Q${cx} ${s*.7} ${s*.655} ${s*.65} Q${s*.695} ${s*.58} ${s*.69} ${s*.45}`} fill={hl} opacity={.22}/>
-      <path d={`M${s*.38} ${s*.505} Q${s*.44} ${s*.522} ${cx} ${s*.518} Q${s*.56} ${s*.522} ${s*.62} ${s*.505}`} fill={hd}/>
-    </>,
-    5: /* Goatee */ <>
-      <path d={`M${s*.42} ${s*.49} Q${s*.44} ${s*.556} ${cx} ${s*.572} Q${s*.56} ${s*.556} ${s*.58} ${s*.49}`} fill={hd} opacity={.78}/>
-      <path d={`M${s*.435} ${s*.505} Q${s*.455} ${s*.524} ${cx} ${s*.52} Q${s*.545} ${s*.524} ${s*.565} ${s*.505}`} fill={hd}/>
-    </>,
-  };
-
-  // ── Necklace styles ───────────────────────────────────────────────────────
-  const nc  = ch.necklaceColor || "#f0c040";
-  const ncd = shadeHex(nc, -25);
-  const ncl = shadeHex(nc,  22);
-  const NECKLACE = {
-    0: null,
-    1: /* Gold chain — sits just below neck */ <>
-      <path d={`M${s*.37} ${s*.67} Q${cx} ${s*.72} ${s*.63} ${s*.67}`} stroke={nc} strokeWidth={s*.013} fill="none" strokeLinecap="round"/>
-      <path d={`M${s*.37} ${s*.67} Q${cx} ${s*.715} ${s*.63} ${s*.67}`} stroke={ncl} strokeWidth={s*.005} fill="none" strokeLinecap="round" opacity={.5}/>
-      {[0,1,2,3,4].map(i=>{
-        const t = i/4;
-        const x = s*(0.37 + t*0.26);
-        const y = s*(0.67 + Math.sin(t*Math.PI)*0.05);
-        return <circle key={i} cx={x} cy={y} r={s*.011} fill={nc}/>;
-      })}
-    </>,
-    2: /* Pendant */ <>
-      <path d={`M${s*.38} ${s*.668} Q${cx} ${s*.706} ${s*.62} ${s*.668}`} stroke={nc} strokeWidth={s*.013} fill="none"/>
-      <circle cx={cx} cy={s*.712} r={s*.024} fill={nc}/>
-      <circle cx={cx} cy={s*.712} r={s*.015} fill={ncd}/>
-      <circle cx={cx-s*.006} cy={s*.706} r={s*.005} fill={ncl} opacity={.7}/>
-    </>,
-    3: /* Beads */ <>
-      {[0,1,2,3,4,5,6].map(i=>{
-        const t = i/6;
-        const x = s*(0.37 + t*0.26);
-        const y = s*(0.668 + Math.sin(t*Math.PI)*0.042);
-        return <circle key={i} cx={x} cy={y} r={s*.015} fill={i%2===0?nc:ncd}/>;
-      })}
-    </>,
-    4: /* Choker — thick band */ <>
-      <path d={`M${s*.36} ${s*.645} Q${cx} ${s*.625} ${s*.64} ${s*.645}`} stroke={nc} strokeWidth={s*.022} fill="none" strokeLinecap="round"/>
-      <path d={`M${s*.36} ${s*.645} Q${cx} ${s*.625} ${s*.64} ${s*.645}`} stroke="rgba(255,255,255,.3)" strokeWidth={s*.007} fill="none" strokeLinecap="round"/>
-    </>,
-    5: /* Pearl necklace — dots along curve */ <>
-      <path d={`M${s*.36} ${s*.66} Q${cx} ${s*.64} ${s*.64} ${s*.66}`} stroke={nc} strokeWidth={s*.006} fill="none" opacity={.4}/>
-      {[-.22,-.16,-.1,-.04,0,.04,.1,.16,.22].map((ox,i)=>{
-        const px=cx+s*ox; const py=s*(.648+Math.abs(ox)*.08);
-        return <><circle key={i} cx={px} cy={py} r={s*.013} fill={nc}/><ellipse key={"sh"+i} cx={px-s*.004} cy={py-s*.005} rx={s*.005} ry={s*.005} fill="rgba(255,255,255,.55)"/></>;
-      })}
-    </>,
-  };
-
-  // ── Earring styles ────────────────────────────────────────────────────────
-  const ec  = ch.earringColor || "#f0c040";
-  const ecd = shadeHex(ec, -20);
-  const EARRINGS = {
-    0: null,
-    1: /* Studs */ <>
-      <circle cx={s*.264} cy={s*.438} r={s*.02} fill={ec}/>
-      <circle cx={s*.736} cy={s*.438} r={s*.02} fill={ec}/>
-    </>,
-    2: /* Drops */ <>
-      <circle cx={s*.264} cy={s*.438} r={s*.016} fill={ec}/>
-      <ellipse cx={s*.264} cy={s*.462} rx={s*.01} ry={s*.02} fill={ecd}/>
-      <circle cx={s*.736} cy={s*.438} r={s*.016} fill={ec}/>
-      <ellipse cx={s*.736} cy={s*.462} rx={s*.01} ry={s*.02} fill={ecd}/>
-    </>,
-    3: /* Hoops */ <>
-      <circle cx={s*.264} cy={s*.444} r={s*.026} fill="none" stroke={ec} strokeWidth={s*.014}/>
-      <circle cx={s*.736} cy={s*.444} r={s*.026} fill="none" stroke={ec} strokeWidth={s*.014}/>
-    </>,
-    4: /* Stars */ <>
-      {[s*.264, s*.736].map((ex,i)=><g key={i} transform={`translate(${ex},${s*.445})`}>
-        {[0,1,2,3,4].map(pt=>{
-          const a = (pt*72-90)*Math.PI/180;
-          const a2 = ((pt*72+36)-90)*Math.PI/180;
-          const r1=s*.024,r2=s*.01;
-          return <path key={pt} d={`M${Math.cos(a)*r1} ${Math.sin(a)*r1}L${Math.cos(a2)*r2} ${Math.sin(a2)*r2}`} stroke={ec} strokeWidth={s*.008} fill="none"/>;
-        })}
-        <polygon points={[0,1,2,3,4].map(pt=>{const a=(pt*72-90)*Math.PI/180;return `${Math.cos(a)*s*.022},${Math.sin(a)*s*.022}`;}).join(' ')} fill={ec} opacity={.85}/>
-      </g>)}
-    </>,
-    5: /* Dangles — long teardrop chain */ <>
-      <ellipse cx={s*.267} cy={s*.39} rx={s*.014} ry={s*.014} fill={ec}/>
-      <line x1={s*.267} y1={s*.404} x2={s*.267} y2={s*.48} stroke={ec} strokeWidth={s*.008}/>
-      <ellipse cx={s*.267} cy={s*.494} rx={s*.018} ry={s*.024} fill={ec}/>
-      <ellipse cx={s*.267} cy={s*.488} rx={s*.008} ry={s*.009} fill="rgba(255,255,255,.45)"/>
-      <ellipse cx={s*.733} cy={s*.39} rx={s*.014} ry={s*.014} fill={ec}/>
-      <line x1={s*.733} y1={s*.404} x2={s*.733} y2={s*.48} stroke={ec} strokeWidth={s*.008}/>
-      <ellipse cx={s*.733} cy={s*.494} rx={s*.018} ry={s*.024} fill={ec}/>
-      <ellipse cx={s*.733} cy={s*.488} rx={s*.008} ry={s*.009} fill="rgba(255,255,255,.45)"/>
-    </>,
-    6: /* Crosses — stud with cross charm */ <>
-      <ellipse cx={s*.267} cy={s*.39} rx={s*.013} ry={s*.013} fill={ec}/>
-      <line x1={s*.267} y1={s*.406} x2={s*.267} y2={s*.44} stroke={ec} strokeWidth={s*.009}/>
-      <line x1={s*.255} y1={s*.42} x2={s*.279} y2={s*.42} stroke={ec} strokeWidth={s*.009}/>
-      <ellipse cx={s*.733} cy={s*.39} rx={s*.013} ry={s*.013} fill={ec}/>
-      <line x1={s*.733} y1={s*.406} x2={s*.733} y2={s*.44} stroke={ec} strokeWidth={s*.009}/>
-      <line x1={s*.721} y1={s*.42} x2={s*.745} y2={s*.42} stroke={ec} strokeWidth={s*.009}/>
-    </>,
-  };
-
-  // Legacy accessory field — no longer used (hat/glasses/earring/necklace replace it)
-  // Kept as empty map for backward compat only
-  const ACC = {};
-
-  // ── Body / outfit — topStyle 0-15 ────────────────────────────────────────
-  // All outfits use radial gradient (url(#b)) for 3-D depth + shadow overlay
-  const ts = ch.topStyle || 0;
-  const bodyPath = `M${s*.04} ${s*1.04} C${s*.1} ${s*.82} ${s*.25} ${s*.7} ${s*.36} ${s*.66} Q${cx} ${s*.63} ${s*.64} ${s*.66} C${s*.75} ${s*.7} ${s*.9} ${s*.82} ${s*.96} ${s*1.04} Z`;
-  const tankPath = `M${s*.04} ${s*1.04} C${s*.06} ${s*.84} ${s*.18} ${s*.72} ${s*.28} ${s*.67} Q${cx} ${s*.64} ${s*.72} ${s*.67} C${s*.82} ${s*.72} ${s*.94} ${s*.84} ${s*.96} ${s*1.04} Z`;
-  // Shared 3-D fabric shadow overlay — applied on top of all body shapes
-  const fabricShadow = <path d={bodyPath} fill="rgba(0,0,0,.07)" clipPath={`url(#c${gid})`} style={{mixBlendMode:"multiply"}}/>;
-  const body = <>
-    {/* Base body shape with 3-D gradient */}
-    {ts!==3 && ts!==9 && ts!==13 && <path d={bodyPath} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>}
-    {/* Fabric depth shadow on all styles */}
-    {ts!==3 && ts!==9 && ts!==13 && fabricShadow}
-
-    {/* ts 0 = T-Shirt — shoulder seam highlight for depth */}
-    {ts===0 && <>
-      <path d={`M${s*.36} ${s*.66} Q${s*.42} ${s*.64} ${cx} ${s*.635} Q${s*.58} ${s*.64} ${s*.64} ${s*.66}`} stroke={tl} strokeWidth={s*.012} fill="none" opacity={.5} clipPath={`url(#c${gid})`}/>
-    </>}
-
-    {ts===1 && /* Hoodie — 3-D hood, zip, kangaroo pocket */ <>
-      <ellipse cx={cx} cy={s*.88} rx={s*.09} ry={s*.055} fill={td} clipPath={`url(#c${gid})`}/>
-      <line x1={s*.47} y1={s*.66} x2={s*.455} y2={s*.91} stroke={td} strokeWidth={s*.017} clipPath={`url(#c${gid})`}/>
-      <line x1={s*.53} y1={s*.66} x2={s*.545} y2={s*.91} stroke={td} strokeWidth={s*.017} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.34} ${s*.66} Q${cx} ${s*.58} ${s*.66} ${s*.66}`} stroke={td} strokeWidth={s*.022} fill="none" clipPath={`url(#c${gid})`}/>
-      {/* hood inner shadow for depth */}
-      <path d={`M${s*.36} ${s*.66} Q${cx} ${s*.60} ${s*.64} ${s*.66}`} stroke="rgba(0,0,0,.15)" strokeWidth={s*.014} fill="none" clipPath={`url(#c${gid})`}/>
-    </>}
-
-    {ts===2 && /* Jacket — lapels with 3-D crease */ <>
-      <path d={`M${s*.5} ${s*.63} L${s*.41} ${s*.72} L${s*.36} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.5} ${s*.63} L${s*.59} ${s*.72} L${s*.64} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
-      {/* lapel crease highlights */}
-      <path d={`M${s*.5} ${s*.63} L${s*.43} ${s*.70}`} stroke={tl} strokeWidth={s*.01} opacity={.5} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.5} ${s*.63} L${s*.57} ${s*.70}`} stroke={tl} strokeWidth={s*.01} opacity={.5} clipPath={`url(#c${gid})`}/>
-      {[0,1,2].map(i=><circle key={i} cx={cx} cy={s*(.72+i*.09)} r={s*.013} fill={tl} clipPath={`url(#c${gid})`}/>)}
-    </>}
-
-    {ts===3 && /* Tank top — narrow straps with gradient */ <>
-      <path d={tankPath} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
-      <path d={tankPath} fill="rgba(0,0,0,.06)" clipPath={`url(#c${gid})`}/>
-      <rect x={s*.41} y={s*.57} width={s*.06} height={s*.1} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
-      <rect x={s*.53} y={s*.57} width={s*.06} height={s*.1} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
-      {/* strap highlight */}
-      <rect x={s*.43} y={s*.57} width={s*.02} height={s*.09} fill={tl} opacity={.3} clipPath={`url(#c${gid})`}/>
-      <rect x={s*.55} y={s*.57} width={s*.02} height={s*.09} fill={tl} opacity={.3} clipPath={`url(#c${gid})`}/>
-    </>}
-
-    {ts===4 && /* Suit + tie — detailed lapels */ <>
-      <path d={`M${s*.5} ${s*.63} L${s*.42} ${s*.73} L${s*.37} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.5} ${s*.63} L${s*.58} ${s*.73} L${s*.63} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
-      {/* lapel sheen */}
-      <path d={`M${s*.5} ${s*.63} L${s*.44} ${s*.71}`} stroke={tl} strokeWidth={s*.009} opacity={.45} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.5} ${s*.63} L${s*.56} ${s*.71}`} stroke={tl} strokeWidth={s*.009} opacity={.45} clipPath={`url(#c${gid})`}/>
-      {/* tie with knot */}
-      <path d={`M${s*.48} ${s*.66} L${s*.5} ${s*.76} L${s*.52} ${s*.66}`} fill="#c0392b" clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.5} ${s*.76} L${s*.49} ${s*.94} L${s*.5} ${s*.975} L${s*.51} ${s*.94} Z`} fill="#c0392b" clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.49} ${s*.77} L${s*.5} ${s*.82}`} stroke="#a93226" strokeWidth={s*.008} clipPath={`url(#c${gid})`}/>
-    </>}
-
-    {ts===5 && /* Crop top — ribbed hem */ <>
-      <rect x={s*.1} y={s*.76} width={s*.8} height={s*.3} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
-      <rect x={s*.1} y={s*.76} width={s*.8} height={s*.3} fill="rgba(0,0,0,.06)" clipPath={`url(#c${gid})`}/>
-      {/* rib lines */}
-      {[0,1,2].map(i=><line key={i} x1={s*.1} y1={s*(.775+i*.018)} x2={s*.9} y2={s*(.775+i*.018)} stroke={td} strokeWidth={s*.007} opacity={.3} clipPath={`url(#c${gid})`}/>)}
-    </>}
-
-    {ts===6 && /* Polo — collar + placket buttons */ <>
-      <path d={`M${s*.46} ${s*.645} L${s*.43} ${s*.70} L${s*.5} ${s*.685}`} fill={tl} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.54} ${s*.645} L${s*.57} ${s*.70} L${s*.5} ${s*.685}`} fill={tl} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.46} ${s*.648} L${s*.44} ${s*.694}`} stroke={td} strokeWidth={s*.008} opacity={.4} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.54} ${s*.648} L${s*.56} ${s*.694}`} stroke={td} strokeWidth={s*.008} opacity={.4} clipPath={`url(#c${gid})`}/>
-      {[0,1].map(i=><circle key={i} cx={cx} cy={s*(.73+i*.08)} r={s*.011} fill={td} clipPath={`url(#c${gid})`}/>)}
-    </>}
-
-    {ts===7 && /* Sport jersey — side stripes + number */ <>
-      <rect x={s*.04} y={s*.66} width={s*.08} height={s*.38} fill={tl} opacity={.7} clipPath={`url(#c${gid})`}/>
-      <rect x={s*.88} y={s*.66} width={s*.08} height={s*.38} fill={tl} opacity={.7} clipPath={`url(#c${gid})`}/>
-      <rect x={s*.41} y={s*.73} width={s*.18} height={s*.14} rx={s*.02} fill={td} clipPath={`url(#c${gid})`}/>
-      <text x={cx} y={s*.845} textAnchor="middle" fontSize={s*.09} fill={tl} fontWeight="900" fontFamily="sans-serif" clipPath={`url(#c${gid})`}>10</text>
-      {/* jersey mesh lines */}
-      {[0,1].map(i=><line key={i} x1={s*.14} y1={s*(.75+i*.1)} x2={s*.1} y2={s*(.75+i*.1)} stroke={tl} strokeWidth={s*.007} opacity={.4} clipPath={`url(#c${gid})`}/>)}
-    </>}
-
-    {ts===8 && /* Streetwear hoodie — oversized, zip, pocket */ <>
-      <path d={`M${s*.00} ${s*1.04} C${s*.04} ${s*.80} ${s*.22} ${s*.68} ${s*.34} ${s*.65} Q${cx} ${s*.62} ${s*.66} ${s*.65} C${s*.78} ${s*.68} ${s*.96} ${s*.80} ${s*1.0} ${s*1.04} Z`} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.00} ${s*1.04} C${s*.04} ${s*.80} ${s*.22} ${s*.68} ${s*.34} ${s*.65} Q${cx} ${s*.62} ${s*.66} ${s*.65} C${s*.78} ${s*.68} ${s*.96} ${s*.80} ${s*1.0} ${s*1.04} Z`} fill="rgba(0,0,0,.06)" clipPath={`url(#c${gid})`}/>
-      <line x1={cx} y1={s*.63} x2={cx} y2={s*.98} stroke={td} strokeWidth={s*.014} clipPath={`url(#c${gid})`}/>
-      {[0,1,2,3].map(i=><line key={i} x1={s*.495} y1={s*(.68+i*.07)} x2={s*.505} y2={s*(.68+i*.07)} stroke={tl} strokeWidth={s*.016} clipPath={`url(#c${gid})`}/>)}
-      <path d={`M${s*.36} ${s*.85} Q${cx} ${s*.82} ${s*.64} ${s*.85} L${s*.64} ${s*1.0} Q${cx} ${s*1.02} ${s*.36} ${s*1.0} Z`} fill={td} clipPath={`url(#c${gid})`}/>
-    </>}
-
-    {ts===9 && /* Dress — flared with waistband + sheen */ <>
-      <path d={`M${s*.3} ${s*.64} Q${cx} ${s*.61} ${s*.7} ${s*.64} L${s*.82} ${s*1.04} Q${cx} ${s*1.06} ${s*.18} ${s*1.04} Z`} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.3} ${s*.64} Q${cx} ${s*.61} ${s*.7} ${s*.64} L${s*.82} ${s*1.04} Q${cx} ${s*1.06} ${s*.18} ${s*1.04} Z`} fill="rgba(0,0,0,.05)" clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.32} ${s*.72} Q${cx} ${s*.70} ${s*.68} ${s*.72}`} stroke={td} strokeWidth={s*.018} fill="none" clipPath={`url(#c${gid})`}/>
-      {/* fabric sheen */}
-      <path d={`M${s*.38} ${s*.65} Q${s*.42} ${s*.72} ${s*.4} ${s*.9}`} stroke={tl} strokeWidth={s*.01} fill="none" opacity={.25} clipPath={`url(#c${gid})`}/>
-    </>}
-
-    {ts===10 && /* Blazer — lapels + pocket square + buttons */ <>
-      <path d={`M${s*.5} ${s*.63} L${s*.40} ${s*.74} L${s*.36} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.5} ${s*.63} L${s*.60} ${s*.74} L${s*.64} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.5} ${s*.63} L${s*.42} ${s*.72}`} stroke={tl} strokeWidth={s*.009} opacity={.5} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.5} ${s*.63} L${s*.58} ${s*.72}`} stroke={tl} strokeWidth={s*.009} opacity={.5} clipPath={`url(#c${gid})`}/>
-      <rect x={s*.38} y={s*.77} width={s*.07} height={s*.055} rx={s*.01} fill={tl} clipPath={`url(#c${gid})`}/>
-      {[0,1].map(i=><circle key={i} cx={cx} cy={s*(.77+i*.1)} r={s*.013} fill={tl} clipPath={`url(#c${gid})`}/>)}
-    </>}
-
-    {ts===11 && /* Graphic tee — bold chest print */ <>
-      <rect x={s*.38} y={s*.70} width={s*.24} height={s*.18} rx={s*.025} fill={td} clipPath={`url(#c${gid})`}/>
-      <circle cx={cx} cy={s*.79} r={s*.06} fill={tl} opacity={.7} clipPath={`url(#c${gid})`}/>
-      {/* star sparkle */}
-      <line x1={cx} y1={s*.745} x2={cx} y2={s*.835} stroke={tl} strokeWidth={s*.009} opacity={.6} clipPath={`url(#c${gid})`}/>
-      <line x1={s*.455} y1={s*.79} x2={s*.545} y2={s*.79} stroke={tl} strokeWidth={s*.009} opacity={.6} clipPath={`url(#c${gid})`}/>
-    </>}
-
-    {ts===12 && /* Varsity jacket — ribbed cuffs, chenille patch */ <>
-      {/* dark sleeves */}
-      <path d={`M${s*.04} ${s*1.04} C${s*.08} ${s*.82} ${s*.2} ${s*.70} ${s*.32} ${s*.67} L${s*.36} ${s*.66} L${s*.36} ${s*1.04} Z`} fill={td} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.96} ${s*1.04} C${s*.92} ${s*.82} ${s*.8} ${s*.70} ${s*.68} ${s*.67} L${s*.64} ${s*.66} L${s*.64} ${s*1.04} Z`} fill={td} clipPath={`url(#c${gid})`}/>
-      {/* ribbed hem */}
-      {[0,1,2].map(i=><line key={i} x1={s*.36} y1={s*(.97+i*.024)} x2={s*.64} y2={s*(.97+i*.024)} stroke={td} strokeWidth={s*.01} opacity={.4} clipPath={`url(#c${gid})`}/>)}
-      {/* snap buttons */}
-      {[0,1,2].map(i=><circle key={i} cx={cx} cy={s*(.71+i*.1)} r={s*.012} fill={td} clipPath={`url(#c${gid})`}/>)}
-      {/* letter patch */}
-      <rect x={s*.41} y={s*.74} width={s*.18} height={s*.14} rx={s*.025} fill={tl} opacity={.85} clipPath={`url(#c${gid})`}/>
-      <text x={cx} y={s*.845} textAnchor="middle" fontSize={s*.085} fill={td} fontWeight="900" fontFamily="serif" clipPath={`url(#c${gid})`}>V</text>
-    </>}
-
-    {ts===13 && /* Kimono/robe — wide collar, sash */ <>
-      <path d={`M${s*.2} ${s*.64} Q${cx} ${s*.60} ${s*.8} ${s*.64} L${s*.92} ${s*1.04} Q${cx} ${s*1.07} ${s*.08} ${s*1.04} Z`} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.2} ${s*.64} Q${cx} ${s*.60} ${s*.8} ${s*.64} L${s*.92} ${s*1.04} Q${cx} ${s*1.07} ${s*.08} ${s*1.04} Z`} fill="rgba(0,0,0,.05)" clipPath={`url(#c${gid})`}/>
-      {/* wide collar flaps */}
-      <path d={`M${s*.5} ${s*.62} L${s*.34} ${s*.78} L${s*.3} ${s*1.04}`} fill={tl} opacity={.7} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.5} ${s*.62} L${s*.66} ${s*.78} L${s*.7} ${s*1.04}`} fill={tl} opacity={.7} clipPath={`url(#c${gid})`}/>
-      {/* sash */}
-      <path d={`M${s*.3} ${s*.82} Q${cx} ${s*.79} ${s*.7} ${s*.82}`} stroke={td} strokeWidth={s*.025} fill="none" clipPath={`url(#c${gid})`}/>
-      {/* fabric sheen */}
-      <path d={`M${s*.38} ${s*.65} Q${s*.36} ${s*.78} ${s*.34} ${s*.95}`} stroke={tl} strokeWidth={s*.012} fill="none" opacity={.28} clipPath={`url(#c${gid})`}/>
-    </>}
-
-    {ts===14 && /* Turtleneck — ribbed collar */ <>
-      {/* turtleneck roll */}
-      <path d={`M${s*.38} ${s*.58} Q${cx} ${s*.55} ${s*.62} ${s*.58} L${s*.62} ${s*.68} Q${cx} ${s*.71} ${s*.38} ${s*.68} Z`} fill={`url(#b${gid})`} clipPath={`url(#c${gid})`}/>
-      {/* rib lines on collar */}
-      {[0,1,2].map(i=><path key={i} d={`M${s*.38} ${s*(.595+i*.024)} Q${cx} ${s*(.565+i*.024)} ${s*.62} ${s*(.595+i*.024)}`} stroke={td} strokeWidth={s*.007} fill="none" opacity={.35} clipPath={`url(#c${gid})`}/>)}
-      {/* collar shadow */}
-      <path d={`M${s*.38} ${s*.68} Q${cx} ${s*.715} ${s*.62} ${s*.68}`} stroke="rgba(0,0,0,.12)" strokeWidth={s*.014} fill="none" clipPath={`url(#c${gid})`}/>
-    </>}
-
-    {ts===15 && /* Denim jacket — stitching + chest pockets */ <>
-      <path d={`M${s*.5} ${s*.63} L${s*.40} ${s*.74} L${s*.36} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.5} ${s*.63} L${s*.60} ${s*.74} L${s*.64} ${s*1.04}`} fill={td} clipPath={`url(#c${gid})`}/>
-      {/* stitch lines on lapels */}
-      <path d={`M${s*.425} ${s*.685} L${s*.38} ${s*.78}`} stroke={tl} strokeWidth={s*.007} strokeDasharray={`${s*.014} ${s*.01}`} opacity={.6} clipPath={`url(#c${gid})`}/>
-      <path d={`M${s*.575} ${s*.685} L${s*.62} ${s*.78}`} stroke={tl} strokeWidth={s*.007} strokeDasharray={`${s*.014} ${s*.01}`} opacity={.6} clipPath={`url(#c${gid})`}/>
-      {/* chest pockets */}
-      <rect x={s*.36} y={s*.73} width={s*.09} height={s*.065} rx={s*.01} fill={td} clipPath={`url(#c${gid})`}/>
-      <rect x={s*.55} y={s*.73} width={s*.09} height={s*.065} rx={s*.01} fill={td} clipPath={`url(#c${gid})`}/>
-      {/* pocket stitching */}
-      <rect x={s*.36} y={s*.73} width={s*.09} height={s*.065} rx={s*.01} fill="none" stroke={tl} strokeWidth={s*.006} opacity={.5} clipPath={`url(#c${gid})`}/>
-      <rect x={s*.55} y={s*.73} width={s*.09} height={s*.065} rx={s*.01} fill="none" stroke={tl} strokeWidth={s*.006} opacity={.5} clipPath={`url(#c${gid})`}/>
-      {/* buttons */}
-      {[0,1].map(i=><circle key={i} cx={cx} cy={s*(.74+i*.1)} r={s*.012} fill={tl} clipPath={`url(#c${gid})`}/>)}
-    </>}
-
-    {/* Collar highlight on fitted styles */}
-    {ts!==3 && ts!==5 && ts!==9 && ts!==13 && ts!==14 && <path d={`M${s*.38} ${s*.645} Q${cx} ${s*.605} ${s*.62} ${s*.645}`} stroke={tl} strokeWidth={s*.017} fill="none" opacity={.44} clipPath={`url(#c${gid})`}/>}
-  </>;
-
-  return (
-    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`} style={{display:"block"}}>
-      <defs>
-        <radialGradient id={`f${gid}`} cx="38%" cy="32%" r="68%">
-          <stop offset="0%"   stopColor={sl}/>
-          <stop offset="55%"  stopColor={ch.skin}/>
-          <stop offset="100%" stopColor={sd}/>
-        </radialGradient>
-        <radialGradient id={`b${gid}`} cx="40%" cy="28%" r="72%">
-          <stop offset="0%"   stopColor={tl}/>
-          <stop offset="55%"  stopColor={ch.top}/>
-          <stop offset="100%" stopColor={td}/>
-        </radialGradient>
-        <radialGradient id={`g${gid}`} cx="50%" cy="45%" r="55%">
-          <stop offset="0%"   stopColor={shadeHex(bg,22)}/>
-          <stop offset="100%" stopColor={bg}/>
-        </radialGradient>
-        <clipPath id={`c${gid}`}><circle cx={cx} cy={cx} r={cx-0.5}/></clipPath>
-      </defs>
-
-      {/* Background */}
-      <circle cx={cx} cy={cx} r={cx} fill={`url(#g${gid})`}/>
-
-      {/* Body / outfit */}
-      {body}
-
-      {/* Neck */}
-      <path d={`M${s*.42} ${s*.566} L${s*.42} ${s*.656} Q${cx} ${s*.686} ${s*.58} ${s*.656} L${s*.58} ${s*.566}`}
-        fill={`url(#f${gid})`} clipPath={`url(#c${gid})`}/>
-      <ellipse cx={cx} cy={s*.656} rx={s*.09} ry={s*.022} fill={sd} opacity={.22} clipPath={`url(#c${gid})`}/>
-
-      {/* Ears */}
-      <ellipse cx={s*.274} cy={s*.395} rx={s*.038} ry={s*.052} fill={`url(#f${gid})`}/>
-      <ellipse cx={s*.279} cy={s*.395} rx={s*.018} ry={s*.03}  fill={sd} opacity={.28}/>
-      <ellipse cx={s*.726} cy={s*.395} rx={s*.038} ry={s*.052} fill={`url(#f${gid})`}/>
-      <ellipse cx={s*.721} cy={s*.395} rx={s*.018} ry={s*.03}  fill={sd} opacity={.28}/>
-
-      {/* Hair behind face */}
-      <g clipPath={`url(#c${gid})`}>{H[ch.hairStyle||0]}</g>
-
-      {/* Face */}
-      <ellipse cx={cx} cy={s*.386} rx={s*.209} ry={s*.233} fill={`url(#f${gid})`}/>
-      <ellipse cx={cx} cy={s*.386} rx={s*.209} ry={s*.233} fill="none" stroke={sd} strokeWidth={s*.01} opacity={.14}/>
-
-      {/* Blush */}
-      {ch.blush && <>
-        <ellipse cx={s*.322} cy={s*.466} rx={s*.06} ry={s*.032} fill="#ff85b3" opacity={.28}/>
-        <ellipse cx={s*.678} cy={s*.466} rx={s*.06} ry={s*.032} fill="#ff85b3" opacity={.28}/>
-      </>}
-
-      {/* Brows → Eyes → Nose → Mouth */}
-      {BROW[ch.eyebrow||0]}
-      {eye(s*.384, s*.37)}
-      {eye(s*.616, s*.37)}
-      {nose}
-      {MOUTH[ch.mouth||0]}
-
-      {/* Lip colour */}
-      {ch.lips && <ellipse cx={cx} cy={s*.526} rx={s*.058} ry={s*.018} fill={ch.lipColor||"#d06060"} opacity={.6}/>}
-
-      {/* Freckles */}
-      {ch.freckles && <>
-        {[[.38,.442],[.432,.47],[.5,.462],[.568,.47],[.62,.442],[.402,.422],[.598,.422]].map(([fx,fy],i)=>
-          <circle key={i} cx={s*fx} cy={s*fy} r={s*.009} fill={sd} opacity={.44}/>)}
-      </>}
-
-      {/* Facial hair (below accessories) */}
-      <g clipPath={`url(#c${gid})`}>{FACIAL_HAIR[ch.facialHair||0]}</g>
-
-      {/* Necklace */}
-      <g clipPath={`url(#c${gid})`}>{NECKLACE[ch.necklace||0]}</g>
-
-      {/* Earrings — inside clip so they stay within avatar circle */}
-      <g clipPath={`url(#c${gid})`}>{EARRINGS[ch.earring||0]}</g>
-
-      {/* Glasses */}
-      <g clipPath={`url(#c${gid})`}>{GLASSES[ch.glasses||0]}</g>
-
-      {/* Hat (topmost layer) */}
-      <g clipPath={`url(#c${gid})`}>{HAT[ch.hat||0]}</g>
-    </svg>
-  );
+function MiniAvatar({ character, size = 40 }) {
+  return <Avatar character={character} size={size} />;
 }
-
-// ─── CHARACTER MODAL ─────────────────────────────────────────────────────────
-// Visual preview: every selector shows mini SVG avatars with the option applied
-// ─── AVATAR SWATCHES (top-level — proper hook support) ────────────────────────
-// Receives ch, field, vals, customColors, and all callbacks as props.
-// Never re-created on render — stable component identity = stable hooks.
-// ─── AVATAR ROW LABEL ────────────────────────────────────────────────────────
-function AvatarRow({ label, children }) {
-  return (
-    <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-      <p style={{ fontSize:10, fontWeight:800, color:"#aaa", letterSpacing:1.1,
-        margin:0, textTransform:"uppercase" }}>{label}</p>
-      <div>{children}</div>
-    </div>
-  );
-}
-
-// ─── AVATAR CHIP ─────────────────────────────────────────────────────────────
-// Pure top-level component — stable identity, no hooks issues.
-function AvatarChip({ ch, field, value, label, size=62, onApply }) {
-  const preview = { ...ch, [field]: value };
-  const sel = ch[field] === value;
-  const A = "#4361ee";
-  // Use CSS variable so size never gets stretched by flexbox on mobile
-  return (
-    <button
-      onClick={() => onApply(field, value)}
-      title={label}
-      style={{
-        display:"flex", flexDirection:"column", alignItems:"center", gap:5,
-        padding:"7px 6px 6px", borderRadius:8, border:"none", cursor:"pointer",
-        flexShrink:0, flexGrow:0,
-        width:size+14, minWidth:size+14, maxWidth:size+14, // fixed width — no stretch
-        background: sel ? "#eef1ff" : "#f5f6fa",
-        outline: sel ? `2.5px solid ${A}` : "2px solid transparent",
-        outlineOffset:2,
-        boxShadow: sel ? `0 0 0 1.5px #fff, 0 3px 12px rgba(67,97,238,.28)` : "0 1px 3px rgba(0,0,0,.07)",
-        transition:"background .12s, outline-color .12s, box-shadow .12s",
-      }}
-    >
-      <div style={{
-        width:size, height:size, minWidth:size, minHeight:size, // fixed — never squish
-        borderRadius:"50%", overflow:"hidden", flexShrink:0,
-        boxShadow: sel ? `0 0 0 2.5px ${A}, 0 2px 8px rgba(67,97,238,.3)` : "0 1px 4px rgba(0,0,0,.13)",
-      }}>
-        <MiniAvatar character={preview} size={size} uid={field+String(value)} />
-      </div>
-      <span style={{
-        fontSize:9, fontWeight:700, letterSpacing:.2, textAlign:"center",
-        lineHeight:1.25, width:size+6, display:"block",
-        whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
-        color: sel ? A : "#666",
-      }}>{label}</span>
-    </button>
-  );
-}
-
-// ─── AVATAR CHIP GRID ────────────────────────────────────────────────────────
-function AvatarChipGrid({ ch, field, items, size=62, onApply }) {
-  return (
-    <div style={{
-      display:"flex", flexWrap:"wrap", gap:8,
-      // On mobile ensure items never stretch — each chip has fixed width
-      alignItems:"flex-start",
-    }}>
-      {items.map((item, i) => {
-        const value = typeof item === "object" ? item.id : i;
-        const label = typeof item === "object" ? item.label : item;
-        return (
-          <AvatarChip key={i} ch={ch} field={field} value={value}
-            label={label} size={size} onApply={onApply} />
-        );
-      })}
-    </div>
-  );
-}
-
-// ─── AVATAR TOGGLE PAIR ───────────────────────────────────────────────────────
-function AvatarTogglePair({ ch, field, label, onEmoji, offLabel="Off", onApply }) {
-  const A = "#4361ee";
-  return (
-    <AvatarRow label={label}>
-      <div style={{ display:"flex", gap:10 }}>
-        {[false, true].map(val => {
-          const sel = !!ch[field] === val;
-          return (
-            <button key={String(val)} onClick={() => onApply(field, val)}
-              style={{
-                display:"flex", flexDirection:"column", alignItems:"center", gap:4,
-                padding:"7px 5px 5px", borderRadius:8, border:"none", cursor:"pointer",
-                background: sel ? "#eef1ff" : "#f5f6fa",
-                outline: sel ? `2.5px solid ${A}` : "2px solid transparent",
-                outlineOffset:2,
-                boxShadow: sel ? "0 2px 12px rgba(67,97,238,.28)" : "0 1px 3px rgba(0,0,0,.07)",
-                transition:"background .12s, outline-color .12s, box-shadow .12s",
-              }}>
-              <div style={{
-                width:66, height:66, borderRadius:"50%", overflow:"hidden",
-                boxShadow: sel ? `0 0 0 2.5px ${A}` : "0 1px 4px rgba(0,0,0,.14)",
-              }}>
-                <MiniAvatar character={{ ...ch, [field]: val }} size={66} uid={field+String(val)} />
-              </div>
-              <span style={{ fontSize:10, fontWeight:700, color: sel ? A : "#777" }}>
-                {val ? `${onEmoji} On` : offLabel}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </AvatarRow>
-  );
-}
-
-// ─── AVATAR SWATCHES ─────────────────────────────────────────────────────────
-// Top-level component with its own open/draft state.
-// Receives ch + callbacks as props — no stale closures.
-function AvatarSwatches({
-  ch, field, vals, sz=26, showCustom=true,
-  customColors, onApply, onApplyCustom, onRemoveCustom,
-}) {
-  const saved = customColors[field] || [];
-  const [open, setOpen] = useState(false);
-  // pickerSeed: the colour the picker opens with (state so picker re-renders correctly)
-  const [pickerSeed, setPickerSeed] = useState(() => ensureHex(ch[field] || vals[0] || "#888888"));
-  // latestRef: always holds the most recent dragged colour — no stale closure on Done
-  const latestRef = useRef(pickerSeed);
-  const A = "#4361ee";
-
-  const ring = (isSel) => ({
-    outline: isSel ? `3px solid ${A}` : "3px solid transparent",
-    outlineOffset: 2,
-    boxShadow: isSel
-      ? `0 0 0 1.5px #fff, 0 3px 10px rgba(67,97,238,.45)`
-      : "0 1px 4px rgba(0,0,0,.18)",
-    transition: "outline-color .1s, box-shadow .1s",
-  });
-
-  const handleOpen = () => {
-    // Seed picker with the current applied colour each time it opens
-    const seed = ensureHex(ch[field] || vals[0] || "#888888");
-    latestRef.current = seed;
-    setPickerSeed(seed);  // causes picker to remount with correct initial value
-    setOpen(o => !o);
-  };
-
-  // Each drag event: update avatar live + store latest in ref
-  const handleLivePick = (hex) => {
-    latestRef.current = hex;
-    onApply(field, hex);
-  };
-
-  // Done: read ref (latest drag position) — no stale closure possible
-  const handleDone = () => {
-    const finalHex = latestRef.current;
-    setOpen(false);
-    onApplyCustom(field, finalHex);
-  };
-
-  return (
-    <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-      {/* ── Swatch + saved row ── */}
-      <div style={{ display:"flex", flexWrap:"wrap", gap:7, alignItems:"center" }}>
-
-        {/* Built-in presets */}
-        {vals.map(v => (
-          <button key={v}
-            onClick={() => { onApply(field, v); setOpen(false); }}
-            style={{
-              width:sz, height:sz, minWidth:sz, minHeight:sz, // fixed — no stretch on mobile
-              borderRadius:"50%", background:v,
-              cursor:"pointer", flexShrink:0, flexGrow:0, border:"none", padding:0,
-              ...ring(ch[field] === v),
-            }}
-          />
-        ))}
-
-        {/* Saved custom colours */}
-        {showCustom && saved.map((v, i) => (
-          <div key={"c"+i} style={{ position:"relative", flexShrink:0 }}>
-            <button
-              onClick={() => { onApply(field, v); setOpen(false); }}
-              style={{
-                width:sz, height:sz, minWidth:sz, minHeight:sz,
-                borderRadius:"50%", background:v,
-                cursor:"pointer", flexShrink:0, flexGrow:0, border:"none", padding:0,
-                ...ring(ch[field] === v),
-              }}
-            />
-            {/* Remove button */}
-            <button
-              onClick={e => { e.stopPropagation(); onRemoveCustom(field, i); }}
-              style={{
-                position:"absolute", top:-4, right:-4,
-                width:14, height:14, borderRadius:"50%",
-                background:"#e74c3c", border:"2px solid #fff",
-                cursor:"pointer", fontSize:8, color:"#fff",
-                display:"flex", alignItems:"center", justifyContent:"center",
-                padding:0, lineHeight:1,
-              }}
-            >×</button>
-          </div>
-        ))}
-
-        {/* "+" — always last */}
-        {showCustom && (
-          <button
-            onClick={handleOpen}
-            title="Custom colour"
-            style={{
-              width:sz, height:sz, minWidth:sz, minHeight:sz,
-              borderRadius:"50%", flexShrink:0, flexGrow:0,
-              cursor:"pointer", border:"2px dashed #bbb",
-              background: open ? A : "rgba(67,97,238,.06)",
-              display:"flex", alignItems:"center", justifyContent:"center",
-              fontSize: sz > 22 ? 15 : 11,
-              color: open ? "#fff" : "#888",
-              transition:"background .14s, color .14s",
-            }}
-          >{open ? "×" : "+"}</button>
-        )}
-      </div>
-
-      {/* ── Inline colour picker ── */}
-      {open && (
-        <div style={{ borderRadius:16, overflow:"hidden", background:"#18182a",
-          boxShadow:"0 6px 32px rgba(0,0,0,.4)" }}>
-          <ColorPicker
-            value={pickerSeed}
-            onChange={handleLivePick}
-            onClose={handleDone}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── AVATAR SKIN SECTION ─────────────────────────────────────────────────────
-function AvatarSkinSection({
-  ch, skinBase, setSkinBase, customColors,
-  onApply, onApplyCustom, onRemoveCustom,
-}) {
-  // SKINS: single source of truth — swatches AND avatar use exactly these hex values
-  const SKINS = ["#FDDBB4","#F5C89A","#FFCBA4","#E8A87C","#D4956A","#C68642","#A0693A","#8D5524","#6B3A1F","#F4D6C8"];
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [pickerSeed, setPickerSeed] = useState(() => ensureHex(ch.skin || "#FDDBB4"));
-  const latestRef = useRef(pickerSeed);
-  const saved = customColors["skin"] || [];
-  const A = "#4361ee";
-
-  const ring = (isSel) => ({
-    outline: isSel ? `3px solid ${A}` : "3px solid transparent",
-    outlineOffset: 2,
-    boxShadow: isSel
-      ? `0 0 0 1.5px #fff, 0 2px 8px rgba(67,97,238,.4)`
-      : "0 1px 4px rgba(0,0,0,.15)",
-    transition: "outline-color .1s",
-  });
-
-  const handleOpen = () => {
-    const seed = ensureHex(ch.skin || "#FDDBB4");
-    latestRef.current = seed;
-    setPickerSeed(seed);
-    setPickerOpen(p => !p);
-  };
-
-  const handleLivePick = (hex) => { latestRef.current = hex; onApply("skin", hex); };
-  const handleDone = () => { setPickerOpen(false); onApplyCustom("skin", latestRef.current); };
-
-  return (
-    <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-      <p style={{ fontSize:10, fontWeight:800, color:"#aaa", letterSpacing:1.1,
-        margin:0, textTransform:"uppercase" }}>
-        Pick a skin tone, then adjust the shade.
-      </p>
-
-      <div style={{ display:"flex", flexWrap:"wrap", gap:7, alignItems:"center" }}>
-        {/* Base tone row */}
-        {SKINS.map(v => (
-          <button key={v}
-            onClick={() => {
-              setSkinBase(v);
-              setPickerOpen(false);
-              const { h } = hexToHsv(v);
-              const mid = hsvToHex(h, 0.15 + 0.5*0.70, 0.95 - 0.5*0.63);
-              onApply("skin", mid);
-            }}
-            style={{
-              width:32, height:32, borderRadius:"50%", background:v,
-              cursor:"pointer", border:"none", padding:0, flexShrink:0,
-              ...ring(skinBase === v),
-            }}
-          />
-        ))}
-
-        {/* Saved custom skin tones */}
-        {saved.map((v, i) => (
-          <div key={"cs"+i} style={{ position:"relative", flexShrink:0 }}>
-            <button
-              onClick={() => { onApply("skin", v); setPickerOpen(false); }}
-              style={{
-                width:32, height:32, borderRadius:"50%", background:v,
-                cursor:"pointer", border:"none", padding:0,
-                ...ring(ch.skin === v),
-              }}
-            />
-            <button
-              onClick={e => { e.stopPropagation(); onRemoveCustom("skin", i); }}
-              style={{
-                position:"absolute", top:-4, right:-4,
-                width:14, height:14, borderRadius:"50%",
-                background:"#e74c3c", border:"2px solid #fff",
-                cursor:"pointer", fontSize:8, color:"#fff",
-                display:"flex", alignItems:"center", justifyContent:"center",
-                padding:0, lineHeight:1,
-              }}
-            >×</button>
-          </div>
-        ))}
-
-        {/* + custom skin */}
-        <button onClick={handleOpen}
-          style={{
-            width:32, height:32, borderRadius:"50%", flexShrink:0,
-            border:"2px dashed #bbb",
-            background: pickerOpen ? A : "rgba(67,97,238,.06)",
-            cursor:"pointer", fontSize:14, color: pickerOpen ? "#fff" : "#888",
-            display:"flex", alignItems:"center", justifyContent:"center",
-          }}
-        >{pickerOpen ? "×" : "+"}</button>
-      </div>
-
-      {/* Shade slider — visible when a base is selected and picker is closed */}
-      {!pickerOpen && skinBase && (
-        <SkinSlider
-          base={skinBase}
-          value={ch.skin || "#FDDBB4"}
-          onChange={hex => onApply("skin", hex)}
-        />
-      )}
-
-      {/* Full colour picker */}
-      {pickerOpen && (
-        <div style={{ borderRadius:16, overflow:"hidden", background:"#18182a",
-          boxShadow:"0 6px 32px rgba(0,0,0,.4)" }}>
-          <ColorPicker value={pickerSeed} onChange={handleLivePick} onClose={handleDone} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── CHARACTER MODAL ──────────────────────────────────────────────────────────
 function CharacterModal({ character, onChange, onClose }) {
-  const ch = character;  // alias for readability — always current via prop
-
-  // ── Tabs ───────────────────────────────────────────────────────────────────
-  const [tab, setTab] = useState("face");
-
-  // ── Colour palettes ────────────────────────────────────────────────────────
-  const HAIRS   = ["#0d0d0d","#1a0a00","#2C1810","#4A2912","#7B4F2C","#B5651D","#C9A96E","#EDD9A3","#F2E6C8","#C0392B","#E74C3C","#F39C12","#8E44AD","#2980B9","#27AE60","#1ABC9C","#fd79a8","#00CED1","#FF6347","#808080"];
-  const EYES    = ["#1a3a5c","#2980B9","#74b9ff","#27AE60","#52BE80","#2d6a4f","#8B6914","#C8A84B","#2C2C2C","#6B4226","#C0392B","#8E44AD","#00b894"];
-  const TOPS    = ["#1a1a2e","#2C3E50","#34495E","#7f8c8d","#E74C3C","#C0392B","#E67E22","#F39C12","#27AE60","#16A085","#2980B9","#1abc9c","#8E44AD","#fd79a8","#FFFFFF","#ECF0F1"];
-  const LIP_C   = ["#C0392B","#E74C3C","#c0706a","#fd79a8","#8E44AD","#D35400","#FF1493","#DC143C"];
-  const BG      = ["#dce8ff","#e8f4ff","#dfe6e9","#ffeaa7","#d5f5e3","#f8d7e3","#e8daef","#ffddd2","#c8e6c9","#fff3e0","#1a1a2e","#2d3436","#6c5ce7","#00b894"];
-  const HAT_C   = ["#E74C3C","#2C3E50","#F39C12","#2980B9","#27AE60","#8E44AD","#1a1a2e","#ECF0F1","#fd79a8","#C0392B","#D35400","#16A085","#FF69B4","#800020"];
-  const GLASS_C = ["#333333","#1a1a2e","#8B4513","#C0392B","#2980B9","#27AE60","#8E44AD","#F39C12","#FFD700","#E0E0E0","#00CED1","#FF69B4"];
-  const JEWEL_C = ["#f0c040","#FFD700","#C0C0C0","#E8E8E8","#B87333","#E74C3C","#2980B9","#27AE60","#8E44AD","#FF69B4","#00CED1","#fff"];
-
-  // ── Option lists ───────────────────────────────────────────────────────────
-  const HAIR_NAMES    = ["Buzz","Side-part","Fringe","Textured","Long","Wavy","Ponytail","Bun","Afro","Box braids","Curly","Locs","Faux hawk","Space buns","Mohawk","Dreadlocks","Slick back"];
-  const EYE_S         = ["Round","Almond","Cat-eye"];
-  const BROWS         = ["Arched","Straight","Thick","Sad"];
-  const MOUTHS        = ["Smile","Frown","Open","Smirk","Neutral"];
-  const HAT_NAMES     = ["None","Beanie","Cap","Cowboy","Grad cap","Crown","Party hat","Headband","Bucket hat"];
-  const GLASS_NAMES   = ["None","Round","Rectangular","Cat-eye","Sunglasses","Heart","Aviator","Monocle"];
-  const FACIAL_NAMES  = ["None","Stubble","Moustache","Short beard","Full beard","Goatee"];
-  const NECKLACE_NAMES= ["None","Gold chain","Pendant","Beads","Choker","Pearl"];
-  const EARRING_NAMES = ["None","Studs","Drops","Hoops","Stars","Dangles","Crosses"];
-  const TOPS_S = [
-    {id:0,label:"T-Shirt"},{id:1,label:"Hoodie"},{id:2,label:"Jacket"},
-    {id:3,label:"Tank Top"},{id:4,label:"Suit & Tie"},{id:5,label:"Crop Top"},
-    {id:6,label:"Polo"},{id:7,label:"Jersey"},{id:8,label:"Streetwear"},
-    {id:9,label:"Dress"},{id:10,label:"Blazer"},{id:11,label:"Graphic Tee"},
-    {id:12,label:"Varsity"},{id:13,label:"Kimono"},{id:14,label:"Turtleneck"},{id:15,label:"Denim"},
-  ];
-  const TABS = [
-    {id:"face",  label:"FACE"},
-    {id:"hair",  label:"HAIR"},
-    {id:"fit",   label:"FIT"},
-    {id:"acc",   label:"ACCS"},
-    {id:"extra", label:"EXTRA"},
-  ];
-
-  // ── Custom colours — persisted per-field in localStorage ──────────────────
-  const CUSTOM_KEY = "classio_custom_colors_v1";
-  const [customColors, setCustomColors] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(CUSTOM_KEY) || "{}"); }
-    catch { return {}; }
-  });
-
-  // ── skinBase ───────────────────────────────────────────────────────────────
-  // SKINS: single source of truth — swatches AND avatar use exactly these hex values
-  const SKINS = ["#FDDBB4","#F5C89A","#FFCBA4","#E8A87C","#D4956A","#C68642","#A0693A","#8D5524","#6B3A1F","#F4D6C8"];
-  const [skinBase, setSkinBase] = useState(() => {
-    const cur = hexToHsv(ensureHex(ch.skin || "#FDDBB4"));
-    let best = SKINS[0], bestD = 999;
-    for (const s of SKINS) {
-      const b = hexToHsv(s);
-      const d = Math.abs(cur.h - b.h) + Math.abs(cur.s - b.s) * 0.4;
-      if (d < bestD) { bestD = d; best = s; }
-    }
-    return best;
-  });
-
-  // ── applyField: apply a single field change immediately ───────────────────
-  // Spread character (the prop) directly — never a stale copy
-  const applyField = (field, value) => onChange({ ...character, [field]: value });
-
-  // ── applyCustomColor: save to list + select immediately ───────────────────
-  const applyCustomColor = (field, hex) => {
-    setCustomColors(prev => {
-      const existing = prev[field] || [];
-      const deduped  = [hex, ...existing.filter(c => c.toLowerCase() !== hex.toLowerCase())].slice(0, 8);
-      const next = { ...prev, [field]: deduped };
-      try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(next)); } catch {}
-      return next;
-    });
-    onChange({ ...character, [field]: hex });
-  };
-
-  // ── removeCustomColor: delete saved colour by index ───────────────────────
-  const removeCustomColor = (field, idx) => {
-    setCustomColors(prev => {
-      const next = { ...prev, [field]: (prev[field] || []).filter((_, i) => i !== idx) };
-      try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(next)); } catch {}
-      return next;
-    });
-  };
-
-  // ── Shared props object for AvatarSwatches ────────────────────────────────
-  const swatchProps = { ch, customColors, onApply:applyField, onApplyCustom:applyCustomColor, onRemoveCustom:removeCustomColor };
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // RENDER
-  // ─────────────────────────────────────────────────────────────────────────
-  // Lock scroll without ANY layout shift or jitter
-  // Strategy: pad body right by scrollbar width so removing scrollbar doesn't shift content
-  useEffect(() => {
-    const html = document.documentElement;
-    const body = document.body;
-    // Measure scrollbar width BEFORE locking
-    const sbW = window.innerWidth - html.clientWidth;
-    const prevBodyPR  = body.style.paddingRight;
-    const prevHtmlOF  = html.style.overflow;
-    const prevBodyOF  = body.style.overflow;
-    // Apply: compensate for scrollbar removal + lock
-    body.style.paddingRight  = `${sbW}px`;
-    html.style.overflow      = "hidden";
-    body.style.overflow      = "hidden";
-    return () => {
-      body.style.paddingRight  = prevBodyPR;
-      html.style.overflow      = prevHtmlOF;
-      body.style.overflow      = prevBodyOF;
-    };
-  }, []);
-
-  return (
-    <div
-      onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
-      style={{
-        position:"fixed", inset:0, zIndex:9999,
-        background:"rgba(0,0,0,.55)",
-        display:"flex", alignItems:"center", justifyContent:"center",
-        padding:16,
-      }}
-    >
-      <div
-        onMouseDown={e => e.stopPropagation()}
-        onClick={e => e.stopPropagation()}
-        style={{
-          width:"100%", maxWidth:520,
-          height:`min(680px, calc(100dvh - 32px))`,
-          display:"flex", flexDirection:"column",
-          background:"#fff", borderRadius:22,
-          boxShadow:"0 24px 80px rgba(0,0,0,.38)",
-          overflow:"hidden",
-          position:"relative",
-          zIndex:1,
-        }}
-      >
-        {/* ── Header ── */}
-        <div style={{
-          flexShrink:0, display:"flex", alignItems:"center", gap:12,
-          padding:"14px 16px 12px", borderBottom:"1px solid #f0f0f0",
-        }}>
-          <div style={{
-            width:52, height:52, borderRadius:"50%", overflow:"hidden", flexShrink:0,
-            boxShadow:"0 2px 10px rgba(0,0,0,.14)", border:"2px solid #f0f0f0",
-          }}>
-            <MiniAvatar character={ch} size={52} />
-          </div>
-          <div style={{ flex:1, minWidth:0 }}>
-            <p style={{ fontFamily:"'Fraunces Variable',serif", fontSize:16, fontWeight:900,
-              color:"#111", margin:"0 0 5px", lineHeight:1.2 }}>My Avatar</p>
-            <input
-              value={ch.name || ""}
-              onChange={e => onChange({ ...ch, name: e.target.value })}
-              placeholder="Nickname…"
-              style={{
-                border:"1.5px solid #e5e5e5", borderRadius:20,
-                padding:"4px 12px", fontSize:12, fontWeight:700,
-                outline:"none", color:"#111", background:"#f8f8f8",
-                width:"100%", boxSizing:"border-box",
-              }}
-            />
-          </div>
-          <button onClick={onClose} style={{
-            flexShrink:0, width:30, height:30, borderRadius:"50%",
-            background:"#f0f0f0", border:"none", cursor:"pointer",
-            fontSize:17, fontWeight:900, color:"#555",
-            display:"flex", alignItems:"center", justifyContent:"center",
-          }}>×</button>
-        </div>
-
-        {/* ── Tab bar ── */}
-        <div style={{
-          flexShrink:0, display:"flex", background:"#fff",
-          borderBottom:"1px solid #f0f0f0",
-        }}>
-          {TABS.map(t => (
-            <button key={t.id}
-              onClick={() => setTab(t.id)}
-              style={{
-                flex:1, padding:"8px 2px 7px", border:"none", cursor:"pointer",
-                background:"#fff", fontWeight:800, fontSize:10,
-                letterSpacing:.3, lineHeight:1.5, whiteSpace:"nowrap",
-                color: tab === t.id ? "#4361ee" : "#bbb",
-                borderBottom:`2.5px solid ${tab === t.id ? "#4361ee" : "transparent"}`,
-                transition:"color .12s, border-color .12s",
-              }}
-            >{t.emoji}<br />{t.label}</button>
-          ))}
-        </div>
-
-        {/* ── Scrollable content ── */}
-        <div style={{
-          flex:1, minHeight:0, overflowY:"auto", overflowX:"hidden",
-          padding:"18px 18px 12px",
-          display:"flex", flexDirection:"column", gap:22,
-          WebkitOverflowScrolling:"touch",
-        }}>
-
-          {/* ══ FACE ══ */}
-          {tab === "face" && <>
-            <AvatarSkinSection
-              ch={ch} skinBase={skinBase} setSkinBase={setSkinBase}
-              customColors={customColors}
-              onApply={applyField} onApplyCustom={applyCustomColor} onRemoveCustom={removeCustomColor}
-            />
-            <AvatarRow label="Eye Shape">
-              <AvatarChipGrid ch={ch} field="eyeShape" items={EYE_S} size={60} onApply={applyField} />
-            </AvatarRow>
-            <AvatarRow label="Eye Colour">
-              <AvatarSwatches {...swatchProps} field="eyes" vals={EYES} sz={26} />
-            </AvatarRow>
-            <AvatarRow label="Eyebrows">
-              <AvatarChipGrid ch={ch} field="eyebrow" items={BROWS} size={58} onApply={applyField} />
-            </AvatarRow>
-            <AvatarRow label="Expression">
-              <AvatarChipGrid ch={ch} field="mouth" items={MOUTHS} size={58} onApply={applyField} />
-            </AvatarRow>
-            <AvatarRow label="Facial Hair">
-              <AvatarChipGrid ch={ch} field="facialHair" items={FACIAL_NAMES} size={58} onApply={applyField} />
-            </AvatarRow>
-          </>}
-
-          {/* ══ HAIR ══ */}
-          {tab === "hair" && <>
-            <AvatarRow label="Hair Style">
-              <AvatarChipGrid ch={ch} field="hairStyle" items={HAIR_NAMES} size={64} onApply={applyField} />
-            </AvatarRow>
-            <AvatarRow label="Hair Colour">
-              <AvatarSwatches {...swatchProps} field="hair" vals={HAIRS} sz={26} />
-            </AvatarRow>
-          </>}
-
-          {/* ══ FIT ══ */}
-          {tab === "fit" && <>
-            <AvatarRow label="Outfit Style">
-              <AvatarChipGrid ch={ch} field="topStyle" items={TOPS_S} size={66} onApply={applyField} />
-            </AvatarRow>
-            <AvatarRow label="Outfit Colour">
-              <AvatarSwatches {...swatchProps} field="top" vals={TOPS} sz={26} />
-            </AvatarRow>
-            <AvatarRow label="Background">
-              <AvatarSwatches {...swatchProps} field="bg" vals={BG} sz={26} />
-            </AvatarRow>
-          </>}
-
-          {/* ══ ACCESSORIES ══ */}
-          {tab === "acc" && <>
-            <AvatarRow label="Hat">
-              <AvatarChipGrid ch={ch} field="hat" items={HAT_NAMES} size={60} onApply={applyField} />
-            </AvatarRow>
-            {ch.hat > 0 && (
-              <AvatarRow label="Hat Colour">
-                <AvatarSwatches {...swatchProps} field="hatColor" vals={HAT_C} sz={26} />
-              </AvatarRow>
-            )}
-            <AvatarRow label="Glasses">
-              <AvatarChipGrid ch={ch} field="glasses" items={GLASS_NAMES} size={60} onApply={applyField} />
-            </AvatarRow>
-            {ch.glasses > 0 && (
-              <AvatarRow label="Glasses Colour">
-                <AvatarSwatches {...swatchProps} field="glassesColor" vals={GLASS_C} sz={26} />
-              </AvatarRow>
-            )}
-            <AvatarRow label="Earrings">
-              <AvatarChipGrid ch={ch} field="earring" items={EARRING_NAMES} size={60} onApply={applyField} />
-            </AvatarRow>
-            {ch.earring > 0 && (
-              <AvatarRow label="Earring Colour">
-                <AvatarSwatches {...swatchProps} field="earringColor" vals={JEWEL_C} sz={26} />
-              </AvatarRow>
-            )}
-            <AvatarRow label="Necklace">
-              <AvatarChipGrid ch={ch} field="necklace" items={NECKLACE_NAMES} size={60} onApply={applyField} />
-            </AvatarRow>
-            {ch.necklace > 0 && (
-              <AvatarRow label="Necklace Colour">
-                <AvatarSwatches {...swatchProps} field="necklaceColor" vals={JEWEL_C} sz={26} />
-              </AvatarRow>
-            )}
-          </>}
-
-          {/* ══ EXTRA ══ */}
-          {tab === "extra" && <>
-            <AvatarTogglePair ch={ch} field="blush"    label="Blush"      onApply={applyField} />
-            <AvatarTogglePair ch={ch} field="lips"     label="Lip Gloss"  onApply={applyField} />
-            {ch.lips && (
-              <AvatarRow label="Lip Colour">
-                <AvatarSwatches {...swatchProps} field="lipColor" vals={LIP_C} sz={26} />
-              </AvatarRow>
-            )}
-            <AvatarTogglePair ch={ch} field="freckles" label="Freckles"   onApply={applyField} />
-            <button
-              onClick={() => onChange({
-                skin:"#FDDBB4", hair:"#3D2B1F", hairStyle:0, eyes:"#2980B9",
-                top:"#2C3E50", bg:"#dce8ff", mouth:0, eyebrow:0, eyeShape:0,
-                accessory:0, topStyle:0, blush:false, lips:false, freckles:false,
-                lipColor:"#d06060", hat:0, hatColor:"#E74C3C", glasses:0,
-                glassesColor:"#333333", facialHair:0, necklace:0,
-                necklaceColor:"#f0c040", earring:0, earringColor:"#f0c040",
-                name:ch.name,
-              })}
-              style={{
-                padding:"8px 18px", background:"#f0f0f0", border:"none",
-                borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer",
-                color:"#555", alignSelf:"flex-start",
-              }}
-            >Reset to Default</button>
-          </>}
-
-        </div>
-
-        {/* ── Done button ── */}
-        <div style={{
-          flexShrink:0, padding:"10px 18px",
-          paddingBottom:"max(12px, env(safe-area-inset-bottom, 12px))",
-          borderTop:"1px solid #f0f0f0", background:"#fff",
-        }}>
-          <button onClick={e => { e.stopPropagation(); onClose(); }} style={{
-            width:"100%", background:"#111", color:"#fff",
-            border:"none", borderRadius:8, padding:"13px",
-            fontSize:14, fontWeight:900, cursor:"pointer", letterSpacing:.4,
-          }}>Done</button>
-        </div>
-
-      </div>
-    </div>
-  );
+  return <AvatarEditor character={character} onChange={onChange} onClose={onClose} />;
 }
 // ─── LINK FILES BUTTON ────────────────────────────────────────────────────────
 function LinkBtn({ file, allFiles, onSave }) {
@@ -5534,13 +4003,13 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFi
             <div onDragOver={e=>{e.preventDefault();setDragging(true);}} onDragLeave={()=>setDragging(false)}
               onDrop={e=>{e.preventDefault();setDragging(false);addFiles(e.dataTransfer.files);}}
               onClick={()=>fileInput.current.click()}
-              style={{ border:`2px dashed ${dragging?"#1d4ed8":C.border}`, borderRadius:20, padding:"36px 24px", textAlign:"center", cursor:"pointer",
-                background:dragging?"#1d4ed80d":C.surface,
-                marginBottom:24, transition:"all .2s", boxShadow:dragging?"0 0 0 3px #1d4ed822":"none" }}>
-              <div style={{ width:52, height:52, background:dragging?"#1d4ed815":C.accentL, borderRadius:16, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 14px", transition:"all .2s" }}>
-                <Icon d={I.upload} size={24} color={dragging?"#1d4ed8":C.accent} />
+              style={{ border:`2px dashed ${dragging?"#2b6777":C.border}`, borderRadius:20, padding:"36px 24px", textAlign:"center", cursor:"pointer",
+                background:dragging?"#2b67770d":C.surface,
+                marginBottom:24, transition:"all .2s", boxShadow:dragging?"0 0 0 3px #2b677722":"none" }}>
+              <div style={{ width:52, height:52, background:dragging?"#2b677715":C.accentL, borderRadius:16, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 14px", transition:"all .2s" }}>
+                <Icon d={I.upload} size={24} color={dragging?"#2b6777":C.accent} />
               </div>
-              <p style={{ fontSize:15, fontWeight:700, color:dragging?"#1d4ed8":C.text, marginBottom:6 }}>
+              <p style={{ fontSize:15, fontWeight:700, color:dragging?"#2b6777":C.text, marginBottom:6 }}>
                 {dragging ? "Drop to upload" : "Drop files here or choose files"}
               </p>
               <p style={{ fontSize:12, color:C.muted, margin:0 }}>PDF, Word, PowerPoint, images, and more</p>
@@ -5582,7 +4051,7 @@ function FolderView({ folder, onBack, onOpenFile, onUpdate, allFolders, onMoveFi
                             <LinkBtn file={file} allFiles={folder.files}
                               onSave={ids => onUpdate({...folder,files:folder.files.map(f=>f.id===file.id?{...f,linkedFileIds:ids}:f)})} />
                             <button onClick={() => onOpenFile(file)}
-                              style={{ display:"flex", alignItems:"center", gap:6, background:"#1d4ed8", color:"#fff", border:"none", borderRadius:10, padding:"8px 18px", fontSize:13, fontWeight:600, cursor:"pointer", boxShadow:"0 3px 10px rgba(29,78,216,.3)" }}>
+                              style={{ display:"flex", alignItems:"center", gap:6, background:"#2b6777", color:"#fff", border:"none", borderRadius:10, padding:"8px 18px", fontSize:13, fontWeight:600, cursor:"pointer", boxShadow:"0 3px 10px rgba(43,103,119,.3)" }}>
                               Open →
                             </button>
                             <FileActionsMenu
@@ -5761,8 +4230,8 @@ ${text}`
       <div style={{ flex:1, display:"flex", overflow:"hidden" }}>
         <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", background:C.isDark?"#111110":"#2a2a26", padding:40 }}>
           <div style={{ background:C.surface, borderRadius:20, padding:"48px 56px", maxWidth:500, width:"100%", boxShadow:"0 8px 40px rgba(0,0,0,.3)", textAlign:"center", border:`1px solid ${C.border}` }}>
-            <div style={{ width:64, height:64, background:"#1d4ed815", borderRadius:18, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 20px" }}>
-              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            <div style={{ width:64, height:64, background:"#2b677715", borderRadius:18, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 20px" }}>
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#2b6777" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
             </div>
             <p style={{ fontSize:20, fontWeight:700, color:C.text, marginBottom:8, fontFamily:"'Fraunces Variable',serif" }}>{file._isBlank || file.isBlankDoc ? "Untitled document" : "Original file unavailable on this device"}</p>
             <p style={{ fontSize:14, color:C.muted, marginBottom:28, lineHeight:1.6 }}>{file._isBlank || file.isBlankDoc ? <>This is a blank notebook. Switch to the <strong style={{color:C.accent}}>Notes</strong> tab to write or generate notes.</> : "The original is not available in this browser. Recover it using the action above, or select the matching original from your device to enable cloud recall."}</p>
@@ -5805,7 +4274,7 @@ ${text}`
             </div>
           )}
           <button onClick={() => doExplain()} disabled={explaining}
-            style={{ display:"flex", alignItems:"center", gap:5, background:explaining?"#ccc":PRIMARY, color:"#fff", border:"none", borderRadius:7, padding:"6px 14px", fontSize:13, fontWeight:600, cursor:explaining?"default":"pointer", boxShadow:explaining?"none":"0 2px 8px rgba(29,78,216,.3)" }}>
+            style={{ display:"flex", alignItems:"center", gap:5, background:explaining?"#ccc":PRIMARY, color:"#fff", border:"none", borderRadius:7, padding:"6px 14px", fontSize:13, fontWeight:600, cursor:explaining?"default":"pointer", boxShadow:explaining?"none":"0 2px 8px rgba(43,103,119,.3)" }}>
             <Icon d={I.sparkle} size={12} color="#fff" sw={2} />{explaining?"Explaining…":"AI Explain"}
           </button>
       </div>
@@ -5864,7 +4333,7 @@ function ViewAIPanel({ file, explaining, explanation, showExplain, onHideExplain
       const sys = `You are a knowledgeable study assistant. ${fileText ? "Document content: " + fileText.slice(0,8000) : ""}
 Format responses with markdown: # headings, **bold** key terms, - bullet points, > for formulas/quotes.
 For comparisons/tables respond ONLY with JSON: {"TABLE":{"explanation":"...","columns":["A","B"],"rows":[["x","y"]]}}
-GRAPHS/CHARTS: If the user asks for a graph, chart, plot, scatter plot, or visualization of data, respond with ONLY valid JSON (no other text): {"GRAPH":{"type":"bar","title":"...","labels":["A","B","C"],"datasets":[{"label":"Series 1","data":[10,20,30],"backgroundColor":["#1d4ed8","#39696d","#06b6d4"]}]}}
+GRAPHS/CHARTS: If the user asks for a graph, chart, plot, scatter plot, or visualization of data, respond with ONLY valid JSON (no other text): {"GRAPH":{"type":"bar","title":"...","labels":["A","B","C"],"datasets":[{"label":"Series 1","data":[10,20,30],"backgroundColor":["#2b6777","#39696d","#06b6d4"]}]}}
 Supported graph types: bar, line, pie, doughnut, scatter.
 If the user's request would clearly benefit from a visual (e.g. "show this as a graph", "compare these visually", "make a table"), proactively use the TABLE or GRAPH format even if not explicitly asked for JSON.
 NEVER use pipe-table markdown (| col | col |).`;
@@ -5917,7 +4386,7 @@ NEVER use pipe-table markdown (| col | col |).`;
       {explanation && msgs.length === 0 && (
         <div style={{ flex:1, overflowY:"auto", padding:"16px 20px" }}>
           <div style={{ background:T.isDark?"#222":"#2a2a2a", borderRadius:14, padding:"14px 16px" }}>
-            <p style={{ margin:"0 0 8px", fontSize:11, fontWeight:700, color:"#1d4ed8", letterSpacing:.8, textTransform:"uppercase" }}>
+            <p style={{ margin:"0 0 8px", fontSize:11, fontWeight:700, color:"#2b6777", letterSpacing:.8, textTransform:"uppercase" }}>
               {isPDF ? `Page ${pageNum} — Explanation` : "AI Explanation"}
             </p>
             <p style={{ margin:0, fontSize:13, lineHeight:1.75, color:"#ddd", whiteSpace:"pre-wrap" }}>{explanation}</p>
@@ -5931,7 +4400,7 @@ NEVER use pipe-table markdown (| col | col |).`;
           {msgs.map((m,i) => (
             <div key={i} style={{ display:"flex", justifyContent:m.role==="user"?"flex-end":"flex-start" }}>
               <div style={{ maxWidth:"90%", padding:"10px 14px", borderRadius:14, fontSize:13, lineHeight:1.65,
-                background:m.role==="user"?"#1d4ed8":"rgba(255,255,255,.08)",
+                background:m.role==="user"?"#2b6777":"rgba(255,255,255,.08)",
                 color:m.role==="user"?"#fff":"#ddd",
                 borderBottomRightRadius:m.role==="user"?2:14,
                 borderBottomLeftRadius:m.role==="user"?14:2 }}>
@@ -5947,7 +4416,7 @@ NEVER use pipe-table markdown (| col | col |).`;
           ))}
           {loading && (
             <div style={{ alignSelf:"flex-start", padding:"10px 14px", background:"rgba(255,255,255,.08)", borderRadius:14 }}>
-              <div style={{ display:"flex", gap:4 }}>{[0,1,2].map(j=><span key={j} style={{width:6,height:6,borderRadius:"50%",background:"#1d4ed8",animation:`bounce .8s ease-in-out ${j*0.15}s infinite`,display:"inline-block"}}/>)}</div>
+              <div style={{ display:"flex", gap:4 }}>{[0,1,2].map(j=><span key={j} style={{width:6,height:6,borderRadius:"50%",background:"#2b6777",animation:`bounce .8s ease-in-out ${j*0.15}s infinite`,display:"inline-block"}}/>)}</div>
             </div>
           )}
           <div ref={bottomRef}/>
@@ -5971,7 +4440,7 @@ NEVER use pipe-table markdown (| col | col |).`;
             </button>
             <button onClick={()=>send()} disabled={!inp.trim()||loading}
               style={{ width:34, height:34, borderRadius:"50%", border:"none",
-                background:inp.trim()&&!loading?"#1d4ed8":"rgba(255,255,255,.15)",
+                background:inp.trim()&&!loading?"#2b6777":"rgba(255,255,255,.15)",
                 cursor:inp.trim()&&!loading?"pointer":"default",
                 display:"flex", alignItems:"center", justifyContent:"center" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -6105,7 +4574,7 @@ function ExcelViewer({ fileObj }) {
             {sheet.rows.map((row, ri) => (
               <tr key={ri} style={{ background: ri===0?"#eff6ff": ri%2===0?"#fff":"#f9fafb" }}>
                 {Array.from({ length: Math.max(row.length, maxCols) }, (_, ci) => (
-                  <td key={ci} style={{ border:"1px solid #e5e7eb", padding:"6px 12px", fontWeight:ri===0?700:400, whiteSpace:"nowrap", maxWidth:240, overflow:"hidden", textOverflow:"ellipsis", color: ri===0?"#1d4ed8":"#111" }}>
+                  <td key={ci} style={{ border:"1px solid #e5e7eb", padding:"6px 12px", fontWeight:ri===0?700:400, whiteSpace:"nowrap", maxWidth:240, overflow:"hidden", textOverflow:"ellipsis", color: ri===0?"#2b6777":"#111" }}>
                     {row[ci] ?? ""}
                   </td>
                 ))}
@@ -6303,7 +4772,7 @@ FORMATTING — strictly follow:
         })()}
         {msgs.length === 0 && (
           <div style={{ textAlign:"center", padding:"24px 20px", color:C.muted }}>
-            <div style={{ width:52, height:52, borderRadius:16, background:"#1d4ed8", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px" }}>
+            <div style={{ width:52, height:52, borderRadius:16, background:"#2b6777", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px" }}>
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8M12 5V3"/><circle cx="12" cy="3" r="1"/></svg>
             </div>
             <p style={{ fontSize:15, fontWeight:600, color:C.text, marginBottom:6 }}>AI Assistant</p>
@@ -6386,10 +4855,10 @@ FORMATTING — strictly follow:
             background:C.bg, color:C.text }} />
         <button onClick={send} disabled={(!inp.trim() && !attachedImage) || loading}
           style={{ flexShrink:0,
-            background:(inp.trim()||attachedImage)&&!loading?"#1d4ed8":"#ccc",
+            background:(inp.trim()||attachedImage)&&!loading?"#2b6777":"#ccc",
             color:"#fff", border:"none", borderRadius:8, padding:"11px 20px",
             fontSize:14, fontWeight:700,
-            boxShadow:(inp.trim()||attachedImage)&&!loading?"0 3px 10px rgba(29,78,216,.3)":"none",
+            boxShadow:(inp.trim()||attachedImage)&&!loading?"0 3px 10px rgba(43,103,119,.3)":"none",
             cursor:(inp.trim()||attachedImage)&&!loading?"pointer":"not-allowed" }}>
           Send
         </button>
@@ -6876,7 +5345,7 @@ function ClassioTable({ data, onClose }) {
       chartInstance.current = new window.Chart(chartRef.current, {
         type:"bar",
         data:{ labels:chart.labels, datasets:[{ label:"Value", data:chart.values,
-          backgroundColor:"rgba(29,78,216,0.7)", borderColor:"#1d4ed8", borderWidth:2, borderRadius:6 }] },
+          backgroundColor:"rgba(43,103,119,0.7)", borderColor:"#2b6777", borderWidth:2, borderRadius:6 }] },
         options:{ responsive:true, plugins:{ legend:{display:false} },
           scales:{ y:{ beginAtZero:true, grid:{color:"rgba(0,0,0,.06)"} } } }
       });
@@ -7046,7 +5515,7 @@ function NotesImageInsert({ file, onInsert }) {
           <button onClick={()=>{ if(aiPrompt.trim()){ onInsert(`[AIImage: ${aiPrompt.trim()} | ${aiStyle}]`); setAiPrompt(""); setShowAI(false); } }}
             disabled={!aiPrompt.trim()}
             style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"7px", borderRadius:8, border:"none",
-              background:aiPrompt.trim()?"#1d4ed8":"#ccc", color:"#fff", fontSize:12, fontWeight:700, cursor:aiPrompt.trim()?"pointer":"not-allowed" }}>
+              background:aiPrompt.trim()?"#2b6777":"#ccc", color:"#fff", fontSize:12, fontWeight:700, cursor:aiPrompt.trim()?"pointer":"not-allowed" }}>
             <Icon d={I.sparkle} size={11} color="#fff" sw={2}/> Insert
           </button>
         </div>
@@ -7083,7 +5552,7 @@ You MUST respond with ONLY this exact JSON format and nothing else — no markdo
 Do NOT use markdown pipe tables (|col|col|) — ONLY use the JSON TABLE format above.
 
 GRAPHS/CHARTS: If the user asks for a graph, chart, plot, or visualization of data, respond with ONLY valid JSON (no other text):
-{"GRAPH":{"type":"bar","title":"...","labels":["A","B","C"],"datasets":[{"label":"Series 1","data":[10,20,30],"backgroundColor":["#1d4ed8","#39696d","#06b6d4"]}]}}
+{"GRAPH":{"type":"bar","title":"...","labels":["A","B","C"],"datasets":[{"label":"Series 1","data":[10,20,30],"backgroundColor":["#2b6777","#39696d","#06b6d4"]}]}}
 Supported graph types: bar, line, pie, doughnut.
 
 Otherwise respond normally with formatted text. Never use pipe-table markdown (| col | col |) under any circumstances.`;
@@ -7140,7 +5609,7 @@ Otherwise respond normally with formatted text. Never use pipe-table markdown (|
               style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 12px", borderRadius:8,
                 border:`1px solid ${T.border}`, background:T.bg, cursor:"pointer", textAlign:"left",
                 position:"relative", transition:"all .15s", boxShadow:"none" }}
-              onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.boxShadow=`0 2px 10px rgba(29,78,216,.1)`;}}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.boxShadow=`0 2px 10px rgba(43,103,119,.1)`;}}
               onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
               {q.badge && <span style={{ position:"absolute", top:6, right:6, background:q.badgeColor, color:"#fff", fontSize:9, fontWeight:700, padding:"2px 7px", borderRadius:20 }}>{q.badge}</span>}
               <span style={{ display:"flex", flexShrink:0 }}>{q.icon}</span>
@@ -7373,7 +5842,7 @@ function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
             <table style={{ width:"100%", borderCollapse:"collapse", fontSize:fs, tableLayout:"fixed" }}>
               <colgroup>{cols.map((_,ci)=><col key={ci} style={{ width:`${100/n}%` }}/>)}</colgroup>
               <thead>
-                <tr style={{ background:"#1d4ed8" }}>
+                <tr style={{ background:"#2b6777" }}>
                   {cols.map((col,ci)=>(
                     <th key={ci} style={{ padding:pad, textAlign:"left", fontWeight:700, color:"#fff", fontSize:fs-1, wordBreak:"break-word", verticalAlign:"top", borderRight:ci<n-1?"1px solid rgba(255,255,255,.15)":"none" }}>{col}</th>
                   ))}
@@ -7577,7 +6046,7 @@ function InlineChart({ data }) {
       }
       if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
       const ctx = canvasRef.current.getContext("2d");
-      const COLORS = ["#1d4ed8","#39696d","#06b6d4","#10b981","#f59e0b","#ef4444","#1d4ed8","#ec4899"];
+      const COLORS = ["#2b6777","#39696d","#06b6d4","#10b981","#f59e0b","#ef4444","#2b6777","#ec4899"];
       const processedDatasets = datasets.map((ds, di) => ({
         ...ds,
         backgroundColor: ds.backgroundColor || (type === "bar" || type === "line" ? COLORS[di % COLORS.length] + "cc" : labels.map((_, li) => COLORS[li % COLORS.length] + "cc")),
@@ -7660,7 +6129,7 @@ function InlineClassioTable({ data }) {
   );
 }
 
-function NotesTab({ file, onUpdate, user, onTabChange }) {
+function NotesTab({ file, onUpdate, user }) {
   const fileObj = file._fileObj || FILE_STORE.get(file.id);
   const readSavedNotes = useCallback(async () => {
     if (!user?.uid) return [];
@@ -7672,8 +6141,7 @@ function NotesTab({ file, onUpdate, user, onTabChange }) {
     return snapshot.data()?.notes || [];
   }, [file.id, user?.uid]);
   return <NotesEditor file={file} fileObj={fileObj} onUpdate={onUpdate}
-    getFileText={() => extractFileText(fileObj)} readSavedNotes={readSavedNotes}
-    assistant={notes => <NotesTurboPanel file={file} notes={notes} lang="en-US" onTabChange={onTabChange} />} />;
+    getFileText={() => extractFileText(fileObj)} readSavedNotes={readSavedNotes} />;
 }
 
 function NotesQASidebar({ file, notes, lang }) {
@@ -7811,7 +6279,7 @@ function RichText({ text }) {
     const parts = str.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
     return parts.map((p, pi) => {
       if (p.startsWith("**") && p.endsWith("**")) return <strong key={pi} style={{ fontWeight:700 }}>{p.slice(2,-2)}</strong>;
-      if (p.startsWith("`") && p.endsWith("`")) return <code key={pi} style={{ background:T.isDark?"#2a2a3a":"#f0eeff", color:"#1d4ed8", borderRadius:4, padding:"1px 6px", fontSize:12, fontFamily:"monospace" }}>{p.slice(1,-1)}</code>;
+      if (p.startsWith("`") && p.endsWith("`")) return <code key={pi} style={{ background:T.isDark?"#2a2a3a":"#f0eeff", color:"#2b6777", borderRadius:4, padding:"1px 6px", fontSize:12, fontFamily:"monospace" }}>{p.slice(1,-1)}</code>;
       return p;
     });
   };
@@ -7831,7 +6299,7 @@ function RichText({ text }) {
       i++; continue;
     }
     if (trim.startsWith("### ")) {
-      els.push(<h4 key={i} style={{ fontSize:14, fontWeight:700, color:"#1d4ed8", margin:"10px 0 3px" }}>{trim.slice(4)}</h4>);
+      els.push(<h4 key={i} style={{ fontSize:14, fontWeight:700, color:"#2b6777", margin:"10px 0 3px" }}>{trim.slice(4)}</h4>);
       i++; continue;
     }
     if (trim.startsWith("|") && trim.endsWith("|")) {
@@ -7846,7 +6314,7 @@ function RichText({ text }) {
         els.push(<div key={"t"+i} style={{ margin:"12px 0", overflowX:"auto", borderRadius:10, border:`1.5px solid ${T.border}` }}>
           <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
             <thead><tr style={{ background:T.isDark?"#1e293b":"#f0eeff" }}>
-              {headers.map((h,ci) => <th key={ci} style={{ padding:"8px 12px", textAlign:"left", fontWeight:700, color:"#1d4ed8", borderBottom:`2px solid ${T.border}`, whiteSpace:"nowrap" }}>{h}</th>)}
+              {headers.map((h,ci) => <th key={ci} style={{ padding:"8px 12px", textAlign:"left", fontWeight:700, color:"#2b6777", borderBottom:`2px solid ${T.border}`, whiteSpace:"nowrap" }}>{h}</th>)}
             </tr></thead>
             <tbody>{body.map((row,ri) => {
               const cells = parseRow(row);
@@ -7860,7 +6328,7 @@ function RichText({ text }) {
       continue;
     }
     if (trim.startsWith("> ")) {
-      els.push(<div key={i} style={{ borderLeft:"3px solid #1d4ed8", padding:"8px 14px", margin:"8px 0", color:"#1d4ed8", fontSize:14, lineHeight:1.65, fontStyle:"italic", background:T.isDark?"#1d4ed811":"#1d4ed808", borderRadius:"0 8px 8px 0" }}>{renderInline(trim.slice(2))}</div>);
+      els.push(<div key={i} style={{ borderLeft:"3px solid #2b6777", padding:"8px 14px", margin:"8px 0", color:"#2b6777", fontSize:14, lineHeight:1.65, fontStyle:"italic", background:T.isDark?"#2b677711":"#2b677708", borderRadius:"0 8px 8px 0" }}>{renderInline(trim.slice(2))}</div>);
       i++; continue;
     }
     if (trim.match(/^[-*\u2022] /)) {
@@ -7868,7 +6336,7 @@ function RichText({ text }) {
       while (i < lines.length && lines[i].trim().match(/^[-*\u2022] /)) { bullets.push(lines[i].trim().replace(/^[-*\u2022] /,"")); i++; }
       els.push(<ul key={"ul"+i} style={{ margin:"6px 0", paddingLeft:0, listStyle:"none" }}>
         {bullets.map((b,bi) => <li key={bi} style={{ display:"flex", gap:8, alignItems:"flex-start", margin:"3px 0" }}>
-          <span style={{ color:"#1d4ed8", fontWeight:700, flexShrink:0, marginTop:2 }}>•</span>
+          <span style={{ color:"#2b6777", fontWeight:700, flexShrink:0, marginTop:2 }}>•</span>
           <span style={{ fontSize:14, color:T.text, lineHeight:1.65 }}>{renderInline(b)}</span>
         </li>)}
       </ul>);
@@ -7879,7 +6347,7 @@ function RichText({ text }) {
       while (i < lines.length && lines[i].trim().match(/^\d+\. /)) { items.push(lines[i].trim().replace(/^\d+\. /,"")); i++; }
       els.push(<ol key={"ol"+i} style={{ margin:"6px 0", paddingLeft:0, listStyle:"none" }}>
         {items.map((b,bi) => <li key={bi} style={{ display:"flex", gap:8, alignItems:"flex-start", margin:"3px 0" }}>
-          <span style={{ color:"#1d4ed8", fontWeight:700, flexShrink:0, minWidth:20 }}>{bi+1}.</span>
+          <span style={{ color:"#2b6777", fontWeight:700, flexShrink:0, minWidth:20 }}>{bi+1}.</span>
           <span style={{ fontSize:14, color:T.text, lineHeight:1.65 }}>{renderInline(b)}</span>
         </li>)}
       </ol>);
@@ -7966,7 +6434,7 @@ function ELI5Panel({ card }) {
             style={{ flex:1, border:`1px solid ${T.border}`, borderRadius:10, padding:"8px 12px", fontSize:13, outline:"none", color:T.text, background:T.bg, fontFamily:"inherit" }}/>
           <button onClick={() => { setOpen(true); sendAsk(); }} disabled={!askQ.trim()||sending}
             style={{ width:34, height:34, borderRadius:"50%", border:"none",
-              background:askQ.trim()&&!sending?"#1d4ed8":T.border,
+              background:askQ.trim()&&!sending?"#2b6777":T.border,
               cursor:askQ.trim()&&!sending?"pointer":"not-allowed",
               display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -7995,7 +6463,7 @@ function ELI5Panel({ card }) {
               {msgs.map((m, i) => (
                 <div key={i} style={{ maxWidth: m.role==="user" ? "85%" : "100%", alignSelf: m.role==="user" ? "flex-end" : "flex-start" }}>
                   {m.role === "user" ? (
-                    <div style={{ background:"#1d4ed8", color:"#fff", borderRadius:16, padding:"12px 18px", fontSize:14, lineHeight:1.6 }}>
+                    <div style={{ background:"#2b6777", color:"#fff", borderRadius:16, padding:"12px 18px", fontSize:14, lineHeight:1.6 }}>
                       {m.content}
                     </div>
                   ) : (
@@ -8028,7 +6496,7 @@ function ELI5Panel({ card }) {
                 autoFocus/>
               <button onClick={sendAsk} disabled={!askQ.trim()||sending}
                 style={{ width:38, height:38, borderRadius:"50%", border:"none",
-                  background:askQ.trim()&&!sending?"#1d4ed8":"#ef4444",
+                  background:askQ.trim()&&!sending?"#2b6777":"#ef4444",
                   cursor:askQ.trim()&&!sending?"pointer":"default",
                   display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                 {sending
@@ -8177,8 +6645,8 @@ function CardsTab({ file, onUpdate }) {
     <div>
       {/* ── Turbo-style header with icon + count ── */}
       <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20 }}>
-        <div style={{ width:48, height:48, background:"#1d4ed815", borderRadius:16, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/></svg>
+        <div style={{ width:48, height:48, background:"#2b677715", borderRadius:16, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2b6777" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/></svg>
         </div>
         <div>
           <h2 style={{ fontFamily:"'Fraunces Variable',serif", fontSize:22, fontWeight:700, color:C.text, margin:0 }}>Study Cards</h2>
@@ -8190,7 +6658,7 @@ function CardsTab({ file, onUpdate }) {
             <Icon d={I.plus} size={13} color={C.text} sw={2.5}/> Add Card
           </button>
           <button onClick={()=>setShowCountPicker(p=>!p)} disabled={gen} className="hov"
-            style={{ display:"flex", alignItems:"center", gap:7, background:gen?"#ccc":"#1d4ed8", color:"#fff", border:"none", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:gen?"not-allowed":"pointer", boxShadow:gen?"none":"0 3px 10px rgba(29,78,216,.3)" }}>
+            style={{ display:"flex", alignItems:"center", gap:7, background:gen?"#ccc":"#2b6777", color:"#fff", border:"none", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:gen?"not-allowed":"pointer", boxShadow:gen?"none":"0 3px 10px rgba(43,103,119,.3)" }}>
             {gen ? <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Generating…</> : <><Icon d={I.sparkle} size={13} color="#fff"/>AI Generate</>}
           </button>
         </div>
@@ -8221,7 +6689,7 @@ function CardsTab({ file, onUpdate }) {
       {/* ── Progress bar ── */}
       {cards.length > 0 && (
         <div style={{ height:5, background:C.border, borderRadius:3, marginBottom:20, overflow:"hidden" }}>
-          <div style={{ height:"100%", width:`${progress}%`, background:"#1d4ed8", borderRadius:3, transition:"width .4s" }}/>
+          <div style={{ height:"100%", width:`${progress}%`, background:"#2b6777", borderRadius:3, transition:"width .4s" }}/>
         </div>
       )}
 
@@ -8255,7 +6723,7 @@ function CardsTab({ file, onUpdate }) {
                 style={{ width:52, border:"none", outline:"none", fontSize:14, fontWeight:700, color:C.text, background:"transparent", textAlign:"center" }}/>
             </div>
             <button onClick={()=>generate(parseInt(cardCount)||8)} disabled={gen||!parseInt(cardCount)}
-              style={{ flex:1, background:gen?"#ccc":PRIMARY, color:"#fff", border:"none", borderRadius:10, padding:"10px 0", fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer", boxShadow:gen?"none":"0 3px 12px rgba(29,78,216,.3)", display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
+              style={{ flex:1, background:gen?"#ccc":PRIMARY, color:"#fff", border:"none", borderRadius:10, padding:"10px 0", fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer", boxShadow:gen?"none":"0 3px 12px rgba(43,103,119,.3)", display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
               {gen ? <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Generating…</> : <><Icon d={I.sparkle} size={13} color="#fff"/> Generate {cardCount} Cards</>}
             </button>
           </div>
@@ -8314,7 +6782,7 @@ function CardsTab({ file, onUpdate }) {
               </div>
             </div>
             <div style={{ flexShrink:0, height:5, background:C.border }}>
-              <div style={{ height:"100%", width:`${pct}%`, background:"#1d4ed8", transition:"width .35s ease" }}/>
+              <div style={{ height:"100%", width:`${pct}%`, background:"#2b6777", transition:"width .35s ease" }}/>
             </div>
             <div style={{ flexShrink:0, display:"flex", justifyContent:"center", gap:16, padding:"10px 28px 0", background:C.bg }}>
               <span className="pill-new">{(displayCards.length - Object.values(known).filter(Boolean).length - Object.values(starred).filter(Boolean).length)} New</span>
@@ -8355,7 +6823,7 @@ function CardsTab({ file, onUpdate }) {
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>Don't Know
                   </button>
                   <button onClick={() => gradeCard(card.id, true)} className="no-min-h"
-                    style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 28px", borderRadius:8, border:"none", background:isKnown?C.green:"#1d4ed8", color:"#fff", fontSize:14, fontWeight:700, cursor:"pointer", boxShadow:isKnown?`0 3px 12px ${C.green}55`:"0 3px 12px rgba(29,78,216,.35)" }}>
+                    style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 28px", borderRadius:8, border:"none", background:isKnown?C.green:"#2b6777", color:"#fff", fontSize:14, fontWeight:700, cursor:"pointer", boxShadow:isKnown?`0 3px 12px ${C.green}55`:"0 3px 12px rgba(43,103,119,.35)" }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Remembered
                   </button>
                 </div>
@@ -8434,7 +6902,7 @@ function CardsTab({ file, onUpdate }) {
               </button>
             </div>
             <button onClick={()=>{setViewMode("study");setStudyIdx(0);setFlipped({});}} className="hov"
-              style={{ display:"flex", alignItems:"center", gap:8, background:"#1d4ed8", color:"#fff", border:"none", borderRadius:8, padding:"10px 24px", fontSize:14, fontWeight:700, cursor:"pointer", boxShadow:"0 3px 14px rgba(29,78,216,.35)" }}>
+              style={{ display:"flex", alignItems:"center", gap:8, background:"#2b6777", color:"#fff", border:"none", borderRadius:8, padding:"10px 24px", fontSize:14, fontWeight:700, cursor:"pointer", boxShadow:"0 3px 14px rgba(43,103,119,.35)" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
               Start Studying
             </button>
@@ -8730,7 +7198,7 @@ ${modeGuide}`,
           ].map(m => (
             <button key={m.id} onClick={() => setMode(m.id)}
               style={{ flex:"1 1 0", padding:"9px 12px", borderRadius:10, border:`1.5px solid ${mode===m.id?C.accent:C.border}`,
-                background:mode===m.id?"#1d4ed815":"transparent", cursor:"pointer", textAlign:"left", transition:"all .15s" }}>
+                background:mode===m.id?"#2b677715":"transparent", cursor:"pointer", textAlign:"left", transition:"all .15s" }}>
               <p style={{ margin:"0 0 1px", fontSize:13, fontWeight:700, color:mode===m.id?C.accent:C.text }}>{m.label}</p>
               <p style={{ margin:0, fontSize:11, color:C.muted }}>{m.desc}</p>
             </button>
@@ -8796,7 +7264,7 @@ Only include what's in the transcript.`,
                 Generate Table
               </button>
               <button onClick={saveAll} disabled={cardsLoading}
-                style={{ background:saved?"linear-gradient(135deg,#4A7C59,#4A9C69)":"#1d4ed8", color:"#fff",
+                style={{ background:saved?"linear-gradient(135deg,#4A7C59,#4A9C69)":"#2b6777", color:"#fff",
                   border:"none", borderRadius:10, padding:"8px 16px",
                   fontSize:13, fontWeight:700, cursor:cardsLoading?"not-allowed":"pointer",
                   display:"flex", alignItems:"center", gap:6 }}>
@@ -9192,7 +7660,7 @@ RULES:
                 background:notes.trim()?PRIMARY:"#ccc", color:"#fff", border:"none",
                 borderRadius:10, padding:"10px 22px", fontSize:14, fontWeight:700,
                 cursor:notes.trim()?"pointer":"not-allowed",
-                boxShadow:notes.trim()?"0 4px 14px rgba(29,78,216,.35)":"none" }}>
+                boxShadow:notes.trim()?"0 4px 14px rgba(43,103,119,.35)":"none" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
               {script ? "Generate new podcast" : "Generate podcast"}
             </button>
@@ -9296,7 +7764,7 @@ RULES:
       <div style={{ display:"flex", alignItems:"center", gap:14 }}>
         <button onClick={listening ? stopMic : startMic}
           style={{ width:50, height:50, borderRadius:"50%", flexShrink:0, border:"none", cursor:"pointer",
-            background: listening ? "linear-gradient(135deg,#ef4444,#dc2626)" : "#1d4ed8",
+            background: listening ? "linear-gradient(135deg,#ef4444,#dc2626)" : "#2b6777",
             boxShadow: listening ? "0 0 0 8px rgba(239,68,68,.15),0 4px 18px rgba(239,68,68,.35)" : "0 4px 16px rgba(124,58,237,.35)",
             display:"flex", alignItems:"center", justifyContent:"center", transition:"all .2s" }}>
           <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -9610,7 +8078,7 @@ Simple language, give an example, under 100 words. No markdown.`,
             width:54, height:54, borderRadius:"50%", flexShrink:0, border:"none", cursor:"pointer",
             background: listening
               ? "linear-gradient(135deg,#ef4444,#dc2626)"
-              : "#1d4ed8",
+              : "#2b6777",
             boxShadow: listening
               ? "0 0 0 8px rgba(239,68,68,.18),0 4px 18px rgba(239,68,68,.4)"
               : "0 4px 18px rgba(124,58,237,.38)",
@@ -9715,8 +8183,8 @@ function PresentationTab({ file, onUpdate }) {
     { id:"ocean",  label:"Ocean",  bg:"#0c4a6e", accent:"#38bdf8", text:"#f0f9ff", sub:"#bae6fd", header:"#0e5a84", card:"rgba(255,255,255,.07)" },
     { id:"forest", label:"Forest", bg:"#14532d", accent:"#4ade80", text:"#f0fdf4", sub:"#bbf7d0", header:"#166534", card:"rgba(255,255,255,.07)" },
     { id:"sunset", label:"Sunset", bg:"#431407", accent:"#fb923c", text:"#fff7ed", sub:"#fed7aa", header:"#7c2d12", card:"rgba(255,255,255,.07)" },
-    { id:"minimal",label:"Minimal",bg:"#f8f9fa", accent:"#1d4ed8", text:"#111827", sub:"#6b7280", header:"#1d4ed8",  card:"rgba(0,0,0,.04)" },
-    { id:"dark",   label:"Dark",   bg:"#0f172a", accent:"#1d4ed8", text:"#f1f5f9", sub:"#94a3b8", header:"#1e293b", card:"rgba(255,255,255,.05)" },
+    { id:"minimal",label:"Minimal",bg:"#f8f9fa", accent:"#2b6777", text:"#111827", sub:"#6b7280", header:"#2b6777",  card:"rgba(0,0,0,.04)" },
+    { id:"dark",   label:"Dark",   bg:"#0f172a", accent:"#2b6777", text:"#f1f5f9", sub:"#94a3b8", header:"#1e293b", card:"rgba(255,255,255,.05)" },
     { id:"rose",   label:"Rose",   bg:"#1c0010", accent:"#fb7185", text:"#fff1f2", sub:"#fecdd3", header:"#4c0519", card:"rgba(255,255,255,.07)" },
     { id:"slate",  label:"Slate",  bg:"#0f172a", accent:"#38bdf8", text:"#e2e8f0", sub:"#94a3b8", header:"#1e293b", card:"rgba(255,255,255,.06)" },
     { id:"amber",  label:"Amber",  bg:"#1c0a00", accent:"#f59e0b", text:"#fffbeb", sub:"#fde68a", header:"#451a03", card:"rgba(255,255,255,.07)" },
@@ -10031,7 +8499,7 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
               PDF
             </button>
             <button onClick={exportPPTX} disabled={exporting}
-              style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 16px", borderRadius:10, border:"none", background:"#1d4ed8", color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", boxShadow:"0 3px 10px rgba(29,78,216,.3)" }}>
+              style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 16px", borderRadius:10, border:"none", background:"#2b6777", color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", boxShadow:"0 3px 10px rgba(43,103,119,.3)" }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
               {exporting ? "Exporting…" : "PPTX"}
             </button>
@@ -10079,7 +8547,7 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
               style={{ width:24,height:24,borderRadius:6,border:`1px solid ${C.border}`,background:C.surface,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",color:C.text,flexShrink:0 }}>+</button>
           </div>
           <button onClick={generate} disabled={generating}
-            style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 20px", borderRadius:10, border:"none", background:generating?"#ccc":"#1d4ed8", color:"#fff", fontSize:14, fontWeight:700, cursor:generating?"not-allowed":"pointer", boxShadow:generating?"none":"0 3px 12px rgba(29,78,216,.3)", whiteSpace:"nowrap" }}>
+            style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 20px", borderRadius:10, border:"none", background:generating?"#ccc":"#2b6777", color:"#fff", fontSize:14, fontWeight:700, cursor:generating?"not-allowed":"pointer", boxShadow:generating?"none":"0 3px 12px rgba(43,103,119,.3)", whiteSpace:"nowrap" }}>
             {generating ? <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Generating…</> : <><Icon d={I.sparkle} size={12} color="#fff" sw={2}/> Generate</>}
           </button>
         </div>
@@ -10093,23 +8561,23 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
                 <button key={t.id} onClick={() => { setTheme(t.id); onUpdate({ ...file, presentationTheme: t.id }); }} title={t.label}
                   style={{ width:32, height:32, borderRadius:"50%",
                     background:t.bg, borderBottomColor:t.accent,
-                    border:`3px solid ${theme===t.id?"#1d4ed8":"transparent"}`,
+                    border:`3px solid ${theme===t.id?"#2b6777":"transparent"}`,
                     cursor:"pointer", boxShadow:"0 2px 8px rgba(0,0,0,.25)",
                     transition:"all .15s", flexShrink:0, position:"relative",
                     transform:theme===t.id?"scale(1.15)":"scale(1)" }}>
-                  {theme===t.id && <div style={{ position:"absolute", inset:-4, borderRadius:"50%", border:"2px solid #1d4ed866" }}/>}
+                  {theme===t.id && <div style={{ position:"absolute", inset:-4, borderRadius:"50%", border:"2px solid #2b677766" }}/>}
                 </button>
               ))}
               {customTheme && (
                 <button key="custom" onClick={() => { setTheme("custom"); onUpdate({ ...file, presentationTheme: "custom" }); }} title={customTheme.label}
                   style={{ width:32, height:32, borderRadius:"50%",
                     background:customTheme.bg, borderBottomColor:customTheme.accent,
-                    border:`3px solid ${theme==="custom"?"#1d4ed8":"transparent"}`,
+                    border:`3px solid ${theme==="custom"?"#2b6777":"transparent"}`,
                     cursor:"pointer", boxShadow:"0 2px 8px rgba(0,0,0,.25)",
                     transition:"all .15s", flexShrink:0, position:"relative",
                     transform:theme==="custom"?"scale(1.15)":"scale(1)" }}>
-                  {theme==="custom" && <div style={{ position:"absolute", inset:-4, borderRadius:"50%", border:"2px solid #1d4ed866" }}/>}
-                  <span style={{ position:"absolute", bottom:-2, right:-2, width:12, height:12, borderRadius:"50%", background:"#1d4ed8", color:"#fff", fontSize:8, fontWeight:900, display:"flex", alignItems:"center", justifyContent:"center", border:`1.5px solid ${C.surface}` }}>✦</span>
+                  {theme==="custom" && <div style={{ position:"absolute", inset:-4, borderRadius:"50%", border:"2px solid #2b677766" }}/>}
+                  <span style={{ position:"absolute", bottom:-2, right:-2, width:12, height:12, borderRadius:"50%", background:"#2b6777", color:"#fff", fontSize:8, fontWeight:900, display:"flex", alignItems:"center", justifyContent:"center", border:`1.5px solid ${C.surface}` }}>✦</span>
                 </button>
               )}
             </div>
@@ -10123,7 +8591,7 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
                 onBlur={e=>e.target.style.borderColor=C.border}/>
               <button onClick={generateTheme} disabled={themeGenerating || !themePrompt.trim()}
                 style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 12px", borderRadius:8, border:"none",
-                  background:themeGenerating||!themePrompt.trim()?"#ccc":"#1d4ed8",
+                  background:themeGenerating||!themePrompt.trim()?"#ccc":"#2b6777",
                   color:"#fff", fontSize:12, fontWeight:700, cursor:themeGenerating||!themePrompt.trim()?"not-allowed":"pointer", whiteSpace:"nowrap" }}>
                 {themeGenerating ? <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Generating…</> : <><Icon d={I.sparkle} size={11} color="#fff" sw={2}/> Generate Theme</>}
               </button>
@@ -10342,7 +8810,7 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
                               }}
                               disabled={aiImgGenerating}
                               style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", borderRadius:8, border:"none",
-                                background:aiImgGenerating?"#ccc":"#1d4ed8",
+                                background:aiImgGenerating?"#ccc":"#2b6777",
                                 color:"#fff", fontSize:12, fontWeight:700, cursor:aiImgGenerating?"not-allowed":"pointer", whiteSpace:"nowrap" }}>
                               {aiImgGenerating ? <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Generating…</> : <><Icon d={I.sparkle} size={11} color="#fff" sw={2}/> {editVal.image && editVal.image.includes("pollinations") ? "Regenerate" : "Generate Image"}</>}
                             </button>
@@ -10403,7 +8871,7 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
                         const next = slides.map((item, index) => index === idx ? slide : item);
                         setSlides(next); onUpdate({ ...file, presentation:next }); setEditIdx(null);
                       }}
-                        style={{ flex:2, padding:"8px", background:"#1d4ed8", color:"#fff", border:"none", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                        style={{ flex:2, padding:"8px", background:"#2b6777", color:"#fff", border:"none", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer" }}>
                         ✓ Save Changes
                       </button>
                       <button onClick={()=>setEditIdx(null)}
@@ -10521,7 +8989,7 @@ function GResults({ score, total, onBack, msg }) {
       <p style={{ fontSize:14, color:pct>=80?C.green:pct>=50?C.warm:C.red, fontWeight:600, marginBottom:32 }}>
         {pct>=80?"Excellent!":pct>=50?"Good effort! Keep studying.":"Keep practicing — you've got this!"}
       </p>
-      <button onClick={onBack} style={{ background:PRIMARY, color:"#fff", border:"none", borderRadius:8, padding:"13px 32px", fontSize:15, fontWeight:700, cursor:"pointer", boxShadow:"0 4px 14px rgba(29,78,216,.3)" }}>← Back to Games</button>
+      <button onClick={onBack} style={{ background:PRIMARY, color:"#fff", border:"none", borderRadius:8, padding:"13px 32px", fontSize:15, fontWeight:700, cursor:"pointer", boxShadow:"0 4px 14px rgba(43,103,119,.3)" }}>← Back to Games</button>
     </div>
   );
 }
@@ -11429,7 +9897,7 @@ function QuizShow({ cards, onBack }) {
           50/50 {!lifelines.fifty ? "(used)" : ""}
         </button>
         <button onClick={useSkip} disabled={!lifelines.skip || sel !== null}
-          style={{ background: lifelines.skip ? "#eff6ff" : "#f3f4f6", color: lifelines.skip ? "#1d4ed8" : C.muted, border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: lifelines.skip ? "pointer" : "not-allowed" }}>
+          style={{ background: lifelines.skip ? "#eff6ff" : "#f3f4f6", color: lifelines.skip ? "#2b6777" : C.muted, border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: lifelines.skip ? "pointer" : "not-allowed" }}>
           Skip {!lifelines.skip ? "(used)" : ""}
         </button>
       </div>
@@ -12118,7 +10586,7 @@ function ListeningGame({ cards, onBack }) {
               if (isCorrect) { bg="#f0fdf4"; border="#16a34a"; col="#16a34a"; }
               else if (isSelected && !isCorrect) { bg="#fff1f1"; border="#dc2626"; col="#dc2626"; }
             } else if (isSelected) {
-              bg="#eff6ff"; border="#3b82f6"; col="#1d4ed8";
+              bg="#eff6ff"; border="#3b82f6"; col="#2b6777";
             }
             return (
               <button key={idx} onClick={() => choose(idx)} disabled={!!result || !hasPlayed}
@@ -12186,8 +10654,8 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
   const TTS_SERVER = _TTS_SERVER_URL;
   // Voices available from server (matches server.py VOICES dict)
   const SERVER_VOICES = [
-    { id:"aria",  label:"Aria",  gender:"female", color:"#1d4ed8", desc:"Warm & natural"   },
-    { id:"nova",  label:"Nova",  gender:"female", color:"#1d4ed8", desc:"Bright & clear"   },
+    { id:"aria",  label:"Aria",  gender:"female", color:"#2b6777", desc:"Warm & natural"   },
+    { id:"nova",  label:"Nova",  gender:"female", color:"#2b6777", desc:"Bright & clear"   },
     { id:"jade",  label:"Jade",  gender:"female", color:"#0f766e", desc:"Calm & smooth"    },
     { id:"echo",  label:"Echo",  gender:"male",   color:"#2563eb", desc:"Deep & confident" },
     { id:"atlas", label:"Atlas", gender:"male",   color:"#ea580c", desc:"Bold & clear"     },
@@ -12542,13 +11010,13 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
       {loading ? (
         <div style={{ padding:"48px 24px", textAlign:"center" }}>
           <div style={{ display:"flex", justifyContent:"center", gap:5, marginBottom:16 }}>
-            {[0,1,2,3].map(i => <span key={i} style={{ width:5, height:28, background:"#1d4ed8", borderRadius:3, display:"inline-block", animation:`ppbar 0.9s ease-in-out ${i*0.15}s infinite` }}/>)}
+            {[0,1,2,3].map(i => <span key={i} style={{ width:5, height:28, background:"#2b6777", borderRadius:3, display:"inline-block", animation:`ppbar 0.9s ease-in-out ${i*0.15}s infinite` }}/>)}
           </div>
           <p style={{ color:"#a5b4fc", fontSize:14, fontWeight:600 }}>Generating podcast script…</p>
         </div>
       ) : !script ? (
         <div style={{ padding:"40px 24px", textAlign:"center" }}>
-          <p style={{ color:"#1d4ed8", fontSize:14 }}>Generate a script to start the podcast.</p>
+          <p style={{ color:"#2b6777", fontSize:14 }}>Generate a script to start the podcast.</p>
         </div>
       ) : (
         <>
@@ -12556,9 +11024,9 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
           <div style={{ padding:"18px 20px 0", display:"flex", alignItems:"flex-start", justifyContent:"space-between" }}>
             <div>
               <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}>
-                <p style={{ fontSize:10, fontWeight:800, color:"#1d4ed8", letterSpacing:1.5, textTransform:"uppercase" }}>Study Podcast</p>
+                <p style={{ fontSize:10, fontWeight:800, color:"#2b6777", letterSpacing:1.5, textTransform:"uppercase" }}>Study Podcast</p>
                 {usePiper && (
-                  <span style={{ fontSize:9, background:"#1d4ed8", color:"#fff", borderRadius:6, padding:"1px 7px", fontWeight:800, letterSpacing:.5 }}>
+                  <span style={{ fontSize:9, background:"#2b6777", color:"#fff", borderRadius:6, padding:"1px 7px", fontWeight:800, letterSpacing:.5 }}>
                     PIPER
                   </span>
                 )}
@@ -12583,7 +11051,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
           {piperLoading && (
             <div style={{ margin:"12px 20px 0", background:"rgba(99,102,241,.15)", border:"1px solid rgba(99,102,241,.3)", borderRadius:10, padding:"10px 14px", display:"flex", alignItems:"center", gap:10 }}>
               <div style={{ display:"flex", gap:3 }}>
-                {[0,1,2].map(i => <span key={i} style={{ width:4, height:14, background:"#1d4ed8", borderRadius:2, display:"inline-block", animation:`ppbar 0.8s ease-in-out ${i*0.15}s infinite` }}/>)}
+                {[0,1,2].map(i => <span key={i} style={{ width:4, height:14, background:"#2b6777", borderRadius:2, display:"inline-block", animation:`ppbar 0.8s ease-in-out ${i*0.15}s infinite` }}/>)}
               </div>
               <p style={{ color:"#a5b4fc", fontSize:12, margin:0 }}>Generating audio… if slow, the server just restarted and is downloading voices. Wait ~60s then try again.</p>
             </div>
@@ -12607,7 +11075,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
             {/* Progress bar */}
             <div onClick={handleSeekBar} onTouchStart={handleSeekBar}
               style={{ height:6, background:"rgba(255,255,255,.1)", borderRadius:3, cursor:"pointer", marginBottom:16, position:"relative", userSelect:"none" }}>
-              <div style={{ height:"100%", width:`${progress*100}%`, background:"#1d4ed8", borderRadius:3, transition:"width .15s linear" }}/>
+              <div style={{ height:"100%", width:`${progress*100}%`, background:"#2b6777", borderRadius:3, transition:"width .15s linear" }}/>
               <div style={{ position:"absolute", top:"50%", left:`${progress*100}%`, transform:"translate(-50%,-50%)", width:13, height:13, borderRadius:"50%", background:"#fff", boxShadow:"0 0 6px rgba(99,102,241,.8)", pointerEvents:"none" }}/>
             </div>
 
@@ -12625,7 +11093,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
 
               {/* Play / Pause */}
               <button onClick={isPlaying ? handlePause : handlePlay} disabled={piperLoading}
-                style={{ width:60, height:60, borderRadius:"50%", background: piperLoading ? "rgba(99,102,241,.4)" : "#1d4ed8", border:"none", color:"#fff", cursor: piperLoading ? "not-allowed" : "pointer", boxShadow:"0 6px 24px rgba(99,102,241,.5)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                style={{ width:60, height:60, borderRadius:"50%", background: piperLoading ? "rgba(99,102,241,.4)" : "#2b6777", border:"none", color:"#fff", cursor: piperLoading ? "not-allowed" : "pointer", boxShadow:"0 6px 24px rgba(99,102,241,.5)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                 {piperLoading
                   ? <div style={{ display:"flex", gap:3 }}>{[0,1,2].map(i=><span key={i} style={{ width:3, height:12, background:"#fff", borderRadius:2, animation:`ppbar 0.8s ease-in-out ${i*0.15}s infinite` }}/>)}</div>
                   : isPlaying
@@ -12646,7 +11114,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
 
               {/* Voice picker toggle */}
               <button onClick={() => setShowPicker(v => !v)}
-                style={{ width:36, height:36, borderRadius:"50%", background:showPicker?"rgba(99,102,241,.5)":"rgba(255,255,255,.08)", border:`1.5px solid ${showPicker?"#1d4ed8":"rgba(255,255,255,.15)"}`, color:"#a5b4fc", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                style={{ width:36, height:36, borderRadius:"50%", background:showPicker?"rgba(99,102,241,.5)":"rgba(255,255,255,.08)", border:`1.5px solid ${showPicker?"#2b6777":"rgba(255,255,255,.15)"}`, color:"#a5b4fc", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
                   <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
@@ -12661,7 +11129,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
               <span style={{ fontSize:9, fontWeight:800, color:"#4b5563", marginRight:2, letterSpacing:1 }}>SPEED</span>
               {SPEEDS.map(s => (
                 <button key={s} onClick={() => changeSpeed(s)}
-                  style={{ padding:"3px 8px", borderRadius:8, border:`1.5px solid ${speed===s?"#1d4ed8":"rgba(255,255,255,.12)"}`, background:speed===s?"#1d4ed8":"transparent", color:speed===s?"#fff":"#818cf8", fontSize:11, fontWeight:700, cursor:"pointer" }}>
+                  style={{ padding:"3px 8px", borderRadius:8, border:`1.5px solid ${speed===s?"#2b6777":"rgba(255,255,255,.12)"}`, background:speed===s?"#2b6777":"transparent", color:speed===s?"#fff":"#818cf8", fontSize:11, fontWeight:700, cursor:"pointer" }}>
                   {s}×
                 </button>
               ))}
@@ -12676,8 +11144,8 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
                 <div style={{ display:"flex", gap:4, marginBottom:10, background:"rgba(255,255,255,.05)", borderRadius:10, padding:3 }}>
                   <button onClick={switchToPiper}
                     style={{ flex:1, padding:"5px 0", borderRadius:8, border:"none", cursor:"pointer", fontSize:10, fontWeight:800,
-                      background:usePiper?"#1d4ed8":"transparent",
-                      color:usePiper?"#fff":"#1d4ed8" }}>
+                      background:usePiper?"#2b6777":"transparent",
+                      color:usePiper?"#fff":"#2b6777" }}>
                     PIPER Neural
                   </button>
                   <button onClick={switchToBrowser}
@@ -12733,7 +11201,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
                 <>
                   <span style={{ width:10, height:10, borderRadius:"50%", background:serverVoice.color, display:"inline-block", boxShadow:`0 0 6px ${serverVoice.color}` }}/>
                   <span style={{ fontSize:11, color:"#c7d2fe", fontWeight:700 }}>{serverVoice.label}</span>
-                  <span style={{ fontSize:11, color:"#1d4ed8" }}>· {serverVoice.gender==="female"?"♀":"♂"} · {serverVoice.desc}</span>
+                  <span style={{ fontSize:11, color:"#2b6777" }}>· {serverVoice.gender==="female"?"♀":"♂"} · {serverVoice.desc}</span>
                   <span style={{ fontSize:9, background:"#31544c", color:"#c7d2fe", borderRadius:6, padding:"1px 7px", fontWeight:800 }}>PIPER</span>
                   {!piperReady && !piperLoading && <span style={{ fontSize:9, color:"#f59e0b" }}>▶ Press play to generate</span>}
                 </>
@@ -12741,7 +11209,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
                 <>
                   <span style={{ width:10, height:10, borderRadius:"50%", background:persona.color, display:"inline-block", boxShadow:`0 0 6px ${persona.color}` }}/>
                   <span style={{ fontSize:11, color:"#c7d2fe", fontWeight:700 }}>{persona.label}</span>
-                  <span style={{ fontSize:11, color:"#1d4ed8" }}>· {persona.gender==="female"?"♀":persona.gender==="male"?"♂":"◇"} · {persona.desc}</span>
+                  <span style={{ fontSize:11, color:"#2b6777" }}>· {persona.gender==="female"?"♀":persona.gender==="male"?"♂":"◇"} · {persona.desc}</span>
                 </>
               )}
             </div>
@@ -12750,7 +11218,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
           {/* No server banner */}
           {!usePiper && (
             <div style={{ margin:"0 12px 12px", background:"rgba(99,102,241,.08)", border:"1px dashed rgba(99,102,241,.3)", borderRadius:10, padding:"8px 12px", textAlign:"center" }}>
-              <p style={{ color:"#1d4ed8", fontSize:11, margin:0 }}>
+              <p style={{ color:"#2b6777", fontSize:11, margin:0 }}>
                 Browser voices are available on this device.
               </p>
             </div>
@@ -12758,7 +11226,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
 
           {/* Script viewer */}
           <details style={{ borderTop:"1px solid rgba(255,255,255,.06)" }}>
-            <summary style={{ padding:"10px 20px", color:"#1d4ed8", fontSize:12, fontWeight:700, cursor:"pointer", userSelect:"none", letterSpacing:.5 }}>READ SCRIPT</summary>
+            <summary style={{ padding:"10px 20px", color:"#2b6777", fontSize:12, fontWeight:700, cursor:"pointer", userSelect:"none", letterSpacing:.5 }}>READ SCRIPT</summary>
             <div style={{ padding:"0 20px 20px", maxHeight:200, overflowY:"auto" }}>
               <p style={{ fontSize:13, color:"#c7d2fe", lineHeight:1.9, whiteSpace:"pre-wrap" }}>{script}</p>
             </div>
@@ -12948,7 +11416,7 @@ Be conversational. Under 120 words. No markdown, no asterisks.`,
             width:48, height:48, borderRadius:"50%", flexShrink:0, border:"none", cursor:loading?"not-allowed":"pointer",
             background: listening
               ? "linear-gradient(135deg,#ef4444,#dc2626)"
-              : "#1d4ed8",
+              : "#2b6777",
             boxShadow: listening
               ? "0 0 0 6px rgba(239,68,68,.25), 0 4px 16px rgba(239,68,68,.4)"
               : "0 4px 16px rgba(99,102,241,.5)",
@@ -14262,7 +12730,7 @@ function SGAIFlashcardGen({ groupId, db, user, groupFile, onClose }) {
                 background:gen||(!groupFile&&!topic.trim())?"#ccc":PRIMARY, color:"#fff", border:"none", borderRadius:8,
                 padding:"12px", fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer",
                 display:"flex", alignItems:"center", justifyContent:"center", gap:8,
-                opacity:(!groupFile&&!topic.trim())?.5:1, boxShadow:"0 4px 14px rgba(29,78,216,.3)",
+                opacity:(!groupFile&&!topic.trim())?.5:1, boxShadow:"0 4px 14px rgba(43,103,119,.3)",
               }}>
                 {gen?<><SGSpinner color="#fff"/>Generating…</>:<><Icon d={I.sparkle} size={13} color="#fff"/> Generate {cardCount} Cards</>}
               </button>
@@ -14432,7 +12900,7 @@ Math: proper notation (1×10⁻¹⁰ not words, H₂O not words). Units: standar
             background:gen||(!groupFile&&!topic.trim())?"#ccc":PRIMARY, color:"#fff", border:"none", borderRadius:8,
             padding:"12px", fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer",
             display:"flex", alignItems:"center", justifyContent:"center", gap:8,
-            opacity:(!groupFile&&!topic.trim())?.5:1, boxShadow:"0 4px 14px rgba(29,78,216,.3)",
+            opacity:(!groupFile&&!topic.trim())?.5:1, boxShadow:"0 4px 14px rgba(43,103,119,.3)",
           }}>
             {gen?<><SGSpinner color="#fff"/>Generating notes…</>:<><Icon d={I.sparkle} size={13} color="#fff"/> Generate Notes</>}
           </button>

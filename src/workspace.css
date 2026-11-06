@@ -1,20 +1,20 @@
 :root {
-  --paper: var(--theme-bg, #f8fafc); --ink: var(--theme-text, #17243b); --muted: var(--theme-muted, #52627a);
-  --line: var(--theme-border, #dbe4ef); --surface: var(--theme-surface, #fff); --brand: #1d4ed8; --soft-blue: #eff6ff;
+  --paper: var(--theme-bg, #f2f2f2); --ink: var(--theme-text, #183a44); --muted: var(--theme-muted, #52627a);
+  --line: var(--theme-border, #dbe4ef); --surface: var(--theme-surface, #fff); --brand: #2b6777; --soft-blue: #e7eff3;
   --radius: 18px; color-scheme: light;
 }
-:root[data-theme="dark"] { color-scheme: dark; --soft-blue: #172e50; }
+:root[data-theme="dark"] { color-scheme: dark; --soft-blue: #25464f; }
 body { background: var(--paper); color: var(--ink); }
 button, input, textarea, select { font: inherit; }
 button, a, input, textarea, select, summary { -webkit-tap-highlight-color: transparent; }
 button { touch-action: manipulation; }
 button, a { transition: background-color .16s, color .16s, border-color .16s, box-shadow .16s; }
 button:disabled { cursor: not-allowed; }
-:focus-visible { outline: 3px solid #60a5fa; outline-offset: 3px; }
-input, textarea, select { min-width: 0; max-width: 100%; accent-color: #2563eb; }
+:focus-visible { outline: 3px solid #52ab98; outline-offset: 3px; }
+input, textarea, select { min-width: 0; max-width: 100%; accent-color: #235967; }
 input, textarea, select, .classio-dialog { color: var(--ink); background: var(--surface); border-color: var(--line); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.classio-dialog { border: 1px solid var(--line); border-radius: 22px; width: min(460px, calc(100vw - 24px)); max-width: calc(100vw - 24px); max-height: calc(100dvh - 24px); padding: 24px; box-shadow: 0 24px 70px #0f172a33; overflow-y: auto; overscroll-behavior: contain; }
+.classio-dialog { margin:auto; border: 1px solid var(--line); border-radius: 22px; width: min(460px, calc(100vw - 24px)); max-width: calc(100vw - 24px); max-height: calc(100dvh - 24px); padding: 24px; box-shadow: 0 24px 70px #0f172a33; overflow-y: auto; overscroll-behavior: contain; }
 .classio-dialog::backdrop { background: #07142799; backdrop-filter: blur(3px); }
 .dialog-close { position: absolute; top: 10px; right: 10px; width: 40px; height: 40px; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--ink); font-size: 24px; z-index: 2; cursor: pointer; }
 .classio-dialog h2 { padding-right: 24px; }
@@ -42,7 +42,7 @@ input, textarea, select, .classio-dialog { color: var(--ink); background: var(--
 .assistant-messages { flex: 1; min-height: 60px; padding: 16px 24px; overflow-y: auto; overscroll-behavior: contain; border-block: 1px solid var(--line); }
 .assistant-empty { padding: 32px 8px; max-width: 380px; margin: auto; text-align: center; color: var(--muted); line-height: 1.6; }
 .chat-message { max-width: 94%; margin-bottom: 18px; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); overflow-wrap: anywhere; line-height: 1.6; }
-.chat-message.user { margin-left: auto; background: var(--soft-blue); }
+.chat-message.user { margin-inline-start: auto; background: var(--soft-blue); }
 .chat-message > strong { display: block; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
 .chat-message img { max-width: 100%; max-height: 200px; object-fit: contain; }
 .chat-message pre, .chat-message table { display: block; max-width: 100%; overflow-x: auto; }
@@ -53,7 +53,7 @@ input, textarea, select, .classio-dialog { color: var(--ink); background: var(--
 .attachment-control input { margin-left: 8px; max-width: 250px; }
 .assistant-save-state { padding: 4px 24px 12px; margin: 0; font-size: 12px; color: var(--muted); }
 .inline-error { padding: 4px 24px; color: var(--theme-red); }
-.workspace-warning { background: var(--soft-blue); color: var(--ink); border-color: #60a5fa; line-height: 1.5; border-radius: 10px; }
+.workspace-warning { background: var(--soft-blue); color: var(--ink); border-color: #52ab98; line-height: 1.5; border-radius: 10px; }
 .workspace-warning button { margin-left: 12px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; cursor: pointer; }
 .mobile-header { position: fixed; inset: 0 0 auto; z-index: 350; height: 56px; display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; background: var(--surface); color: var(--ink); border-bottom: 1px solid var(--line); }
 .mobile-header > a { color: inherit; text-decoration: none; font: 700 22px 'Fraunces Variable', Georgia, serif; }
@@ -62,7 +62,7 @@ input, textarea, select, .classio-dialog { color: var(--ink); background: var(--
 .navigation-drawer nav { display: grid; gap: 5px; margin: 16px 0; }
 .navigation-drawer nav + nav { border-top: 1px solid var(--line); padding-top: 12px; }
 .navigation-drawer nav h3 { margin: 4px 12px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
-.navigation-drawer button:not(.dialog-close) { display: flex; align-items: center; gap: 12px; padding: 12px; border: 0; border-radius: 10px; color: var(--ink); background: transparent; text-align: left; cursor: pointer; }
+.navigation-drawer button:not(.dialog-close) { display: flex; align-items: center; gap: 12px; padding: 12px; border: 0; border-radius: 10px; color: var(--ink); background: transparent; text-align: start; cursor: pointer; }
 .navigation-drawer button:hover, .navigation-drawer button[aria-current] { background: var(--soft-blue); }
 .drawer-account { border-top: 1px solid var(--line); display: grid; padding-top: 12px; }
 .youtube-preview { padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); margin-bottom: 20px; }
@@ -70,7 +70,23 @@ input, textarea, select, .classio-dialog { color: var(--ink); background: var(--
 .youtube-preview iframe { width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 10px; }
 .youtube-preview p { color: var(--muted); line-height: 1.5; font-size: 13px; }
 .youtube-preview a { color: var(--theme-accent); }
-body.classio-dark button[style*="background: rgb(147, 197, 253)"], body.classio-dark button[style*="background-color: rgb(147, 197, 253)"] { color: #0f172a !important; }
+body.classio-dark button[style*="background: rgb(166, 214, 209)"], body.classio-dark button[style*="background-color: rgb(166, 214, 209)"] { color: #11282f !important; }
 @media (max-width: 640px) { .assistant-header, .assistant-toolbar, .assistant-messages { padding: 14px; } .assistant-composer { padding: 10px 14px; } .assistant-header h2 { font-size: 23px; } .classio-dialog { padding: 18px; } .assistant-dialog { padding: 0; } .course-form { padding: 14px; } .page-inner { padding: 18px 12px !important; } }
 @media (pointer: coarse) { input, textarea, select { font-size: 16px !important; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+/* Supplied Classio palette: ink #2b6777, mist #c8d8e4, paper #fff/#f2f2f2, mint #52ab98. */
+:root { --brand:#2b6777; --soft-blue:var(--theme-accentL); --palette-mist:#c8d8e4; --palette-mint:#52ab98; }
+.language-settings { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:22px; }
+.language-settings label { display:grid; gap:9px; font-size:14px; font-weight:650; }
+.language-settings select { width:100%; padding:11px 12px; border:1px solid var(--theme-border); border-radius:10px; background:var(--paper); color:var(--ink); }
+.language-settings span,.language-settings > p { color:var(--muted); font-size:12px; font-weight:400; line-height:1.6; }
+.language-settings > p { grid-column:1/-1; margin:0; }
+[dir=rtl] .classio-dialog.navigation-drawer { margin-inline-start:0; margin-inline-end:auto; border-radius:20px 0 0 20px; }
+[dir=rtl] .dialog-close { right:auto; left:10px; }
+[dir=rtl] .classio-dialog h2 { padding-right:0; padding-left:24px; }
+[dir=rtl] .assistant-toolbar,[dir=rtl] .assistant-composer { text-align:start; }
+[dir=rtl] .avatar-stage { border-right:0; }
+@media(max-width:640px) { .language-settings { grid-template-columns:minmax(0,1fr); } }
+
+.settings-secondary-button { padding:9px 14px; border:1px solid var(--line); color:var(--ink); background:var(--soft-blue); border-radius:10px; cursor:pointer; margin-top:10px; }
+.settings-secondary-button:hover { border-color:var(--theme-accent); }

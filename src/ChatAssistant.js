@@ -4,11 +4,13 @@ import { auth, db } from './firebase';
 import { makeStudyId, sendStudyRequest } from './studyTools';
 import Dialog from './Dialog';
 import AISettings from './AISettings';
+import { useLocale } from './locale';
 import { markdownToNoteHtml } from './noteFormat';
 
 function readCache(key) { try { return JSON.parse(sessionStorage.getItem(key) || 'null'); } catch { return null; } }
 
 export default function ChatAssistant({ onClose, onCreateCourse, renderMessage }) {
+  const { t } = useLocale();
   const uid = auth.currentUser?.uid;
   const key = 'classio_chat:' + (uid || 'guest');
   const cached = readCache(key);
@@ -42,7 +44,7 @@ export default function ChatAssistant({ onClose, onCreateCourse, renderMessage }
   useEffect(() => () => request.current?.abort(), []);
 
   async function persist(next, id) {
-    const value = { messages: next.map(({ image, ...message }) => message), title: next.find(message => message.role === 'user')?.content.slice(0, 70) || 'New conversation', updatedAt: Date.now() };
+    const value = { messages: next.map(({ image, ...message }) => message), title: next.find(message => message.role === 'user')?.content.slice(0, 70) || t('New conversation'), updatedAt: Date.now() };
     revision.current = value.updatedAt;
     setConversations(previous => [{ id, ...value }, ...previous.filter(item => item.id !== id)]);
     if (!uid) return;
@@ -76,32 +78,32 @@ export default function ChatAssistant({ onClose, onCreateCourse, renderMessage }
     window.addEventListener('classio-ai-result', listener);
     return () => window.removeEventListener('classio-ai-result', listener);
   }, []);
-  return <Dialog onClose={onClose} label="AI Assistant" className="assistant-dialog">
-    <header className="assistant-header"><p className="entry-kicker">Room to think</p><h2>AI Assistant</h2><p>Work through a question. Find a clearer explanation.</p></header>
-    <div className="assistant-toolbar"><label>Conversation<select value={selected} disabled={loading} onChange={event => { const id = event.target.value; setSelected(id); setMessages(conversations.find(item => item.id === id)?.messages || []); setError(''); }}><option value={selected}>{conversations.find(item => item.id === selected)?.title || 'New conversation'}</option>{conversations.filter(item => item.id !== selected).map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
-      <button type="button" disabled={loading} onClick={() => { setSelected(makeStudyId()); setMessages([]); setError(''); }}>New chat</button>
-      {onCreateCourse && <button type="button" disabled={loading} onClick={onCreateCourse}>Create course</button>}
+  return <Dialog onClose={onClose} label={t("AI Assistant")} className="assistant-dialog">
+    <header className="assistant-header"><p className="entry-kicker">{t("Room to think")}</p><h2>{t("AI Assistant")}</h2><p>{t("Work through a question. Find a clearer explanation.")}</p></header>
+    <div className="assistant-toolbar"><label>{t("Conversation")}<select value={selected} disabled={loading} onChange={event => { const id = event.target.value; setSelected(id); setMessages(conversations.find(item => item.id === id)?.messages || []); setError(''); }}><option value={selected}>{conversations.find(item => item.id === selected)?.title || t('New conversation')}</option>{conversations.filter(item => item.id !== selected).map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
+      <button type="button" disabled={loading} onClick={() => { setSelected(makeStudyId()); setMessages([]); setError(''); }}>{t("New chat")}</button>
+      {onCreateCourse && <button type="button" disabled={loading} onClick={onCreateCourse}>{t("Create course")}</button>}
     </div>
-    <details className="assistant-settings"><summary>Provider & privacy</summary><AISettings /></details>
-    <div className="assistant-messages" role="log" aria-label="Conversation messages" aria-busy={loading}>
-      {!messages.length && <div className="assistant-empty"><h3>What are you curious about?</h3><p>Ask a question or attach an image of a problem. Your materials stay yours.</p></div>}
-      {messages.map((message, index) => <article key={index} className={`chat-message ${message.role}`} aria-label={message.role === 'user' ? 'You' : 'Classio'}>
-        <strong>{message.role === 'user' ? 'You' : 'Classio'}</strong>{message.image && <img src={message.image} alt="Your attachment" />}
+    <details className="assistant-settings"><summary>{t("Provider & privacy")}</summary><AISettings /></details>
+    <div className="assistant-messages" role="log" aria-label={t("Conversation messages")} aria-busy={loading}>
+      {!messages.length && <div className="assistant-empty"><h3>{t("What are you curious about?")}</h3><p>{t("Ask a question or attach an image of a problem. Your materials stay yours.")}</p></div>}
+      {messages.map((message, index) => <article dir="auto" key={index} className={`chat-message ${message.role}`} aria-label={message.role === 'user' ? t('You') : 'Classio'}>
+        <strong>{message.role === 'user' ? t('You') : 'Classio'}</strong>{message.image && <img src={message.image} alt={t("Your attachment")} />}
         {renderMessage ? renderMessage(message.content) : <div className="markdown-content" dangerouslySetInnerHTML={{ __html: markdownToNoteHtml(message.content) }} />}
       </article>)}
-      {loading && <p role="status">Thinking through your question…</p>}<div ref={bottom} />
+      {loading && <p role="status">{t("Thinking through your question…")}</p>}<div ref={bottom} />
     </div>
-    {error && <p role="alert" className="inline-error">{error} Your question is ready to retry.</p>}
+    {error && <p role="alert" className="inline-error">{error} {t("Your question is ready to retry.")}</p>}
     <form className="assistant-composer" onSubmit={event => { event.preventDefault(); send(); }}>
-      <label className="attachment-control">Attach image<input aria-label="Attach image" type="file" accept="image/png,image/jpeg,image/webp" disabled={loading} onChange={event => {
+      <label className="attachment-control">{t("Attach image")}<input aria-label={t("Attach image")} type="file" accept="image/png,image/jpeg,image/webp" disabled={loading} onChange={event => {
         const file = event.target.files[0];
         if (!file) return;
         if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 2700000) { setError('Choose a PNG, JPEG or WebP image under 2.7 MB.'); return; }
         const reader = new FileReader(); reader.onload = () => setImage(reader.result); reader.readAsDataURL(file); event.target.value = '';
       }} /></label>
-      {image && <button type="button" onClick={() => setImage(null)}>Remove attachment</button>}
-      <label className="sr-only" htmlFor="assistant-question">Your message</label><textarea id="assistant-question" value={input} onChange={event => setInput(event.target.value)} placeholder="Ask a question…" maxLength={12000} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); send(); } }} />
-      <button type="submit" disabled={loading || (!input.trim() && !image)}>{loading ? 'Thinking…' : error ? 'Retry' : 'Send'}</button>
-    </form><p className="assistant-save-state" role="status">{saving}{provider && ` · ${provider}`}</p>
+      {image && <button type="button" onClick={() => setImage(null)}>{t("Remove attachment")}</button>}
+      <label className="sr-only" htmlFor="assistant-question">{t("Your message")}</label><textarea dir="auto" id="assistant-question" value={input} onChange={event => setInput(event.target.value)} placeholder={t("Ask a question…")} maxLength={12000} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); send(); } }} />
+      <button type="submit" disabled={loading || (!input.trim() && !image)}>{t(loading ? 'Thinking…' : error ? 'Retry' : 'Send')}</button>
+    </form><p className="assistant-save-state" role="status">{t(saving)}{provider && ` · ${provider}`}</p>
   </Dialog>;
 }

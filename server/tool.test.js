@@ -67,3 +67,18 @@ test('a failed database write never returns saved:true or exposes backend except
   assert.notEqual(result.body.saved, true);
   assert.doesNotMatch(JSON.stringify(result.body), /private backend/);
 });
+
+
+test('course language is validated before execution and forwarded to the provider prompt', async context => {
+  database(context);
+  const fetch = context.mock.method(global, 'fetch', async (_url, options) => {
+    assert.match(JSON.parse(options.body).messages[0].content, /Respond in Arabic/);
+    return { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify([unit, unit]) } }] }) };
+  });
+  const invalid = body(); invalid.arguments.language = 'arbitrary instruction';
+  assert.equal((await invoke(invalid)).status, 400);
+  assert.equal(fetch.mock.callCount(), 0);
+  const valid = body(); valid.arguments.language = 'Arabic';
+  assert.equal((await invoke(valid)).status, 200);
+  assert.equal(fetch.mock.callCount(), 1);
+});
