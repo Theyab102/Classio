@@ -76,7 +76,11 @@
     "image-size": "2.0.4",
     "postcss@^8.0.0": "8.5.32",
     "serialize-javascript": "7.1.4",
-    "underscore": "1.13.8"
+    "underscore": "1.13.8",
+    "@svgr/webpack": "8.1.0",
+    "resolve-url-loader": "5.0.0",
+    "webpack-dev-server": "5.2.6",
+    "webpack-dev-middleware": "7.4.5"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",

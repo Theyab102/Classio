@@ -1,3 +1,4 @@
+import {useLocale} from './locale';
 const operator = process.env.REACT_APP_CLASSIO_OPERATOR || "Classio";
 const contactEmail = process.env.REACT_APP_CLASSIO_CONTACT_EMAIL;
 const copyrightEmail = process.env.REACT_APP_CLASSIO_COPYRIGHT_EMAIL || contactEmail;
@@ -76,11 +77,12 @@ export const legalPages = {
 };
 
 export function LegalLinks() {
+  const {t}=useLocale();
   return (
-    <footer className="legal-links" aria-label="Policies">
-      <a href="/privacy">Privacy Policy</a>
-      <a href="/terms">Terms and Conditions</a>
-      <a href="/copyright">Copyright</a>
+    <footer className="legal-links" aria-label={t('Policies')}>
+      <a href="/privacy">{t('Privacy Policy')}</a>
+      <a href="/terms">{t('Terms and Conditions')}</a>
+      <a href="/copyright">{t('Copyright')}</a>
     </footer>
   );
 }

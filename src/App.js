@@ -5,6 +5,7 @@ import katex from "katex";
 import "katex/dist/katex.min.css";
 import { LegalLinks } from "./Legal";
 import LearnMode from "./LearnMode";
+import StudyQuiz from "./StudyQuiz";
 import Avatar, { avatarDefaults } from "./Avatar";
 import AvatarEditor from "./AvatarEditor";
 import LanguageSettings from "./LanguageSettings";
@@ -37,6 +38,7 @@ import { AnnotatedDeckSlide, DeckDesignPicker, DeckSlide, deckDesigns, normalize
 import { getPdfFigures, isPdfFile, likelyStudyImage, prepareNoteImage, safeImageSource, searchStudyImages } from "./documentMedia";
 import { escapeHtml, sanitizeDocumentHtml } from "./safeContent";
 import { signOut, onAuthStateChanged } from "firebase/auth";
+import { watchVerificationSync } from "./verificationSync";
 import { auth, db, authReady, authError, signInGoogle, linkVerification } from "./firebase";
 import { migrateWorkspace, loadWorkspace, watchWorkspace, saveWorkspace, recallOriginal } from "./cloudWorkspace";
 import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot, updateDoc, deleteDoc, serverTimestamp, query, orderBy, limit, getDocs, arrayUnion } from "firebase/firestore";
@@ -1223,8 +1225,8 @@ async function attachBlobs(raw) {
 }
 
 // ─── STANDALONE AI ASSISTANT ─────────────────────────────────────────────────
-function StandaloneAI({ onClose, onCreateCourse }) {
-  return <ChatAssistant onClose={onClose} onCreateCourse={onCreateCourse} renderMessage={text => <Fmt text={text} />} />;
+function StandaloneAI({ onClose, onCreateCourse, files, onOpenFile, getFileText }) {
+  return <ChatAssistant onClose={onClose} onCreateCourse={onCreateCourse} files={files} onOpenFile={onOpenFile} getFileText={getFileText} renderMessage={text => <Fmt text={text} />} />;
 }
 
 // ─── SETTINGS TAB ─────────────────────────────────────────────────────────────
@@ -2650,10 +2652,12 @@ export default function App() {
     let active = true;
     let revision = 0;
     let stopWatching = () => {};
+    let stopVerification = () => {};
     const unsubscribe = onAuthStateChanged(auth, async account => {
       const current = ++revision;
       saveRevision.current++;
       stopWatching();
+      stopVerification();
       clearTimeout(saveTimer.current);
       cloudPending.current = false;
       pendingUploads.current = [];
@@ -2681,8 +2685,11 @@ export default function App() {
       let cached = null;
       try { cached = JSON.parse(localStorage.getItem(workspaceCacheKey(account.uid))); } catch {}
       let remote = [], raw = cached?.folders || [], warning = '';
-      try { await linkVerification(); }
-      catch { warning = 'This browser is verified. Account-level verification could not sync; the operator may need to configure Firebase Admin.'; }
+      const verificationMessage='Your verification is saved in this browser. Account sync will retry when you’re online.';
+      stopVerification=watchVerificationSync(account.uid,status=>{
+        if(!active||current!==revision||auth.currentUser?.uid!==account.uid)return;
+        setWorkspaceWarning(previous=>status==='synced'?previous.replace(verificationMessage,'').trim():previous.includes(verificationMessage)?previous:(previous?previous+' ':'')+verificationMessage);
+      });
       try {
         await migrateWorkspace(account.uid);
         remote = await loadWorkspace(account.uid);
@@ -2718,7 +2725,7 @@ export default function App() {
       }, () => setWorkspaceWarning('Live cloud sync lost its connection. Your local changes are kept; retry when online.'));
     });
     authReady.catch(error => { if (active) setSignInError(authError(error)); });
-    return () => { active = false; unsubscribe(); stopWatching(); clearTimeout(saveTimer.current); };
+    return () => { active = false; unsubscribe(); stopWatching(); stopVerification(); clearTimeout(saveTimer.current); };
   }, []);
 
   function setFoldersSave(next) {
@@ -2974,7 +2981,7 @@ export default function App() {
         fileTab={fileTab} onFileTab={setFileTab}
         folder={activeFolder} file={activeFile}
       />
-      {showHomeAI && <StandaloneAI onClose={() => setShowHomeAI(false)} onCreateCourse={() => { setShowHomeAI(false); startCourse(); }} />}
+      {showHomeAI && <StandaloneAI files={folders.flatMap(folder=>folder.files)} onOpenFile={openAgentFile} getFileText={readAgentSource} onClose={() => setShowHomeAI(false)} onCreateCourse={() => { setShowHomeAI(false); startCourse(); }} />}
       {showSearch && <CommandSearch folders={folders} onOpenFile={handleOpenFileFromSearch2} onClose={()=>setShowSearch(false)} />}
       {showCharacter && <CharacterModal character={character} onChange={saveCharacter} onClose={() => setShowCharacter(false)} />}
       <div style={{
@@ -3040,6 +3047,26 @@ export default function App() {
     else if (id==="guides") { setHomeTab("about"); setScreen("home"); }
     else if (id==="settings") { setHomeTab("settings"); setScreen("home"); }
   };
+
+  async function readAgentSource(file) {
+    let original=file._fileObj||FILE_STORE.get(file.id);
+    if(!original&&file.cloudFile&&auth.currentUser)original=await recallOriginal(auth.currentUser.uid,file);
+    return (file.notes||await extractFileText(original)||"" ).slice(0,20000);
+  }
+
+  async function openAgentFile(result) {
+    const uid=auth.currentUser?.uid;
+    if(!uid||!result||!/^[-A-Za-z0-9_.]{1,150}$/.test(result.fileId||""))throw new Error(tr("Sign in to use account study tools."));
+    const file=(await getDoc(doc(db,"users",uid,"files",result.fileId))).data();
+    if(auth.currentUser?.uid!==uid)throw new Error(tr("Your account changed. Sign in again before syncing."));
+    if(!file||file._deleted||!/^[-A-Za-z0-9_.]{1,150}$/.test(file.folderId||""))throw new Error(tr("The saved file is unavailable. Refresh your workspace and retry."));
+    let folder=foldersRef.current.find(item=>item.id===file.folderId);
+    if(!folder){const metadata=(await getDoc(doc(db,"users",uid,"folders",file.folderId))).data();if(metadata&&!metadata._deleted)folder={...metadata,files:[]};}
+    if(!folder||auth.currentUser?.uid!==uid)throw new Error(tr("The saved file is unavailable. Refresh your workspace and retry."));
+    folder={...folder,files:[...(folder.files||[]).filter(item=>item.id!==file.id),file]};
+    replaceFolders([...foldersRef.current.filter(item=>item.id!==folder.id),folder]);
+    setShowHomeAI(false);setActiveFolder(folder);setActiveFile(file);setFileTab(file.defaultTab||"notes");setScreen("file");
+  }
 
   function startCourse() {
     const inbox = foldersRef.current.find(folder => folder.id === "inbox") ||
@@ -3310,7 +3337,7 @@ export default function App() {
           </div>
         )}
 
-      {showHomeAI && <StandaloneAI onClose={() => setShowHomeAI(false)} onCreateCourse={() => { setShowHomeAI(false); startCourse(); }} />}
+      {showHomeAI && <StandaloneAI files={folders.flatMap(folder=>folder.files)} onOpenFile={openAgentFile} getFileText={readAgentSource} onClose={() => setShowHomeAI(false)} onCreateCourse={() => { setShowHomeAI(false); startCourse(); }} />}
 
       {confirmDelete && (
         <ConfirmDialog
@@ -4121,8 +4148,8 @@ function FileView({ file: sourceFile, folder, allFiles, user, isGuest, onBack, o
         if (effectiveTab === "view") return <ViewTab file={file} onUpdate={onUpdate} />;
         return (
           <div className={effectiveTab==="notes" ? "page-inner document-study-page" : "page-inner"} style={{ maxWidth:effectiveTab==="notes" ? "none" : 900, margin:"0 auto", padding:effectiveTab==="notes" ? "12px 18px" : "32px 24px", overflow:"visible" }}>
-            {effectiveTab==="learn" && <LearnMode key={file.id} file={file} onUpdate={onUpdate}
-              getFileText={() => extractFileText(file._fileObj || FILE_STORE.get(file.id))} />}
+            {effectiveTab==="learn" && (file.studyQuiz?<StudyQuiz key={file.id} file={file} onUpdate={onUpdate}/>:<LearnMode key={file.id} file={file} onUpdate={onUpdate}
+              getFileText={() => extractFileText(file._fileObj || FILE_STORE.get(file.id))} />)}
             {effectiveTab==="notes" && <div key="notes" className="page-fade"><NotesTab key={file.id} file={file} onUpdate={onUpdate} user={user} isGuest={isGuest} onTabChange={setTab} onBack={handleBack} /></div>}
             {effectiveTab==="voice" && <div key="voice" className="page-fade"><VoicePodcastTab file={file} onUpdate={onUpdate} user={user} /></div>}
             {effectiveTab==="cards" && <div key="cards" className="page-fade"><CardsTab file={file} onUpdate={onUpdate} /></div>}

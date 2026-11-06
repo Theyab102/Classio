@@ -1,5 +1,4 @@
 const { createHmac, timingSafeEqual } = require('node:crypto');
-const admin = require('./admin');
 
 const COOKIE = 'classio_access_v2';
 const TERMS_VERSION = '2026-11-06';
@@ -21,7 +20,7 @@ function readAccess(req) {
     const actual = Buffer.from(signature, 'base64url');
     if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return null;
     const claim = JSON.parse(Buffer.from(body, 'base64url').toString());
-    if (claim.exp <= Date.now() || claim.version !== TERMS_VERSION || !['eligible', 'accepted', 'blocked'].includes(claim.stage)) return null;
+    if (!Number.isFinite(claim.exp) || claim.exp <= Date.now() || claim.version !== TERMS_VERSION || !['eligible', 'accepted', 'blocked'].includes(claim.stage)) return null;
     return claim;
   } catch { return null; }
 }
@@ -41,7 +40,7 @@ async function authenticatedUser(req, required = false) {
   }
   try {
     if (typeof header !== 'string' || !header.startsWith('Bearer ') || header.length > 10000) throw new Error();
-    const token = await admin.identity().verifyIdToken(header.slice(7), true);
+    const token = await require('./admin').identity().verifyIdToken(header.slice(7), true);
     if (!token.uid || token.firebase?.sign_in_provider !== 'google.com' || !token.email_verified) throw new Error();
     return token;
   } catch {
@@ -52,7 +51,7 @@ async function authenticatedUser(req, required = false) {
 async function requireAccess(req, { account = false } = {}) {
   const user = await authenticatedUser(req, account);
   if (user) {
-    const snap = await admin.database().doc(`users/${user.uid}/access/verification`).get();
+    const snap = await require('./admin').database().doc(`users/${user.uid}/access/verification`).get();
     const record = snap.data();
     if (record?.stage === 'accepted' && record.version === TERMS_VERSION) return { user, ...record };
   }
@@ -61,4 +60,4 @@ async function requireAccess(req, { account = false } = {}) {
   throw Object.assign(new Error('Complete the eligibility and terms steps before using AI.'), { status: 403, code: 'VERIFICATION_REQUIRED' });
 }
 
-module.exports = { readAccess, setAccess, requireAccess, authenticatedUser, TERMS_VERSION };
+module.exports = { readAccess, setAccess, requireAccess, authenticatedUser, TERMS_VERSION, assertAccessConfiguration: () => { signingKey(); } };

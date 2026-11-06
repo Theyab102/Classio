@@ -76,3 +76,20 @@ test('account verification restores to a fresh browser without storing a birth d
   assert.equal(result.status, 200);
   assert.equal(readAccess({ headers: { cookie: result.headers['Set-Cookie'] } }).stage, 'accepted');
 });
+
+test('guest eligibility works independently of Firebase Admin and all AI credentials',async context=>{
+  context.mock.method(admin,'database',()=>{throw new Error('Admin must not load for guest screening');});
+  context.mock.method(admin,'identity',()=>{throw new Error('Auth must not load for guest screening');});
+  assert.equal((await invoke()).body.stage,'new');
+  const eligible=await invoke({action:'screen',birthDate:'2000-01-01'});
+  const accepted=await invoke({action:'accept',termsAccepted:true},eligible.headers['Set-Cookie']);
+  assert.equal((await invoke(null,accepted.headers['Set-Cookie'])).body.stage,'accepted');
+});
+test('missing signing configuration is a safe explicit service failure, never a new or accepted decision',async context=>{
+  const session=process.env.CLASSIO_SESSION_SECRET,quota=process.env.AI_RATE_LIMIT_SECRET;
+  context.mock.method(console,'error',()=>{});
+  try{
+    delete process.env.CLASSIO_SESSION_SECRET;delete process.env.AI_RATE_LIMIT_SECRET;
+    const result=await invoke();assert.equal(result.status,503);assert.equal(result.body.code,'VERIFICATION_CONFIG_MISSING');assert.equal(result.body.stage,undefined);
+  }finally{process.env.CLASSIO_SESSION_SECRET=session;if(quota===undefined)delete process.env.AI_RATE_LIMIT_SECRET;else process.env.AI_RATE_LIMIT_SECRET=quota;}
+});

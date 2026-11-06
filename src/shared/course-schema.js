@@ -1,6 +1,6 @@
-function parseCourse(raw, expectedCount) {
+function parseCourse(raw, expectedCount, maxCount = 8) {
   const value = JSON.parse(raw.replace(/^\s*```(?:json)?\s*|\s*```\s*$/gi, ''));
-  if (!Array.isArray(value) || value.length < 2 || value.length > 8 || (expectedCount && value.length !== expectedCount)) throw new Error('The AI returned an incomplete course. Try again.');
+  if (!Array.isArray(value) || value.length < 2 || value.length > maxCount || (expectedCount && value.length !== expectedCount)) throw new Error('The AI returned an incomplete course. Try again.');
   const text = (value, max) => {
     if (typeof value !== 'string' || !value.trim() || value.length > max) throw new Error('The AI returned an incomplete lesson. Try again.');
     return value.trim();

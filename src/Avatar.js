@@ -1,6 +1,7 @@
 import { memo, useId } from 'react';
+import VillageAvatar from './VillageAvatar';
 
-export const avatarDefaults = { portraitStyle:0, eyeSize:1, noseSize:1, mouthSize:1, browHeight:0, skin:'#edc19c', hair:'#3d2b24', hairStyle:1, eyes:'#476775', top:'#2b6777', bg:'#c8d8e4', mouth:0, eyebrow:0, eyeShape:0, faceShape:0, nose:0, eyeSpacing:0, mouthPosition:0, topStyle:0, blush:false, lips:false, freckles:false, lipColor:'#b96669', hat:0, hatColor:'#2b6777', glasses:0, glassesColor:'#31434a', facialHair:0, necklace:0, necklaceColor:'#d4ad62', earring:0, earringColor:'#d4ad62', name:'' };
+export const avatarDefaults = { portraitStyle:2, species:0, tuftStyle:1, fur:'#c89469', eyeSize:1, noseSize:1, mouthSize:1, browHeight:0, skin:'#edc19c', hair:'#3d2b24', hairStyle:1, eyes:'#476775', top:'#2b6777', bg:'#c8d8e4', mouth:0, eyebrow:0, eyeShape:0, faceShape:0, nose:0, eyeSpacing:0, mouthPosition:0, topStyle:0, blush:false, lips:false, freckles:false, lipColor:'#b96669', hat:0, hatColor:'#2b6777', glasses:0, glassesColor:'#31434a', facialHair:0, necklace:0, necklaceColor:'#d4ad62', earring:0, earringColor:'#d4ad62', name:'' };
 const colour = (value, fallback) => /^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(value || '') ? value : fallback;
 function shade(hex, amount) {
   const full = hex.length === 4 ? '#' + [...hex.slice(1)].map(value => value + value).join('') : hex;
@@ -37,7 +38,8 @@ const hairFront = [
 function Avatar({ character = {}, size = 80, animate = false, label }) {
   const id = 'classio-avatar-' + useId().replace(/[^a-zA-Z0-9]/g,'');
   const ch = { ...avatarDefaults, ...character };
-  for (const key of ['skin','hair','eyes','top','bg','hatColor','glassesColor','necklaceColor','earringColor','lipColor']) ch[key] = colour(ch[key],avatarDefaults[key]);
+  for (const key of ['skin','fur','hair','eyes','top','bg','hatColor','glassesColor','necklaceColor','earringColor','lipColor']) ch[key] = colour(ch[key],avatarDefaults[key]);
+  if(Number(ch.portraitStyle)===2)return <VillageAvatar ch={ch} id={id} size={size} animate={animate} label={label} hairPaths={hairFront}/>;
   const classic=Number(ch.portraitStyle)!==1;
   const featureScale=key=>Math.max(0.65,Math.min(1.4,Number(ch[key])||1));
   const skinShadow = shade(ch.skin,-27), hairShadow = shade(ch.hair,-24);

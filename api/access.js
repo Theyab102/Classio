@@ -1,6 +1,5 @@
 const { jsonRequest, reject } = require('../server/http');
-const { readAccess, setAccess, authenticatedUser, TERMS_VERSION } = require('../server/access');
-const admin = require('../server/admin');
+const { readAccess, setAccess, authenticatedUser, TERMS_VERSION, assertAccessConfiguration } = require('../server/access');
 
 function ageDecision(value, today = new Date()) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value || '');
@@ -14,8 +13,9 @@ function ageDecision(value, today = new Date()) {
 
 module.exports = async (req, res) => {
   if (!jsonRequest(req, res, ['GET', 'POST'])) return;
-  if (req.method === 'GET') return res.status(200).json({ stage: readAccess(req)?.stage || 'new' });
   try {
+    assertAccessConfiguration();
+    if (req.method === 'GET') return res.status(200).json({ stage: readAccess(req)?.stage || 'new' });
     const previous = readAccess(req);
     const action = req.body?.action;
     let claim;
@@ -28,7 +28,7 @@ module.exports = async (req, res) => {
       claim = { stage: 'accepted', adult: previous.adult === true };
     } else if (action === 'restore' || action === 'link') {
       const user = await authenticatedUser(req, true);
-      const ref = admin.database().doc(`users/${user.uid}/access/verification`);
+      const ref = require('../server/admin').database().doc(`users/${user.uid}/access/verification`);
       const snap = await ref.get();
       const stored = snap.data();
       if (stored?.stage === 'accepted' && stored.version === TERMS_VERSION) {
@@ -45,7 +45,9 @@ module.exports = async (req, res) => {
   } catch (error) {
     if (error.status) return reject(res, error.status, error.code, error.message);
     console.error('Classio access configuration unavailable', { code: error.message === 'SESSION_NOT_CONFIGURED' ? 'SESSION_NOT_CONFIGURED' : 'ACCOUNT_VERIFICATION_UNAVAILABLE' });
-    return reject(res, 503, 'VERIFICATION_UNAVAILABLE', 'Verification is temporarily unavailable. Your progress has been kept. Try again.');
+    return error.message === 'SESSION_NOT_CONFIGURED'
+      ? reject(res, 503, 'VERIFICATION_CONFIG_MISSING', 'Classio’s secure access service is not ready yet. Please try again shortly.')
+      : reject(res, 503, 'VERIFICATION_UNAVAILABLE', 'Verification is temporarily unavailable. Your progress has been kept. Try again.');
   }
 };
 module.exports.ageDecision = ageDecision;

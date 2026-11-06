@@ -1,92 +1,48 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { LegalLinks, LegalPage, legalPages } from './Legal';
-import { requestJson } from './apiClient';
+import useAccessSession from './useAccessSession';
+import { setLanguages, useLocale } from './locale';
 import './entry.css';
 
 const Workspace = lazy(() => import('./App'));
 
-async function accessRequest(payload, headers = {}) {
-  const data = await requestJson('/api/access', { body: payload, headers, timeout: 12000 });
-  return data.stage;
-}
-
-export default function Entry() {
-  const [access, setAccess] = useState('loading');
-  const [screening, setScreening] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState('');
-  const page = legalPages[window.location.pathname.replace(/\/$/, '')];
-
-  useEffect(() => {
-    if (page) return;
-    let active = true;
-    accessRequest().then(async stage => {
-      let requested=false;try{requested=localStorage.getItem('classio_google_signin_requested')==='true';}catch{}
-      if(stage==='new'&&requested){
-        const firebase=await import('./firebase');
-        const user=await firebase.restoreSignedInAccount();
-        if(user)stage=await accessRequest({action:'restore'},await firebase.accountHeaders());
-      }
-      if(active)setAccess(stage);
-    }).catch(() => {
-      if (active) { setAccess('unavailable'); setError('Could not check your saved verification. Check your connection and retry.'); }
-    });
-    return () => { active = false; };
-  }, [page]);
-
-  async function run(payload) {
-    if (pending) return;
-    setPending(true); setError('');
-    try { setAccess(await accessRequest(payload)); }
-    catch (failure) { setError(failure.message); }
-    finally { setPending(false); }
-  }
-
-  async function restoreAccount() {
-    if (pending) return;
-    setPending(true); setError('');
-    try {
-      const firebase = await import('./firebase');
-      await firebase.signInGoogle();
-      await firebase.authReady.catch(() => {});
-      if (firebase.auth.currentUser) setAccess(await accessRequest({ action: 'restore' }, await firebase.accountHeaders()));
-    } catch (failure) {
-      const { authError } = await import('./firebase');
-      setError(failure.code ? authError(failure) : failure.message);
-    } finally { setPending(false); }
-  }
-
-  if (page) return <LegalPage page={page} />;
-  if (access === 'loading') return <p className="entry-loading" role="status">Checking your saved verification…</p>;
-  if (access === 'accepted') return <Suspense fallback={<p className="entry-loading" role="status">Loading Classio…</p>}><Workspace /></Suspense>;
-
+function EntryShell({children}) {
+  const {t,locale}=useLocale();
   return <div className="entry-shell">
-    <header className="entry-header"><a className="entry-brand" href="/"><img src="/ClassioLogo.png" width="32" height="32" alt="" />Classio</a></header>
-    <main className="entry-main">
-      <div className="entry-intro">
-        <p className="entry-kicker">A little clarity. A lot of possibility.</p>
-        <h1>Your next great idea starts here.</h1>
-        <p>A thoughtful home for your study files, notes and flashcards. Learn at your own pace, with a little help when you need it.</p>
-        <ul className="entry-feature-list"><li>One workspace for every subject</li><li>Your materials, made easier to understand</li><li>Free to explore. Yours to make progress.</li></ul>
-      </div>
-      <section className="entry-card" aria-labelledby="entry-step" aria-busy={pending}>
-        <p className="entry-kicker">Welcome to Classio</p>
-        {access === 'blocked' ? <><h2 id="entry-step">Classio is unavailable to you</h2><p>Based on the date you entered, you cannot use the study workspace. You can still read our privacy policy.</p></> : access === 'eligible' ?
-          <form onSubmit={event => { event.preventDefault(); run({ action: 'accept', termsAccepted: true }); }}>
-            <h2 id="entry-step">Make yourself at home</h2><p>Take a moment to review how Classio works.</p>
-            <label className="entry-agreement"><input type="checkbox" required disabled={pending} /><span>I agree to the <a href="/terms" target="_blank" rel="noreferrer">Terms and Conditions</a> and acknowledge the <a href="/privacy" target="_blank" rel="noreferrer">Privacy Policy</a>.</span></label>
-            <button className="entry-button" disabled={pending}>{pending ? 'Opening…' : 'Open workspace'}</button>
-          </form> : screening ? <form onSubmit={event => { event.preventDefault(); const form = event.currentTarget; const birthDate = new FormData(form).get('birthDate'); run({ action: 'screen', birthDate }); }}>
-            <h2 id="entry-step">A quick eligibility check</h2><p>Classio is for people aged 13 and over. We keep the verification result, not your date of birth.</p>
-            <label htmlFor="birth-date">Date of birth</label><input id="birth-date" name="birthDate" type="date" required disabled={pending} aria-describedby={error ? 'access-error' : undefined} />
-            <button className="entry-button" disabled={pending}>{pending ? 'Checking…' : 'Continue'}</button>
-          </form> : <>
-            <h2 id="entry-step">Your space to learn</h2><p>Check eligibility once to get started. This browser remembers your completed verification.</p>
-            {access === 'unavailable' ? <button className="entry-button" onClick={async () => { setAccess('loading'); try { setAccess(await accessRequest()); setError(''); } catch { setAccess('unavailable'); } }}>Retry verification check</button> : <button className="entry-button" onClick={() => setScreening(true)}>Get started</button>}
-            <button className="entry-button secondary" onClick={restoreAccount} disabled={pending}>{pending ? 'Connecting…' : 'Returning? Sign in with Google'}</button>
-          </>}
-        {error && <p id="access-error" className="entry-error" role="alert">{error}</p>}
-      </section>
-    </main><LegalLinks />
+    <header className="entry-header"><a className="entry-brand" href="/"><img src="/ClassioLogo.png" width="32" height="32" alt=""/>Classio</a><label className="entry-language"><span className="sr-only">{t('Interface language')}</span><select aria-label={t('Interface language')} value={locale} onChange={event=>setLanguages({interfaceLanguage:event.target.value})}><option value="en">English</option><option value="ar">العربية</option></select></label></header>
+    <main className="entry-main"><div className="entry-intro"><p className="entry-kicker">{t('A little clarity. A lot of possibility.')}</p><h1>{t('Your next great idea starts here.')}</h1><p>{t('A thoughtful home for your study files, notes and flashcards. Learn at your own pace, with a little help when you need it.')}</p><ul className="entry-feature-list"><li>{t('One workspace for every subject')}</li><li>{t('Your materials, made easier to understand')}</li><li>{t('Free to explore. Yours to make progress.')}</li></ul></div>{children}</main><LegalLinks/>
   </div>;
+}
+function OpeningWorkspace(){
+  const {t}=useLocale();
+  return <EntryShell><section className="entry-card entry-workspace-preview" aria-label={t('Your workspace')} aria-busy="true"><p className="entry-kicker">Classio</p><h2>{t('Your space to learn')}</h2><div className="entry-skeleton" aria-hidden="true"><i/><i/><i/></div></section></EntryShell>;
+}
+export default function Entry() {
+  const {t}=useLocale();
+  const page=legalPages[window.location.pathname.replace(/\/$/,'')];
+  const {stage,checking,pending,error,check,run}=useAccessSession(!page);
+  const [screening,setScreening]=useState(false);
+  async function restoreAccount(){
+    await run({action:'restore'},async()=>{
+      const firebase=await import('./firebase');
+      try{await firebase.signInGoogle();return await firebase.accountHeaders();}
+      catch(failure){throw Object.assign(new Error(firebase.authError(failure)),{code:failure.code||'auth/failed'});}
+    });
+  }
+  if(page)return <LegalPage page={page}/>;
+  if(stage==='accepted')return <Suspense fallback={<OpeningWorkspace/>}><Workspace/></Suspense>;
+  const waiting=checking||pending||stage==='checking';
+  return <EntryShell><section className="entry-card" aria-labelledby="entry-step" aria-busy={waiting}>
+    <p className="entry-kicker">{t('Welcome to Classio')}</p>
+    {stage==='blocked'?<><h2 id="entry-step">{t('Classio is unavailable to you')}</h2><p>{t('Based on the date you entered, you cannot use the study workspace. You can still read our privacy policy.')}</p></>:stage==='eligible'?<form onSubmit={event=>{event.preventDefault();run({action:'accept',termsAccepted:true});}}>
+      <h2 id="entry-step">{t('Make yourself at home')}</h2><p>{t('Take a moment to review how Classio works.')}</p><label className="entry-agreement"><input type="checkbox" required disabled={waiting}/><span>{t('I agree to the ')}<a href="/terms" target="_blank" rel="noreferrer">{t('Terms and Conditions')}</a>{t(' and acknowledge the ')}<a href="/privacy" target="_blank" rel="noreferrer">{t('Privacy Policy')}</a>.</span></label><button className="entry-button" disabled={waiting}>{t(pending?'Opening…':'Open workspace')}</button>
+    </form>:screening&&stage==='new'?<form onSubmit={event=>{event.preventDefault();run({action:'screen',birthDate:new FormData(event.currentTarget).get('birthDate')});}}>
+      <h2 id="entry-step">{t('A quick eligibility check')}</h2><p>{t('Classio is for people aged 13 and over. We keep the verification result, not your date of birth.')}</p><label htmlFor="birth-date">{t('Date of birth')}</label><input id="birth-date" name="birthDate" type="date" required disabled={waiting} aria-describedby={error?'access-error':undefined}/><button className="entry-button" disabled={waiting}>{t(pending?'Continuing…':'Continue')}</button>
+    </form>:<>
+      <h2 id="entry-step">{t('Your space to learn')}</h2><p>{t('Bring your materials. Find a little clarity, one idea at a time.')}</p>
+      {stage==='unavailable'?<button className="entry-button" onClick={check} disabled={waiting}>{t('Try again')}</button>:<button className="entry-button" onClick={()=>setScreening(true)} disabled={waiting}>{t('Get started')}</button>}
+      <button className="entry-button secondary" onClick={restoreAccount} disabled={waiting}>{t(pending?'Connecting…':'Returning? Sign in with Google')}</button>
+    </>}
+    {error&&<p id="access-error" className="entry-error" role="alert">{t(error)}</p>}
+  </section></EntryShell>;
 }

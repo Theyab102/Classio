@@ -2,6 +2,8 @@ import { getApp, getApps, initializeApp } from 'firebase/app';
 import { browserLocalPersistence, getAuth, GoogleAuthProvider, setPersistence, signInWithPopup, signInWithRedirect, getRedirectResult } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
+import {requestJson} from './apiClient';
+import {untilAborted} from './accessSession';
 
 // Web configuration identifies a public Firebase project; it is not an Admin key.
 const app = getApps().length ? getApp() : initializeApp({
@@ -41,16 +43,25 @@ export async function signInGoogle() {
   }
 }
 export async function restoreSignedInAccount(){
-  await authReady;
+  await persistence;
   await auth.authStateReady();
+  if(auth.currentUser)return auth.currentUser;
+  await authReady;
   return auth.currentUser;
 }
 export async function accountHeaders() {
-  await authReady.catch(() => {});
+  await persistence.catch(() => {});
+  await auth.authStateReady();
   const token = await auth.currentUser?.getIdToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
-export async function linkVerification() {
-  const response = await fetch('/api/access', { method: 'POST', headers: { 'Content-Type': 'application/json', ...await accountHeaders() }, body: JSON.stringify({ action: 'link' }) });
-  if (!response.ok) throw new Error('Account verification could not sync. Retry when online.');
+export async function linkVerification({signal}={}) {
+  const controller=new AbortController(),cancel=()=>controller.abort();
+  if(signal?.aborted)cancel();signal?.addEventListener('abort',cancel,{once:true});
+  const timer=setTimeout(cancel,12000);
+  try{
+    const headers=await untilAborted(accountHeaders(),controller.signal);
+    const result=await requestJson('/api/access',{headers,body:{action:'link'},signal:controller.signal,timeout:7000});
+    if(result.stage!=='accepted')throw new Error('Account verification could not sync. Retry when online.');
+  }finally{clearTimeout(timer);signal?.removeEventListener('abort',cancel);}
 }

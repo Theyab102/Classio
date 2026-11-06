@@ -1,5 +1,8 @@
 # Classio integrated workspace update
 
+For the later verification, village-character, Assistant-action and dependency
+changes, see [VERIFICATION-AND-VILLAGERS.md](VERIFICATION-AND-VILLAGERS.md).
+
 6 November 2026. App branch: `feat/integrated-study-and-podcasts`.
 Speech branch: `feat/two-host-audio-and-captions` in `Theyab102/classio-tts-server`.
 These branches include the preceding critical-functionality and calm-palette work.

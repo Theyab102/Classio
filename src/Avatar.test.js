@@ -16,6 +16,20 @@ test('multiple avatars use unique gradient identifiers and reject invalid colour
   expect(screen.getByRole('img',{name:'First'})).toBeInTheDocument();
 });
 
+test('village characters switch species and fur live while retaining prior customization',()=>{
+  let value;
+  function Harness(){const [character,setCharacter]=useState({portraitStyle:0,name:'My learner',hairStyle:12,topStyle:4,unknownLegacySetting:'kept'});value=character;return <AvatarEditor character={character} onChange={setCharacter} onClose={()=>{}}/>;}
+  render(<Harness/>);
+  fireEvent.click(screen.getByRole('button',{name:'Village',exact:true}));
+  fireEvent.click(screen.getByRole('button',{name:'Fox',exact:true}));
+  fireEvent.change(screen.getByLabelText('Custom colour: Fur colour'),{target:{value:'#b58b69'}});
+  expect(value).toMatchObject({portraitStyle:2,species:4,fur:'#b58b69',hairStyle:12,topStyle:4,name:'My learner',unknownLegacySetting:'kept'});
+  expect(screen.getByRole('button',{name:'Fox',exact:true})).toHaveAttribute('aria-pressed','true');
+  fireEvent.click(screen.getByRole('button',{name:'Classic console',exact:true}));
+  expect(value.species).toBe(4);
+  expect(value.portraitStyle).toBe(0);
+});
+
 test('live customization preserves saved legacy attributes and nickname input focus',()=>{
   let value;
   function Harness(){const [character,setCharacter]=useState({name:'Learner',hairStyle:12,unknownLegacySetting:'kept'});value=character;return <AvatarEditor character={character} onChange={setCharacter} onClose={()=>{}}/>;}

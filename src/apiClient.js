@@ -8,7 +8,7 @@ export async function requestJson(path, { body, headers = {}, signal, timeout = 
   signal?.addEventListener('abort', cancel, { once: true });
   const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeout);
   try {
-    const response = await fetch(path, { method: body === undefined ? 'GET' : 'POST',
+    const response = await fetch(path, { method: body === undefined ? 'GET' : 'POST', credentials:'same-origin', cache:'no-store',
       headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...headers },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: controller.signal });
     const data = await response.json().catch(() => ({}));

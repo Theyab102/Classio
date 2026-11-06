@@ -1,5 +1,8 @@
 # Integrated-workspace verification
 
+Historical integrated-pass results. The later results are in
+[VERIFICATION-VALIDATION.md](VERIFICATION-VALIDATION.md).
+
 Executed locally on 6 November 2026. These are development-branch results, not
 production deployment or physical-device results. See `INTEGRATED-WORKSPACE.md`
 for setup and the implemented boundaries.

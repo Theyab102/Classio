@@ -15,6 +15,7 @@ beforeEach(() => {
   sessionStorage.clear();
   localStorage.clear();
   mockAccessStage = 'new';
+  restoreSignedInAccount.mockReset();
   global.fetch = jest.fn(async (_url, options) => {
     if (options?.method === 'POST') {
       const body = JSON.parse(options.body);
@@ -28,7 +29,9 @@ beforeEach(() => {
 });
 
 async function enterBirthDate(value) {
-  fireEvent.click(await screen.findByRole("button", { name: "Get started" }));
+  const start=await screen.findByRole("button", { name: "Get started" });
+  await waitFor(()=>expect(start).toBeEnabled());
+  fireEvent.click(start);
   const field = screen.getByLabelText("Date of birth");
   fireEvent.change(field, { target: { value } });
   // Eligibility updates after the asynchronous server response.
@@ -121,6 +124,15 @@ test("session import combines the guest Inbox with the saved Inbox", () => {
   expect(saved[0].files).toEqual([{ id: "old" }]);
 });
 
+test('older browsers without randomUUID still create IDs accepted by the real course schema',()=>{
+  const {makeStudyId}=require('./studyTools'),{courseInput}=require('./shared/course-schema');
+  for(const api of [{getRandomValues:bytes=>bytes.fill(171)},null]){
+    const requestId=makeStudyId(api);
+    expect(requestId).toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
+    expect(courseInput({tool:'create_course',requestId,arguments:{fileId:'source',topic:'Energy',difficulty:'beginner',lessons:2}})).not.toBeNull();
+  }
+});
+
 test("missed cards return sooner and successful reviews get a longer interval", () => {
   const { scheduleCardReview } = require("./studyTools");
   expect(scheduleCardReview({ level: 3 }, false, 1000)).toEqual({ level: 0, due: 601000 });
@@ -143,7 +155,8 @@ test('returning Google sessions wait for account verification restore without fl
   let complete;restoreSignedInAccount.mockReturnValue(new Promise(resolve=>{complete=resolve;}));
   render(<Entry/>);
   await waitFor(()=>expect(restoreSignedInAccount).toHaveBeenCalled());
-  expect(screen.queryByRole('button',{name:'Get started'})).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('Date of birth')).not.toBeInTheDocument();
+  expect(screen.getByRole('button',{name:'Get started'})).toBeDisabled();
   await act(async()=>{complete({uid:'test-account'});});
   expect(await screen.findByText('Workspace loaded')).toBeInTheDocument();
   expect(global.fetch.mock.calls.some(([,options])=>options?.body&&JSON.parse(options.body).action==='restore')).toBe(true);
@@ -152,6 +165,51 @@ test('a failed account restore preserves the retry state instead of marking a re
   localStorage.setItem('classio_google_signin_requested','true');
   restoreSignedInAccount.mockRejectedValue(new Error('Temporary network problem'));
   render(<Entry/>);
-  await screen.findByText('Could not check your saved verification. Check your connection and retry.');
+  await screen.findByText('We couldn’t connect to Classio. Your saved verification has not been changed. We’ll try again when you’re online.');
   expect(screen.queryByRole('button',{name:'Get started'})).not.toBeInTheDocument();
+});
+
+test('the welcome page stays visible during a slow background check with no verification checking screen',async()=>{
+  let complete;
+  global.fetch=jest.fn(()=>new Promise(resolve=>{complete=resolve;}));
+  render(<Entry/>);
+  expect(screen.getByRole('heading',{name:'Your next great idea starts here.'})).toBeInTheDocument();
+  expect(screen.queryByText(/Checking your saved verification/)).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('Date of birth')).not.toBeInTheDocument();
+  expect(mockWorkspace).not.toHaveBeenCalled();
+  await act(async()=>complete({ok:true,json:async()=>({stage:'accepted'})}));
+  expect(await screen.findByText('Workspace loaded')).toBeInTheDocument();
+});
+test('an HTML/static fallback cannot be mistaken for completed verification',async()=>{
+  global.fetch=jest.fn(async()=>({ok:true,json:async()=>{throw new Error('HTML response');}}));
+  render(<Entry/>);
+  await screen.findByText('Classio’s access service could not be reached. Please try again shortly.');
+  expect(mockWorkspace).not.toHaveBeenCalled();
+});
+test('a failed background check retries automatically when the connection returns',async()=>{
+  global.fetch=jest.fn().mockRejectedValueOnce(new TypeError('offline')).mockResolvedValue({ok:true,json:async()=>({stage:'accepted'})});
+  render(<Entry/>);await screen.findByRole('alert');
+  await act(async()=>window.dispatchEvent(new Event('online')));
+  expect(await screen.findByText('Workspace loaded')).toBeInTheDocument();
+});
+test('a browser that discards the eligibility cookie receives a real recovery message instead of access',async()=>{
+  const normal=global.fetch;
+  global.fetch=jest.fn(async(url,options)=>options.method==='POST'?{ok:true,json:async()=>({stage:'eligible'})}:normal(url,options));
+  render(<Entry/>);await enterBirthDate('2000-01-01');
+  await screen.findByText('Allow first-party cookies for Classio, then try again. Your browser did not keep the access decision.');
+  expect(screen.getByLabelText('Date of birth')).toHaveValue('2000-01-01');
+  expect(mockWorkspace).not.toHaveBeenCalled();
+});
+test('a stalled Firebase restoration is bounded and never marks the account as new',async()=>{
+  jest.useFakeTimers();
+  localStorage.setItem('classio_google_signin_requested','true');
+  restoreSignedInAccount.mockReturnValue(new Promise(()=>{}));
+  try{
+    render(<Entry/>);
+    await act(async()=>{await Promise.resolve();await Promise.resolve();});
+    await act(async()=>jest.advanceTimersByTime(11001));
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Date of birth')).not.toBeInTheDocument();
+    expect(mockWorkspace).not.toHaveBeenCalled();
+  }finally{jest.useRealTimers();}
 });

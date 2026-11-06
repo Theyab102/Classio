@@ -56,6 +56,14 @@ export function downloadStudyFile(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function makeStudyId() {
-  return crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+export function makeStudyId(source = typeof window==='undefined'?undefined:window.crypto) {
+  if(source?.randomUUID)return source.randomUUID();
+  // Older Safari supplies getRandomValues but not randomUUID. These object/
+  // idempotency identifiers are not authentication tokens or signing secrets.
+  const bytes=new Uint8Array(16);
+  if(source?.getRandomValues)source.getRandomValues(bytes);
+  else for(let index=0;index<bytes.length;index++)bytes[index]=Math.floor(Math.random()*256);
+  bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;
+  const hex=[...bytes].map(value=>value.toString(16).padStart(2,'0')).join('');
+  return [hex.slice(0,8),hex.slice(8,12),hex.slice(12,16),hex.slice(16,20),hex.slice(20)].join('-');
 }

@@ -10,6 +10,7 @@ const { courseInput, courseMessages, parseCourse } = require('../src/shared/cour
 // choose database paths, delete content, or read another account's documents.
 module.exports = async (req, res) => {
   if (!jsonRequest(req, res)) return;
+  if(['plan_action','create_notes','create_flashcards','create_quiz'].includes(req.body?.tool)||(req.body?.tool==='create_course'&&req.body?.confirmed===true))return require('../server/workspace-tools')(req,res);
   const args = courseInput(req.body);
   if (!args) return reject(res, 400, 'INVALID_TOOL_ARGUMENTS', 'Check the course topic, difficulty and lesson count.');
   let job;
