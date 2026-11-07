@@ -51,6 +51,10 @@ module.exports = async function study(req, res) {
     console.error("study_request", { code });
     const messages = {
       CONTENT_BLOCKED: "The AI service could not answer this request. Rephrase it or use different study material.",
+      CREDENTIALS_REJECTED: "The AI provider rejected its server credentials. The site owner needs to update the provider secret.",
+      MODEL_UNAVAILABLE: "No supported text model is available for this provider. Check its model access or select an available model on the server.",
+      VISION_MODEL_UNAVAILABLE: "Image analysis is unavailable for the configured provider. You can still ask a text question.",
+      MODEL_CATALOG_UNAVAILABLE: "The AI provider could not list available models. Try again shortly.",
       OUTPUT_LIMIT: "The answer was too long to finish. Ask for a shorter response or a smaller course.",
     };
     const status = error.status || 503;

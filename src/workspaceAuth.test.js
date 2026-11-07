@@ -21,10 +21,11 @@ jest.mock("firebase/firestore", () => ({
 }));
 jest.mock("./pdf", () => ({ openPdf: jest.fn(), loadPdfLibrary: jest.fn() }));
 jest.mock("./NotesEditor", () => () => null);
-jest.mock("./noteFormat", () => ({ markdownToNoteHtml: jest.fn() }));
 jest.mock("./pptxExport", () => ({ loadPptxExporter: jest.fn() }));
 
 beforeEach(() => {
+  window.matchMedia = jest.fn(() => ({ matches: false, addEventListener: jest.fn(), removeEventListener: jest.fn() }));
+  HTMLElement.prototype.scrollIntoView = jest.fn();
   localStorage.clear();
   localStorage.setItem("classio_onboarded", "1");
   mockAuth.currentUser = null;
@@ -45,7 +46,7 @@ test("opens a signed-in cached workspace when Firebase never answers", async () 
     expect(screen.getByRole("progressbar", { name: "Preparing workspace" })).toBeInTheDocument();
     await act(async () => { jest.advanceTimersByTime(8000); await restore; });
     expect(screen.getByRole("heading", { name: "Library" })).toBeInTheDocument();
-    expect(screen.getByText("Physics")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open folder Physics", exact: true })).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Cloud sync is unavailable");
   } finally { jest.useRealTimers(); }
 });
@@ -57,6 +58,25 @@ test("explains an unauthorized Firebase hostname and keeps the guest dashboard o
   expect(screen.getByRole("alert")).toHaveTextContent("authorized domains");
   expect(screen.getByRole("heading", { name: "Library" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Sign in to save" })).toBeEnabled();
+});
+
+test("switching accounts isolates saved characters and assistant conversations", async () => {
+  localStorage.setItem("classio_chat:account-a", JSON.stringify([{ role: "user", content: "Account A private conversation" }]));
+  getDoc.mockResolvedValue({ metadata: { fromCache: false }, data: () => ({ folders: [], character: { name: "Account A character", hairStyle: 13 } }) });
+  render(<App />);
+  mockAuth.currentUser = { uid: "account-a", displayName: "Account A" };
+  await act(async () => { await mockAuthListener(mockAuth.currentUser); });
+  fireEvent.click(screen.getByRole("button", { name: "AI Assistant", exact: true }));
+  expect(screen.getByText("Account A private conversation")).toBeInTheDocument();
+  getDoc.mockResolvedValue({ metadata: { fromCache: false }, data: () => ({ folders: [] }) });
+  mockAuth.currentUser = { uid: "account-b", displayName: "Account B" };
+  await act(async () => { await mockAuthListener(mockAuth.currentUser); });
+  fireEvent.click(screen.getByRole("button", { name: "AI Assistant", exact: true }));
+  expect(screen.queryByText("Account A private conversation")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Close AI Assistant", exact: true }));
+  fireEvent.click(screen.getByRole("button", { name: "Edit character", exact: true }));
+  expect(screen.getByLabelText("Display name", { exact: true })).toHaveValue("");
+  expect(JSON.parse(localStorage.getItem("classio_char:account-a")).name).toBe("Account A character");
 });
 
 test("opens saved notes when the browser file database is blocked", async () => {
@@ -73,7 +93,7 @@ test("opens saved notes when the browser file database is blocked", async () => 
     await act(async () => { restore = mockAuthListener(mockAuth.currentUser); });
     await act(async () => { jest.advanceTimersByTime(8000); await restore; });
     expect(screen.getByRole("heading", { name: "Library" })).toBeInTheDocument();
-    expect(screen.getByText("Physics")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open folder Physics", exact: true })).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Original uploads could not be restored");
   } finally {
     if (originalDatabase) Object.defineProperty(global, "indexedDB", originalDatabase);

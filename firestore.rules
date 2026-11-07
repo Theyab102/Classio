@@ -8,6 +8,9 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow get, create, update, delete: if ownsWorkspace(userId);
+      match /preferences/{preferenceId} {
+        allow get, create, update, delete: if ownsWorkspace(userId);
+      }
       match /savedNotes/{fileId} {
         allow get, create, update, delete: if ownsWorkspace(userId);
       }

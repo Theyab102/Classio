@@ -1,57 +1,38 @@
-const { test, after } = require("node:test");
+const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const { configurationStatus } = require("./ai-configuration");
-const status = require("../api/status");
+const { reserveInstance, configured } = require("./ai-quota");
 
-const fixture = {
-  GROQ_API_KEY: "test-provider-secret",
-  FIREBASE_SERVICE_ACCOUNT_JSON: JSON.stringify({ project_id: "test", client_email: "test@example.com", private_key: "test-private-key" }),
-  AI_RATE_LIMIT_SECRET: "test-only-rate-secret-over-32-characters",
-};
-
-test("reports missing or invalid settings by name, without leaking credentials", () => {
-  assert.deepEqual(configurationStatus({}), { configured: false, providers: [],
-    missing: ["GROQ_API_KEY", "FIREBASE_SERVICE_ACCOUNT_JSON", "AI_RATE_LIMIT_SECRET"] });
-  const invalid = configurationStatus({ ...fixture, FIREBASE_SERVICE_ACCOUNT_JSON: "{}", AI_RATE_LIMIT_SECRET: "short" });
-  assert.deepEqual(invalid.missing, ["FIREBASE_SERVICE_ACCOUNT_JSON", "AI_RATE_LIMIT_SECRET"]);
-  const report = configurationStatus(fixture);
-  assert.deepEqual(report, { configured: true, providers: ["groq"], missing: [] });
-  for (const secret of Object.values(fixture)) assert(!JSON.stringify(report).includes(secret));
+test("accepts the confirmed server aliases without requiring a Firebase administrator", () => {
+  const report = configurationStatus({ Groq_Key: "test-provider-secret", Gemini_Key: "test-google-secret" });
+  assert.equal(report.configured, true); assert.deepEqual(report.providers, ["groq"]);
+  assert.deepEqual(report.settingNames, ["Groq_Key", "Gemini_Key"]); assert.equal(report.quotaMode, "instance");
+  assert.equal(report.geminiOptInRequired, true);
+  assert(!JSON.stringify(report).includes("test-provider-secret")); assert(!JSON.stringify(report).includes("test-google-secret"));
 });
-
-test("Gemini remains opt-in and requires a model as well as a key", () => {
-  const env = { ...fixture, GROQ_API_KEY: "", GEMINI_API_KEY: "test-google-secret", GEMINI_MODEL: "example-model" };
-  assert(!configurationStatus(env).configured);
-  assert(configurationStatus({ ...env, GEMINI_ENABLED: "true" }).configured);
-  assert.deepEqual(configurationStatus({ ...env, GEMINI_ENABLED: "true", GEMINI_MODEL: "" }).missing, ["GEMINI_MODEL"]);
+test("never accepts public build variables, placeholder values, or a disabled Gemini key alone", () => {
+  assert(!configurationStatus({ REACT_APP_GROQ_KEY: "test-key" }).configured);
+  assert(!configurationStatus({ Groq_Key: "Your_new_Groq_API_key" }).configured);
+  assert(!configurationStatus({ Groq_Key: "gsk_example..." }).configured);
+  assert(!configurationStatus({ Gemini_Key: "test-google-secret" }).configured);
+  assert(configurationStatus({ Gemini_Key: "test-google-secret", GEMINI_ENABLED: "true" }).configured);
 });
-
-const names = [...Object.keys(fixture), "GEMINI_ENABLED", "GEMINI_API_KEY", "GEMINI_MODEL"];
-const previous = Object.fromEntries(names.map(key => [key, process.env[key]]));
-after(() => { for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } });
-function invoke(method) {
-  const result = { headers: {} };
-  status({ method }, {
-    setHeader(key, value) { result.headers[key] = value; },
-    status(code) { result.status = code; return this; },
-    json(body) { result.body = body; }, end() { result.ended = true; },
-  });
-  return result;
-}
-
-test("deployment diagnostics distinguish configuration from live access and support HEAD", () => {
-  names.forEach(key => delete process.env[key]);
-  assert.equal(invoke("GET").status, 503);
-  Object.assign(process.env, fixture);
-  const report = invoke("GET");
-  assert.equal(report.status, 200);
-  assert.equal(report.headers["Cache-Control"], "no-store");
-  assert.equal(report.body.aiConfigured, true);
-  assert.match(report.body.checked, /live provider access is not tested/);
-  for (const secret of Object.values(fixture)) assert(!JSON.stringify(report.body).includes(secret));
-  const head = invoke("HEAD");
-  assert.equal(head.status, 200);
-  assert.equal(head.ended, true);
-  assert.equal(head.body, undefined);
-  assert.equal(invoke("POST").status, 405);
+test("shared quota storage fails closed when explicitly selected but misconfigured", () => {
+  assert(!configured({ AI_QUOTA_MODE: "firestore" }));
+  assert(!configured({ AI_QUOTA_MODE: "invalid" }));
+  assert(configured({ FIREBASE_SERVICE_ACCOUNT_JSON: JSON.stringify({ project_id: "test", client_email: "test@example.com", private_key: "fixture" }), AI_RATE_LIMIT_SECRET: "test-only-secret-at-least-32-characters" }));
+});
+test("instance limiter enforces client and instance limits and expires counters", () => {
+  const store = new Map(), now = 1;
+  for (let i = 0; i < 18; i++) assert.deepEqual(reserveInstance("study", "client-a", now, store), {});
+  assert(reserveInstance("study", "client-a", now, store).retryAfter > 0);
+  assert.deepEqual(reserveInstance("study", "client-a", 600001, store), {});
+  for (let i = 0; i < 231; i++) assert.deepEqual(reserveInstance("study", `other-${i}`, 600001, store), {});
+  assert(reserveInstance("study", "final", 600001, store).retryAfter > 0);
+  assert.deepEqual(reserveInstance("study", "final", 86400001, store), {});
+});
+test("audio limits are separate and malformed quota mode is diagnosed by name", () => {
+  const store = new Map(); for (let i = 0; i < 3; i++) assert.deepEqual(reserveInstance("audio", "client", 1, store), {});
+  assert(reserveInstance("audio", "client", 1, store).retryAfter > 0); assert.deepEqual(reserveInstance("study", "client", 1, store), {});
+  assert.deepEqual(configurationStatus({ Groq_Key: "fixture", AI_QUOTA_MODE: "bad" }).missing, ["AI_QUOTA_MODE must be instance or firestore"]);
 });

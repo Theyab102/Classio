@@ -8,7 +8,7 @@ module.exports = function status(req, res) {
   }
   // Names and presence only. Never return keys, account JSON, or provider data.
   const report = configurationStatus();
-  const body = { aiConfigured: report.configured, providers: report.providers, missing: report.missing,
+  const body = { aiConfigured: report.configured, providers: report.providers, missing: report.missing, settingNames: report.settingNames, quotaMode: report.quotaMode, geminiOptInRequired: report.geminiOptInRequired,
     checked: "configuration only; live provider access is not tested" };
   if (req.method === "HEAD") return res.status(report.configured ? 200 : 503).end();
   return res.status(report.configured ? 200 : 503).json(body);

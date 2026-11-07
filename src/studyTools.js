@@ -58,5 +58,5 @@ export function downloadStudyFile(blob, filename) {
 }
 
 export function makeStudyId() {
-  return crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }

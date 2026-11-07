@@ -7,6 +7,9 @@ import TextAlign from "@tiptap/extension-text-align";
 import { closeHistory } from "@tiptap/pm/history";
 import { TextStyleKit } from "@tiptap/extension-text-style";
 import LearnMode from "./LearnMode";
+import { NoteEquation } from "./NoteEquation";
+import katex from "katex";
+import { useStudyActivity } from "./LearningSession";
 import UiIcon from "./UiIcon";
 import ActionMenu from "./ActionMenu";
 import { getPdfContext, getPdfFigures, isPdfFile, likelyStudyImage, prepareNoteImage, searchStudyImages } from "./documentMedia";
@@ -16,6 +19,7 @@ import "./documentStudio.css";
 import "./workspace.css";
 
 const editorExtensions = [
+  NoteEquation,
   StarterKit.configure({ link: { openOnClick: false, HTMLAttributes: { rel: "noopener noreferrer" } } }),
   Image.configure({ allowBase64: true, resize: { enabled: true, minWidth: 60, minHeight: 45, alwaysPreserveAspectRatio: true }, HTMLAttributes: { referrerpolicy: "no-referrer" } }),
   TableKit.configure({ table: { resizable: true, renderWrapper: true } }),
@@ -89,8 +93,10 @@ async function enrichDraft(markdown, pdfFile, useWeb, signal, originalHtml) {
   return sanitizeNoteHtml(root.innerHTML);
 }
 
-export default function NotesEditor({ file, fileObj, getFileText, onUpdate, readSavedNotes }) {
+export default function NotesEditor({ file, fileObj, getFileText, onUpdate, readSavedNotes, initialMode, onModeChange }) {
   const [error, setError] = useState("");
+  const [equation, setEquation] = useState("E = mc^2");
+  const [savedAt, setSavedAt] = useState(0);
   const [status, setStatus] = useState("");
   const [topic, setTopic] = useState("");
   const [style, setStyle] = useState("Detailed");
@@ -99,7 +105,10 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState("");
   const [panel, setPanel] = useState(file.notesMode === "generate" ? "generate" : null);
-  const [view, setView] = useState((file.notesMode || (file.defaultTab === "learn" ? "lessons" : "write")) === "lessons" ? "lessons" : "write");
+  const [view, setView] = useState(initialMode || ((file.notesMode || (file.defaultTab === "learn" ? "lessons" : "write")) === "lessons" ? "lessons" : "write"));
+  useEffect(() => { if (initialMode) setView(initialMode); }, [initialMode]);
+  useStudyActivity(view === "write" ? file.id : null, "Notes", file.notes || "", file.name);
+  const workspace = useRef(null);
   const [moreTools, setMoreTools] = useState(false);
   const [narrow, setNarrow] = useState(() => window.innerWidth < 900);
   const panelRef = useRef(null);
@@ -140,6 +149,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
     onUpdate({ editor: current }) {
       const notesHtml = current.getHTML();
       updateFields({ notesHtml, notes: noteHtmlToMarkdown(notesHtml) });
+      setSavedAt(Date.now());
     },
   });
   const tools = useEditorState({
@@ -173,11 +183,12 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
   }, [file.id, file.namedNotes, readSavedNotes]);
 
   useEffect(() => {
-    const media = window.matchMedia?.("(max-width: 899px)");
-    const change = event => setNarrow(event.matches);
-    media?.addEventListener?.("change", change);
-    return () => media?.removeEventListener?.("change", change);
-  }, []);
+    if (!workspace.current) return;
+    const node = workspace.current, update = () => setNarrow(node.clientWidth < 800);
+    update();
+    const observer = new ResizeObserver(update); observer.observe(node);
+    return () => observer.disconnect();
+  }, [editor]);
 
   useEffect(() => {
     if (!narrow || !panel || !panelRef.current) return;
@@ -296,8 +307,13 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
   const run = operation => operation(editor.chain().focus()).run();
   const action = (label, icon, operation, pressed) => <button type="button" title={label} aria-label={label}
     disabled={preview} aria-pressed={pressed} onMouseDown={event => event.preventDefault()} onClick={() => run(operation)}><UiIcon name={icon} /></button>;
-  const openPanel = name => { setView("write"); setPanel(value => value === name ? null : name); };
-  const exportNotes = () => downloadStudyFile(new Blob([`<!doctype html><meta charset="utf-8"><style>body{max-width:760px;margin:40px auto;font:16px/1.65 system-ui}table{border-collapse:collapse}td,th{border:1px solid #aaa;padding:.45rem}img{max-width:100%}</style>${sanitizeNoteHtml(editor.getHTML())}`], { type: "text/html" }), "classio-notes.html");
+  const openPanel = name => { setView("write"); onModeChange?.("write"); setPanel(value => value === name ? null : name); };
+  const exportNotes = () => {
+    const content = document.createElement("div"); content.innerHTML = sanitizeNoteHtml(editor.getHTML());
+    content.querySelectorAll("[data-classio-equation]").forEach(node => { node.innerHTML = katex.renderToString(node.getAttribute("data-latex") || "", { output: "mathml", throwOnError: false, trust: false, maxExpand: 500 }); });
+    downloadStudyFile(new Blob([`<!doctype html><meta charset="utf-8"><title>Classio notes</title><style>body{max-width:760px;margin:40px auto;padding:20px;font:16px/1.7 system-ui;color:#253648}table{border-collapse:collapse;width:100%}td,th{border:1px solid #c7d5e0;padding:.5rem}th{background:#edf4fa}img{max-width:100%}math{font-size:1.15em}</style>${content.innerHTML}`], { type: "text/html" }), "classio-notes.html");
+  };
+
   const applyDraft = append => {
     const chain = editor.chain().focus(append ? "end" : undefined).command(({ tr }) => { closeHistory(tr); return true; });
     if (!append) chain.selectAll();
@@ -306,11 +322,11 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
     setStatus("Notes updated. You can undo this change.");
   };
 
-  return <section className="notes-studio notes-workspace" aria-label="Notes workspace">
+  return <section ref={workspace} className="notes-studio notes-workspace" aria-label="Notes workspace">
     <header className="notes-workspace-header">
       <nav className="workspace-tabs" aria-label="Notes modes">
-        <button type="button" aria-pressed={view === "write"} onClick={() => { setView("write"); updateFields({ notesMode: "write" }); }}>Notes</button>
-        <button type="button" aria-pressed={view === "lessons"} onClick={() => { setView("lessons"); setPanel(null); updateFields({ notesMode: "lessons" }); }}>Lessons</button>
+        <button type="button" aria-pressed={view === "write"} onClick={() => { setView("write"); onModeChange?.("write"); updateFields({ notesMode: "write" }); }}>Notes</button>
+        <button type="button" aria-pressed={view === "lessons"} onClick={() => { setView("lessons"); onModeChange?.("lessons"); setPanel(null); updateFields({ notesMode: "lessons" }); }}>Lessons</button>
       </nav>
       <div className="notes-primary-actions">
         <button className="quiet-button is-primary" type="button" aria-expanded={panel === "generate"} onClick={() => openPanel("generate")}><UiIcon name="generate" /><span>Generate</span></button>
@@ -325,7 +341,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
     {view === "lessons" ? <LearnMode file={file} getFileText={getFileText} onUpdate={next => updateFields({ course: next.course })}
       onUseAsNotes={markdown => {
         editor.chain().focus("end").command(({ tr }) => { closeHistory(tr); return true; }).insertContent(markdownToNoteHtml(markdown)).run();
-        setView("write"); updateFields({ notesMode: "write" }); setStatus("Lessons added to your notes.");
+        setView("write"); onModeChange?.("write"); updateFields({ notesMode: "write" }); setStatus("Lessons added to your notes.");
       }} /> : <div className={`notes-layout ${panel && !narrow ? "has-inspector" : ""}`}>
       <article className="note-workspace">
         <div className="note-toolbar" role="toolbar" aria-label="Note formatting">
@@ -339,6 +355,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
           {action("Bold", "bold", chain => chain.toggleBold(), tools?.bold)}
           {action("Italic", "italic", chain => chain.toggleItalic(), tools?.italic)}
           {action("Underline", "underline", chain => chain.toggleUnderline(), tools?.underline)}
+          <button type="button" disabled={preview} aria-label="Insert equation" title="Insert equation" onClick={() => openPanel("equation")}><UiIcon name="equation" /></button>
           {action("Bullets", "list", chain => chain.toggleBulletList(), tools?.bullet)}
           <span className="toolbar-divider" />
           <button type="button" disabled={preview} aria-label="Insert table" title="Insert table" onMouseDown={event => event.preventDefault()} onClick={() => run(chain => chain.insertTable({ rows: 3, cols: 3, withHeaderRow: true }))}><UiIcon name="table" /></button>
@@ -355,7 +372,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
           <select aria-label="Align text" disabled={preview} value="" onChange={event => run(chain => chain.setTextAlign(event.target.value))}>
             <option value="" disabled>Align</option><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option><option value="justify">Justify</option>
           </select>
-          {action("Undo", "undo", chain => chain.undo())}{action("Redo", "undo", chain => chain.redo())}
+          {action("Undo", "undo", chain => chain.undo())}{action("Redo", "redo", chain => chain.redo())}
         </div>}
         {tools?.table && <div className="studio-controls note-table-tools" aria-label="Table actions">
           <button onClick={() => run(chain => chain.addRowAfter())}>Add row</button><button onClick={() => run(chain => chain.addColumnAfter())}>Add column</button>
@@ -364,14 +381,15 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
           <button onClick={() => run(chain => chain.deleteTable())}>Delete table</button>
         </div>}
         {tools?.image && !preview && <div className="studio-controls note-table-tools"><button onClick={() => run(chain => chain.deleteSelection())}>Remove selected image</button></div>}
+        <div className="note-document-meta"><span>{editor.getText().trim() ? editor.getText().trim().split(/\s+/).length : 0} words</span><span>{savedAt ? "Saved in workspace" : "Changes save automatically"}</span></div>
         <div className={`note-paper ${preview ? "is-reading" : ""}`}><EditorContent editor={editor} /></div>
         {status && !busy && <p className="note-local-status" role="status">{status}</p>}
       </article>
       {panel && <>
         {narrow && <button className="notes-panel-backdrop" aria-label="Close note tools backdrop" onClick={() => setPanel(null)} />}
-        <aside ref={panelRef} className="notes-inspector" role={narrow ? "dialog" : "complementary"} aria-modal={narrow || undefined}
-          aria-label={panel === "generate" ? "AI note tools" : panel === "images" ? "Note images" : "Saved versions"}>
-          <header><h2>{panel === "generate" ? "Generate notes" : panel === "images" ? "Images" : "Versions"}</h2>
+        <aside ref={panelRef} className={`notes-inspector ${narrow ? "is-drawer" : ""}`} role={narrow ? "dialog" : "complementary"} aria-modal={narrow || undefined}
+          aria-label={panel === "generate" ? "AI note tools" : panel === "images" ? "Note images" : panel === "equation" ? "Equation editor" : "Saved versions"}>
+          <header><h2>{panel === "generate" ? "Generate notes" : panel === "images" ? "Images" : panel === "equation" ? "Equation" : "Versions"}</h2>
             <button type="button" className="quiet-button" aria-label="Close note tools" onClick={() => setPanel(null)}><UiIcon name="close" /></button></header>
           {panel === "generate" && <div className="notes-panel-body">
             <p>Start with a topic or use the material in this file.</p>
@@ -399,6 +417,9 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
             <div className="note-image-results">{images.map(image => <figure key={image.src}><img src={image.src} alt={image.title} referrerPolicy="no-referrer" loading="lazy" />
               <figcaption>{image.source ? <a href={image.source} target="_blank" rel="noreferrer">{image.credit}</a> : image.title}</figcaption><button onClick={() => addFoundImage(image)}>Insert image</button></figure>)}</div>
           </div>}
+          {panel === "equation" && <form className="notes-panel-body" onSubmit={event => { event.preventDefault(); if (!equation.trim()) return; editor.chain().focus().insertContent({ type: "noteEquation", attrs: { latex: equation.trim().slice(0, 600) } }).run(); setPanel(null); }}>
+            <label>Equation (LaTeX)<input aria-label="Equation LaTeX" maxLength={600} value={equation} onChange={event => setEquation(event.target.value)} /></label><div className="equation-preview" aria-label="Equation preview" dangerouslySetInnerHTML={{ __html: katex.renderToString(equation, { throwOnError: false, trust: false, maxExpand: 500 }) }} /><button className="quiet-button is-primary" disabled={!equation.trim()}>Insert equation</button><p>Use LaTeX notation, for example \(\frac&#123;a&#125;&#123;b&#125;\), x^2, or \sqrt&#123;x&#125;.</p>
+          </form>}
           {panel === "versions" && <div className="notes-panel-body"><form onSubmit={saveVersion}><label>Version name<input value={versionName} onChange={event => setVersionName(event.target.value)} placeholder="e.g. Before exam review" /></label>
             <button className="quiet-button" type="submit" disabled={!versionName.trim()}>Save version</button></form>
             {saved.length > 0 && <label>Restore version<select aria-label="Restore version" value="" onChange={event => { const version = saved[Number(event.target.value)]; if (version) editor.commands.setContent(version.html ? sanitizeNoteHtml(version.html) : markdownToNoteHtml(version.text)); }}>

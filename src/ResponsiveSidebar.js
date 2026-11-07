@@ -21,6 +21,7 @@ export default function ResponsiveSidebar({ mobile, expanded, onExpand, main, ma
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const previousFocus = document.activeElement;
+    const menuTrigger = trigger.current;
     drawer.current?.querySelector("button")?.focus();
     const keyboard = event => {
       if (event.key === "Escape") { event.preventDefault(); setOpen(false); }
@@ -34,7 +35,7 @@ export default function ResponsiveSidebar({ mobile, expanded, onExpand, main, ma
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", keyboard);
-      if (trigger.current?.isConnected) trigger.current.focus();
+      if (menuTrigger?.isConnected) menuTrigger.focus();
       else if (previousFocus?.isConnected) previousFocus.focus();
     };
   }, [mobile, open]);
@@ -45,7 +46,7 @@ export default function ResponsiveSidebar({ mobile, expanded, onExpand, main, ma
     <div className="navigation-brand">
       <button type="button" onClick={() => mobile ? setOpen(false) : onExpand(value => !value)}
         aria-label={mobile ? "Close menu" : expanded ? "Collapse sidebar" : "Expand sidebar"}>
-        {mobile ? <MenuIcon close /> : <img src="/ClassioLogo.png" alt="" width="28" height="28" />}
+        {mobile ? <MenuIcon close /> : <img src="/classio-mark.svg" alt="" width="28" height="28" />}
       </button>
       {full && <span>Classio</span>}
     </div>
@@ -87,7 +88,7 @@ export default function ResponsiveSidebar({ mobile, expanded, onExpand, main, ma
       {mobile && <button ref={trigger} type="button" className="quiet-button" aria-label="Open menu" aria-expanded={open} aria-controls="classio-navigation" onClick={() => setOpen(true)}><MenuIcon /></button>}
       {documentName && <button type="button" className="quiet-button" aria-label="Back to library" onClick={() => onNavigate("home")}><UiIcon name="back" /></button>}
       <span className="workspace-topbar-title">{documentName || "Classio"}</span>
-      <button type="button" className="quiet-button" aria-label="AI Assistant" onClick={() => onNavigate("assistant")}>Ask AI</button>
+      <span className="workspace-session-tag">{guest ? "Guest workspace" : "Signed in"}</span>
     </header>
     {mobile ? open && <div className="phone-navigation-overlay">
       <button type="button" tabIndex={-1} className="navigation-backdrop" aria-label="Close menu backdrop" onClick={() => setOpen(false)} />

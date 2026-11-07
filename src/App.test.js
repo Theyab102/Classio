@@ -4,6 +4,8 @@ import { checkBirthDate } from "./eligibility";
 import { escapeHtml, sanitizeDocumentHtml } from "./safeContent";
 import { parseStudyRequest } from "../server/study-request";
 
+jest.mock("./pdf", () => ({ openPdf: jest.fn(), loadPdfLibrary: jest.fn() }));
+
 const mockWorkspace = jest.fn(() => <p>Workspace loaded</p>);
 jest.mock("./App", () => ({ __esModule: true, default: () => mockWorkspace() }));
 

@@ -1,13 +1,15 @@
-const { test } = require("node:test");
+const { test, beforeEach } = require("node:test");
 const assert = require("node:assert/strict");
-const { availableProviders, geminiPayload, generateStudy } = require("./ai-providers");
+const { availableProviders, geminiPayload, generateStudy, clearProviderCaches } = require("./ai-providers");
 
-const env = { GROQ_API_KEY: "test-groq", GEMINI_API_KEY: "test-google", GEMINI_ENABLED: "true", GEMINI_MODEL: "test-model" };
+beforeEach(() => clearProviderCaches());
+
+const env = { GROQ_TEXT_MODEL: "test-groq-model", GROQ_API_KEY: "test-groq", GEMINI_API_KEY: "test-google", GEMINI_ENABLED: "true", GEMINI_MODEL: "test-model" };
 const input = { messages: [{ role: "system", content: "Use the learner's language." }, { role: "user", content: "Explain gravity." }], maxTokens: 500 };
 
-test("Gemini requires explicit enablement, a key and a valid configured model", () => {
+test("Gemini requires explicit enablement, a key; discovers a model when no override is set", () => {
   assert.deepEqual(availableProviders({ ...env, GEMINI_ENABLED: "false" }), ["groq"]);
-  assert.deepEqual(availableProviders({ ...env, GEMINI_MODEL: "" }), ["groq"]);
+  assert.deepEqual(availableProviders({ ...env, GEMINI_MODEL: "" }), ["groq", "gemini"]);
   assert.deepEqual(availableProviders({ ...env, GEMINI_MODEL: "../other/key" }), ["groq"]);
   assert.deepEqual(availableProviders({ ...env, AI_PROVIDER_ORDER: "gemini,gemini,unknown,groq" }), ["gemini", "groq"]);
 });
@@ -36,7 +38,7 @@ test("Groq rate limiting falls back to Gemini without sending keys in URLs or re
   assert.equal(calls.length, 2);
   assert.equal(calls[1].options.headers["x-goog-api-key"], env.GEMINI_API_KEY);
   assert(!calls[1].url.includes(env.GEMINI_API_KEY));
-  assert.deepEqual(reports, [{ provider: "groq", code: "HTTP_429" }]);
+  assert.deepEqual(reports, [{ provider: "groq", code: "PROVIDER_RATE_LIMIT" }]);
 });
 
 test("safety-blocked responses do not bypass the block through another provider", async () => {
@@ -78,4 +80,22 @@ test("truncated course/JSON output is reported instead of presented as a complet
   await assert.rejects(generateStudy(input, { env: { GEMINI_ENABLED: "true", GEMINI_API_KEY: "test", GEMINI_MODEL: "test-model" },
     fetcher: async () => ({ ok: true, json: async () => ({ candidates: [{ finishReason: "MAX_TOKENS" }] }) }) }),
   error => error.code === "OUTPUT_LIMIT");
+});
+
+test("uses the server alias and discovers an actually listed text model", async () => {
+  const urls = [];
+  const result = await generateStudy(input, { env: { Groq_Key: "fixture-alias" }, fetcher: async (url, options) => {
+    urls.push(url); assert.equal(options.headers.Authorization, "Bearer fixture-alias");
+    if (url.endsWith("/models")) return { ok: true, json: async () => ({ data: [{ id: "llama-3.3-70b-versatile", active: true }] }) };
+    assert.equal(JSON.parse(options.body).model, "llama-3.3-70b-versatile");
+    return { ok: true, json: async () => ({ choices: [{ message: { content: "A provider response." } }] }) };
+  } });
+  assert.equal(result.provider, "groq"); assert.equal(urls.length, 2); assert(urls.every(url => !url.includes("fixture-alias")));
+});
+test("a rejected credential is not repeatedly sent by the same warm server", async () => {
+  let calls = 0;
+  const options = { env: { Groq_Key: "fixture-rejected", GROQ_TEXT_MODEL: "fixture" }, fetcher: async () => { calls++; return { ok: false, status: 401, json: async () => ({}) }; } };
+  await assert.rejects(generateStudy(input, options), error => error.code === "CREDENTIALS_REJECTED");
+  await assert.rejects(generateStudy(input, options), error => error.code === "CREDENTIALS_REJECTED");
+  assert.equal(calls, 1);
 });

@@ -4,8 +4,7 @@ import JSZip from "jszip";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 import { LegalLinks } from "./Legal";
-import PodcastDownload from "./PodcastDownload";
-import { downloadStudyFile, makeStudyId, MAX_AUDIO_BYTES, mergeSessionFolders, scheduleCardReview, sendStudyRequest, TTS_SPACE_URL } from "./studyTools";
+import { makeStudyId, MAX_AUDIO_BYTES, mergeSessionFolders, sendStudyRequest, TTS_SPACE_URL } from "./studyTools";
 import { openPdf } from "./pdf";
 import LibraryHome from "./LibraryHome";
 import ActionMenu from "./ActionMenu";
@@ -14,8 +13,19 @@ import AvatarEditor from "./AvatarEditor";
 import WorkspaceFrame from "./WorkspaceFrame";
 import UiIcon from "./UiIcon";
 import "./workspace.css";
+import "./premium.css";
+import AssistantPanel from "./AssistantPanel";
+import InlineAssistant from "./InlineAssistant";
+import WorkspaceArt from "./WorkspaceArt";
+import FlashcardStudio from "./FlashcardStudio";
+import QuizStudio from "./QuizStudio";
+import PodcastStudio from "./PodcastStudio";
+import DocumentWorkspace from "./DocumentWorkspace";
+import StudioDialog from "./StudioDialog";
+import { LearningSession, useLearningSession } from "./LearningSession";
+import { DEFAULT_CHARACTER } from "./avatarOptions";
+import { encodeWorkspace, decodeWorkspace } from "./workspaceCodec";
 import { markdownToNoteHtml } from "./noteFormat";
-import LocalPdfViewer from "./LocalPdfViewer";
 import PowerPointViewer from "./PowerPointViewer";
 import { loadPptxExporter } from "./pptxExport";
 import { renderInkImage } from "./DocumentInk";
@@ -1281,173 +1291,10 @@ async function attachBlobs(raw) {
 }
 
 // ─── STANDALONE AI ASSISTANT ─────────────────────────────────────────────────
-function StandaloneAI({ onClose, context, messages, onMessagesChange, pending, onPendingChange }) {
-  const msgs = messages;
-  const setMsgs = onMessagesChange;
-  const [inp, setInp] = useState("");
-  const loading = pending;
-  const setLoading = onPendingChange;
-  const [attachedImage, setAttachedImage] = useState(null);
-  const imgInputRef = useRef(null);
-  const bottomRef = useRef(null);
-  const dialogRef = useRef(null), closeRef = useRef(onClose);
-  closeRef.current = onClose;
-  useEffect(() => {
-    const before = document.activeElement, overflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    dialogRef.current?.querySelector('[aria-label="Message"]')?.focus();
-    const keyboard = event => {
-      if (event.key === "Escape") { event.preventDefault(); closeRef.current(); }
-      if (event.key !== "Tab") return;
-      const controls = [...dialogRef.current.querySelectorAll('button:not(:disabled), input:not([type=file])')];
-      if (event.shiftKey && document.activeElement === controls[0]) { event.preventDefault(); controls.at(-1)?.focus(); }
-      else if (!event.shiftKey && document.activeElement === controls.at(-1)) { event.preventDefault(); controls[0]?.focus(); }
-    };
-    window.addEventListener("keydown", keyboard);
-    return () => { document.body.style.overflow = overflow; window.removeEventListener("keydown", keyboard); if (before?.isConnected) before.focus(); };
-  }, []);
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:"auto" }); }, [msgs]);
-  const attachImage = (f) => {
-    if (!f) return;
-    const r = new FileReader();
-    r.onload = e => setAttachedImage({ base64: e.target.result, name: f.name });
-    r.readAsDataURL(f);
-  };
-  const send = async () => {
-    const text = inp.trim();
-    if ((!text && !attachedImage) || loading) return;
-    const content = text || "Analyze this image and explain or solve it.";
-    const userMsg = { role:"user", content, image: attachedImage?.base64 };
-    const newMsgs = [...msgs, userMsg];
-    setMsgs(newMsgs); setInp(""); setLoading(true);
-    const imgToSend = attachedImage?.base64 || null;
-    setAttachedImage(null);
-    try {
-      const source = context ? context.notes || await extractFileText(context._fileObj || FILE_STORE.get(context.id)).catch(() => "") || "" : "";
-      const sys = "You are Classio AI, a smart study assistant. Help students with any question — solve problems, explain concepts, analyze images of questions or diagrams. Be clear and concise. No asterisks, no markdown." + (context ? `\nCurrent file: ${context.name}\nStudy material:\n${source.slice(0, 12000)}\nUse the supplied material when answering about this file. If it is missing, say so.` : "");
-      const apiMsgs = newMsgs.map(m => ({ role:m.role, content:m.content }));
-      const reply = imgToSend
-        ? await callClaudeVision(sys, apiMsgs, imgToSend)
-        : await callClaudeChat(sys, apiMsgs);
-      setMsgs([...newMsgs, { role:"assistant", content: reply }]);
-    } catch(e) { setMsgs([...newMsgs, { role:"assistant", content:"Error: " + e.message }]); }
-    setLoading(false);
-  };
-  return (
-    <div style={{ position:"fixed", inset:0, zIndex:3000, background:"rgba(26,23,20,.55)",
-      backdropFilter:"blur(4px)", display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <div ref={dialogRef} className="assistant-dialog" role="dialog" aria-modal="true" aria-label="AI Assistant" style={{ background:C.bg, borderRadius:10, width:"100%", maxWidth:680,
-        height:"min(85dvh, 780px)", maxHeight:"calc(100dvh - 32px)", display:"flex", flexDirection:"column",
-        boxShadow:"0 24px 80px rgba(0,0,0,.2)", border:`1px solid ${C.border}` }}>
-        {/* Header */}
-        <div style={{ display:"flex", alignItems:"center", gap:12, padding:"16px 20px",
-          borderBottom:`1px solid ${C.border}`, flexShrink:0 }}>
-          <div style={{ width:40, height:40, borderRadius:12,
-            background:"#286a9b",
-            display:"flex", alignItems:"center", justifyContent:"center" }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8M12 5V3"/><circle cx="12" cy="3" r="1"/></svg>
-          </div>
-          <div style={{ flex:1 }}>
-            <p style={{ margin:0, fontSize:16, fontWeight:700, color:C.text }}>AI Assistant</p>
-            <p style={{ margin:0, fontSize:12, color:C.muted }}>{context ? `About ${context.name}` : "Study questions and explanations"}</p>
-          </div>
-          <button aria-label="Close AI Assistant" onClick={onClose} style={{ background:C.surface, border:`1px solid ${C.border}`,
-            borderRadius:"50%", width:32, height:32, cursor:"pointer", fontSize:18,
-            color:C.muted, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
-        </div>
-        {/* Messages */}
-        <div style={{ flex:1, overflowY:"auto", padding:"16px 20px",
-          display:"flex", flexDirection:"column", gap:12 }}>
-          {msgs.length === 0 && <div className="assistant-empty">
-            <p>{context ? "Ask a question about this file." : "Ask a study question or attach an image."}</p>
-            <div className="studio-controls">{["Explain the main ideas", "Give me a practice question"].map(prompt =>
-              <button type="button" key={prompt} onClick={() => setInp(prompt)}>{prompt}</button>)}</div>
-          </div>}
-          {msgs.map((m,i)=>(
-            <div key={i} style={{ display:"flex", justifyContent:m.role==="user"?"flex-end":"flex-start",
-              alignItems:"flex-end", gap:8 }}>
-              {m.role==="assistant" && (
-                <div style={{ width:28,height:28,borderRadius:8,
-                  background:"#286a9b",
-                  display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8"/></svg>
-                </div>
-              )}
-              <div style={{ maxWidth:"75%", borderRadius:16, overflow:"hidden",
-                background:m.role==="user"?"var(--app-accent)":C.surface,
-                border:m.role==="user"?"none":`1px solid ${C.border}` }}>
-                {m.image && <img src={m.image} alt="attached"
-                  style={{ display:"block", width:"100%", maxWidth:320, maxHeight:200,
-                    objectFit:"contain", background:"#111" }} />}
-                <div style={{ padding:"10px 14px", color:m.role==="user"?"var(--app-on-accent)":C.text,
-                  fontSize:14, lineHeight:1.7 }}><Fmt text={m.content} /></div>
-              </div>
-            </div>
-          ))}
-          {loading && (
-            <div style={{ display:"flex", alignItems:"flex-end", gap:8 }}>
-              <div style={{ width:28,height:28,borderRadius:8,
-                background:"#286a9b",
-                display:"flex",alignItems:"center",justifyContent:"center" }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="11" rx="2"/><path d="M9 10h.01M15 10h.01M9 13s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M12 16v2M8 20h8"/></svg>
-              </div>
-              <div style={{ display:"flex", gap:5, padding:"12px 14px", background:C.surface,
-                borderRadius:16, border:`1px solid ${C.border}` }}>
-                {[0,1,2].map(j=><div key={j} style={{ width:7,height:7,borderRadius:"50%",
-                  background:C.accent,animation:"bounce 1.2s infinite",animationDelay:`${j*.2}s` }}/>)}
-              </div>
-            </div>
-          )}
-          <div ref={bottomRef}/>
-        </div>
-        {/* Image preview */}
-        {attachedImage && (
-          <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 20px",
-            background:C.accentL, borderTop:`1px solid ${C.accentS}`, flexShrink:0 }}>
-            <img src={attachedImage.base64} alt="preview"
-              style={{ width:44,height:44,objectFit:"cover",borderRadius:8,flexShrink:0 }}/>
-            <div style={{ flex:1, minWidth:0 }}>
-              <p style={{ margin:0, fontSize:12, fontWeight:700, color:C.link }}>Image attached</p>
-              <p style={{ margin:0, fontSize:11, color:C.muted, overflow:"hidden",
-                textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{attachedImage.name}</p>
-            </div>
-            <button onClick={()=>setAttachedImage(null)}
-              style={{ background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:20 }}>×</button>
-          </div>
-        )}
-        {/* Input */}
-        <div style={{ display:"flex", gap:8, padding:"14px 20px",
-          borderTop:`1px solid ${C.border}`, flexShrink:0 }}>
-          <button onClick={()=>imgInputRef.current?.click()} title="Attach image"
-            style={{ flexShrink:0, width:44, height:44, borderRadius:8,
-              border:`1.5px solid ${attachedImage?C.accent:C.border}`,
-              background:attachedImage?C.accentL:C.bg, cursor:"pointer",
-              display:"flex", alignItems:"center", justifyContent:"center", color:attachedImage?C.link:C.muted }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-          </button>
-          <input ref={imgInputRef} type="file" accept="image/*" style={{ display:"none" }}
-            onChange={e=>{ attachImage(e.target.files?.[0]); e.target.value=""; }}/>
-          <input aria-label="Message" value={inp} onChange={e=>setInp(e.target.value)}
-            onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); }}}
-            placeholder={attachedImage?"Ask about the image":"Ask a study question"}
-            style={{ flex:1, minWidth:0, border:`1.5px solid ${C.border}`, borderRadius:7,
-              padding:"11px 16px", fontSize:16, outline:"none", background:C.bg, color:C.text }}/>
-          <button onClick={send} disabled={(!inp.trim()&&!attachedImage)||loading}
-            style={{ flexShrink:0,
-              background:(inp.trim()||attachedImage)&&!loading?C.accent:"#ccc",
-              color:"#fff", border:"none", borderRadius:8, padding:"11px 22px",
-              fontSize:14, fontWeight:700,
-              cursor:(inp.trim()||attachedImage)&&!loading?"pointer":"not-allowed" }}>
-            Send
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+function StandaloneAI(props) { return <AssistantPanel {...props} />; }
 
 // ─── SETTINGS TAB ─────────────────────────────────────────────────────────────
-function SettingsTab({ onToggleTheme, onClearCache, files, streak }) {
+function SettingsTab({ onToggleTheme, onClearCache, files, streak, character, onEditCharacter }) {
   const T = useTheme();
   C = T;
   const [lang, setLang] = useState(() => { try { return localStorage.getItem("classio_lang") || "auto"; } catch { return "auto"; } });
@@ -1478,6 +1325,7 @@ function SettingsTab({ onToggleTheme, onClearCache, files, streak }) {
 
   return (
     <div style={{ paddingBottom:40 }}>
+      <section className="profile-summary"><FriendlyAvatar character={character} size={78} /><div><p className="eyebrow">YOUR PROFILE</p><h2>{character?.name || "Your Classio character"}</h2><p>Your saved look appears throughout your workspace.</p></div><button className="quiet-button" onClick={onEditCharacter}>Edit character</button></section>
       <div style={{ marginBottom:28 }}>
         <h1 style={{ fontFamily:"'Fraunces Variable',serif", fontSize:28, fontWeight:700, color:T.text, margin:"0 0 4px", letterSpacing:-.5 }}>Settings</h1>
         <p style={{ fontSize:14, color:T.muted, margin:0 }}>Manage your Classio preferences</p>
@@ -1867,10 +1715,13 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
   const isBlankDoc = file?._isBlank || file?.isBlankDoc || file?.id?.startsWith("blank_") || file?.type === "text/youtube";
   const FILE_TABS = [
     { id:"notes", label:"Notes", icon:<UiIcon name="notes" /> },
-    { id:"cards", label:"Review", icon:<UiIcon name="cards" /> },
-    { id:"voice", label:"Audio", icon:<UiIcon name="podcast" /> },
-    { id:"present", label:"Slides", icon:<UiIcon name="slides" /> },
+    { id:"learn", label:"Lessons", icon:<UiIcon name="book" /> },
+    { id:"quiz", label:"Quizzes", icon:<UiIcon name="quiz" /> },
+    { id:"cards", label:"Flashcards", icon:<UiIcon name="cards" /> },
+    { id:"voice", label:"Podcasts", icon:<UiIcon name="podcast" /> },
+    { id:"present", label:"Presentations", icon:<UiIcon name="slides" /> },
     ...(!isBlankDoc ? [{ id:"view", label:"Source", icon:<UiIcon name="source" /> }] : []),
+    { id:"game", label:"Study games", icon:<UiIcon name="game" /> },
     ...(file?.type === "text/youtube" || file?.youtubeUrl ? [{ id:"youtube", label:"Link", icon:<UiIcon name="link" /> }] : []),
   ];
   const FOLDER_TABS = [{ id:"files", label:"Files", icon:<UiIcon name="folder" /> }];
@@ -1878,9 +1729,9 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
 
   return <ResponsiveSidebar mobile={isMobile} expanded={sidebarExpanded} onExpand={onToggleSidebar}
     mainActive={context === "dashboard" ? homeTab === "about" ? "guides" : homeTab === "settings" ? "settings" : "home" : undefined}
-    main={NAV}
+    main={[NAV[0], { id: "assistant", label: "AI Assistant", icon: <UiIcon name="generate" /> }, ...NAV.slice(1)]}
     tabs={context === "document" ? FILE_TABS : context === "folder" ? FOLDER_TABS : []}
-    active={documentTab === "learn" || documentTab === "ai" ? "notes" : documentTab === "game" ? "cards" : documentTab} onTab={setActiveTab} onNavigate={onNavigate} onSearch={onOpenSearch}
+    active={documentTab === "ai" ? "notes" : documentTab} onTab={setActiveTab} onNavigate={onNavigate} onSearch={onOpenSearch}
     onCharacter={onOpenCharacter} avatar={<MiniAvatar character={character || {}} size={28} />}
     account={character?.name || user?.displayName?.split(" ")[0]} guest={isGuest} onSignOut={onSignOut}
     onToggleTheme={onToggleTheme} dark={T.isDark} documentName={context === "document" ? file?.name : context === "folder" ? folder?.name : null} />;
@@ -2225,56 +2076,24 @@ function MoveFileDropdown({ file, folders, T, onMove }) {
 
 // ── In-app ConfirmDialog (replaces window.confirm) ────────────────────────────
 function ConfirmDialog({ title, message, confirmLabel="Delete", danger=true, onConfirm, onCancel }) {
-  const T = useTheme();
-  useEffect(() => {
-    const h = e => { if(e.key==="Enter") onConfirm(); if(e.key==="Escape") onCancel(); };
-    window.addEventListener("keydown", h);
-    return () => window.removeEventListener("keydown", h);
-  }, []);
-  return (
-    <div onClick={onCancel} style={{ position:"fixed", inset:0, zIndex:9500, background:"rgba(0,0,0,.5)", display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <div onClick={e=>e.stopPropagation()} style={{ background:T.surface, borderRadius:20, padding:"28px 28px 22px", maxWidth:380, width:"100%", boxShadow:"0 24px 64px rgba(0,0,0,.3)", textAlign:"center", border:`1px solid ${T.border}` }}>
-        <div style={{ width:52, height:52, borderRadius:"50%", background:danger?"#fee2e2":T.accentL, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 16px" }}>
-          {danger
-            ? <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4h6v2"/></svg>
-            : <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={T.accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          }
-        </div>
-        <p style={{ fontSize:17, fontWeight:800, color:T.text, margin:"0 0 8px", fontFamily:"'Fraunces Variable',serif" }}>{title}</p>
-        <p style={{ fontSize:14, color:T.muted, margin:"0 0 24px", lineHeight:1.55 }}>{message}</p>
-        <div style={{ display:"flex", gap:10 }}>
-          <button onClick={onCancel} style={{ flex:1, padding:"11px", borderRadius:8, border:`1.5px solid ${T.border}`, background:"transparent", fontSize:14, fontWeight:700, cursor:"pointer", color:T.muted }}>Cancel</button>
-          <button onClick={onConfirm} style={{ flex:1, padding:"11px", borderRadius:8, border:"none", background:danger?"#ef4444":T.accent, color:"#fff", fontSize:14, fontWeight:700, cursor:"pointer" }}>{confirmLabel}</button>
-        </div>
-      </div>
+  return <StudioDialog title={title} onClose={onCancel}>
+    <p>{message}</p><div className="dialog-actions">
+      <button type="button" className="quiet-button" onClick={onCancel}>Cancel</button>
+      <button type="button" className={`quiet-button ${danger ? "is-danger" : "is-primary"}`} onClick={onConfirm}>{confirmLabel}</button>
     </div>
-  );
+  </StudioDialog>;
 }
 
 // ── In-app RenameDialog (replaces window.prompt) ──────────────────────────────
 function RenameDialog({ title, defaultValue="", placeholder="Enter name…", onConfirm, onCancel }) {
   const [val, setVal] = useState(defaultValue);
-  const T = useTheme();
-  useEffect(() => {
-    const h = e => { if(e.key==="Escape") onCancel(); };
-    window.addEventListener("keydown", h);
-    return () => window.removeEventListener("keydown", h);
-  }, []);
-  return (
-    <div onClick={onCancel} style={{ position:"fixed", inset:0, zIndex:9500, background:"rgba(0,0,0,.5)", display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <div onClick={e=>e.stopPropagation()} style={{ background:T.surface, borderRadius:20, padding:"26px 26px 20px", maxWidth:380, width:"100%", boxShadow:"0 24px 64px rgba(0,0,0,.3)", border:`1px solid ${T.border}` }}>
-        <p style={{ fontSize:17, fontWeight:800, color:T.text, margin:"0 0 16px", fontFamily:"'Fraunces Variable',serif" }}>{title}</p>
-        <input autoFocus value={val} onChange={e=>setVal(e.target.value)}
-          onKeyDown={e=>{ if(e.key==="Enter"&&val.trim()) onConfirm(val.trim()); }}
-          placeholder={placeholder}
-          style={{ width:"100%", border:`1.5px solid ${T.border}`, borderRadius:12, padding:"11px 14px", fontSize:14, outline:"none", color:T.text, background:T.bg, boxSizing:"border-box", marginBottom:16, fontFamily:"'DM Sans Variable',sans-serif" }}/>
-        <div style={{ display:"flex", gap:10 }}>
-          <button onClick={onCancel} style={{ flex:1, padding:"11px", borderRadius:8, border:`1.5px solid ${T.border}`, background:"transparent", fontSize:14, fontWeight:700, cursor:"pointer", color:T.muted }}>Cancel</button>
-          <button onClick={()=>{ if(val.trim()) onConfirm(val.trim()); }} style={{ flex:1, padding:"11px", borderRadius:8, border:"none", background:T.accent, color:"#fff", fontSize:14, fontWeight:700, cursor:"pointer" }}>Save</button>
-        </div>
-      </div>
-    </div>
-  );
+  return <StudioDialog title={title} onClose={onCancel}>
+    <form className="simple-workspace-form" onSubmit={event => { event.preventDefault(); if (val.trim()) onConfirm(val.trim()); }}>
+      <label>Name<input autoFocus required maxLength={160} value={val} onChange={event => setVal(event.target.value)} placeholder={placeholder} /></label>
+      <footer><button type="button" className="quiet-button" onClick={onCancel}>Cancel</button>
+        <button type="submit" className="quiet-button is-primary" disabled={!val.trim()}>Save</button></footer>
+    </form>
+  </StudioDialog>;
 }
 
 function DashboardDropZone({ onFilesAdded }) {
@@ -2568,7 +2387,9 @@ function WebLinkModal({ folders, onClose, onSaveDirect }) {
 }
 
 
-export default function App() {
+export default function App() { return <LearningSession><ClassioApp /></LearningSession>; }
+
+function ClassioApp() {
   const { isMobile, isTablet } = useResponsive();
   const [user, setUser] = useState(null);
   const isGuest = !user;
@@ -2585,6 +2406,11 @@ export default function App() {
   const [showHomeAI, setShowHomeAI] = useState(false);
   const [assistantMessages, setAssistantMessages] = useState([]);
   const [assistantPending, setAssistantPending] = useState(false);
+  const [assistantDraft, setAssistantDraft] = useState("");
+  const [conversationNotice, setConversationNotice] = useState("");
+  const assistantRequest = useRef(null), chatRevision = useRef(0);
+  const { activity, question, clearQuestion } = useLearningSession();
+  useEffect(() => { if (question) { setAssistantDraft(question.text); setShowHomeAI(true); clearQuestion(); } }, [question, clearQuestion]);
   const assistantEpoch = useRef(0);
   const [newName, setNewName] = useState("");
   const [newColor,       setNewColor]       = useState(FOLDER_COLORS[0]);
@@ -2592,7 +2418,7 @@ export default function App() {
   const [activeStudyGroup, setActiveStudyGroup] = useState(null); // group doc id
   const [showStudyGroupLobby, setShowStudyGroupLobby] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
-  const [sidebarExpanded, setSidebarExpanded] = useState(false);
+  const [sidebarExpanded, setSidebarExpanded] = useState(() => window.innerWidth >= 1200);
   const [folderTab, setFolderTab] = useState("files");
   const [fileTab, setFileTab] = useState("view");
 
@@ -2629,7 +2455,7 @@ export default function App() {
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, []);
-  const DEFAULT_CHAR = { skin:"#FDDBB4", hair:"#3D2B1F", hairStyle:0, eyes:"#2980B9", top:"#2C3E50", bg:"#dce8ff", mouth:0, eyebrow:0, eyeShape:0, accessory:0, topStyle:0, blush:false, lips:false, freckles:false, lipColor:"#d06060", hat:0, hatColor:"#E74C3C", glasses:0, glassesColor:"#333333", facialHair:0, necklace:0, necklaceColor:"#f0c040", earring:0, earringColor:"#f0c040", name:"" };
+  const DEFAULT_CHAR = DEFAULT_CHARACTER;
   const [character, setCharacter] = useState(() => {
     try { return { ...DEFAULT_CHAR, ...(JSON.parse(localStorage.getItem("classio_char") || "null") || {}) }; }
     catch { return { skin:"#FDDBB4", hair:"#3D2B1F", hairStyle:0, eyes:"#3D5A80", top:"#3D5A80", name:"" }; }
@@ -2662,11 +2488,13 @@ export default function App() {
       accountUid.current = account.uid;
       deferAccountSync.current = false;
       const guestFolders = saveGuestOnSignIn.current ? foldersRef.current : [];
+      const guestAudio = guestFolders.length ? [...FILE_STORE].filter(([key]) => key.startsWith("podcast:")) : [];
       saveGuestOnSignIn.current = false;
       resetWorkspace();
       setUser(undefined);
 
       const key = workspaceCacheKey(account.uid);
+      try { const profile = JSON.parse(localStorage.getItem("classio_char:" + account.uid) || "null"); if (profile) setCharacter({ ...DEFAULT_CHARACTER, ...profile }); } catch {}
       let cached = null;
       try { cached = JSON.parse(localStorage.getItem(key)); } catch {}
       let raw = Array.isArray(cached?.folders) ? cached.folders : [];
@@ -2675,7 +2503,9 @@ export default function App() {
       try {
         const snap = await withRestoreTimeout(getDoc(doc(db, "users", account.uid)));
         if (snap.metadata.fromCache) throw new Error("Account could only be read from cache.");
-        const remote = snap.data()?.folders;
+        const profile = snap.data()?.character;
+        if (profile && active && current === revision) { setCharacter({ ...DEFAULT_CHARACTER, ...profile }); try { localStorage.setItem("classio_char:" + account.uid, JSON.stringify(profile)); } catch {} }
+        const remote = decodeWorkspace(snap.data()?.folders);
         if (Array.isArray(remote)) {
           if (cached?.mergeOnRestore) raw = mergeSessionFolders(remote, raw);
           else if (!cached?.pending) raw = remote;
@@ -2702,6 +2532,19 @@ export default function App() {
       replaceFolders(workspace);
       setWorkspaceWarning(warning);
       setUser(account);
+      for (const [audioKey, blob] of guestAudio) { FILE_STORE.set(audioKey, blob); idbSave(audioKey, blob); }
+      let cachedChat = null;
+      try { cachedChat = JSON.parse(localStorage.getItem("classio_chat:" + account.uid) || "null"); const messages = Array.isArray(cachedChat) ? cachedChat : cachedChat?.messages; if (Array.isArray(messages)) { setAssistantMessages(messages); setConversationNotice("Conversation saved on this browser"); } } catch {}
+      const chatVersion = chatRevision.current;
+      withRestoreTimeout(getDoc(doc(db, "users", account.uid, "preferences", "assistant"))).then(snapshot => {
+        if (active && current === revision && auth.currentUser?.uid === account.uid && chatVersion === chatRevision.current) {
+          const remoteChat = snapshot.data();
+          if (!cachedChat?.pending && Array.isArray(remoteChat?.messages) && (remoteChat.updatedAt || 0) >= (cachedChat?.updatedAt || 0)) {
+            setAssistantMessages(remoteChat.messages); setConversationNotice("Conversation restored from your account");
+            try { localStorage.setItem("classio_chat:" + account.uid, JSON.stringify({ ...remoteChat, pending: false })); } catch {}
+          }
+        }
+      }).catch(() => {});
       setSignInPending(false);
       if (guestFolders.length || cached?.pending) saveAccountWorkspace(workspace, account.uid);
       for (const folder of guestFolders) {
@@ -2736,7 +2579,7 @@ export default function App() {
     saveTimer.current = setTimeout(async () => {
       if (auth.currentUser?.uid !== uid) return;
       try {
-        await setDoc(doc(db, "users", uid), { folders }, { merge: true });
+        await setDoc(doc(db, "users", uid), { folders: encodeWorkspace(folders) }, { merge: true });
         if (localSaved && localStorage.getItem(key) === pending) {
           localStorage.setItem(key, JSON.stringify({ folders, pending: false }));
         }
@@ -2781,6 +2624,7 @@ export default function App() {
   }
 
   function resetWorkspace() {
+    try { setCharacter({ ...DEFAULT_CHARACTER, ...(JSON.parse(localStorage.getItem("classio_char") || "null") || {}) }); } catch { setCharacter({ ...DEFAULT_CHARACTER }); }
     setWorkspaceWarning("");
     replaceFolders([]);
     FILE_STORE.clear();
@@ -2789,7 +2633,7 @@ export default function App() {
     setActiveFolder(null);
     setActiveFile(null);
     setShowHomeAI(false);
-    setAssistantMessages([]);
+    setAssistantMessages([]); setConversationNotice(""); setAssistantDraft(""); assistantRequest.current?.abort(); assistantRequest.current = null;
     setAssistantPending(false);
     assistantEpoch.current++;
     setShowSearch(false);
@@ -2823,10 +2667,39 @@ export default function App() {
 
   if (user === undefined) return <Splash />;
 
+  function askAssistant(text) { setAssistantDraft(text); setShowHomeAI(true); }
+  function saveCharacter(next) {
+    setCharacter(next);
+    let local = false;
+    try { localStorage.setItem(user ? "classio_char:" + user.uid : "classio_char", JSON.stringify(next)); local = true; } catch {}
+    if (user) setDoc(doc(db, "users", user.uid), { character: next }, { merge: true }).catch(() => setWorkspaceWarning(local ? "Character saved on this browser. Profile sync is unavailable." : "The character could not be saved. Keep this workspace open and try again."));
+  }
+  function saveConversation(messages) {
+    chatRevision.current++;
+    const bounded = messages.slice(-60); setAssistantMessages(bounded);
+    if (!user || auth.currentUser?.uid !== user.uid) { setConversationNotice("Guest conversation ends with this session"); return; }
+    const saved = bounded.map(({ role, content, failed }) => ({ role, content: content.slice(0, 12000), ...(failed ? { failed: true } : {}) }));
+    const uid = user.uid, key = "classio_chat:" + uid, record = { messages: saved, updatedAt: Date.now() }, pending = JSON.stringify({ ...record, pending: true });
+    let local = false;
+    try { localStorage.setItem(key, pending); local = true; } catch {}
+    setConversationNotice(local ? "Conversation saved on this browser" : "Saving conversation…");
+    withRestoreTimeout(setDoc(doc(db, "users", uid, "preferences", "assistant"), record, { merge: true })).then(() => {
+      if (auth.currentUser?.uid !== uid) return;
+      if (local && localStorage.getItem(key) === pending) localStorage.setItem(key, JSON.stringify({ ...record, pending: false }));
+      setConversationNotice("Conversation synced with your account");
+    }).catch(() => { if (auth.currentUser?.uid === uid) setConversationNotice(local ? "Saved on this browser; conversation sync is unavailable" : "Conversation could not be saved. Keep this session open."); });
+  }
+  function markOpened(file, folder) {
+    const next = { ...file, lastOpenedAt: Date.now() };
+    setFoldersSave(foldersRef.current.map(item => item.id === folder.id ? { ...item, files: item.files.map(value => value.id === file.id ? { ...value, lastOpenedAt: next.lastOpenedAt } : value) } : item));
+    return next;
+  }
   function renderAssistant() {
     const epoch = assistantEpoch.current;
-    return showHomeAI && <StandaloneAI context={screen === "file" ? activeFile : null} onClose={() => setShowHomeAI(false)} messages={assistantMessages}
-      onMessagesChange={messages => { if (epoch === assistantEpoch.current) setAssistantMessages(messages); }}
+    return showHomeAI && <StandaloneAI context={screen === "file" ? activeFile : null} activity={activity} library={folders.flatMap(folder => folder.files.map(file => ({ name: file.name, folder: folder.name })))}
+      readSource={file => extractFileText(file._fileObj || FILE_STORE.get(file.id))} controllerRef={assistantRequest}
+      storageNotice={conversationNotice} draft={assistantDraft} onDraftChange={setAssistantDraft} onClose={() => setShowHomeAI(false)} messages={assistantMessages}
+      onMessagesChange={messages => { if (epoch === assistantEpoch.current) saveConversation(messages); }}
       pending={assistantPending} onPendingChange={pending => { if (epoch === assistantEpoch.current) setAssistantPending(pending); }} />;
   }
 
@@ -2838,16 +2711,17 @@ export default function App() {
   };
 
   const handleOpenFileFromSearch2 = (fi, folder) => {
+    const opened = markOpened(fi, folder);
     setActiveFolder(folder);
     setFileTab("view");
-    const restored = {...fi, _fileObj: fi._fileObj||FILE_STORE.get(fi.id)||null};
+    const restored = {...opened, _fileObj: fi._fileObj||FILE_STORE.get(fi.id)||null};
     setActiveFile(restored);
     setScreen("file");
   };
 
   // ── Persistent sidebar wrapper for sub-screens ──────────────────────────
   const renderSubscreen = (children) => (
-    <div style={{ minHeight:"100vh", background:T.bg, fontFamily:"'DM Sans Variable',sans-serif", display:"flex", width:"100%", overflowX:"hidden" }}>
+    <div className={`classio-shell ${showHomeAI ? "assistant-is-open" : ""}`} style={{ minHeight:"100vh", background:T.bg, fontFamily:"'DM Sans Variable',sans-serif", display:"flex", width:"100%", overflowX:"hidden" }}>
       <style>{GS}</style>
       <style>{DARK_CSS}</style>
       <style>{`
@@ -2895,7 +2769,7 @@ export default function App() {
       />
       {renderAssistant()}
       {showSearch && <CommandSearch folders={folders} onOpenFile={handleOpenFileFromSearch2} onClose={()=>setShowSearch(false)} />}
-      {showCharacter && <CharacterModal character={character} onChange={c => { setCharacter(c); if (user) localStorage.setItem("classio_char", JSON.stringify(c)); }} onClose={() => setShowCharacter(false)} />}
+      {showCharacter && <CharacterModal character={character} onChange={saveCharacter} onClose={() => setShowCharacter(false)} />}
       <div className="workspace-content" style={{
         flex: 1,
         marginLeft: isMobile ? 0 : (sidebarExpanded ? 220 : 60),
@@ -2936,7 +2810,7 @@ export default function App() {
     const folder = folders.find(f => f.id === activeFolder.id) || activeFolder;
     return renderSubscreen(
         <FolderView folder={folder} guest={isGuest} onBack={() => { setScreen("home"); setActiveFolder(null); }}
-          onOpenFile={(f) => { const restored = {...f, _fileObj: f._fileObj || FILE_STORE.get(f.id) || null}; setActiveFile(restored); setScreen("file"); setFileTab("view"); }}
+          onOpenFile={(f) => { const opened = markOpened(f, folder); const restored = {...opened, _fileObj: f._fileObj || FILE_STORE.get(f.id) || null}; setActiveFile(restored); setScreen("file"); setFileTab("view"); }}
           onUpdate={updateFolder}
           activeTab={folderTab}
           allFolders={folders}
@@ -2962,23 +2836,24 @@ export default function App() {
 
   function createNote(mode = "write") {
     const inbox = foldersRef.current.find(folder => folder.id === "inbox") || { id: "inbox", name: "Inbox", color: "#286a9b", files: [] };
-    const file = { id: `blank_${makeStudyId()}`, name: "Untitled note", type: "text/plain", notes: "", studyCards: [],
+    const file = { id: `blank_${makeStudyId()}`, name: mode === "lessons" ? "Untitled course" : "Untitled note", type: "text/plain", notes: "", studyCards: [], createdAt: Date.now(), lastOpenedAt: Date.now(),
       _isBlank: true, defaultTab: "notes", notesMode: mode };
     const folder = { ...inbox, files: [file, ...inbox.files] };
     setFoldersSave([folder, ...foldersRef.current.filter(item => item.id !== inbox.id)]);
-    setActiveFolder(folder); setActiveFile(file); setFileTab("notes"); setScreen("file");
+    setActiveFolder(folder); setActiveFile(file); setFileTab(mode === "lessons" ? "learn" : "notes"); setScreen("file");
   }
 
   const handleOpenFileFromSearch = (fi, folder) => {
+    const opened = markOpened(fi, folder);
     setActiveFolder(folder);
     setFileTab("view");
-    const restored = {...fi, _fileObj: fi._fileObj||FILE_STORE.get(fi.id)||null};
+    const restored = {...opened, _fileObj: fi._fileObj||FILE_STORE.get(fi.id)||null};
     setActiveFile(restored);
     setScreen("file");
   };
 
   return (
-    <div style={{ minHeight:"100vh", background:T.bg, fontFamily:"'DM Sans Variable',sans-serif", display:"flex", width:"100%", boxSizing:"border-box", overflow:"visible" }}>
+    <div className={`classio-shell ${showHomeAI ? "assistant-is-open" : ""}`} style={{ minHeight:"100vh", background:T.bg, fontFamily:"'DM Sans Variable',sans-serif", display:"flex", width:"100%", boxSizing:"border-box", overflow:"visible" }}>
       <style>{GS}</style>
       <style>{DARK_CSS}</style>
       {/* Sidebar */}
@@ -3000,7 +2875,7 @@ export default function App() {
       />
       {/* Command-K Search */}
       {showSearch && <CommandSearch folders={folders} onOpenFile={handleOpenFileFromSearch} onClose={()=>setShowSearch(false)} />}
-      {showCharacter && <CharacterModal character={character} onChange={c => { setCharacter(c); if (user) localStorage.setItem("classio_char", JSON.stringify(c)); }} onClose={() => setShowCharacter(false)} />}
+      {showCharacter && <CharacterModal character={character} onChange={saveCharacter} onClose={() => setShowCharacter(false)} />}
       {user && showStudyGroupLobby && <StudyGroupLobby
         user={user}
         db={db}
@@ -3009,11 +2884,11 @@ export default function App() {
       />}
       {/* Main content area — offset by sidebar */}
       <div className="workspace-content" style={{ flex:1, minWidth:0, marginLeft:isMobile?0:(sidebarExpanded?220:60), marginTop:60, marginBottom:0, minHeight:"100vh", display:"flex", flexDirection:"column", background:T.bg }}>
-      <div style={{ maxWidth:960, margin:"0 auto", padding:isMobile?"12px 14px":isTablet?"16px 20px":"32px 36px", width:"100%", boxSizing:"border-box" }}>
+      <div className="library-container" style={{ maxWidth:960, margin:"0 auto", padding:isMobile?"12px 14px":isTablet?"16px 20px":"32px 36px", width:"100%", boxSizing:"border-box" }}>
 
         {workspaceWarning && <p className="workspace-warning" role="status">{workspaceWarning}</p>}
         {homeTab === "folders" && <LibraryHome folders={folders} guest={isGuest} signIn={signInToSave}
-          signInPending={signInPending} signInError={signInError} createNote={createNote}
+          signInPending={signInPending} signInError={signInError} createNote={createNote} onAsk={askAssistant}
           upload={() => setShowUploadModal(true)} record={() => setShowRecordModal(true)} addLink={() => setShowWebLinkModal(true)}
           newFolder={() => setShowNewFolder(true)} openFile={handleOpenFileFromSearch}
           openFolder={folder => { setActiveFolder(folder); setFolderTab("files"); setScreen("folder"); }}
@@ -3022,7 +2897,7 @@ export default function App() {
             ? { ...folder, files: folder.files.filter(item => item.id !== file.id) }
             : folder.id === to ? { ...folder, files: [...folder.files, file] } : folder))} />}
         {homeTab === "about" && <AboutTab />}
-        {homeTab === "settings" && <SettingsTab onToggleTheme={_toggleTheme} onClearCache={user ? clearFolderCache : undefined}
+        {homeTab === "settings" && <SettingsTab character={character} onEditCharacter={() => setShowCharacter(true)} onToggleTheme={_toggleTheme} onClearCache={user ? clearFolderCache : undefined}
           files={folders.flatMap(folder => folder.files)} streak={studyStreak} />}
 
       {renderAssistant()}
@@ -3072,7 +2947,7 @@ export default function App() {
             // Fallback: save raw audio file to dashboard
             const inbox = folders.find(f=>f.id==="inbox") || {id:"inbox",name:"Inbox",color:"#6B4E8A",files:[]};
             const id = `fi${Date.now()}-${Math.random()}`;
-            FILE_STORE.set(id, file); idbSave(id, file);
+            FILE_STORE.set(id, file); if (user) idbSave(id, file);
             const newFile = { id, name:file.name||"Recording.wav", type:file.type, size:file.size,
               colorIndex:0, notes:"", studyCards:[], uploadedAt:new Date().toLocaleDateString(), linkedFileIds:[], _fileObj:file };
             setFoldersSave([{...inbox,files:[...inbox.files,newFile]}, ...folders.filter(f=>f.id!=="inbox")]);
@@ -3083,7 +2958,7 @@ export default function App() {
             const inbox = folders.find(f=>f.id==="inbox") || {id:"inbox",name:"Inbox",color:"#6B4E8A",files:[]};
             const id = `fi${Date.now()}-${Math.random()}`;
             const title = "Voice Notes " + new Date().toLocaleDateString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
-            if (originalAudio) { FILE_STORE.set(id, originalAudio); idbSave(id, originalAudio); }
+            if (originalAudio) { FILE_STORE.set(id, originalAudio); if (user) idbSave(id, originalAudio); }
             const newFile = { id, name:originalAudio?.name || title, type:originalAudio?.type || "text/plain", size:originalAudio?.size || 0,
               colorIndex:0, notes:notesText, transcript, studyCards:[],
               uploadedAt:new Date().toLocaleDateString(), linkedFileIds:[], _fileObj:originalAudio || null, _isBlank:!originalAudio };
@@ -3105,7 +2980,7 @@ export default function App() {
           <p style={{ fontSize:13, color:C.muted, marginBottom:16 }}>Add a file you own or have permission to use. It will appear in your Inbox.</p>
           <DashboardDropZone onFilesAdded={(files) => {
             const inbox = folders.find(f=>f.id==="inbox") || {id:"inbox",name:"Inbox",color:"#6B4E8A",files:[]};
-            const added = Array.from(files).map(f => { const id=`fi${Date.now()}-${Math.random()}`; FILE_STORE.set(id,f); idbSave(id,f); return {id,name:f.name,type:f.type,size:f.size,colorIndex:0,notes:"",studyCards:[],uploadedAt:new Date().toLocaleDateString(),linkedFileIds:[],_fileObj:f}; });
+            const added = Array.from(files).map(f => { const id=`fi${Date.now()}-${Math.random()}`; FILE_STORE.set(id,f); if (user) idbSave(id,f); return {id,name:f.name,type:f.type,size:f.size,colorIndex:0,notes:"",studyCards:[],uploadedAt:new Date().toLocaleDateString(),linkedFileIds:[],_fileObj:f}; });
             setFoldersSave([{...inbox,files:[...inbox.files,...added]}, ...folders.filter(f=>f.id!=="inbox")]);
             setShowUploadModal(false);
           }} />
@@ -3585,159 +3460,38 @@ function FolderView({ folder, onOpenFile, onUpdate, allFolders = [], onMoveFile,
 
 // ─── FILE VIEW ────────────────────────────────────────────────────────────────
 function FileView({ file, user, onUpdate, activeTab, onTabChange }) {
-  const tab = activeTab || "view";
-  const isBlank = file._isBlank || file.isBlankDoc || file.id.startsWith("blank_");
-  const selected = tab === "view" && isBlank ? file.defaultTab || "notes"
-    : tab === "view" && file.type === "text/youtube" ? "youtube" : tab;
+  const { ask } = useLearningSession();
+  const tab = activeTab || "view", blank = file._isBlank || file.isBlankDoc || file.id.startsWith("blank_");
+  const selected = tab === "view" && blank ? file.defaultTab || "notes" : tab === "view" && file.type === "text/youtube" ? "youtube" : tab;
+  const mode = selected === "learn" ? "lessons" : selected === "notes" ? "write" : undefined;
   const effective = ["learn", "ai"].includes(selected) ? "notes" : selected;
-  useEffect(() => () => {
-    try { window.speechSynthesis?.cancel(); } catch {}
-    document.querySelectorAll("audio").forEach(audio => { audio.pause(); });
-  }, [effective]);
-  return <div className="document-screen">
+  const readSource = () => extractFileText(file._fileObj || FILE_STORE.get(file.id));
+  useEffect(() => () => { try { window.speechSynthesis?.cancel(); } catch {} document.querySelectorAll("audio").forEach(audio => audio.pause()); }, [effective]);
+  return <div className="document-screen premium-document-screen"><div className="file-assist-strip"><InlineAssistant onAsk={ask} contextLabel={file.name} /></div>
     {effective === "view" ? <ViewTab file={file} onUpdate={onUpdate} /> : <div className="document-inner">
-      {effective === "notes" && <NotesTab key={file.id} file={file} onUpdate={onUpdate} user={user} />}
+      {effective === "notes" && <NotesTab key={file.id} file={file} onUpdate={onUpdate} user={user} onTabChange={onTabChange} initialMode={mode} />}
       {effective === "voice" && <VoicePodcastTab file={file} onUpdate={onUpdate} user={user} />}
-      {["cards", "game"].includes(effective) && <section className="review-workspace"><nav className="workspace-tabs" aria-label="Review modes">
-        <button aria-pressed={effective === "cards"} onClick={() => onTabChange("cards")}>Flashcards</button>
-        <button aria-pressed={effective === "game"} onClick={() => onTabChange("game")}>Practice</button>
-      </nav><div className="review-content">{effective === "cards" ? <CardsTab file={file} onUpdate={onUpdate} /> : <GameTab file={file} />}</div></section>}
+      {effective === "cards" && <CardsTab file={file} onUpdate={onUpdate} />}
+      {effective === "quiz" && <QuizStudio file={file} onUpdate={onUpdate} getFileText={readSource} />}
+      {effective === "game" && <GameTab file={file} />}
       {effective === "youtube" && <YouTubeTab file={file} onUpdate={onUpdate} />}
       {effective === "present" && <PresentationTab file={file} onUpdate={onUpdate} />}
     </div>}
   </div>;
 }
+
 function ViewTab({ file, onUpdate }) {
   const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
-  const fileName = fileObj?.name || file.name || "";
-  const ext  = fileName.split(".").pop().toLowerCase();
-  const mime = fileObj?.type || "";
-
-  const isPDF   = ext === "pdf" || mime === "application/pdf";
-  const isImage = mime.startsWith("image/") || ["jpg","jpeg","png","gif","webp","bmp","svg"].includes(ext);
-  const isText  = ["txt","md","csv","json","js","ts","jsx","py","html","css","xml","yaml","yml"].includes(ext);
-  const isWord  = ["doc","docx"].includes(ext);
-  const isPPT   = ["ppt","pptx"].includes(ext);
-  const isExcel = ["xls","xlsx"].includes(ext);
-
-  // Explain state
-  const [explaining,  setExplaining]  = useState(false);
-  const [explanation, setExplanation] = useState("");
-  const [showExplain, setShowExplain] = useState(false);
-
-  // PPT page nav
-  const [pptTotal, setPptTotal] = useState(0);
-  const [pptPage,  setPptPage]  = useState(1);
-
-  const pptSlidesRef = useRef([]);   // populated by PPTViewer
-
-  const doExplain = async (getText, location) => {
-    setExplaining(true); setShowExplain(true); setExplanation("");
-    try {
-      let text = "";
-      if (getText) {
-        text = ((await getText()) || "").slice(0, 6000);
-      } else if (isPPT && pptSlidesRef.current.length > 0) {
-        text = (pptSlidesRef.current[pptPage - 1]?.texts || []).join(" ").slice(0, 3000);
-      } else if (fileObj) {
-        text = ((await extractFileText(fileObj).catch(() => "")) || "").slice(0, 6000);
-      }
-      const pageLabel = location || (isPPT ? `slide ${pptPage}` : "file");
-      const res = await callClaude(
-        "You are a helpful study tutor. Explain clearly and simply. Plain text only — no asterisks, no markdown.",
-        text
-          ? `Explain ONLY this content from ${pageLabel} of "${file.name}":
-
-${text}`
-          : `Explain the topic "${file.name}" to a student.`
-      );
-      setExplanation(res);
-    } catch(e) { setExplanation("Error: " + e.message); }
-    setExplaining(false);
-  };
-
-  if (!fileObj) return (
-    <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 112px)" }}>
-      <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, height:50, flexShrink:0 }}/>
-      <div style={{ flex:1, display:"flex", overflow:"hidden" }}>
-        <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", background:C.isDark?"#111110":"#2a2a26", padding:40 }}>
-          <div style={{ background:C.surface, borderRadius:20, padding:"48px 56px", maxWidth:500, width:"100%", boxShadow:"0 8px 40px rgba(0,0,0,.3)", textAlign:"center", border:`1px solid ${C.border}` }}>
-            <div style={{ width:64, height:64, background:"#286a9b15", borderRadius:18, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 20px" }}>
-              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#286a9b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-            </div>
-            <p style={{ fontSize:20, fontWeight:700, color:C.text, marginBottom:8, fontFamily:"'Fraunces Variable',serif" }}>Untitled Document</p>
-            <p style={{ fontSize:14, color:C.muted, marginBottom:28, lineHeight:1.6 }}>This is a blank notebook. Switch to the <strong style={{color:C.link}}>Notes</strong> tab to write or generate AI notes.</p>
-            <label style={{ display:"inline-flex", alignItems:"center", gap:8, background:"transparent", color:C.muted, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"10px 20px", cursor:"pointer", fontSize:13, fontWeight:600 }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              Upload a file instead
-              <input type="file" style={{ display:"none" }} onChange={e => {
-                const f = e.target.files?.[0]; if (!f) return;
-                FILE_STORE.set(file.id, f); idbSave(file.id, f); onUpdate({...file, _fileObj: f, name: f.name});
-              }} />
-            </label>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  if (isPDF) return (
-    <div className="pdf-study-layout">
-      <LocalPdfViewer file={file} fileObj={fileObj} onUpdate={onUpdate} explain={doExplain} />
-      {showExplain && <ViewAIPanel file={file} explaining={explaining} explanation={explanation}
-        showExplain={showExplain} onHideExplain={() => setShowExplain(false)} isPDF={false} />}
-    </div>
-  );
-
-  return (
-    <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 112px)" }}>
-
-      {/* Turbo-style top toolbar */}
-      <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"8px 16px", display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", minHeight:50 }}>
-          <span style={{ fontSize:13, color:C.muted }}> <strong style={{ color:C.text }}>{fileName}</strong></span>
-          <div style={{ flex:1 }} />
-          {isPPT && pptTotal > 1 && (
-            <div style={{ display:"flex", alignItems:"center", gap:5 }}>
-              <button onClick={() => setPptPage(p=>Math.max(1,p-1))} disabled={pptPage<=1}
-                style={{ width:28, height:28, borderRadius:6, border:`1px solid ${C.border}`, background:"#fff", cursor:pptPage<=1?"default":"pointer", opacity:pptPage<=1?.4:1, fontSize:18 }}>‹</button>
-              <span style={{ fontSize:13, color:C.muted }}>{pptPage}/{pptTotal}</span>
-              <button onClick={() => setPptPage(p=>Math.min(pptTotal,p+1))} disabled={pptPage>=pptTotal}
-                style={{ width:28, height:28, borderRadius:6, border:`1px solid ${C.border}`, background:"#fff", cursor:pptPage>=pptTotal?"default":"pointer", opacity:pptPage>=pptTotal?.4:1, fontSize:18 }}>›</button>
-            </div>
-          )}
-          <button onClick={() => doExplain()} disabled={explaining}
-            style={{ display:"flex", alignItems:"center", gap:5, background:explaining?"#ccc":PRIMARY, color:primaryInk(explaining?"#ccc":PRIMARY, "#fff"), border:"none", borderRadius:7, padding:"6px 14px", fontSize:13, fontWeight:600, cursor:explaining?"default":"pointer", boxShadow:explaining?"none":"0 2px 8px rgba(22,86,76,.3)" }}>
-            <Icon d={I.sparkle} size={12} color="#fff" sw={2} />{explaining?"Explaining…":"AI Explain"}
-          </button>
-      </div>
-
-      {/* Turbo split-pane: document left, AI chat right */}
-      <div style={{ flex:1, display:"flex", overflow:"hidden" }}>
-        {/* Left — document */}
-        <div style={{ flex:1, overflow:"auto", background:C.isDark?"#111110":"#2a2a26", padding:"24px", display:"flex", justifyContent:"center", alignItems:"flex-start", position:"relative" }}>
-          <div style={{ position:"absolute", top:10, left:10, fontSize:13, fontWeight:700, color:"#fff", opacity:.7, userSelect:"none" }}>
-            {fileName}
-          </div>
-
-          {isImage  && <ImageViewer  fileObj={fileObj} fileName={fileName} />}
-          {isText   && <TextViewer   fileObj={fileObj} />}
-          {isWord   && <WordViewer   fileObj={fileObj} />}
-          {isPPT    && <PowerPointViewer file={file} onUpdate={onUpdate} fileObj={fileObj} page={pptPage} onTotalPages={setPptTotal} onSlidesLoaded={slides => { pptSlidesRef.current = slides; }} />}
-          {isExcel  && <ExcelViewer  fileObj={fileObj} />}
-
-          {!isPDF && !isImage && !isText && !isWord && !isPPT && !isExcel && (
-            <DownloadViewer fileObj={fileObj} fileName={fileName} />
-          )}
-        </div>
-
-        {/* Right — Turbo AI chat panel */}
-        <ViewAIPanel file={file} explaining={explaining} explanation={explanation}
-          showExplain={showExplain} onHideExplain={()=>setShowExplain(false)}
-          isPDF={false} />
-      </div>
-    </div>
-  );
+  const name = fileObj?.name || file.name || "", ext = name.split(".").pop().toLowerCase(), mime = fileObj?.type || "";
+  if (!fileObj) return <section className="document-inner"><div className="tool-empty"><WorkspaceArt /><h2>The original file is on another device</h2><p>Your notes and study progress are still available. Choose the original copy of {file.name} to view and search it on this device.</p><label className="quiet-button is-primary">Choose original file<input type="file" hidden onChange={event => { const blob = event.target.files?.[0]; if (!blob) return; FILE_STORE.set(file.id, blob); if (auth.currentUser) idbSave(file.id, blob); onUpdate({ ...file, _fileObj: blob, name: blob.name, type: blob.type }); }} /></label></div></section>;
+  const type = ext === "pdf" || mime === "application/pdf" ? "pdf" : ["ppt", "pptx"].includes(ext) ? "pptx" : "other";
+  return <DocumentWorkspace file={file} fileObj={fileObj} type={type} onUpdate={onUpdate}>
+    {mime.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"].includes(ext) ? <ImageViewer fileObj={fileObj} fileName={name} />
+      : ["txt", "md", "csv", "json", "js", "ts", "jsx", "py", "html", "css", "xml", "yaml", "yml"].includes(ext) ? <TextViewer fileObj={fileObj} />
+      : ["doc", "docx"].includes(ext) ? <WordViewer fileObj={fileObj} /> : ["xls", "xlsx"].includes(ext) ? <ExcelViewer fileObj={fileObj} /> : type === "other" ? <DownloadViewer fileObj={fileObj} fileName={name} /> : null}
+  </DocumentWorkspace>;
 }
+
 
 // ── Turbo-style View AI Panel ─────────────────────────────────────────────────
 function ViewAIPanel({ file, explaining, explanation, showExplain, onHideExplain, isPDF, pageNum }) {
@@ -4388,7 +4142,7 @@ function getLangInstruction(langCode) {
 // All audio features: Voice Notes recording + Podcast player
 function VoicePodcastTab({ file, user, onUpdate }) {
   const { isMobile } = useResponsive();
-  const [subTab, setSubTab] = useState("record"); // "record" | "podcast"
+  const [subTab, setSubTab] = useState(file.voiceMode || "podcast"); // "record" | "podcast"
   const [lang, setLang] = useState("en-US");
 
   // ── Shared notes state for pushing voice → written notes ──────────────────
@@ -4615,10 +4369,10 @@ STRICT RULES — follow every single one:
       {/* Sub-tabs */}
       <div style={{ display:"flex", gap:8, marginBottom:22, borderBottom:`1.5px solid ${C.border}`, paddingBottom:12 }}>
         {[
-          {id:"record",  label:"Voice Notes"},
-          {id:"podcast", label:"AI Podcast"},
+          {id:"record",  label:"Recordings"},
+          {id:"podcast", label:"Podcasts"},
         ].map(t => (
-          <button key={t.id} onClick={() => setSubTab(t.id)} style={{
+          <button key={t.id} onClick={() => { setSubTab(t.id); onUpdate({ ...file, voiceMode: t.id }); }} style={{
             padding:"8px 20px", borderRadius:8, border:"none", cursor:"pointer",
             fontWeight:700, fontSize:13,
             background: subTab===t.id ? C.accent : C.surface,
@@ -4733,7 +4487,7 @@ STRICT RULES — follow every single one:
       )}
 
       {/* ─── AI PODCAST (merged) ─── */}
-      {subTab === "podcast" && <AIPodcastPanel file={file} lang={lang} onUpdate={onUpdate} />}
+      {subTab === "podcast" && <AIPodcastPanel file={file} user={user} lang={lang} onUpdate={onUpdate} />}
     </div>
   );
 }
@@ -5560,7 +5314,7 @@ function InlineClassioTable({ data }) {
   );
 }
 
-function NotesTab({ file, onUpdate, user, onTabChange }) {
+function NotesTab({ file, onUpdate, user, onTabChange, initialMode }) {
   const fileObj = file._fileObj || FILE_STORE.get(file.id);
   const readSavedNotes = useCallback(async () => {
     if (!user?.uid) return [];
@@ -5571,7 +5325,7 @@ function NotesTab({ file, onUpdate, user, onTabChange }) {
     const snapshot = await getDoc(doc(db, "users", user.uid, "savedNotes", file.id));
     return snapshot.data()?.notes || [];
   }, [file.id, user?.uid]);
-  return <Suspense fallback={<div className="note-initial-frame" aria-busy="true" aria-label="Notes" />}><NotesEditor file={file} fileObj={fileObj} onUpdate={onUpdate}
+  return <Suspense fallback={<div className="note-initial-frame" aria-busy="true" aria-label="Notes" />}><NotesEditor file={file} fileObj={fileObj} onUpdate={onUpdate} initialMode={initialMode} onModeChange={mode => onTabChange?.(mode === "lessons" ? "learn" : "notes")}
     getFileText={() => extractFileText(fileObj)} readSavedNotes={readSavedNotes}
     /></Suspense>;
 }
@@ -5949,476 +5703,7 @@ function AskAboutCard({ card }) {
 }
 
 // ─── STUDY CARDS TAB ──────────────────────────────────────────────────────────
-function CardsTab({ file, onUpdate }) {
-  const { isMobile } = useResponsive();
-  const [cards, setCards] = useState(file.studyCards||[]);
-  const [flipped,  setFlipped]  = useState({});
-  const [starred,  setStarred]  = useState(file.cardProgress?.starred || {});
-  const [known, setKnown] = useState(file.cardProgress?.known || {});
-  const [review, setReview] = useState(file.cardProgress?.review || {});
-  const [error, setError] = useState("");
-  const [editingCard, setEditingCard] = useState(null); // {id, question}
-  const [gen, setGen] = useState(false);
-  const [showAdd, setShowAdd] = useState(false);
-  const [showCountPicker, setShowCountPicker] = useState(false);
-  const [cardCount, setCardCount] = useState(8);
-  const [nQ, setNQ] = useState(""); const [nA, setNA] = useState("");
-  const [filter, setFilter] = useState("all");
-  const [shuffled, setShuffled] = useState(false);
-  const [shuffleOrder, setShuffleOrder] = useState([]);
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    const refresh = setInterval(() => setNow(Date.now()), 30000);
-    return () => clearInterval(refresh);
-  }, []);
-  const due = cards.filter(card => !review[card.id] || review[card.id].due <= now);
-  const visibleCards = filter === "due" ? due : cards.filter(card =>
-    filter === "all" || (filter === "starred" && starred[card.id]) ||
-    (filter === "known" && known[card.id]) || (filter === "unknown" && !known[card.id]));
-  const order = new Map(shuffleOrder.map((id, index) => [id, index]));
-  const displayCards = shuffled ? [...visibleCards].sort((a, b) =>
-    (order.get(a.id) ?? Infinity) - (order.get(b.id) ?? Infinity)) : visibleCards;
-  const [viewMode, setViewMode] = useState("grid"); // grid | list | study
-  const [studyIdx, setStudyIdx] = useState(0); // current card index in study mode
-
-  // Keyboard nav in study mode
-  useEffect(() => {
-    const handler = (e) => {
-      if (viewMode !== "study" || e.target.closest?.("input, textarea, button, select, [contenteditable]")) return;
-      if (e.key === "ArrowRight" || e.key === " ") {
-        e.preventDefault();
-        if (e.key === " ") setFlipped(f => {
-          const card = displayCards[studyIdx];
-          if (!card) return f;
-          return {...f, [card.id]: !f[card.id]};
-        });
-        else setStudyIdx(i => Math.min(displayCards.length - 1, i + 1));
-        if (e.key === "ArrowRight") setFlipped({});
-      }
-      if (e.key === "ArrowLeft") { e.preventDefault(); setStudyIdx(i=>Math.max(0,i-1)); setFlipped({}); }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [viewMode, studyIdx, displayCards]);
-
-  const knownCount   = cards.filter(c => known[c.id]).length;
-  const starredCount = cards.filter(c => starred[c.id]).length;
-  const progress     = cards.length > 0 ? Math.round((knownCount / cards.length) * 100) : 0;
-
-  const generate = async (count = cardCount) => {
-    setGen(true); setShowCountPicker(false); setError("");
-    try {
-      const fileObj = file._fileObj || FILE_STORE.get(file.id) || null;
-      const fileText = fileObj ? await extractFileText(fileObj) : null;
-      const source = file.notes?.trim() || fileText;
-      const userMsg = source
-        ? `Study material from "${file.name}":\n${source.slice(0, 12000)}\nCreate ${count} cards as a JSON array with question and answer strings.`
-        : `Create ${count} cards about "${file.name}" as a JSON array with question and answer strings.`;
-      const txt = await callClaude("Return only valid JSON.", userMsg);
-      const parsed = JSON.parse(txt.replace(/^s*```(?:json)?s*|s*```s*$/gi, ""));
-      if (!Array.isArray(parsed) || !parsed.length || parsed.some(card =>
-        !card || typeof card.question !== "string" || typeof card.answer !== "string" ||
-        !card.question.trim() || !card.answer.trim())) throw new Error("The AI returned incomplete flashcards. Try again.");
-      const next = parsed.slice(0, count).map(card => ({
-        id: makeStudyId(), question: card.question.trim(), answer: card.answer.trim(),
-      }));
-      setCards(next);
-      onUpdate({ ...file, studyCards: next, cardProgress: { known: {}, starred: {}, review: {} } });
-      setFlipped({}); setStarred({}); setKnown({}); setReview({});
-      setStudyIdx(0); setPreviewIdx(0); setFilter("all");
-    } catch (failure) { setError(failure.message); }
-    finally { setGen(false); }
-  };
-
-  const del = id => {
-    const next = cards.filter(card => card.id !== id);
-    setCards(next);
-    onUpdate({ ...file, studyCards: next });
-  };
-  const add = () => {
-    if (!nQ.trim() || !nA.trim()) return;
-    const next = [...cards, { id: makeStudyId(), question: nQ.trim(), answer: nA.trim() }];
-    setCards(next); onUpdate({ ...file, studyCards: next }); setNQ(""); setNA(""); setShowAdd(false);
-  };
-  function saveProgress(nextKnown, nextStarred, nextReview) {
-    setKnown(nextKnown); setStarred(nextStarred); setReview(nextReview);
-    onUpdate({ ...file, cardProgress: { known: nextKnown, starred: nextStarred, review: nextReview } });
-  }
-  const toggleStar = (id, event) => { event.stopPropagation(); saveProgress(known, { ...starred, [id]: !starred[id] }, review); };
-  const toggleKnown = (id, event) => { event.stopPropagation(); saveProgress({ ...known, [id]: !known[id] }, starred, review); };
-  const resetProgress = () => { saveProgress({}, {}, {}); setFlipped({}); };
-
-  function gradeCard(id, remembered) {
-    const reviewedAt = Date.now();
-    setNow(reviewedAt);
-    saveProgress({ ...known, [id]: remembered }, starred, { ...review, [id]: scheduleCardReview(review[id], remembered, reviewedAt) });
-    if (filter !== "due") setStudyIdx(index => Math.min(displayCards.length - 1, index + 1));
-    setFlipped({});
-  }
-
-  function toggleShuffle() {
-    setShuffleOrder(cards.map(card => card.id).sort(() => Math.random() - .5));
-    setStudyIdx(0); setPreviewIdx(0); setFlipped({});
-    setShuffled(value => !value);
-  }
-
-  const FILTER_OPTS = [
-    {id:"all",     label:`All (${cards.length})`},
-    {id:"due",     label:`Due (${due.length})`},
-    {id:"unknown", label:`To Learn (${cards.length - knownCount})`},
-    {id:"starred", label:`Starred (${starredCount})`},
-    {id:"known",   label:`✓ Known (${knownCount})`},
-  ];
-
-  // ── preview card index (browse before studying)
-  const [previewIdx, setPreviewIdx] = useState(0);
-
-  return (
-    <div>
-      {/* ── Turbo-style header with icon + count ── */}
-      <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20 }}>
-        <div style={{ width:48, height:48, background:"#286a9b15", borderRadius:16, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#286a9b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/></svg>
-        </div>
-        <div>
-          <h2 style={{ fontFamily:"'Fraunces Variable',serif", fontSize:22, fontWeight:700, color:C.text, margin:0 }}>Study Cards</h2>
-          <p style={{ margin:0, fontSize:13, color:C.muted }}>{cards.length} Total Flashcard{cards.length!==1?"s":""}</p>
-        </div>
-        <div style={{ marginLeft:"auto", display:"flex", gap:8, flexWrap:"wrap" }}>
-          <button onClick={()=>setShowAdd(true)} className="hov"
-            style={{ display:"flex", alignItems:"center", gap:6, background:C.surface, color:C.text, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
-            <Icon d={I.plus} size={13} color={C.text} sw={2.5}/> Add Card
-          </button>
-          <button onClick={()=>setShowCountPicker(p=>!p)} disabled={gen} className="hov"
-            style={{ display:"flex", alignItems:"center", gap:7, background:gen?"#ccc":"#286a9b", color:"#fff", border:"none", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:gen?"not-allowed":"pointer", boxShadow:gen?"none":"0 3px 10px rgba(22,86,76,.3)" }}>
-            {gen ? <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Generating…</> : <><Icon d={I.sparkle} size={13} color="#fff"/>AI Generate</>}
-          </button>
-        </div>
-      </div>
-
-      {error && <p className="workspace-warning" role="alert">{error}</p>}
-      {cards.length > 0 && (
-        <div className="study-tool-actions">
-          <button type="button" disabled={!due.length} onClick={() => { setFilter("due"); setStudyIdx(0); setFlipped({}); setViewMode("study"); }}>Review due cards ({due.length})</button>
-          <button type="button" onClick={() => {
-            const tsv = cards.map(card => [card.question, card.answer].map(value => value.replace(/[\t\r\n]+/g, " ").replace(/^[=+@-]/, "'$&")).join("\t")).join("\n");
-            downloadStudyFile(new Blob([tsv], { type: "text/tab-separated-values" }), "classio-flashcards.tsv");
-          }}>Download flashcards</button>
-        </div>
-      )}
-      {viewMode === "study" && filter === "due" && !due.length && <p role="status">You are caught up for now. Missed cards are due in 10 minutes.</p>}
-      {/* ── Mastery pill bar ── */}
-      <div style={{ display:"flex", gap:8, marginBottom:20, flexWrap:"wrap" }}>
-        <span className="pill-new">{cards.filter(card => !known[card.id] && !starred[card.id]).length} New</span>
-        <span className="pill-learning">{starredCount} Learning</span>
-        <span className="pill-mastered">{knownCount} Mastered</span>
-        {cards.length > 0 && <span style={{ fontSize:12, color:C.link, fontWeight:700, alignSelf:"center", marginLeft:4 }}>{progress}% mastered</span>}
-        {(knownCount > 0 || starredCount > 0) && (
-          <button onClick={resetProgress} style={{ fontSize:11, color:C.muted, background:"none", border:"none", cursor:"pointer", textDecoration:"underline", alignSelf:"center" }}>Reset</button>
-        )}
-      </div>
-
-      {/* ── Progress bar ── */}
-      {cards.length > 0 && (
-        <div style={{ height:5, background:C.border, borderRadius:3, marginBottom:20, overflow:"hidden" }}>
-          <div style={{ height:"100%", width:`${progress}%`, background:"#286a9b", borderRadius:3, transition:"width .4s" }}/>
-        </div>
-      )}
-
-      {/* ── Count picker ── */}
-      {showCountPicker && (
-        <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:16, padding:"20px 20px 16px", marginBottom:16, boxShadow:"0 4px 20px rgba(0,0,0,.07)" }}>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
-            <div>
-              <p style={{ fontSize:15, fontWeight:700, color:C.text, margin:0 }}>How many cards?</p>
-              <p style={{ fontSize:12, color:C.muted, margin:"2px 0 0" }}>AI will generate from your file content</p>
-            </div>
-            <button onClick={()=>setShowCountPicker(false)} className="no-min-h"
-              style={{ width:28, height:28, borderRadius:"50%", background:C.bg, border:`1px solid ${C.border}`, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:C.muted, fontSize:16 }}>×</button>
-          </div>
-          <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:16 }}>
-            {[5,8,10,15,20,25,30].map(n=>(
-              <button key={n} onClick={()=>setCardCount(n)} className="no-min-h"
-                style={{ padding:"8px 16px", borderRadius:8, fontSize:13, fontWeight:700, cursor:"pointer", transition:"all .12s",
-                  background:cardCount===n?C.accent:C.bg, color:cardCount===n?"#fff":C.muted,
-                  border:`1.5px solid ${cardCount===n?C.accent:C.border}`,
-                  boxShadow:cardCount===n?`0 2px 8px ${C.accentS}`:"none" }}>
-                {n}
-              </button>
-            ))}
-          </div>
-          <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:6, background:C.bg, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"6px 10px" }}>
-              <span style={{ fontSize:12, color:C.muted, whiteSpace:"nowrap" }}>Custom</span>
-              <input type="number" min="1" max="50" value={cardCount}
-                onChange={e=>{ const v=e.target.value; if(v==="")setCardCount(""); else setCardCount(Math.min(50,Math.max(0,parseInt(v)||0))); }}
-                style={{ width:52, border:"none", outline:"none", fontSize:14, fontWeight:700, color:C.text, background:"transparent", textAlign:"center" }}/>
-            </div>
-            <button onClick={()=>generate(parseInt(cardCount)||8)} disabled={gen||!parseInt(cardCount)}
-              style={{ flex:1, background:gen?"#ccc":PRIMARY, color:primaryInk(gen?"#ccc":PRIMARY, "#fff"), border:"none", borderRadius:10, padding:"10px 0", fontSize:14, fontWeight:700, cursor:gen?"not-allowed":"pointer", boxShadow:gen?"none":"0 3px 12px rgba(22,86,76,.3)", display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
-              {gen ? <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{animation:"spin 1s linear infinite"}}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Generating…</> : <><Icon d={I.sparkle} size={13} color="#fff"/> Generate {cardCount} Cards</>}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {showAdd && (
-        <div style={{ background:C.surface, border:`1.5px solid ${C.accentS}`, borderRadius:14, padding:20, marginBottom:20 }}>
-          <input value={nQ} onChange={e=>setNQ(e.target.value)} placeholder="Question"
-            style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:8, padding:"9px 12px", fontSize:14, marginBottom:10, outline:"none", color:C.text, background:C.bg }}/>
-          <input value={nA} onChange={e=>setNA(e.target.value)} placeholder="Answer"
-            style={{ width:"100%", border:`1.5px solid ${C.border}`, borderRadius:8, padding:"9px 12px", fontSize:14, marginBottom:14, outline:"none", color:C.text, background:C.bg }}/>
-          <div style={{ display:"flex", gap:8 }}>
-            <button onClick={()=>setShowAdd(false)} style={{ flex:1, padding:"8px", border:`1.5px solid ${C.border}`, borderRadius:8, background:"none", cursor:"pointer", fontSize:14, color:C.text }}>Cancel</button>
-            <button onClick={add} style={{ flex:2, padding:"8px", background:C.accent, color:"#fff", border:"none", borderRadius:8, cursor:"pointer", fontSize:14, fontWeight:600 }}>Add Card</button>
-          </div>
-        </div>
-      )}
-
-      {cards.length === 0 && (
-        <div style={{ textAlign:"center", padding:"60px 0", color:C.muted }}>
-          <Icon d={I.cards} size={40} color={C.border}/>
-          <p style={{ marginTop:12, fontSize:15 }}>Add a flashcard or generate a set.</p>
-        </div>
-      )}
-
-      {/* ── Study mode — fullscreen single card flipper ── */}
-      {viewMode === "study" && displayCards.length > 0 && (()=>{
-        const card = displayCards[Math.min(studyIdx, displayCards.length-1)];
-        const isFlipped = !!flipped[card?.id];
-        const isStarred = !!starred[card?.id];
-        const isKnown   = !!known[card?.id];
-        const pct = Math.round(((studyIdx + 1) / displayCards.length) * 100);
-        return (
-          <div style={{ position:"fixed", inset:0, zIndex:1000, background:C.bg, display:"flex", flexDirection:"column", fontFamily:"'DM Sans Variable',sans-serif" }}>
-            <style>{`
-              .ql-wrap{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .5s cubic-bezier(.4,0,.2,1)}
-              .ql-wrap.flipped{transform:rotateY(180deg)}
-              .ql-side{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 56px;text-align:center;cursor:pointer}
-              .ql-back{transform:rotateY(180deg)}
-            `}</style>
-            <div style={{ flexShrink:0, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 28px", background:C.surface, borderBottom:`1px solid ${C.border}` }}>
-              <button onClick={()=>{setViewMode("grid");setFlipped({});}}
-                style={{ display:"flex", alignItems:"center", gap:7, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14, fontWeight:600 }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>Back
-              </button>
-              <span style={{ fontSize:15, fontWeight:700, color:C.text }}>{studyIdx+1} <span style={{ color:C.muted, fontWeight:400 }}>/ {displayCards.length}</span></span>
-              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                <button onClick={e=>toggleStar(card.id,e)} className="no-min-h" style={{ background:"none", border:"none", cursor:"pointer", display:"flex", opacity:isStarred?1:.3 }}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill={isStarred?"#f59e0b":"none"} stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-                </button>
-                <button onClick={toggleShuffle} className="no-min-h"
-                  style={{ display:"flex", alignItems:"center", gap:5, background:shuffled?C.purpleL:"transparent", border:`1.5px solid ${shuffled?C.purple:C.border}`, borderRadius:8, padding:"5px 14px", cursor:"pointer", fontSize:12, fontWeight:700, color:shuffled?C.purple:C.muted }}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>Shuffle
-                </button>
-              </div>
-            </div>
-            <div style={{ flexShrink:0, height:5, background:C.border }}>
-              <div style={{ height:"100%", width:`${pct}%`, background:"#286a9b", transition:"width .35s ease" }}/>
-            </div>
-            <div style={{ flexShrink:0, display:"flex", justifyContent:"center", gap:16, padding:"10px 28px 0", background:C.bg }}>
-              <span className="pill-new">{(displayCards.length - Object.values(known).filter(Boolean).length - Object.values(starred).filter(Boolean).length)} New</span>
-              <span className="pill-learning">{Object.values(starred).filter(Boolean).length} Learning</span>
-              <span className="pill-mastered">{Object.values(known).filter(Boolean).length} Mastered</span>
-            </div>
-            <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", padding:"16px 32px", minHeight:0, perspective:1400 }}>
-              <div className={`ql-wrap${isFlipped?" flipped":""}`}
-                onClick={()=>setFlipped(f=>({...f,[card.id]:!f[card.id]}))}
-                style={{ width:"100%", maxWidth:760, height:"min(340px, calc(100vh - 280px))", cursor:"pointer", userSelect:"none" }}>
-                <div className="ql-side" style={{ background:isKnown?C.greenL:C.surface, border:`2px solid ${isKnown?C.green:isStarred?"#f59e0b":C.border}`, boxShadow:C.cardShadow }}>
-                  <div style={{ position:"absolute", top:16, left:16, cursor:"pointer", opacity:.4 }}
-                    onClick={e=>{e.stopPropagation();setEditingCard({id:card.id,question:card.question});}}>
-                    <Icon d={I.edit} size={16} color={C.muted}/>
-                  </div>
-                  <button onClick={e=>toggleStar(card.id,e)} className="no-min-h"
-                    style={{ position:"absolute", top:14, right:14, background:"none", border:"none", cursor:"pointer", fontSize:18, opacity:isStarred?1:.3 }}>☆</button>
-                  <p style={{ fontSize:11, fontWeight:800, letterSpacing:2, textTransform:"uppercase", color:C.muted, marginBottom:20 }}>QUESTION</p>
-                  <p style={{ fontSize:clamp(card.question?.length), color:C.text, lineHeight:1.65, fontWeight:500, maxWidth:640 }}>{card.question}</p>
-                  <p style={{ fontSize:12, color:C.muted, marginTop:24 }}>Click to flip</p>
-                </div>
-                <div className="ql-side ql-back" style={{ background:C.accentL, border:`2px solid ${C.accentS}`, boxShadow:C.cardShadow }}>
-                  <p style={{ fontSize:11, fontWeight:800, letterSpacing:2, textTransform:"uppercase", color:C.link, marginBottom:20 }}>ANSWER</p>
-                  <p style={{ fontSize:clamp(card.answer?.length), color:C.text, lineHeight:1.65, fontWeight:500, maxWidth:640 }}>{card.answer}</p>
-                  <p style={{ fontSize:12, color:C.link, marginTop:24 }}>Click to flip back</p>
-                </div>
-              </div>
-            </div>
-            <div style={{ flexShrink:0, background:C.surface, borderTop:`1px solid ${C.border}` }}>
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 28px 10px" }}>
-                <button onClick={()=>{setStudyIdx(i=>Math.max(0,i-1));setFlipped({});}} disabled={studyIdx===0} className="no-min-h"
-                  style={{ width:44, height:44, borderRadius:"50%", border:`1.5px solid ${C.border}`, background:C.bg, cursor:studyIdx===0?"not-allowed":"pointer", opacity:studyIdx===0?.35:1, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.text} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-                </button>
-                <div style={{ display:"flex", gap:10 }}>
-                  <button onClick={()=>{gradeCard(card.id, false);}} className="no-min-h"
-                    style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 24px", borderRadius:8, border:`1.5px solid ${C.red}55`, background:C.redL, color:C.red, fontSize:14, fontWeight:700, cursor:"pointer" }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>Don't Know
-                  </button>
-                  <button onClick={() => gradeCard(card.id, true)} className="no-min-h"
-                    style={{ display:"flex", alignItems:"center", gap:7, padding:"10px 28px", borderRadius:8, border:"none", background:isKnown?C.green:"#286a9b", color:"#fff", fontSize:14, fontWeight:700, cursor:"pointer", boxShadow:isKnown?`0 3px 12px ${C.green}55`:"0 3px 12px rgba(22,86,76,.35)" }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Remembered
-                  </button>
-                </div>
-                <button onClick={()=>{setStudyIdx(i=>Math.min(displayCards.length-1,i+1));setFlipped({});}} disabled={studyIdx===displayCards.length-1} className="no-min-h"
-                  style={{ width:44, height:44, borderRadius:"50%", border:`1.5px solid ${C.border}`, background:C.bg, cursor:studyIdx===displayCards.length-1?"not-allowed":"pointer", opacity:studyIdx===displayCards.length-1?.35:1, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.text} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-                </button>
-              </div>
-              <ELI5Panel card={card}/>
-              <p style={{ textAlign:"center", fontSize:10, color:C.muted, padding:"0 0 8px" }}>← → navigate &nbsp;·&nbsp; Space to flip</p>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* ── Turbo AI style: big preview card + action buttons + list below ── */}
-      {cards.length > 0 && viewMode !== "study" && (
-        <>
-          {/* Big preview card */}
-          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", marginBottom:20 }}>
-            <div style={{ width:"100%", maxWidth:680, position:"relative" }}>
-              <div
-                className={`ql-wrap${!!flipped[displayCards[Math.min(previewIdx,displayCards.length-1)]?.id]?" flipped":""}`}
-                onClick={()=>{const c=displayCards[Math.min(previewIdx,displayCards.length-1)];if(c)setFlipped(f=>({...f,[c.id]:!f[c.id]}));}}
-                style={{ width:"100%", height:220, cursor:"pointer", userSelect:"none", position:"relative", transformStyle:"preserve-3d", transition:"transform .5s cubic-bezier(.4,0,.2,1)" }}>
-                <style>{`
-                  .ql-wrap{position:relative;width:100%;transform-style:preserve-3d;transition:transform .5s cubic-bezier(.4,0,.2,1)}
-                  .ql-wrap.flipped{transform:rotateY(180deg)}
-                  .ql-side{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 48px;text-align:center}
-                  .ql-back{transform:rotateY(180deg)}
-                `}</style>
-                {(() => {
-                  const c = displayCards[Math.min(previewIdx,displayCards.length-1)];
-                  const isK = c ? !!known[c.id] : false;
-                  const isS = c ? !!starred[c.id] : false;
-                  return (<>
-                    <div className="ql-side" style={{ background:isK?C.greenL:C.surface, border:`2px solid ${isK?C.green:isS?"#f59e0b":C.border}`, boxShadow:"0 4px 20px rgba(0,0,0,.09)" }}>
-                      <p style={{ fontSize:11, fontWeight:800, letterSpacing:2, textTransform:"uppercase", color:C.muted, marginBottom:16 }}>QUESTION</p>
-                      <p style={{ fontSize:clamp(c?.question?.length), color:C.text, lineHeight:1.65, fontWeight:500 }}>{c?.question||"No cards"}</p>
-                      <p style={{ fontSize:11, color:C.muted, marginTop:20 }}>Click to flip</p>
-                    </div>
-                    <div className="ql-side ql-back" style={{ background:C.accentL, border:`2px solid ${C.accentS}`, boxShadow:"0 4px 20px rgba(0,0,0,.09)" }}>
-                      <p style={{ fontSize:11, fontWeight:800, letterSpacing:2, textTransform:"uppercase", color:C.link, marginBottom:16 }}>ANSWER</p>
-                      <p style={{ fontSize:clamp(c?.answer?.length), color:C.text, lineHeight:1.65, fontWeight:500 }}>{c?.answer||""}</p>
-                    </div>
-                  </>);
-                })()}
-              </div>
-            </div>
-
-            {/* Card nav */}
-            <div style={{ display:"flex", alignItems:"center", gap:16, marginTop:14 }}>
-              <button onClick={()=>{setPreviewIdx(i=>Math.max(0,i-1));setFlipped({});}} disabled={previewIdx===0} className="no-min-h"
-                style={{ width:36, height:36, borderRadius:"50%", border:`1.5px solid ${C.border}`, background:C.surface, cursor:previewIdx===0?"default":"pointer", opacity:previewIdx===0?.3:1, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.text} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-              </button>
-              <span style={{ fontSize:14, color:C.muted, fontWeight:500 }}>{Math.min(previewIdx+1,displayCards.length)} / {displayCards.length}</span>
-              <button onClick={()=>{setPreviewIdx(i=>Math.min(displayCards.length-1,i+1));setFlipped({});}} disabled={previewIdx>=displayCards.length-1} className="no-min-h"
-                style={{ width:36, height:36, borderRadius:"50%", border:`1.5px solid ${C.border}`, background:C.surface, cursor:previewIdx>=displayCards.length-1?"default":"pointer", opacity:previewIdx>=displayCards.length-1?.3:1, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.text} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-              </button>
-            </div>
-          </div>
-
-          {/* Action buttons: Edit + Start Studying */}
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:22 }}>
-            <div style={{ display:"flex", gap:8 }}>
-              <button onClick={()=>setShowAdd(true)} className="hov"
-                style={{ display:"flex", alignItems:"center", gap:6, background:C.surface, color:C.text, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
-                <Icon d={I.edit} size={13} color={C.text}/> Edit Flashcards
-              </button>
-              <button onClick={toggleShuffle} className="hov"
-                style={{ display:"flex", alignItems:"center", gap:6, background:shuffled?C.purpleL:"transparent", color:shuffled?C.purple:C.muted, border:`1.5px solid ${shuffled?C.purple:C.border}`, borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
-                Shuffle
-              </button>
-            </div>
-            <button onClick={()=>{setViewMode("study");setStudyIdx(0);setFlipped({});}} className="hov"
-              style={{ display:"flex", alignItems:"center", gap:8, background:"#286a9b", color:"#fff", border:"none", borderRadius:8, padding:"10px 24px", fontSize:14, fontWeight:700, cursor:"pointer", boxShadow:"0 3px 14px rgba(22,86,76,.35)" }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              Start Studying
-            </button>
-          </div>
-
-          {/* Filter tabs + list */}
-          <div style={{ display:"flex", gap:6, marginBottom:14, flexWrap:"wrap" }}>
-            {FILTER_OPTS.map(f=>(
-              <button key={f.id} onClick={()=>{setFilter(f.id);setPreviewIdx(0);}}
-                style={{ padding:"6px 14px", borderRadius:8, border:`1.5px solid ${filter===f.id?C.accent:C.border}`,
-                  background:filter===f.id?C.accentL:"transparent", color:filter===f.id?C.link:C.muted,
-                  fontSize:12, fontWeight:700, cursor:"pointer", transition:"all .12s" }}>
-                {f.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Card list rows — Turbo style */}
-          {(() => {
-            const grouped = filter === "all" ? [
-              { label:"New", labelCls:"pill-new", items: displayCards.filter(c=>!known[c.id]&&!starred[c.id]) },
-              { label:"Learning", labelCls:"pill-learning", items: displayCards.filter(c=>starred[c.id]) },
-              { label:"Mastered", labelCls:"pill-mastered", items: displayCards.filter(c=>known[c.id]) },
-            ] : [{ label: filter, labelCls:"", items: displayCards }];
-            return grouped.filter(g=>g.items.length>0).map(group=>(
-              <div key={group.label} style={{ marginBottom:20 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
-                  <div style={{ flex:1, height:1, background:C.border }}/>
-                  <span className={group.labelCls||"pill-new"} style={{ fontSize:11 }}>{group.label} <span style={{ background:"rgba(0,0,0,.1)", borderRadius:20, padding:"1px 7px", marginLeft:4 }}>{group.items.length} cards</span></span>
-                  <div style={{ flex:1, height:1, background:C.border }}/>
-                </div>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-                  {group.items.map((card,idx)=>{
-                    const isF = !!flipped[card.id];
-                    const isS = !!starred[card.id];
-                    const isK = !!known[card.id];
-                    return (
-                      <div key={card.id} style={{ background:isK?C.greenL:C.surface, border:`1.5px solid ${isK?C.green:isS?"#f59e0b":C.border}`, borderRadius:14, padding:"14px 16px", cursor:"pointer", position:"relative" }}
-                        onClick={()=>{setPreviewIdx(displayCards.indexOf(card));setFlipped({});}}>
-                        <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:6, marginBottom:8 }}>
-                          <span style={{ fontSize:9, fontWeight:800, color:C.muted, letterSpacing:1, textTransform:"uppercase" }}>QUESTION</span>
-                          <div style={{ display:"flex", gap:3 }} onClick={e=>e.stopPropagation()}>
-                            <button onClick={e=>toggleStar(card.id,e)} className="no-min-h" style={{ background:"none", border:"none", cursor:"pointer", display:"flex", opacity:isS?1:.3, padding:"1px 2px" }}>
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill={isS?"#f59e0b":"none"} stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-                            </button>
-                            <button onClick={e=>toggleKnown(card.id,e)} className="no-min-h"
-                              style={{ background:isK?C.greenL:"none", border:`1.5px solid ${isK?C.green:C.border}`, borderRadius:5, cursor:"pointer", padding:"1px 6px", fontSize:9, fontWeight:700, color:isK?C.green:C.muted }}>
-                              {isK?"✓":"Got it"}
-                            </button>
-                            <button onClick={e=>{e.stopPropagation();del(card.id);}} className="no-min-h" style={{ background:"none", border:"none", cursor:"pointer", padding:"1px 2px", opacity:.35 }}>
-                              <Icon d={I.trash} size={11} color={C.muted}/>
-                            </button>
-                          </div>
-                        </div>
-                        <p style={{ fontSize:13, color:C.text, lineHeight:1.5, margin:"0 0 6px", overflow:"hidden", display:"-webkit-box", WebkitLineClamp:3, WebkitBoxOrient:"vertical" }}>{card.question}</p>
-                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", paddingTop:8, borderTop:`1px solid ${C.border}`, marginTop:4 }}>
-                          <span style={{ fontSize:10, color:C.muted }}>Tap to preview</span>
-                          {isK && <span style={{ fontSize:9, fontWeight:800, color:C.green, letterSpacing:.5 }}>MASTERED</span>}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ));
-          })()}
-      </>
-      )}
-    {editingCard && (
-      <RenameDialog
-        title="Edit Question"
-        defaultValue={editingCard.question}
-        placeholder="Enter question…"
-        onConfirm={(newQ) => {
-          const u = cards.map(c=>c.id===editingCard.id?{...c,question:newQ}:c);
-          setCards(u); onUpdate({...file,studyCards:u});
-          setEditingCard(null);
-        }}
-        onCancel={() => setEditingCard(null)}
-      />
-    )}
-  </div>
-  );
-}
+function CardsTab({ file, onUpdate }) { return <FlashcardStudio file={file} onUpdate={onUpdate} getFileText={() => extractFileText(file._fileObj || FILE_STORE.get(file.id))} />; }
 
 // ─── YOUTUBE VIDEO ANALYSIS TAB ──────────────────────────────────────────────
 function YouTubeTab({ file, onUpdate }) {
@@ -6477,6 +5762,11 @@ function YouTubeTab({ file, onUpdate }) {
 
   // Fetch transcript using multiple free methods
   const fetchTranscript = async (vid) => {
+    try {
+      const response = await fetch(`/api/transcript?v=${vid}`, { signal: AbortSignal.timeout(20000) });
+      const data = response.ok ? await response.json() : null;
+      if (typeof data?.transcript === "string" && data.transcript.trim()) return { transcript: data.transcript, title: data.title || "" };
+    } catch { /* A public transcript may be blocked by the source. Keep manual input available. */ }
     const serverUrl = TTS_SPACE_URL;
 
     // Method 1: Our HF Space server (most reliable — add /transcript endpoint to app.py)
@@ -6485,7 +5775,7 @@ function YouTubeTab({ file, onUpdate }) {
         const resp = await fetch(`${serverUrl}/transcript/${vid}`, { signal: AbortSignal.timeout(12000) });
         if (resp.ok) {
           const data = await resp.json();
-          if (data.success && data.transcript) {
+          if (data.success && typeof data.transcript === "string" && data.transcript.trim()) {
             return { transcript: data.transcript, title: data.title || "" };
           }
         }
@@ -6500,7 +5790,7 @@ function YouTubeTab({ file, onUpdate }) {
         const lines = [...xml.matchAll(/<text[^>]*>([\s\S]*?)<\/text>/g)]
           .map(m => m[1].replace(/<[^>]+>/g,"").replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&#39;/g,"'").trim())
           .filter(Boolean);
-        if (lines.length > 10) return { transcript: lines.join(" "), title: "" };
+        if (lines.length > 0) return { transcript: lines.join(" "), title: "" };
       }
     } catch { /* fall through */ }
 
@@ -6537,7 +5827,7 @@ function YouTubeTab({ file, onUpdate }) {
         if (!vid) { setError("Invalid YouTube URL."); setLoading(false); return; }
         setStatus("Fetching transcript…");
         let { transcript, title: ytTitle } = await fetchTranscript(vid);
-        if (transcript && transcript.length > 200) {
+        if (typeof transcript === "string" && transcript.trim()) {
           if (!ytTitle) { setStatus("Getting video info…"); ytTitle = await fetchTitle(vid); }
           title = ytTitle || "YouTube Video";
           content = transcript.slice(0, 16000);
@@ -6797,414 +6087,8 @@ function MicPromptOverlay({ onSubmit, onCancel }) {
   );
 }
 
-function AIPodcastPanel({ file, lang, onUpdate }) {
-  const [micPromptActive, setMicPromptActive] = useState(false);
-  const [allSaved] = useState(() => {
-    if (file.namedNotes) return file.namedNotes;
-    try { return JSON.parse(localStorage.getItem("saved_notes_" + file.id) || "[]"); } catch { return []; }
-  });
-  const [selectedNoteIdx, setSelectedNoteIdx] = useState(0);
-  const [notes, setNotes] = useState(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem("saved_notes_" + file.id) || "[]");
-      return file.namedNotes?.[0]?.text || file.notes || saved[0]?.text || "";
-    } catch { return file.notes || ""; }
-  });
-
-  const SCRIPT_KEY = "aipodcast_" + file.id;
-  const [phase, setPhase]       = useState("idle"); // idle|generating|speaking|paused|done
-  const [script, setScript]     = useState(() => { try { return file.podcastScript || localStorage.getItem(SCRIPT_KEY) || ""; } catch { return ""; } });
-  const [transcript, setTranscript] = useState([]);
-  const [voices,   setVoices]   = useState([]);
-  const [voiceIdx, setVoiceIdx] = useState(0);
-  const [listening, setListening] = useState(false);
-  const [micText,   setMicText]   = useState("");
-  const [length, setLength] = useState("short");
-  const [podcastError, setPodcastError] = useState("");
-  const generation = useRef(null);
-
-  const pausedRef       = useRef(false);
-  const stoppedRef      = useRef(false);
-  const queueRef        = useRef([]);
-  const resolveRef      = useRef(null);
-  const recognitionRef  = useRef(null);
-  const finalTransRef   = useRef("");
-  const endRef          = useRef(null);
-  // Store ALL chunks and track position — this is how we always know where to resume
-  const allChunksRef    = useRef([]);
-  const chunkIdxRef     = useRef(0); // index of the NEXT chunk to speak
-  const speakingIdxRef  = useRef(0); // index of chunk currently mid-speech
-
-  useEffect(() => {
-    const speech = window.speechSynthesis;
-    const load = () => setVoices(speech?.getVoices() || []);
-    load();
-    speech?.addEventListener("voiceschanged", load);
-    return () => {
-      stoppedRef.current = true; pausedRef.current = true;
-      generation.current?.abort();
-      speech?.removeEventListener("voiceschanged", load);
-      cancelSpeech();
-      try { recognitionRef.current?.abort(); } catch {}
-    };
-  }, []);
-
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior:"smooth" }); }, [transcript]);
-
-  const cancelSpeech = () => {
-    try { window.speechSynthesis.cancel(); } catch {}
-    if (resolveRef.current) { resolveRef.current(); resolveRef.current = null; }
-  };
-
-  const speak = (text) => new Promise(resolve => {
-    if (stoppedRef.current || pausedRef.current) { resolve(); return; }
-    try { window.speechSynthesis.cancel(); } catch {}
-    const u = new SpeechSynthesisUtterance(text);
-    u.rate  = GLOBAL_PERSONAS[voiceIdx]?.rate  || 0.93;
-    u.pitch = GLOBAL_PERSONAS[voiceIdx]?.pitch || 1.0;
-    const v = getSmartVoice(voiceIdx, voices);
-    if (v) u.voice = v;
-    resolveRef.current = resolve;
-    const done = () => { resolveRef.current = null; resolve(); };
-    u.onend = done; u.onerror = done;
-    window.speechSynthesis.speak(u);
-  });
-
-  // Play from chunkIdxRef.current through the end of allChunksRef.current
-  const runFromCurrentIdx = async () => {
-    const chunks = allChunksRef.current;
-    while (chunkIdxRef.current < chunks.length) {
-      if (stoppedRef.current) break;
-      if (pausedRef.current) return; // handleResume will call us again
-      const idx   = chunkIdxRef.current;
-      const chunk = chunks[idx];
-      speakingIdxRef.current = idx;    // record which chunk is mid-speech
-      chunkIdxRef.current    = idx + 1; // advance optimistically
-      setTranscript(t => [...t, { role:"ai", text:chunk }]);
-      await speak(chunk);
-      // If interrupted mid-chunk (paused while speaking), rewind so it replays
-      if (pausedRef.current && !stoppedRef.current) {
-        chunkIdxRef.current = idx; // step back to the interrupted chunk
-        return;
-      }
-    }
-    if (!stoppedRef.current && !pausedRef.current) setPhase("done");
-  };
-
-  function playScript(text) {
-    stoppedRef.current = false;
-    pausedRef.current = false;
-    const chunks = text.match(/[^.!?。！？]+[.!?。！？]*|[.!?。！？]+/gu) || [text];
-    allChunksRef.current = chunks.map(chunk => chunk.trim()).filter(Boolean);
-    chunkIdxRef.current = 0;
-    setTranscript([]);
-    if (!window.speechSynthesis) {
-      setPhase("done");
-      setPodcastError("This browser cannot play speech. You can download the script or audio below.");
-      return;
-    }
-    setPhase("speaking");
-    runFromCurrentIdx();
-  }
-
-  async function startPodcast() {
-    if (!notes.trim() || generation.current) return;
-    const controller = new AbortController();
-    generation.current = controller;
-    stoppedRef.current = false;
-    setPhase("generating");
-    setPodcastError("");
-    setTranscript([]);
-    try {
-      const explanation = await sendStudyRequest({
-        messages: [
-          { role: "system", content: `Write a spoken study podcast in the requested language. ${getLangInstruction(lang)} Explain the concepts in order, with examples. Use plain spoken words, no markup. Target ${length === "short" ? "2–3 minutes" : "5–8 minutes"}.` },
-          { role: "user", content: notes.slice(0, 10000) },
-        ],
-        maxTokens: length === "short" ? 1500 : 3500,
-      }, controller.signal);
-      if (controller.signal.aborted) return;
-      onUpdate({ ...file, podcastScript: explanation });
-      setScript(explanation);
-      playScript(explanation);
-    } catch (error) {
-      if (!controller.signal.aborted) {
-        setPodcastError(error.message);
-        setPhase("idle");
-      }
-    } finally {
-      if (generation.current === controller) generation.current = null;
-    }
-  }
-
-  const handleStop = () => {
-    generation.current?.abort();
-    generation.current = null;
-    stoppedRef.current = true; pausedRef.current = true;
-    allChunksRef.current = []; chunkIdxRef.current = 0; speakingIdxRef.current = 0;
-    cancelSpeech();
-    try { recognitionRef.current?.abort(); } catch {}
-    setPhase("idle"); setListening(false); setMicText("");
-  };
-
-  const handlePause = () => {
-    pausedRef.current = true; setPhase("paused");
-    cancelSpeech();
-    // chunkIdxRef stays where it is — resume will start from same chunk
-  };
-
-  const handleResume = () => {
-    pausedRef.current = false; stoppedRef.current = false; setPhase("speaking");
-    runFromCurrentIdx();
-  };
-
-  const askQuestion = async (q) => {
-    if (!q.trim()) return;
-    setTranscript(t => [...t, { role:"user", text:q }]);
-
-    // Build context: what was just being explained (last 3 spoken chunks)
-    const chunks = allChunksRef.current;
-    const spokenSoFar = chunks.slice(Math.max(0, speakingIdxRef.current - 2), speakingIdxRef.current + 1);
-    const justExplaining = spokenSoFar.join(" ");
-
-    const answer = await callClaude(
-      `You are an AI podcast host. You were explaining a topic when the listener interrupted with a question or comment.
-RULES:
-- You know exactly what you were just saying (provided below as "WHAT I WAS JUST EXPLAINING").
-- If the listener asks about something you were explaining or just explained, answer it directly using what you know.
-- If it's any other question about the topic, answer it clearly in 1-3 sentences. No markdown.
-- If the listener says "ok", "continue", "go on", "carry on", "resume", "go back", "yes", or anything meaning "keep going" — reply with EXACTLY: RESUME
-- Never say "I didn't cover that" if it appears in your recent explanation context.
-- Be natural and conversational, like a podcast host.`,
-      `NOTES (full topic context):\n${notes.slice(0,2000)}\n\nWHAT I WAS JUST EXPLAINING:\n"${justExplaining}"\n\nLISTENER SAID: "${q}"\n\nRespond.`,
-      350
-    ).catch(() => "RESUME");
-
-    if (stoppedRef.current) return;
-
-    const isResume = /^resume$/i.test(answer.trim());
-    if (!isResume) {
-      setTranscript(t => [...t, { role:"ai", text:answer }]);
-      pausedRef.current = false;
-      await speak(answer);
-    } else {
-      pausedRef.current = false;
-    }
-
-    // Resume explanation from exactly where it was interrupted
-    if (!stoppedRef.current) {
-      if (allChunksRef.current.length > 0 && chunkIdxRef.current < allChunksRef.current.length) {
-        setPhase("speaking");
-        await runFromCurrentIdx();
-      } else {
-        setPhase("done");
-      }
-    }
-  };
-
-  const startMic = () => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) {
-      // Mic not available — show inline prompt via setMicText
-      const q = prompt("Ask your question:");
-      if (q?.trim()) { pausedRef.current = true; cancelSpeech(); setTimeout(() => askQuestion(q.trim()), 150); }
-      return;
-    }
-    // Set paused FIRST, then cancel speech, then wait before starting mic
-    // This prevents speech synthesis / recognition conflict on iOS/Safari
-    pausedRef.current = true;
-    cancelSpeech();
-    finalTransRef.current = ""; setMicText(""); setListening(true);
-    // Delay rec.start() so the browser fully stops synthesis before opening mic
-    setTimeout(() => {
-      if (stoppedRef.current) { setListening(false); return; }
-      const rec = new SR();
-      rec.lang = lang || "en-US"; rec.interimResults = true; rec.continuous = false;
-      recognitionRef.current = rec;
-      rec.onresult = (e) => {
-        const t = Array.from(e.results).map(r => r[0].transcript).join("");
-        setMicText(t);
-        if (e.results[e.results.length-1].isFinal) finalTransRef.current = t;
-      };
-      rec.onend = () => {
-        setListening(false); setMicText(""); recognitionRef.current = null;
-        const q = finalTransRef.current.trim(); finalTransRef.current = "";
-        if (q) askQuestion(q); else pausedRef.current = false;
-      };
-      rec.onerror = (err) => {
-        console.warn("Mic error:", err.error);
-        setListening(false); setMicText(""); recognitionRef.current = null;
-        finalTransRef.current = ""; pausedRef.current = false;
-      };
-      try { rec.start(); } catch(e) { console.warn("rec.start failed:", e); setListening(false); pausedRef.current = false; }
-    }, 200);
-  };
-
-  const stopMic = () => { try { recognitionRef.current?.stop(); } catch {} setListening(false); };
-
-  const isPlaying = phase === "speaking";
-
-  return (
-    <div>
-      <div style={{ marginBottom:16 }}>
-        <h2 style={{ fontFamily:"'Fraunces Variable',serif", fontSize:20, fontWeight:700, color:C.text, marginBottom:3 }}>AI Podcast</h2>
-        <p style={{ fontSize:13, color:C.muted }}>AI teaches your notes out loud like a personal podcast. Tap mic to ask questions anytime.</p>
-      </div>
-
-      {/* Saved notes selector — pick which note the podcast teaches */}
-      {allSaved.length > 1 && (
-        <div style={{ background:C.accentL, border:`1px solid ${C.accentS}`, borderRadius:12, padding:"10px 14px", marginBottom:12, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-          <span style={{ fontSize:12, fontWeight:700, color:C.link, flexShrink:0 }}>Podcast from:</span>
-          <select value={selectedNoteIdx} onChange={e => { setSelectedNoteIdx(+e.target.value); setNotes(allSaved[+e.target.value]?.text || ""); }}
-            style={{ flex:1, border:`1.5px solid ${C.accentS}`, borderRadius:8, padding:"5px 10px", fontSize:12, color:C.text, background:C.surface, outline:"none", cursor:"pointer", minWidth:120 }}>
-            {allSaved.map((n, i) => <option key={i} value={i}>{n.name}</option>)}
-          </select>
-        </div>
-      )}
-
-      {micPromptActive && (
-        <MicPromptOverlay
-          onSubmit={(q) => { setMicPromptActive(false); pausedRef.current = true; cancelSpeech(); setTimeout(() => askQuestion(q), 150); }}
-          onCancel={() => setMicPromptActive(false)}
-        />
-      )}
-
-      {/* Controls bar */}
-      <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"12px 16px", marginBottom:14 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-
-          {["idle", "done"].includes(phase) && (
-            <label>Length <select value={length} onChange={event => setLength(event.target.value)}>
-              <option value="short">Quick review</option><option value="deep">Deep dive</option>
-            </select></label>
-          )}
-          {script && ["idle", "done"].includes(phase) && <button type="button" onClick={() => playScript(script)}>Play saved podcast</button>}
-          {(phase === "idle" || phase === "done") && (
-            <button onClick={startPodcast} disabled={!notes.trim()}
-              style={{ display:"flex", alignItems:"center", gap:7,
-                background:notes.trim()?PRIMARY:"#ccc", color:primaryInk(notes.trim()?PRIMARY:"#ccc", "#fff"), border:"none",
-                borderRadius:10, padding:"10px 22px", fontSize:14, fontWeight:700,
-                cursor:notes.trim()?"pointer":"not-allowed",
-                boxShadow:notes.trim()?"0 4px 14px rgba(22,86,76,.35)":"none" }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-              {script ? "Generate new podcast" : "Generate podcast"}
-            </button>
-          )}
-
-          {phase === "generating" && (
-            <div style={{ display:"flex", alignItems:"center", gap:12, flex:1 }}>
-              <span style={{ fontSize:12, color:C.muted, whiteSpace:"nowrap" }}>Generating podcast…</span>
-              <button onClick={handleStop} style={{ fontSize:12, color:C.red, background:"none", border:"none", cursor:"pointer", fontWeight:600, whiteSpace:"nowrap" }}>Cancel</button>
-            </div>
-          )}
-
-          {phase === "paused" && (
-            <>
-              <button onClick={handleResume} style={{ display:"flex", alignItems:"center", gap:7, background:C.green, color:"#fff", border:"none", borderRadius:10, padding:"10px 20px", fontSize:14, fontWeight:700, cursor:"pointer" }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Resume
-              </button>
-              <button onClick={handleStop} style={{ display:"flex", alignItems:"center", gap:7, background:C.red, color:"#fff", border:"none", borderRadius:10, padding:"10px 14px", fontSize:14, fontWeight:700, cursor:"pointer" }}>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>Stop
-              </button>
-            </>
-          )}
-
-          {phase === "speaking" && (
-            <>
-              <button onClick={handlePause} style={{ display:"flex", alignItems:"center", gap:7, background:C.warm, color:"#fff", border:"none", borderRadius:10, padding:"10px 20px", fontSize:14, fontWeight:700, cursor:"pointer" }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>Pause
-              </button>
-              <button onClick={handleStop} style={{ display:"flex", alignItems:"center", gap:7, background:C.red, color:"#fff", border:"none", borderRadius:10, padding:"10px 14px", fontSize:14, fontWeight:700, cursor:"pointer" }}>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>Stop
-              </button>
-            </>
-          )}
-
-          <label>Playback voice <select value={voiceIdx} onChange={event => setVoiceIdx(Number(event.target.value))}>
-            {GLOBAL_PERSONAS.map((persona, index) => <option key={persona.id} value={index}>{persona.label}</option>)}
-          </select></label>
-        </div>
-      </div>
-
-      {podcastError && <p className="workspace-warning" role="alert">{podcastError}</p>}
-      {script && <PodcastDownload script={script} />}
-      {/* Centered pulsing audio indicator */}
-      {isPlaying && !listening && (
-        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6, padding:"12px 0 6px" }}>
-          <style>{`
-            @keyframes aipulse{0%,100%{transform:scale(1);opacity:.4}50%{transform:scale(1.6);opacity:1}}
-            @keyframes aipulse2{0%,100%{transform:scale(1);opacity:.15}50%{transform:scale(2.2);opacity:.4}}
-            @keyframes aipulse3{0%,100%{transform:scale(1);opacity:.08}50%{transform:scale(2.8);opacity:.2}}
-          `}</style>
-          <div style={{ position:"relative", width:32, height:32, display:"flex", alignItems:"center", justifyContent:"center" }}>
-            <div style={{ position:"absolute", width:32, height:32, borderRadius:"50%", background:C.purple, animation:"aipulse3 1.6s ease-in-out infinite" }}/>
-            <div style={{ position:"absolute", width:22, height:22, borderRadius:"50%", background:C.purple, animation:"aipulse2 1.6s ease-in-out 0.1s infinite" }}/>
-            <div style={{ position:"absolute", width:14, height:14, borderRadius:"50%", background:C.purple, animation:"aipulse 1.6s ease-in-out 0.2s infinite" }}/>
-            <div style={{ width:8, height:8, borderRadius:"50%", background:C.purple, position:"relative", zIndex:1 }}/>
-          </div>
-          <span style={{ fontSize:11, fontWeight:700, color:C.purple, letterSpacing:.5 }}>PLAYING</span>
-        </div>
-      )}
-
-      {/* Transcript */}
-      <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14,
-        minHeight:180, maxHeight:300, overflowY:"auto", padding:"12px 14px",
-        display:"flex", flexDirection:"column", gap:10, marginBottom:14 }}>
-        {transcript.length === 0 && phase !== "generating" && (
-          <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:8, opacity:.4, padding:"16px 0" }}>
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-              <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
-            </svg>
-            <p style={{ fontSize:13, color:C.muted, textAlign:"center", maxWidth:280 }}>
-              {notes.trim() ? "Press Start Podcast — AI will explain your notes out loud" : "No notes found — go to the Notes tab first"}
-            </p>
-          </div>
-        )}
-        {transcript.map((msg, i) => {
-          return (
-            <div key={i} style={{
-              padding:"9px 13px", borderRadius:12, fontSize:13, lineHeight:1.65,
-              maxWidth:"86%", wordBreak:"break-word",
-              background:   msg.role === "user" ? C.accent : C.bg,
-              color:        msg.role === "user" ? "#fff"   : C.text,
-              alignSelf:    msg.role === "user" ? "flex-end" : "flex-start",
-              borderBottomRightRadius: msg.role === "user" ? 4 : 12,
-              borderBottomLeftRadius:  msg.role === "ai"   ? 4 : 12,
-            }}>
-              <MathText text={msg.text} />
-            </div>
-          );
-        })}
-        {(isPlaying || phase === "generating") && transcript.length > 0 && (
-          <div style={{ display:"flex", gap:4, padding:"4px 8px", alignSelf:"flex-start" }}>
-            {[0,1,2].map(i => <span key={i} style={{ width:6, height:6, borderRadius:"50%", background:C.muted, animation:`bounce .8s ${i*0.15}s infinite`, display:"inline-block" }}/>)}
-          </div>
-        )}
-        <div ref={endRef}/>
-      </div>
-
-      {/* Mic button */}
-      <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-        <button onClick={listening ? stopMic : startMic}
-          style={{ width:50, height:50, borderRadius:"50%", flexShrink:0, border:"none", cursor:"pointer",
-            background: listening ? "linear-gradient(135deg,#ef4444,#dc2626)" : "#286a9b",
-            boxShadow: listening ? "0 0 0 8px rgba(239,68,68,.15),0 4px 18px rgba(239,68,68,.35)" : "0 4px 16px rgba(124,58,237,.35)",
-            display:"flex", alignItems:"center", justifyContent:"center", transition:"all .2s" }}>
-          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-            <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
-          </svg>
-        </button>
-        <p style={{ fontSize:13, margin:0, fontWeight:listening?700:400, color:listening?C.red:C.muted }}>
-          {listening ? (micText ? `"${micText}"` : "Listening…") : "Tap mic to ask a question — podcast pauses to answer"}
-        </p>
-      </div>
-    </div>
-  );
-}
+function AIPodcastPanel({ file, onUpdate, user }) { return <PodcastStudio file={file} onUpdate={onUpdate} getFileText={() => extractFileText(file._fileObj || FILE_STORE.get(file.id))}
+  audioStore={{ get: async key => FILE_STORE.get(key) || (user ? await idbGet(key) : null), save: async (key, blob) => { FILE_STORE.set(key, blob); if (user) await idbSave(key, blob); }, remove: key => { FILE_STORE.delete(key); if (user) idbDelete(key); } }} />; }
 
 // ─── CONTINUOUS AI EXPLANATION ────────────────────────────────────────────────
 function ContinuousExplanationTab({ file }) {

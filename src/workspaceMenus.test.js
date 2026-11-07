@@ -48,8 +48,10 @@ test("character updates preserve the existing appearance and Escape closes the e
   const change = jest.fn(), close = jest.fn();
   render(<AvatarEditor character={character} onChange={change} onClose={close} />);
   fireEvent.click(screen.getByRole("button", { name: "Hair", exact: true }));
-  fireEvent.click(screen.getByRole("button", { name: "Two buns", exact: true }));
-  expect(change).toHaveBeenCalledWith({ ...character, hairStyle: 13 });
+  fireEvent.click(screen.getByRole("button", { name: "Hairstyle: Two buns", exact: true }));
+  expect(change).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Save changes", exact: true }));
+  expect(change).toHaveBeenCalledWith(expect.objectContaining({ ...character, hairStyle: 13 }));
   fireEvent.keyDown(window, { key: "Escape" });
-  expect(close).toHaveBeenCalledTimes(1);
+  expect(close).toHaveBeenCalledTimes(2);
 });

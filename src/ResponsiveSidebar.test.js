@@ -3,7 +3,7 @@ import ResponsiveSidebar from "./ResponsiveSidebar";
 
 test("phone menu includes every study tool, traps focus, selects a tool and closes", () => {
   const select = jest.fn();
-  const props = { mobile: true, expanded: false, onExpand: jest.fn(), main: [{ id: "home", label: "Library" }],
+  const props = { mobile: true, expanded: false, onExpand: jest.fn(), main: [{ id: "home", label: "Library" }, { id: "assistant", label: "AI Assistant" }],
     tabs: ["Notes", "Review", "Audio", "Slides", "Source", "Link"].map(label => ({ id: label, label })),
     onTab: select, onNavigate: jest.fn(), onSearch: jest.fn(), onCharacter: jest.fn(), onSignOut: jest.fn(), guest: true };
   render(<ResponsiveSidebar {...props} />);

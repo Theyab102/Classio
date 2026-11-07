@@ -6,14 +6,14 @@ let quotaReady;
 const quotaPath = require.resolve("./ai-quota");
 require.cache[quotaPath] = {
   exports: {
-    configured: () => quotaReady,
+    configured: () => quotaReady, quotaMode: () => "instance",
     reserveRequest: async (_req, kind) => { requestQuota.kind = kind; return requestQuota; },
   },
 };
 const study = require("../api/study");
 const { parseAudioRequest } = require("./study-request");
 const fixture = {
-  GROQ_API_KEY: "test-only-provider-key",
+  GROQ_API_KEY: "test-only-provider-key", GROQ_TEXT_MODEL: "test-model",
   FIREBASE_SERVICE_ACCOUNT_JSON: JSON.stringify({ project_id: "test", client_email: "test@example.com", private_key: "test-only-private-key" }),
   AI_RATE_LIMIT_SECRET: "test-only-rate-limit-secret-32-characters",
 };

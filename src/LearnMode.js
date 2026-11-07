@@ -1,107 +1,71 @@
 import { useEffect, useRef, useState } from "react";
 import { sendStudyRequest } from "./studyTools";
+import { useStudyActivity } from "./LearningSession";
+import StudyMarkdown from "./StudyMarkdown";
+import WorkspaceArt from "./WorkspaceArt";
+import UiIcon from "./UiIcon";
 import "./studyTools.css";
 
 export function parseLessonPlan(raw) {
   const value = JSON.parse(raw.replace(/^\s*```(?:json)?\s*|\s*```\s*$/gi, ""));
   if (!Array.isArray(value) || value.length < 2 || value.length > 6) throw new Error("The AI returned an incomplete course. Try again.");
-  const text = (input, max) => {
-    if (typeof input !== "string" || !input.trim()) throw new Error("The AI returned an incomplete lesson. Try again.");
-    return input.trim().slice(0, max);
-  };
+  const text = (input, max) => { if (typeof input !== "string" || !input.trim()) throw new Error("The AI returned an incomplete lesson. Try again."); return input.trim().slice(0, max); };
   return value.map(unit => {
-    if (!unit || !Array.isArray(unit.options) || unit.options.length !== 3 ||
-        !Number.isInteger(unit.correct) || unit.correct < 0 || unit.correct > 2) {
-      throw new Error("A knowledge check was incomplete. Try generating the course again.");
-    }
-    return {
-      title: text(unit.title, 100), lesson: text(unit.lesson, 4000), question: text(unit.question, 500),
-      options: unit.options.map(option => text(option, 250)), correct: unit.correct, explanation: text(unit.explanation, 700),
-    };
+    if (!unit || !Array.isArray(unit.options) || unit.options.length !== 3 || !Number.isInteger(unit.correct) || unit.correct < 0 || unit.correct > 2) throw new Error("A knowledge check was incomplete. Try generating the course again.");
+    return { title: text(unit.title, 100), lesson: text(unit.lesson, 5000), question: text(unit.question, 500), options: unit.options.map(option => text(option, 250)), correct: unit.correct, explanation: text(unit.explanation, 1000) };
   });
 }
-
 export default function LearnMode({ file, getFileText, onUpdate, onUseAsNotes }) {
   const [topic, setTopic] = useState("");
-  const [active, setActive] = useState(0);
-  const [choice, setChoice] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const request = useRef(null);
-  const units = file.course?.units || [];
-  const completed = file.course?.completed || [];
-  const unit = units[active];
-
-  useEffect(() => () => request.current?.abort(), []);
-
+  const [active, setActive] = useState(() => Math.max(0, Math.min(file.course?.active || 0, (file.course?.units?.length || 1) - 1)));
+  const [choice, setChoice] = useState(() => file.course?.answers?.[file.course?.active || 0] ?? null), [loading, setLoading] = useState(false), [error, setError] = useState(""), [speaking, setSpeaking] = useState(false);
+  const request = useRef(null), latest = useRef({ file, onUpdate }); latest.current = { file, onUpdate };
+  const units = file.course?.units || [], completed = file.course?.completed || [], unit = units[active];
+  useStudyActivity(file.id, "Lesson tutor", unit ? `${unit.title}\n${unit.lesson}\nKnowledge check: ${unit.question}` : "The learner is preparing a course.", unit?.title);
+  useEffect(() => () => { request.current?.abort(); window.speechSynthesis?.cancel(); }, []);
+  const updateCourse = patch => { const current = latest.current; const course = { ...current.file.course, ...patch }; current.onUpdate({ ...current.file, course }); };
   async function generate(event) {
-    event.preventDefault();
-    if (loading) return;
-    const controller = new AbortController();
-    request.current = controller;
-    setLoading(true);
-    setError("");
+    event.preventDefault(); if (loading) return;
+    if (units.length && !window.confirm("Generate a new course for this file? The current lesson plan will be replaced; your written notes stay saved.")) return;
+    const controller = new AbortController(); request.current = controller; setLoading(true); setError("");
     try {
-      const source = (file.notes || await getFileText() || "").slice(0, 15000);
-      const subject = topic.trim();
-      if (!source && !subject) throw new Error("Enter a topic or add study material first.");
+      const source = (file.notes || await getFileText?.() || "").slice(0, 15000);
+      if (!source.trim() && !topic.trim()) throw new Error("Enter a topic or add study material first.");
       const raw = await sendStudyRequest({ messages: [
-        { role: "system", content: "Build a short, accurate self-paced course. Output only a JSON array of 3 to 5 objects. Each object has title, lesson (plain text with short paragraphs and a worked example), question, options (exactly three strings), correct (zero-based index), and explanation. Use the learner's language. Use the source when supplied and label any supplemental explanations." },
-        { role: "user", content: `Topic: ${subject || file.name}\n\nStudy material:\n${source}` },
-      ], maxTokens: 4200 }, controller.signal);
-      const course = { units: parseLessonPlan(raw), completed: [] };
+        { role: "system", content: "Build a short, accurate self-paced course. Output only a JSON array of 3 to 5 objects. Each object has title, lesson (Markdown with short titled sections, a worked example, and a short takeaway), question, options (exactly three strings), correct (zero-based index), and explanation. Use the learner's language. Stay grounded in the source, label supplemental explanations, and do not invent source content. Use LaTeX for equations." },
+        { role: "user", content: `Topic: ${topic.trim() || file.name}\n\nStudy material:\n${source}` },
+      ], maxTokens: 5500 }, controller.signal);
       if (controller.signal.aborted) return;
-      onUpdate({ ...file, course });
-      setActive(0);
-      setChoice(null);
-    } catch (failure) {
-      if (!controller.signal.aborted) setError(failure.message);
-    } finally {
-      if (!controller.signal.aborted) setLoading(false);
-    }
+      updateCourse({ units: parseLessonPlan(raw), completed: [], active: 0, answers: {} }); setActive(0); setChoice(null);
+    } catch (failure) { if (!controller.signal.aborted) setError(failure.message); }
+    finally { if (!controller.signal.aborted) setLoading(false); request.current = null; }
   }
-
-  function answer(index) {
-    setChoice(index);
-    if (index === unit.correct && !completed.includes(active)) {
-      onUpdate({ ...file, course: { units, completed: [...completed, active] } });
-    }
-  }
-
   function select(index) {
-    setActive(index);
-    setChoice(null);
+    window.speechSynthesis?.cancel(); setSpeaking(false); setActive(index); setChoice(file.course?.answers?.[index] ?? null); updateCourse({ active: index });
   }
-
-  return (
-    <section className="study-tool" aria-labelledby="learn-title">
-      <h2 id="learn-title">Lessons</h2>
-      <p>Turn your notes or a topic into short lessons with practice questions.</p>
-      <form onSubmit={generate} className="study-tool-actions">
-        <label htmlFor="course-topic">Topic</label>
-        <input id="course-topic" placeholder="Optional if this file has study material" value={topic} onChange={event => setTopic(event.target.value)} />
-        <button type="submit" disabled={loading}>{loading ? "Generating…" : units.length ? "Generate new lessons" : "Generate lessons"}</button>
-      </form>
-      {error && <p role="alert">{error}</p>}
-      {unit && (
-        <>
-          <p role="status">{completed.length} of {units.length} lessons completed</p>
-          {onUseAsNotes && <button type="button" onClick={() => onUseAsNotes(units.map(item => `## ${item.title}\n\n${item.lesson}`).join("\n\n"))}>Add lessons to notes</button>}
-          <nav aria-label="Course lessons" className="study-tool-actions">
-            {units.map((item, index) => <button key={index} type="button" aria-current={index === active ? "step" : undefined} onClick={() => select(index)}>{index + 1}. {item.title}{completed.includes(index) ? " (done)" : ""}</button>)}
-          </nav>
-          <article className="study-lesson">
-            <h3>{unit.title}</h3>
-            <p className="study-lesson-text">{unit.lesson}</p>
-            <h4>{unit.question}</h4>
-            <div className="study-tool-actions">
-              {unit.options.map((option, index) => <button type="button" key={index} aria-pressed={choice === index} onClick={() => answer(index)}>{option}</button>)}
-            </div>
-            {choice !== null && <p role="status">{choice === unit.correct ? `Correct. ${unit.explanation}` : "Try another answer."}</p>}
-            {completed.includes(active) && active < units.length - 1 && <button type="button" onClick={() => select(active + 1)}>Next lesson</button>}
-          </article>
-        </>
-      )}
-    </section>
-  );
+  function answer(index) {
+    setChoice(index); updateCourse({ answers: { ...file.course?.answers, [active]: index }, completed: index === unit.correct && !completed.includes(active) ? [...completed, active] : completed });
+  }
+  function listen() {
+    if (speaking) { window.speechSynthesis.cancel(); setSpeaking(false); return; }
+    if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) { setError("Read aloud is not supported by this browser."); return; }
+    const speech = new SpeechSynthesisUtterance(`${unit.title}. ${unit.lesson.replace(/[#*_`]/g, "")}`);
+    speech.lang = navigator.language; speech.rate = .95; speech.onend = () => setSpeaking(false); speech.onerror = () => { setSpeaking(false); setError("Read aloud stopped. You can continue reading the lesson."); };
+    window.speechSynthesis.cancel(); window.speechSynthesis.speak(speech); setSpeaking(true);
+  }
+  return <section className="lesson-studio" aria-labelledby="learn-title"><header className="tool-heading"><div><p className="eyebrow">STEP BY STEP</p><h2 id="learn-title">Lessons</h2><p>A focused path through your material, with a check after each lesson.</p></div>
+    {unit && <span className="tool-count">{completed.length} / {units.length} complete</span>}</header>
+    <form onSubmit={generate} className={`course-generator ${unit ? "is-compact" : ""}`}><label htmlFor="course-topic">Topic<input id="course-topic" placeholder="Optional when this file has study material" value={topic} onChange={event => setTopic(event.target.value)} /></label><button className="quiet-button is-primary" disabled={loading}><UiIcon name="generate" />{loading ? "Generating lessons…" : unit ? "New course" : "Generate lessons"}</button></form>
+    {error && <p role="alert" className="tool-error">{error}</p>}
+    {!unit && !loading && <div className="tool-empty"><WorkspaceArt /><h3>Turn a chapter into a clear learning path</h3><p>Use the notes or source in this file, or enter a topic above. Your generated lessons and progress stay with this material.</p></div>}
+    {loading && <div className="lesson-skeleton" role="status" aria-label="Generating lessons"><span /><span /><span /></div>}
+    {unit && <><div className="course-progress"><div role="progressbar" aria-label="Course progress" aria-valuemin={0} aria-valuemax={units.length} aria-valuenow={completed.length}><span style={{ width: `${completed.length / units.length * 100}%` }} /></div><p role="status">{completed.length} of {units.length} lessons completed</p></div>
+      <div className="lesson-layout"><nav className="lesson-outline" aria-label="Course lessons">{units.map((item, index) => <button key={index} onClick={() => select(index)} aria-current={active === index ? "step" : undefined}><span>{completed.includes(index) ? <UiIcon name="check" size={15} /> : String(index + 1).padStart(2, "0")}</span><strong>{item.title}</strong></button>)}</nav>
+        <article className="lesson-paper"><div className="lesson-paper-heading"><p className="eyebrow">LESSON {active + 1} OF {units.length}</p>{window.speechSynthesis && <button className="quiet-button" onClick={listen} aria-pressed={speaking}><UiIcon name="volume" />{speaking ? "Stop reading" : "Listen"}</button>}</div><h3>{unit.title}</h3><StudyMarkdown text={unit.lesson} />
+          <section className="lesson-check" aria-label="Knowledge check"><p className="eyebrow">CHECK YOUR UNDERSTANDING</p><h4>{unit.question}</h4><div className="answer-choices">{unit.options.map((option, index) => <button type="button" key={index} className={choice === index ? index === unit.correct ? "is-correct" : "is-incorrect" : ""} aria-pressed={choice === index} onClick={() => answer(index)}><span>{String.fromCharCode(65 + index)}</span>{option}{choice === index && <UiIcon name={index === unit.correct ? "check" : "close"} size={17} />}</button>)}</div>
+          {choice !== null && <div className="answer-explanation" role="status"><strong>{choice === unit.correct ? "That’s right." : "Take another look."}</strong><StudyMarkdown text={unit.explanation} /></div>}</section>
+          <footer className="lesson-navigation"><button className="quiet-button" disabled={active === 0} onClick={() => select(active - 1)}><UiIcon name="back" />Previous</button><span>{active + 1} / {units.length}</span>
+            {active < units.length - 1 ? <button className="quiet-button is-primary" onClick={() => select(active + 1)}>Continue<UiIcon name="arrow" /></button> : <button className="quiet-button is-primary" disabled={choice !== unit.correct && !completed.includes(active)} onClick={() => { if (!completed.includes(active)) updateCourse({ completed: [...completed, active] }); }}><UiIcon name="check" />Finish lesson</button>}</footer>
+        </article></div>{onUseAsNotes && <button className="text-button lesson-save-notes" onClick={() => onUseAsNotes(units.map(item => `## ${item.title}\n\n${item.lesson}`).join("\n\n"))}><UiIcon name="notes" />Add lessons to notes</button>}</>}
+  </section>;
 }

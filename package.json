@@ -9,6 +9,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^13.5.0",
+    "@tiptap/core": "3.32.3",
     "@tiptap/extension-image": "^3.32.3",
     "@tiptap/extension-table": "^3.32.3",
     "@tiptap/extension-text-align": "^3.32.3",
@@ -32,11 +33,12 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "CI=false react-scripts build",
+    "build": "node scripts/build.cjs",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "check:ai": "node scripts/check-ai-config.cjs",
-    "test:server": "node --test server/*.test.js"
+    "test:server": "node --test server/*.test.js",
+    "test:browser": "node scripts/test-browser.cjs"
   },
   "eslintConfig": {
     "extends": [
@@ -63,5 +65,14 @@
     "proxy-addr": "^2.0.8",
     "shell-quote": "^1.8.5",
     "websocket-driver": "^0.7.5"
+  },
+  "jest": {
+    "transformIgnorePatterns": [
+      "node_modules/(?!marked/).+\\.(js|jsx|mjs|cjs|ts|tsx)$",
+      "^.+\\.module\\.(css|sass|scss)$"
+    ]
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
   }
 }
