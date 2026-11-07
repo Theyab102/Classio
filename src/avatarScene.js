@@ -17,14 +17,25 @@ hairCap.computeVertexNormals();
 const validColor = (value, fallback) => /^#[\da-f]{3}(?:[\da-f]{3})?$/i.test(value || "") ? value : fallback;
 const material = (color, roughness = .78) => new THREE.MeshStandardMaterial({ color, roughness, metalness: 0 });
 
-export function createCharacter(character = {}) {
+export function createCharacter(character = {}, textures = {}) {
   const ch = character, root = new THREE.Group(), owned = new Set();
   const skinColor = validColor(ch.skin, "#edc5a1"), hairColor = validColor(ch.hair, "#493326");
-  const skin = material(skinColor), hair = material(hairColor, .72), shirt = material(validColor(ch.top, "#528ca6"));
+  const skin = material(skinColor), brows = material(hairColor,.8), hair = material(hairColor, .72), shirt = material(validColor(ch.top, "#528ca6"));
   const white = material("#fffaf1", .45), ink = material("#242c34", .45), iris = material(validColor(ch.eyes, "#487b9b"), .38);
   const pants = material("#3b4b60"), shoes = material("#e3d4b7"), lips = material(ch.lips ? validColor(ch.lipColor, "#ae6262") : "#754f44");
   const style = Number(ch.hairStyle) || 0, top = Number(ch.topStyle) || 0;
+  function fitted(mat, field) { if (textures[field]) { mat.map = textures[field]; mat.color.set('#ffffff'); mat.needsUpdate = true; } return mat; }
+  fitted(shirt,'customClothing'); fitted(hair,'customHair'); fitted(pants,'customBottom'); fitted(shoes,'customShoes');
+  if (ch.customHair) hair.roughness = .4 + Math.min(1,Math.max(0,ch.customHair.textureAmount || 0)) * .55;
   function mesh(geometry, mat, position, scale = [1, 1, 1], parent = root, own = false) {
+    // A front sketch must face the viewer; lathe UVs put its centre on the back.
+    // Clone shared primitives so built-in characters keep their original UVs.
+    if(mat.map && ["CapsuleGeometry","SphereGeometry","CylinderGeometry","ConeGeometry","BoxGeometry"].includes(geometry.type)) {
+      if(own)owned.add(geometry);geometry=geometry.clone();owned.add(geometry);geometry.computeBoundingBox();
+      const bounds=geometry.boundingBox,p=geometry.attributes.position,uv=[];
+      for(let i=0;i<p.count;i++)uv.push((p.getX(i)-bounds.min.x)/Math.max(.0001,bounds.max.x-bounds.min.x),(p.getY(i)-bounds.min.y)/Math.max(.0001,bounds.max.y-bounds.min.y));
+      geometry.setAttribute("uv",new THREE.Float32BufferAttribute(uv,2));
+    }
     const item = new THREE.Mesh(geometry, mat); item.position.set(...position); item.scale.set(...scale); item.castShadow = true; item.receiveShadow = true; parent.add(item); if (own) owned.add(geometry); return item;
   }
   const oval = (mat, x, y, z, rx, ry, rz, parent) => mesh(sphere, mat, [x, y, z], [rx, ry, rz], parent);
@@ -34,7 +45,7 @@ export function createCharacter(character = {}) {
     return mesh(new THREE.TubeGeometry(curve, Math.max(20, points.length * 5), radius, 8, closed), mat, [0, 0, 0], [1, 1, 1], parent, true);
   }
   function ring(mat, x, y, z, rx, ry, thickness = .018, parent = root, shape = "round") {
-    const points = Array.from({ length: 40 }, (_, i) => { const a = i / 40 * Math.PI * 2; return [x + rx * Math.sign(Math.cos(a)) * Math.pow(Math.abs(Math.cos(a)), shape === "rectangle" ? .45 : 1), y + ry * Math.sign(Math.sin(a)) * Math.pow(Math.abs(Math.sin(a)), shape === "rectangle" ? .45 : 1), z]; });
+    const points = Array.from({ length: 40 }, (_, i) => { const a = i / 40 * Math.PI * 2; if(shape === "heart") return [x + rx * Math.sin(a) ** 3,y + ry * (13*Math.cos(a)-5*Math.cos(2*a)-2*Math.cos(3*a)-Math.cos(4*a)+2)/17,z]; return [x + rx * Math.sign(Math.cos(a)) * Math.pow(Math.abs(Math.cos(a)), shape === "rectangle" ? .45 : 1), y + ry * Math.sign(Math.sin(a)) * Math.pow(Math.abs(Math.sin(a)), shape === "rectangle" ? .45 : 1) + (shape === "cat-eye" ? .35*ry*Math.abs(Math.cos(a))**4 : shape === "aviator" && Math.sin(a)<0 ? -.18*ry*Math.abs(Math.sin(a)) : 0), z]; });
     return tube(mat, points, thickness, parent, true);
   }
 
@@ -43,8 +54,10 @@ export function createCharacter(character = {}) {
   if (!dress) for (const sign of [-1, 1]) limb(pants, sign * .145, .62, 0, .148, .30, .205);
   for (const sign of [-1, 1]) {
     limb(skin, sign * .16, .37, .015, .10, .45, .10);
-    if ([2, 4, 10, 12, 14, 15].includes(top)) limb(pants, sign * .16, .38, .015, .108, .49, .11);
-    oval(shoes, sign * .17, .115, .09, .145, .10, .225);
+    if (ch.customBottom ? ch.pantsStyle !== 1 : [2, 4, 10, 12, 14, 15].includes(top)) limb(pants, sign * .16, .38, .015, .108, .49, .11);
+    oval(shoes, sign * .17, .115, .09, .145, ch.shoeStyle === 3 ? .065 : .10, ch.shoeStyle === 2 ? .19 : .225);
+    if(ch.shoeStyle === 1) limb(shoes,sign*.17,.24,.02,.125,.27,.14);
+    if(ch.shoeStyle === 2) oval(shoes,sign*.17,.17,.075,.13,.055,.17);
     tube(white, [[sign * .17 - .06, .18, .19], [sign * .17 + .06, .18, .19]], .016);
   }
   limb(shirt, 0, 1.08, 0, .345, .87, .225);
@@ -73,7 +86,7 @@ export function createCharacter(character = {}) {
   else ring(white, 0, 1.49, .08, .16, .045, .015);
 
   const long = [4, 5, 9, 11, 15].includes(style);
-  if (long) oval(hair, 0, 2.00, -.18, .655, .84, .43);
+  if (long) oval(hair, 0, 2.00, -.18, .655, ch.customHair ? .64 + Math.min(1,Math.max(0,ch.customHair.length || 0)) * .35 : .84, .43);
   oval(skin, 0, 2.16, 0, .64, .60, .55);
   for (const sign of [-1, 1]) {
     oval(skin, sign * .635, 2.12, -.015, .14, .17, .12);
@@ -109,9 +122,11 @@ export function createCharacter(character = {}) {
     const geometry = mergeVertices(wrapped); flat.dispose(); wrapped.dispose();
     const positions = geometry.attributes.position;
     for (let i = 0; i < positions.count; i++) {
-      const x = positions.getX(i), y = positions.getY(i), surface = .575 * Math.sqrt(Math.max(.025, 1 - (x / .69) ** 2 - ((y - 2.16) / .65) ** 2));
+      const x = positions.getX(i), originalY = positions.getY(i), y = ch.customHair ? 2.77 - (2.77 - originalY) * (.82 + Math.min(1,Math.max(0,ch.customHair.fringe || 0)) * .36) : originalY, surface = .575 * Math.sqrt(Math.max(.025, 1 - (x / .69) ** 2 - ((y - 2.16) / .65) ** 2));
+      positions.setY(i,y);
       positions.setZ(i, surface + .035 + positions.getZ(i));
     }
+    if(textures.customHair) { const uv=[];for(let i=0;i<positions.count;i++)uv.push((positions.getX(i)+.65)/1.3,(positions.getY(i)-2.12)/.7);geometry.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2)); }
     geometry.computeVertexNormals();
     mesh(geometry, hair, [0, 0, 0], [1, 1, 1], root, true);
   }
@@ -148,7 +163,7 @@ export function createCharacter(character = {}) {
     }
     const brow = Number(ch.eyebrow) || 0, raised = brow === 4 && sign === -1 ? .025 : 0, middle = (brow === 1 ? 2.382 : brow === 3 ? 2.425 : 2.405) + raised;
     const browPoints = [[x - .10, 2.375 + raised], [x, middle], [x + .10, 2.378 + raised]].map(([bx, by]) => [bx, by, faceZ(bx, by) + .022]);
-    tube(hair, browPoints, brow === 2 ? .023 : .014);
+    tube(brows, browPoints, brow === 2 ? .023 : .014);
   }
   oval(skin, 0, 2.065, .566, .062, .070, .065);
   if (ch.blush) { const blush = material("#d98b85"); blush.transparent = true; blush.opacity = .35; for (const sign of [-1, 1]) oval(blush, sign * .405, 1.995, faceZ(sign * .405, 1.995) + .008, .095, .045, .012); }
@@ -162,24 +177,31 @@ export function createCharacter(character = {}) {
     if ([2, 3, 4].includes(Number(ch.facialHair))) tube(hair, [[-.16, 1.99, .51], [-.07, 2.01, .56], [0, 1.98, .57], [.07, 2.01, .56], [.16, 1.99, .51]], .032);
   }
   if (ch.glasses > 0) {
-    const frame = material(validColor(ch.glassesColor, "#394957"), .45), glasses = Number(ch.glasses);
+    const frame = fitted(material(validColor(ch.glassesColor, "#394957"), .45),'customGlasses'), glasses = Number(ch.glasses);
     for (const sign of glasses === 7 ? [1] : [-1, 1]) {
-      ring(frame, sign * .245, 2.19, .595, .18, glasses === 6 ? .17 : .158, .019, root, glasses === 2 ? "rectangle" : "round");
+      ring(frame, sign * .245, 2.19, .595, .18, glasses === 6 ? .17 : .158, .019, root, glasses === 2 ? "rectangle" : glasses === 3 ? "cat-eye" : glasses === 5 ? "heart" : glasses === 6 ? "aviator" : "round");
       if (glasses === 4) { const lens = material("#263844", .2); lens.transparent = true; lens.opacity = .87; oval(lens, sign * .245, 2.19, .589, .16, .139, .018); }
     }
     if (glasses !== 7) tube(frame, [[-.065, 2.20, .595], [0, 2.225, .625], [.065, 2.20, .595]], .018);
     for (const sign of [-1, 1]) tube(frame, [[sign * .42, 2.21, .59], [sign * .59, 2.23, .12]], .017);
     if (glasses === 7) tube(frame, [[.39, 2.11, .58], [.49, 1.84, .35], [.53, 1.69, .08]], .007);
   }
-  const jewelry = material(validColor(ch.necklaceColor, "#c99d48"), .28); jewelry.metalness = .5;
+  const jewelry = fitted(material(validColor(ch.necklaceColor, "#c99d48"), .28),'customNecklace'); jewelry.metalness = .5;
   if (ch.necklace > 0) { tube(jewelry, [[-.16, 1.51, .15], [-.12, 1.29, .239], [0, 1.23, .26], [.12, 1.29, .239], [.16, 1.51, .15]], Number(ch.necklace) === 4 ? .025 : .012); if ([2, 5].includes(Number(ch.necklace))) oval(jewelry, 0, 1.20, .27, .042, .05, .018); if (Number(ch.necklace) === 3) for (let i = -2; i <= 2; i++) oval(jewelry, i * .053, 1.24 + Math.abs(i) * .03, .26, .025, .025, .025); }
-  if (ch.earring > 0) { const metal = material(validColor(ch.earringColor, "#c99d48"), .28); metal.metalness = .5; for (const sign of [-1, 1]) { oval(metal, sign * .69, 2.015, .08, .025, .025, .025); if (Number(ch.earring) > 1) ring(metal, sign * .69, 1.96, .075, .045, .07, .012); } }
+  if (ch.earring > 0) { const metal = fitted(material(validColor(ch.earringColor, "#c99d48"), .28),'customEarring'); metal.metalness = .5; for (const sign of [-1, 1]) { oval(metal, sign * .69, 2.015, .08, .025, .025, .025); if (Number(ch.earring) > 1) ring(metal, sign * .69, 1.96, .075, .045, .07, .012); } }
+  if(ch.customAccessory && textures.customAccessory){
+    const accessory=fitted(material('#ffffff'),'customAccessory'), shape=ch.customAccessory.baseStyle;
+    if(shape===1){oval(accessory,0,1.1,-.31,.29,.35,.15);for(const sign of [-1,1])tube(accessory,[[sign*.25,1.47,-.15],[sign*.3,1.3,.19],[sign*.24,.88,-.12]],.025);}
+    else if(shape===2){for(const sign of [-1,1]){const wing=oval(accessory,sign*.46,1.34,-.28,.34,.41,.08);wing.rotation.z=sign*-.42;}}
+    else if(shape===3)tube(accessory,[[0,.66,-.12],[.12,.55,-.45],[.4,.75,-.55],[.45,.9,-.48]],.065);
+    else oval(accessory,.12,1.2,.247,.085,.095,.02);
+  }
   if (ch.hat > 0) {
-    const hat = material(validColor(ch.hatColor, "#739db8")), number = Number(ch.hat);
+    const hat = fitted(material(validColor(ch.hatColor, "#739db8")),'customHat'), number = Number(ch.hat);
     if ([1, 2, 8].includes(number)) { mesh(hairCap, hat, [0, 2.36, -.02], [.70, .56, .61]); if (number === 1) oval(hat, 0, 2.94, -.02, .10, .10, .10); if (number === 2) oval(hat, 0, 2.59, .54, .53, .035, .29); if (number === 8) mesh(new THREE.CylinderGeometry(.69, .78, .08, 48), hat, [0, 2.59, -.01], [1, 1, .91], root, true); }
     else if (number === 3) { mesh(new THREE.CylinderGeometry(.52, .56, .31, 40), hat, [0, 2.85, -.04], [1, 1, .8], root, true); oval(hat, 0, 2.69, -.01, .88, .045, .70); }
     else if (number === 4) { limb(hat, 0, 2.83, -.05, .45, .28, .42); mesh(box, hat, [0, 3.0, -.03], [1.20, .065, 1.05]); tube(jewelry, [[0, 3.04, 0], [.55, 3.04, .13], [.60, 2.66, .18]], .014); }
-    else if (number === 5) { mesh(new THREE.CylinderGeometry(.57, .57, .17, 40, 1, true), jewelry, [0, 2.78, -.01], [1, 1, .9], root, true); for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; mesh(new THREE.ConeGeometry(.095, .25, 4), jewelry, [Math.cos(a) * .54, 2.95, Math.sin(a) * .48], [1, 1, 1], root, true); } }
+    else if (number === 5) { const crown=ch.customHat?hat:jewelry; mesh(new THREE.CylinderGeometry(.57, .57, .17, 40, 1, true), crown, [0, 2.78, -.01], [1, 1, .9], root, true); for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; mesh(new THREE.ConeGeometry(.095, .25, 4), crown, [Math.cos(a) * .54, 2.95, Math.sin(a) * .48], [1, 1, 1], root, true); } }
     else if (number === 6) { mesh(new THREE.ConeGeometry(.36, .77, 40), hat, [0, 3.01, -.03], [1, 1, .9], root, true); oval(white, 0, 3.4, -.03, .07, .07, .07); }
     else if (number === 7) tube(hat, [[-.65, 2.18, .02], [-.55, 2.65, -.02], [0, 2.81, -.04], [.55, 2.65, -.02], [.65, 2.18, .02]], .055);
   }
@@ -202,8 +224,20 @@ function getStudio() {
   studio = { renderer, scene, camera, floor }; return studio;
 }
 
-export function renderCharacter(character, { framing = "portrait", yaw = -.10, size = 256 } = {}) {
-  const { renderer, scene, camera } = getStudio(), model = createCharacter(character);
+const textureCache = new Map();
+async function itemTextures(character) {
+  const result={};
+  for(const field of ['customClothing','customHair','customBottom','customShoes','customHat','customGlasses','customNecklace','customEarring','customAccessory']) {
+    const source=character[field]?.texture;
+    if(!/^data:image\/(?:png|jpeg|webp);base64,[a-z0-9+/=]+$/i.test(source||'')||source.length>100000)continue;
+    if(!textureCache.has(source)){const image=new Image();image.src=source;await image.decode();const texture=new THREE.Texture(image);texture.colorSpace=THREE.SRGBColorSpace;texture.needsUpdate=true;textureCache.set(source,texture);if(textureCache.size>40){const key=textureCache.keys().next().value;textureCache.get(key).dispose();textureCache.delete(key);}}
+    result[field]=textureCache.get(source);
+  }
+  return result;
+}
+export async function renderCharacter(character, { framing = "portrait", yaw = -.10, size = 256 } = {}) {
+  const textures=await itemTextures(character);
+  const { renderer, scene, camera } = getStudio(), model = createCharacter(character,textures);
   const color = new THREE.Color(validColor(character.bg, "#e6f2fb")); scene.background = color;
   model.rotation.y = yaw; scene.add(model);
   const full = framing === "full", span = full ? 1.72 : 1.00, target = full ? 1.52 : 2.12;

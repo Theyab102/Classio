@@ -3,10 +3,14 @@
   "name": "Classio Study Workspace",
   "icons": [
     {
-      "src": "ClassioLogo-transparent.png",
-      "sizes": "1254x1254",
+      "src": "favicon-192.png?v=20261107-white",
       "type": "image/png",
-      "purpose": "any"
+      "sizes": "192x192"
+    },
+    {
+      "src": "favicon-512.png?v=20261107-white",
+      "type": "image/png",
+      "sizes": "512x512"
     }
   ],
   "start_url": ".",

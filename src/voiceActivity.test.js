@@ -1,0 +1,3 @@
+import {createSilenceDetector} from './voiceActivity';
+test('a natural short pause does not end a question; two seconds after speech does',()=>{const d=createSilenceDetector();d.sample(.08,0);d.sample(.08,200);expect(d.sample(.001,1000).stop).toBe(false);d.sample(.09,1300);d.sample(.09,1500);expect(d.sample(.001,3000).stop).toBe(false);expect(d.sample(.001,3501)).toMatchObject({stop:true,reason:'silence'});});
+test('quiet input and brief background clicks do not create an invented question',()=>{const d=createSilenceDetector();d.sample(.001,0);d.sample(.1,500);d.sample(.001,550);expect(d.sample(.002,12001)).toMatchObject({stop:true,reason:'no-speech'});});

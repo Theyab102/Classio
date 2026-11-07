@@ -1,3 +1,4 @@
+import {spokenMathText} from "./mathSpeech";
 import { TTS_SPACE_URL } from "./studyTools";
 
 export function spokenTurn(text) {
@@ -7,7 +8,7 @@ export function spokenTurn(text) {
 
 export async function synthesizeSpeech(text, voice, signal) {
   if (!TTS_SPACE_URL) throw new Error("Audio generation is not connected.");
-  const response = await fetch(`${TTS_SPACE_URL}/generate-podcast`, { method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store", signal: AbortSignal.any([signal, AbortSignal.timeout(90000)]), body: JSON.stringify({ text: spokenTurn(text), voice, speed: 1 }) });
+  const response = await fetch(`${TTS_SPACE_URL}/generate-podcast`, { method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store", signal: AbortSignal.any([signal, AbortSignal.timeout(90000)]), body: JSON.stringify({ text: spokenMathText(spokenTurn(text)), voice, speed: 1 }) });
   if (!response.ok || !response.headers.get("content-type")?.startsWith("audio/")) throw new Error("The voice service could not create audio. Your transcript is still available.");
   const blob = await response.blob();
   if (blob.size > 15000000) throw new Error("This audio section is too large. Try a shorter answer.");

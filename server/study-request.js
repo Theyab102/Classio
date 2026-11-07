@@ -30,7 +30,8 @@ function parseStudyRequest(body) {
     messages.push({ role, content: [{ type: "image_url", image_url: { url } }, { type: "text", text: text.text }] });
   }
   if (textLength > MAX_TEXT_LENGTH || !messages.some(message => message.role === "user")) return null;
-  return { messages, maxTokens: body.maxTokens, vision: imageCount === 1 };
+  const tasks=new Set(["classification","style","notes","questions","flashcards","conversation","presentation","avatar-fit"]);
+  return { messages, maxTokens: body.maxTokens, vision: imageCount === 1, ...(tasks.has(body.task)?{task:body.task}:{}) };
 }
 
 function parseAudioRequest(body) {

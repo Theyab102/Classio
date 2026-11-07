@@ -1,3 +1,4 @@
+import { acknowledgeStudyImage } from "./documentMedia";
 import { markdownToNoteHtml, sanitizeNoteHtml } from "./noteFormat";
 import { getPdfFigures, getPresentationFigures, likelyStudyImage, prepareSourceFigure, safeImageSource, searchStudyImages } from "./documentMedia";
 
@@ -86,9 +87,10 @@ export async function enrichNoteImages(markdown, { pdfFile, fileObj, useWeb, sig
       return { marker, image: likelyStudyImage(marker.query, results) };
     } catch { return { marker }; }
   });
-  for (const { marker, image } of await Promise.all(requests)) {
+  for (let { marker, image } of await Promise.all(requests)) {
     if (!marker || signal?.aborted) continue;
     if (image && seen.has(image.src)) continue;
+    if(image)try{await acknowledgeStudyImage(image,signal);}catch{image=null;}
     if (!image || !insertNoteFigure(root, image, marker.query, marker.anchor)) missing++;
     else { seen.add(image.src); added++; }
   }

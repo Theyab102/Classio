@@ -141,12 +141,12 @@ export async function getPdfFigures(file, pageNumber, { pagePreview = false } = 
   } finally { await pdf.destroy(); }
 }
 
-export async function searchStudyImages(query, signal) {
+async function commonsImages(query, signal) {
   const term = query.trim().slice(0, 100);
   if (!term) return [];
   const params = new URLSearchParams({
     action: "query", generator: "search", gsrsearch: term, gsrnamespace: "6",
-    gsrlimit: "12", prop: "imageinfo", iiprop: "url|mime|extmetadata", iiurlwidth: "720",
+    gsrlimit: "12", prop: "imageinfo", iiprop: "url|mime|extmetadata|size", iiurlwidth: "720",
     iiextmetadatafilter: "LicenseShortName|Artist|ImageDescription", format: "json", origin: "*",
   });
   const response = await fetch(`https://commons.wikimedia.org/w/api.php?${params}`, { signal, referrerPolicy: "no-referrer" });
@@ -163,8 +163,29 @@ export async function searchStudyImages(query, signal) {
     const artist = new DOMParser().parseFromString(info.extmetadata?.Artist?.value || "", "text/html").body.textContent.trim();
     const context = new DOMParser().parseFromString(info.extmetadata?.ImageDescription?.value || "", "text/html").body.textContent.trim().slice(0, 800);
     const credit = [title, artist, license].filter(Boolean).join(" · ");
-    return [{ src: info.thumburl, source: info.descriptionurl, title, credit, context }];
+    return [{ src: info.thumburl, source: info.descriptionurl, title, credit, context, ...(info.thumbwidth&&info.thumbheight?{width:info.thumbwidth,height:info.thumbheight}:{}) }];
   }).slice(0, 8);
+}
+
+let capabilities;
+async function extraImageSearch(query,signal){
+  if(!capabilities)capabilities=fetch('/api/images').then(r=>r.ok?r.json():{}).catch(()=>{capabilities=null;return {};});
+  if(!(await capabilities).searchProviders?.length)return[];
+  const response=await fetch('/api/images',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'search',query}),signal});
+  if(!response.ok)throw new Error('Additional image sources are unavailable.');
+  const data=await response.json();return Array.isArray(data.images)?data.images:[];
+}
+export async function searchStudyImages(query,signal){
+  const results=await Promise.allSettled([commonsImages(query,signal),extraImageSearch(query,signal)]);
+  if(signal?.aborted)throw new DOMException('Image search cancelled','AbortError');
+  const images=results.flatMap(result=>result.status==='fulfilled'?result.value:[]);
+  if(!images.length&&results.every(result=>result.status==='rejected'))throw new Error('Image search is temporarily unavailable.');
+  return [...new Map(images.map(image=>[image.src,image])).values()];
+}
+export async function acknowledgeStudyImage(image,signal){
+  if(image.provider!=='unsplash')return;
+  const response=await fetch('/api/images',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'track-download',id:image.providerId}),signal});
+  if(!response.ok||!(await response.json()).tracked)throw new Error('This image source could not confirm the selection. Choose another image or try again.');
 }
 
 export function likelyStudyImage(query, results) {

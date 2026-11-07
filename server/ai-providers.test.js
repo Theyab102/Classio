@@ -38,7 +38,7 @@ test("Groq rate limiting falls back to Gemini without sending keys in URLs or re
   assert.equal(calls.length, 2);
   assert.equal(calls[1].options.headers["x-goog-api-key"], env.GEMINI_API_KEY);
   assert(!calls[1].url.includes(env.GEMINI_API_KEY));
-  assert.deepEqual(reports, [{ provider: "groq", code: "PROVIDER_RATE_LIMIT" }]);
+  assert.deepEqual(reports.filter(item=>item.code!=="ROUTE_SELECTED"), [{ provider: "groq", code: "PROVIDER_RATE_LIMIT" }]);
 });
 
 test("safety-blocked responses do not bypass the block through another provider", async () => {
@@ -122,4 +122,19 @@ test("an oversized generation does not put a later small greeting into cooldown"
   } };
   await assert.rejects(generateStudy({ ...input, maxTokens: 5500 }, options), error => error.code === "REQUEST_TOO_LARGE");
   assert.equal((await generateStudy({ ...input, maxTokens: 200 }, options)).text, "Hello!");
+});
+
+test('two independently configured Gemini quota groups fail over sequentially without duplicate requests',async()=>{
+  const keys=[],settings={GEMINI_ENABLED:'true',GEMINI_MODEL:'test',GEMINI_API_KEY:'first',GEMINI_API_KEY_2:'second',GEMINI_QUOTA_GROUP_1:'project-a',GEMINI_QUOTA_GROUP_2:'project-b'};
+  const result=await generateStudy(input,{env:settings,fetcher:async(url,request)=>{keys.push(request.headers['x-goog-api-key']);return keys.length===1?{ok:false,status:429,headers:{get:()=> '12'},json:async()=>({})}:{ok:true,json:async()=>({candidates:[{content:{parts:[{text:'Second project answered.'}]}}]})};}});
+  assert.equal(result.text,'Second project answered.');assert.deepEqual(keys,['first','second']);
+});
+test('Gemini keys with unknown/shared quota do not rotate around a rate limit',async()=>{
+  const keys=[],settings={GEMINI_ENABLED:'true',GEMINI_MODEL:'test',GEMINI_API_KEY:'first',Gemini_Key_2:'second'};
+  await assert.rejects(generateStudy(input,{env:settings,fetcher:async(url,request)=>{keys.push(request.headers['x-goog-api-key']);return{ok:false,status:429,headers:{get:()=> '20'},json:async()=>({})};}}),error=>error.status===429);
+  assert.deepEqual(keys,['first']);
+});
+test('identical in-flight style requests share one provider call and validated tasks can be cached',async()=>{
+  let calls=0;const options={env:{GROQ_API_KEY:'dedupe',GROQ_TEXT_MODEL:'test'},fetcher:async()=>{calls++;await new Promise(resolve=>setTimeout(resolve,10));return{ok:true,json:async()=>({choices:[{message:{content:'{"font":"sans"}'}}]})};}};
+  const request={...input,task:'style'};await Promise.all([generateStudy(request,options),generateStudy(request,options)]);await generateStudy(request,options);assert.equal(calls,1);
 });

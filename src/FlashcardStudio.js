@@ -1,3 +1,6 @@
+import AIStyleDialog from "./AIStyleDialog";
+import {styleVariables} from "./styleConfig";
+import {activeTheme} from "./theme";
 import ChoiceMenu from "./ChoiceMenu";
 import { MATH_OUTPUT_GUIDE } from "./mathMarkdown";
 import { useEffect, useRef, useState } from "react";
@@ -15,6 +18,7 @@ export function parseFlashcards(raw, count) {
   return rows.slice(0, count).map(card => ({ id: makeStudyId(), question: card.question.trim().slice(0, 2000), answer: card.answer.trim().slice(0, 4000) }));
 }
 export default function FlashcardStudio({ file, onUpdate, getFileText }) {
+  const [styleOpen,setStyleOpen]=useState(false);
   const cards = file.studyCards || [], progress = file.cardProgress || {}, known = progress.known || {}, starred = progress.starred || {}, reviews = progress.review || {};
   const [filter, setFilter] = useState("all"), [query, setQuery] = useState(""), [mode, setMode] = useState("browse"), [flipped, setFlipped] = useState(false);
   const [activeId, setActiveId] = useState(progress.activeCardId || cards[0]?.id), [edited, setEdited] = useState(null), [remove, setRemove] = useState(null), [generator, setGenerator] = useState(false);
@@ -48,6 +52,7 @@ export default function FlashcardStudio({ file, onUpdate, getFileText }) {
   useEffect(() => {
     const key = event => {
       if (mode !== "study" || edited || generator || remove || event.target.closest?.("input,textarea,select,button,[contenteditable]")) return;
+      if(event.key === "Escape") { setMode("browse"); return; }
       if (event.key === " " || event.key === "ArrowRight" || event.key === "ArrowLeft") event.preventDefault();
       if (event.key === " ") setFlipped(value => !value);
       if (event.key === "ArrowRight") select(index + 1);
@@ -78,7 +83,7 @@ export default function FlashcardStudio({ file, onUpdate, getFileText }) {
     finally { if (!controller.signal.aborted) setBusy(false); pending.current = null; }
   }
   const exportCards = () => downloadStudyFile(new Blob([cards.map(item => [item.question, item.answer].map(text => text.replace(/[\t\r\n]+/g, " ")).join("\t")).join("\n")], { type: "text/tab-separated-values" }), "classio-flashcards.tsv");
-  return <section className="flashcard-studio"><header className="tool-heading"><div><p className="eyebrow">A LITTLE PRACTICE, OFTEN</p><h2>Flashcards</h2><p>{cards.length ? `${cards.length} cards from your material. Study at your own pace.` : "Turn important ideas into something you can remember."}</p></div><div className="studio-controls"><button className="quiet-button" onClick={() => setEdited({ question: "", answer: "" })}><UiIcon name="plus" />Add card</button><button className="quiet-button is-primary" onClick={() => { setGenerator(true); setError(""); }}><UiIcon name="generate" />Generate cards</button></div></header>
+  return <section className={`flashcard-studio ${mode === "study" ? "is-studying" : ""}`} data-custom-style={!!file.contentStyle} style={styleVariables(file.contentStyle,activeTheme())}>{styleOpen&&<AIStyleDialog value={file.contentStyle} previous={file.previousContentStyle} onClose={()=>setStyleOpen(false)} onApply={style=>update({contentStyle:style,previousContentStyle:file.contentStyle||null})}/>}<header className="tool-heading"><div><p className="eyebrow">A LITTLE PRACTICE, OFTEN</p><h2>Flashcards</h2><p>{cards.length ? `${cards.length} cards from your material. Study at your own pace.` : "Turn important ideas into something you can remember."}</p></div><div className="studio-controls"><button className="quiet-button" aria-label="Customize flashcard style" onClick={()=>setStyleOpen(true)}><UiIcon name="generate"/>Style</button><button className="quiet-button" onClick={() => setEdited({ question: "", answer: "" })}><UiIcon name="plus" />Add card</button><button className="quiet-button is-primary" onClick={() => { setGenerator(true); setError(""); }}><UiIcon name="generate" />Generate cards</button></div></header>
     <div className="card-category-bar" aria-label="Card categories">{["new", "learning", "mastered"].map(type => <button key={type} aria-pressed={filter === type} className={`category-${type}`} onClick={() => { setFilter(filter === type ? "all" : type); setFlipped(false); setFinished(false); }}>{groups[type]} {type[0].toUpperCase() + type.slice(1)}</button>)}</div>
     {cards.length ? <><div className="flashcard-actions"><label className="library-search"><UiIcon name="search" /><input type="search" aria-label="Search flashcards" placeholder="Find a card" value={query} onChange={event => setQuery(event.target.value)} /></label><ChoiceMenu aria-label="Flashcard filter" value={filter} onChange={event => { setFilter(event.target.value); setFlipped(false); }}><option value="all">All cards</option><option value="due">Due for review</option><option value="new">New</option><option value="learning">Learning</option><option value="mastered">Mastered</option><option value="starred">Starred</option></ChoiceMenu><button className="quiet-button" onClick={() => { setShuffle(previous => previous.length ? [] : cards.map(item => item.id).sort(() => Math.random() - .5)); setFlipped(false); }} aria-pressed={!!shuffle.length}><UiIcon name="shuffle" />Shuffle</button><button className="quiet-button" onClick={exportCards} title="Download flashcards"><UiIcon name="download" /></button></div>
       {card ? <div className={`flashcard-stage ${mode === "study" ? "is-studying" : ""}`}>

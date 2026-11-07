@@ -15,11 +15,14 @@ export const AVATAR_COLORS = {
   top: ["#528ca6", "#264658", "#738e72", "#b66957", "#b99d61", "#ededdf", "#787e8b", "#a46378"],
   eyes: ["#373b38", "#775b3b", "#4f7766", "#487b9b"], bg: ["#e6f2fb", "#f4ead8", "#e3eddc", "#f4e1dc", "#e7e9ed", "#273e4b"],
 };
-export function randomCharacter(current, random = Math.random) {
+export function randomCharacter(current, random = Math.random, preset = "any") {
   const choose = list => list[Math.min(list.length - 1, Math.floor(random() * list.length))];
   const next = { ...current };
   for (const [key, list] of Object.entries(AVATAR_COLORS)) next[key] = choose(list);
   for (const key of ["hairStyle", "eyeShape", "mouth", "eyebrow", "topStyle"]) next[key] = Math.floor(random() * AVATAR_OPTIONS[key].length);
+  const presets = { male: {hairStyle:[0,1,2,3,8,10,12,14,16],topStyle:[0,1,2,4,6,7,10,11,12,14,15]}, female:{hairStyle:[2,4,5,6,7,9,10,11,13,15],topStyle:[0,1,2,3,5,9,10,13,14,15]} };
+  if(presets[preset]) for(const key of ["hairStyle","topStyle"]) next[key] = choose(presets[preset][key]);
+  for(const key of ["customClothing","customHair","customBottom","customShoes","customHat","customGlasses","customNecklace","customEarring","customAccessory"]) next[key] = null;
   next.hat = random() < .75 ? 0 : 1 + Math.floor(random() * 8);
   next.glasses = random() < .6 ? 0 : 1 + Math.floor(random() * 7);
   next.blush = random() > .3; next.freckles = random() > .65;

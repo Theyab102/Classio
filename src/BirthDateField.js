@@ -1,0 +1,9 @@
+import {useEffect,useState} from 'react';
+import ChoiceMenu from './ChoiceMenu';
+export default function BirthDateField({onInput}){
+  const query='(pointer: coarse), (max-width: 1024px)',[native,setNative]=useState(()=>window.matchMedia?.(query).matches??true),[year,setYear]=useState(''),[month,setMonth]=useState(''),[day,setDay]=useState('');
+  useEffect(()=>{const media=window.matchMedia?.(query),change=()=>setNative(media.matches);media?.addEventListener?.('change',change);return()=>media?.removeEventListener?.('change',change);},[]);
+  if(native)return <><label htmlFor="birth-date">Date of birth</label><input id="birth-date" name="birthDate" type="date" required onInput={onInput}/></>;
+  const value=/^\d{4}$/.test(year)&&month&&day?`${year}-${month.padStart(2,'0')}-${day.padStart(2,'0')}`:'';
+  return <><span id="birth-date-label">Date of birth</span><div className="birth-date-fields" role="group" aria-labelledby="birth-date-label"><label><span>Day</span><ChoiceMenu aria-label="Birth day" value={day} onChange={event=>{setDay(event.target.value);onInput?.();}}><option value="" disabled>Day</option>{Array.from({length:31},(_,i)=><option key={i} value={String(i+1)}>{i+1}</option>)}</ChoiceMenu></label><label><span>Month</span><ChoiceMenu aria-label="Birth month" value={month} onChange={event=>{setMonth(event.target.value);onInput?.();}}><option value="" disabled>Month</option>{['January','February','March','April','May','June','July','August','September','October','November','December'].map((name,i)=><option key={name} value={String(i+1)}>{name}</option>)}</ChoiceMenu></label><label><span>Year</span><input aria-label="Birth year" inputMode="numeric" pattern="[0-9]{4}" placeholder="YYYY" maxLength={4} value={year} onChange={event=>{setYear(event.target.value.replace(/\D/g,''));onInput?.();}} required/></label></div><input type="hidden" name="birthDate" value={value}/></>;
+}

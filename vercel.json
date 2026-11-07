@@ -42,6 +42,12 @@
     },
     "api/source.js": {
       "maxDuration": 60
+    },
+    "api/images.js": {
+      "maxDuration": 60
+    },
+    "api/avatar-designs.js": {
+      "maxDuration": 30
     }
   }
 }

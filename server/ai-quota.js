@@ -25,10 +25,10 @@ function requester(req, env = process.env) {
   return createHmac("sha256", env.AI_RATE_LIMIT_SECRET || instanceSecret).update(address).digest("hex");
 }
 function specifications(action, id, now) {
-  const audio = action === "audio";
+  const audio = action === "audio",image = action === "image";
   return [
-    { key: `${action}-client-${id}`, interval: WINDOW_MS, limit: audio ? 3 : 18 },
-    { key: `${action}-all`, interval: DAY_MS, limit: audio ? 40 : 250 },
+    { key: `${action}-client-${id}`, interval: WINDOW_MS, limit: audio ? 3 : image ? 3 : 18 },
+    { key: `${action}-all`, interval: DAY_MS, limit: audio ? 40 : image ? 30 : 250 },
   ].map(item => ({ ...item, start: Math.floor(now / item.interval) * item.interval, end: (Math.floor(now / item.interval) + 1) * item.interval }));
 }
 function reserveInstance(action, id, now = Date.now(), store = counters) {

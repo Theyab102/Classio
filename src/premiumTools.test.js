@@ -19,7 +19,8 @@ test("quiz hints, checked answers and navigation preserve the actual attempt", (
   const changed = jest.fn();
   render(<Harness Component={QuizStudio} changed={changed} initial={{ id: "physics", name: "Forces", notes: "Force is measured in newtons.", quiz: { questions: [question, { ...question, question: "Name the SI unit of force." }], answers: {}, checked: {}, active: 0 } }} />);
   fireEvent.click(screen.getByRole("button", { name: "Show hint" }));
-  expect(screen.getByText(question.hint)).toBeInTheDocument();
+  expect(document.querySelector(".quiz-hint").textContent).toContain("Think of the unit in");
+  expect(document.querySelector(".quiz-hint .katex")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: /A Newton/ }));
   fireEvent.click(screen.getByRole("button", { name: "Check answer", exact: true }));
   expect(changed.mock.calls.at(-1)[0].quiz.checked[0]).toBe(true);

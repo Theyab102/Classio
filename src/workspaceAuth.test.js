@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import App from "./App";
-import { getDoc } from "firebase/firestore";
+import { getDoc, setDoc } from "firebase/firestore";
 import { getAuth, signInWithPopup } from "firebase/auth";
 
 const mockAuth = getAuth();
@@ -100,4 +100,15 @@ test("opens saved notes when the browser file database is blocked", async () => 
     else delete global.indexedDB;
     jest.useRealTimers();
   }
+});
+
+test("custom wearable profiles restore separately and save without inflating the materials document",async()=>{
+ const design={name:"Blue crown",kind:"hat",region:"hat",baseStyle:5,texture:"data:image/png;base64,iVBORw0KGgo="};
+ const root={metadata:{fromCache:false},data:()=>({folders:[],characterAssetProfile:true,character:{name:"Saved creator",hat:5}})};
+ getDoc.mockResolvedValue(root).mockResolvedValueOnce(root).mockResolvedValueOnce({data:()=>({character:{name:"Saved creator",hat:5,customHat:design,designs:[design]}})});setDoc.mockResolvedValue();
+ render(<App/>);mockAuth.currentUser={uid:"creator",displayName:"Creator"};await act(async()=>{await mockAuthListener(mockAuth.currentUser);});
+ fireEvent.click(screen.getByRole("button",{name:"Edit character",exact:true}));expect(screen.getByRole("button",{name:"Edit Blue crown",exact:true})).toBeInTheDocument();
+ await act(async()=>{fireEvent.click(screen.getByRole("button",{name:"Save changes",exact:true}));});
+ expect(setDoc.mock.calls.some(([,data])=>data.character?.customHat?.name==="Blue crown")).toBe(true);
+ const workspace=setDoc.mock.calls.find(([,data])=>data.characterAssetProfile===true)?.[1];expect(workspace.character.customHat).toBeUndefined();expect(workspace.character.designs).toBeUndefined();expect(workspace.character.name).toBe("Saved creator");
 });

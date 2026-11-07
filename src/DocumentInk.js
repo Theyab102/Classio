@@ -1,3 +1,4 @@
+import ColorField from "./ColorPicker";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import UiIcon from "./UiIcon";
 
@@ -7,16 +8,18 @@ export function useInkTool() {
   const [tool, setTool] = useState("pan");
   const [color, setColor] = useState("#b52332");
   const [size, setSize] = useState(3);
-  return { tool, setTool, color, setColor, size, setSize };
+  const [future,setFuture]=useState([]),expected=useRef(null);
+  return { tool, setTool, color, setColor, size, setSize,future,setFuture,expected };
 }
 
 export function InkToolbar({ ink, strokes, onChange }) {
   return <div className="studio-controls" role="toolbar" aria-label="Annotation tools">
     <div className="ink-tool-choices">{inkTools.map(([id, label]) => <button type="button" key={id} aria-pressed={ink.tool === id} onClick={() => ink.setTool(id)}><UiIcon name={id === "pen" ? "edit" : id === "highlight" ? "highlight" : id === "erase" ? "eraser" : "hand"} size={16} />{label}</button>)}</div>
-    <div className="ink-colors" role="group" aria-label="Ink colors">{[["#b52332", "Red"], ["#286a9b", "Blue"], ["#2f7b59", "Green"], ["#d19a16", "Gold"], ["#7b54a0", "Purple"]].map(([color, name]) => <button type="button" key={color} className="ink-color-swatch" aria-label={name + " ink"} aria-pressed={ink.color === color} style={{ "--swatch": color }} onClick={() => ink.setColor(color)}>{ink.color === color && <UiIcon name="check" size={13} />}</button>)}<label className="ink-custom-color" title="Custom ink color"><span style={{ background: ink.color }} /><input type="color" aria-label="Ink color" value={ink.color} onChange={event => ink.setColor(event.target.value)} /></label></div>
+    <div className="ink-colors" role="group" aria-label="Ink colors">{[["#b52332", "Red"], ["#286a9b", "Blue"], ["#2f7b59", "Green"], ["#d19a16", "Gold"], ["#7b54a0", "Purple"]].map(([color, name]) => <button type="button" key={color} className="ink-color-swatch" aria-label={name + " ink"} aria-pressed={ink.color === color} style={{ "--swatch": color }} onClick={() => ink.setColor(color)}>{ink.color === color && <UiIcon name="check" size={13} />}</button>)}<label className="ink-custom-color" title="Custom ink color"><span style={{ background: ink.color }} /><ColorField aria-label="Ink color" value={ink.color} onChange={event => ink.setColor(event.target.value)} /></label></div>
     <div className="ink-size-choices" role="group" aria-label="Ink size">{[[2, "Fine"], [5, "Medium"], [10, "Broad"]].map(([size, name]) => <button type="button" key={size} aria-label={name + " stroke"} aria-pressed={size === (ink.size <= 3 ? 2 : ink.size <= 7 ? 5 : 10)} onClick={() => ink.setSize(size)}><span style={{ width: size + 3, height: size + 3 }} /><small>{name}</small></button>)}</div>
-    <button type="button" disabled={!strokes.length} onClick={() => onChange(strokes.slice(0, -1))}>Undo ink</button>
-    <button type="button" disabled={!strokes.length} onClick={() => onChange([])}>Clear ink</button>
+    <button type="button" disabled={!strokes.length} onClick={() => {const next=strokes.slice(0,-1);ink.expected.current=next;ink.setFuture([strokes.at(-1),...ink.future]);onChange(next);}}>Undo ink</button>
+    <button type="button" disabled={!ink.future?.length} onClick={()=>{const next=[...strokes,ink.future[0]];ink.expected.current=next;ink.setFuture(ink.future.slice(1));onChange(next);}}>Redo ink</button>
+    <button type="button" disabled={!strokes.length} onClick={() => {ink.expected.current=[];ink.setFuture([]);onChange(ink.expected.current);}}>Clear ink</button>
   </div>;
 }
 
@@ -52,6 +55,7 @@ export function InkLayer({ ink, strokes, onChange }) {
   const canvas = useRef(null);
   const active = useRef(null);
   const frame = useRef(null);
+  useLayoutEffect(()=>{if(ink.expected && ink.expected.current!==strokes)ink.setFuture([]);if(ink.expected)ink.expected.current=strokes;},[strokes,ink]);
 
   const redraw = useCallback(() => {
     const surface = canvas.current;
@@ -85,6 +89,7 @@ export function InkLayer({ ink, strokes, onChange }) {
   function start(event) {
     if (ink.tool === "pan" || active.current || event.button !== 0) return;
     event.preventDefault();
+    event.currentTarget.focus({preventScroll:true});
     event.currentTarget.setPointerCapture(event.pointerId);
     active.current = { pointer: event.pointerId, stroke: { tool: ink.tool, size: ink.size, color: ink.color, points: [point(event)] } };
     redraw();
@@ -105,9 +110,9 @@ export function InkLayer({ ink, strokes, onChange }) {
     const session = active.current;
     if (!session || session.pointer !== event.pointerId) return;
     active.current = null;
-    onChange([...strokes, session.stroke]);
+    const next=[...strokes,session.stroke];ink.expected.current=next;ink.setFuture([]);onChange(next);
   }
 
-  return <canvas ref={canvas} aria-label="Ink layer" className="studio-ink" data-tool={ink.tool}
+  return <canvas tabIndex={0} onKeyDown={event=>{if(!(event.ctrlKey||event.metaKey)||event.altKey||!["z","y"].includes(event.key.toLowerCase()))return;event.preventDefault();event.stopPropagation();const redo=event.key.toLowerCase()==="y"||event.shiftKey;if(redo&&ink.future.length){const next=[...strokes,ink.future[0]];ink.expected.current=next;ink.setFuture(ink.future.slice(1));onChange(next);}else if(!redo&&strokes.length){const next=strokes.slice(0,-1);ink.expected.current=next;ink.setFuture([strokes.at(-1),...ink.future]);onChange(next);}}} ref={canvas} aria-label="Ink layer" className="studio-ink" data-tool={ink.tool}
     onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end} />;
 }

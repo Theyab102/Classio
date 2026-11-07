@@ -1,4 +1,4 @@
-import { Children, Fragment, isValidElement, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { Children, Fragment, isValidElement, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import UiIcon from "./UiIcon";
 import "./choices.css";
@@ -16,7 +16,7 @@ function optionsFrom(children, group = "") {
 // A select-only combobox: focus stays on its trigger, including inside dialogs.
 export default function ChoiceMenu({ children, value, defaultValue, onChange, disabled, className = "", style,
   variant = "", icon, descriptions = {}, onKeyDown, ...props }) {
-  const options = optionsFrom(children), [local, setLocal] = useState(defaultValue ?? options[0]?.value ?? "");
+  const options = useMemo(()=>optionsFrom(children),[children]), [local, setLocal] = useState(defaultValue ?? options[0]?.value ?? "");
   const selected = String(value ?? local), current = options.find(option => option.value === selected);
   const [open, setOpen] = useState(false), [active, setActive] = useState(0), [position, setPosition] = useState({});
   const trigger = useRef(null), menu = useRef(null), search = useRef({ text: "", at: 0 }), id = useId();
@@ -31,7 +31,7 @@ export default function ChoiceMenu({ children, value, defaultValue, onChange, di
     if (!open) return;
     const place = event => {
       if (event?.target instanceof Node && menu.current?.contains(event.target)) return;
-      const box = trigger.current.getBoundingClientRect(), width = Math.min(Math.max(box.width, variant === "notebook" ? 315 : 180), window.innerWidth - 24);
+      const box = trigger.current.getBoundingClientRect(), width = Math.min(Math.max(box.width, variant === "notebook" ? 315 : Math.min(240,Math.max(140,...options.map(option=>option.label.length*7+50)))), window.innerWidth - 24);
       const roomBelow = window.innerHeight - box.bottom - 18, above = roomBelow < 190 && box.top > roomBelow;
       const height = Math.min(360, Math.max(80, above ? box.top - 18 : roomBelow));
       setPosition({ width, left: Math.max(12, Math.min(box.left, window.innerWidth - width - 12)), maxHeight: height,
@@ -39,7 +39,7 @@ export default function ChoiceMenu({ children, value, defaultValue, onChange, di
     };
     place(); window.addEventListener("resize", place); window.addEventListener("scroll", place, true);
     return () => { window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); };
-  }, [open, variant]);
+  }, [open, variant, options]);
   useEffect(() => {
     if (!open) return;
     const outside = event => { if (!trigger.current?.contains(event.target) && !menu.current?.contains(event.target)) close(); };

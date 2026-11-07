@@ -1,7 +1,9 @@
+import BirthDateField from "./BirthDateField";
 import { lazy, Suspense, useState } from "react";
 import { checkBirthDate } from "./eligibility";
 import { LegalLinks, LegalPage, legalPages } from "./Legal";
 import "./entry.css";
+import "./refinements.css";
 import { readAccess, rememberAccess } from "./access";
 import { ThemeSelector, useThemeMode } from "./theme";
 import WorkspaceBoundary from "./WorkspaceBoundary";
@@ -73,8 +75,7 @@ export default function Entry() {
             <form onSubmit={submitBirthDate}>
               <h2 id="entry-step">Check eligibility</h2>
               <p>Your date of birth stays in this form. Classio remembers the eligibility result in this browser.</p>
-              <label htmlFor="birth-date">Date of birth</label>
-              <input id="birth-date" name="birthDate" type="date" required onInput={() => setError("")} />
+              <BirthDateField onInput={() => setError("")} />
               {error && <p className="entry-error" role="alert">{error}</p>}
               <button className="entry-button">Continue</button>
             </form>

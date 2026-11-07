@@ -1,4 +1,5 @@
-const { providerKey, credentialId } = require("./ai-settings");
+const { providerKey, credentialId, geminiCredentials, credentialEnvironment } = require("./ai-settings");
+const {geminiBlocked,noteGeminiFailure,clearGeminiPool}=require("./gemini-pool");
 class ProviderError extends Error {
   constructor(status, code, retryable = false, retryAfter = 0) {
     super(code);
@@ -19,7 +20,8 @@ function availableProviders(env = process.env) {
   return [...new Set([...order, "groq", "gemini"])].filter(provider => enabled.has(provider));
 }
 
-const models = new Map(), failures = new Map();
+const {createHash}=require("node:crypto");
+const models = new Map(), failures = new Map(), inFlight = new Map(), cache = new Map();
 async function chooseModel(provider, input, env, fetcher, tried = []) {
   const explicit = provider === "gemini" ? env.GEMINI_MODEL : input.vision ? env.GROQ_VISION_MODEL : env.GROQ_TEXT_MODEL;
   if (explicit && /^[\w./-]+$/.test(explicit)) return explicit.replace(/^models\//, "");
@@ -28,8 +30,9 @@ async function chooseModel(provider, input, env, fetcher, tried = []) {
   if (!catalog || catalog.until <= Date.now()) {
     const url = provider === "gemini" ? "https://generativelanguage.googleapis.com/v1beta/models" : "https://api.groq.com/openai/v1/models";
     const headers = provider === "gemini" ? { "x-goog-api-key": providerKey(provider, env) } : { Authorization: `Bearer ${providerKey(provider, env)}` };
-    const response = await fetcher(url, { headers, signal: AbortSignal.timeout(5000) });
+    let response;try { response = await fetcher(url, { headers, signal: AbortSignal.timeout(5000) }); } catch { throw new ProviderError(503,"NETWORK",true); }
     if (!response.ok) {
+      if(provider === "gemini") noteGeminiFailure(env,response.status,60);
       const code = [401, 403].includes(response.status) ? "CREDENTIALS_REJECTED" : response.status === 429 ? "PROVIDER_RATE_LIMIT" : "MODEL_CATALOG_UNAVAILABLE";
       if ([401, 403, 429].includes(response.status)) failures.set(key, { until: Date.now() + (response.status === 429 ? 60000 : 300000), code });
       throw new ProviderError(response.status === 429 ? 429 : 502, code, true);
@@ -113,7 +116,9 @@ async function runProvider(provider, input, env, fetcher, model, deadline) {
     const unavailable = ["model_decommissioned", "model_not_found"].includes(details?.error?.code);
     const tooLarge = response.status === 413 || (response.status === 429 && /request too large/i.test(details?.error?.message || ""));
     const code = response.status === 401 || response.status === 403 ? "CREDENTIALS_REJECTED" : tooLarge ? "REQUEST_TOO_LARGE" : response.status === 429 ? "PROVIDER_RATE_LIMIT" : unavailable ? "MODEL_UNAVAILABLE" : `HTTP_${response.status}`;
-    const seconds = Math.min(Math.max(Number(response.headers?.get?.("retry-after")) || (response.status === 429 ? 60 : 300), 1), 600);
+    const header=response.headers?.get?.("retry-after"), retryInfo=details?.error?.details?.find?.(item=>item["@type"]?.endsWith("RetryInfo"))?.retryDelay;
+    const seconds = Math.min(Math.max(Number(header) || (header ? Math.ceil((Date.parse(header)-Date.now())/1000) : 0) || Math.ceil(parseFloat(retryInfo)) || (response.status === 429 ? 60 : 300), 1), 600);
+    if(provider === "gemini" && !tooLarge) noteGeminiFailure(env,response.status,seconds);
     if ([401, 403, 429].includes(response.status)) {
       // A token limit belongs to the selected model, not every tool on the key.
       // Oversized requests must not disable later small requests at all.
@@ -140,36 +145,42 @@ async function runProvider(provider, input, env, fetcher, model, deadline) {
   return text;
 }
 
-async function generateStudy(input, { env = process.env, fetcher = global.fetch, report = () => {} } = {}) {
-  const providers = availableProviders(env);
-  if (!providers.length) throw new ProviderError(503, "NOT_CONFIGURED");
-  let last; const deadline = Date.now() + 40000;
-  for (const provider of providers) {
-    try {
-      const blocked = failures.get(credentialId(provider, env));
-      if (blocked?.until > Date.now()) throw new ProviderError(blocked.code === "PROVIDER_RATE_LIMIT" ? 429 : 502, blocked.code, true);
-      const explicit = input.vision ? env.GROQ_VISION_MODEL : env.GROQ_TEXT_MODEL;
-      const attempts = provider === "groq" && !input.audio && !explicit ? 2 : 1, tried = [];
-      for (let attempt = 0; attempt < attempts; attempt++) {
-        const model = provider === "groq" && input.audio ? undefined : await chooseModel(provider, input, env, fetcher, tried);
-        const cooldown = failures.get(credentialId(provider, env) + ":" + (model || "audio"));
-        if (cooldown?.until > Date.now()) throw new ProviderError(cooldown.code === "PROVIDER_RATE_LIMIT" ? 429 : 503, cooldown.code, true, Math.ceil((cooldown.until - Date.now()) / 1000));
-        if (model) tried.push(model);
-        try { return { text: await runProvider(provider, input, env, fetcher, model, deadline), provider }; }
-        catch (error) {
-          if (!(error instanceof ProviderError) || !error.retryable || error.code === "CREDENTIALS_REJECTED" || attempt === attempts - 1 || Date.now() >= deadline) throw error;
-          report({ provider, code: error.code });
+async function routeStudy(input, { env = process.env, fetcher = global.fetch, report = () => {} } = {}) {
+  const providers=availableProviders(env);if(!providers.length)throw new ProviderError(503,"NOT_CONFIGURED");
+  let last;const deadline=Date.now()+40000;
+  for(const provider of providers){
+    const credentials=provider === "gemini" ? geminiCredentials(env) : [null];
+    for(const credential of credentials){
+      const activeEnv=credential ? credentialEnvironment(env,credential) : env;
+      try {
+        const shared=credential && geminiBlocked(activeEnv),blocked=failures.get(credentialId(provider,activeEnv));
+        const cooldown=shared?.until>Date.now()?shared:blocked;
+        if(cooldown?.until>Date.now())throw new ProviderError(cooldown.code === "PROVIDER_RATE_LIMIT"?429:502,cooldown.code,true,Math.ceil((cooldown.until-Date.now())/1000));
+        if(Date.now()>=deadline)throw last||new ProviderError(503,"NETWORK",true);
+        const explicit=input.vision?activeEnv.GROQ_VISION_MODEL:activeEnv.GROQ_TEXT_MODEL;
+        const attempts=provider === "groq"&&!input.audio&&!explicit?2:1,tried=[];
+        for(let attempt=0;attempt<attempts;attempt++){
+          const model=provider === "groq"&&input.audio?undefined:await chooseModel(provider,input,activeEnv,fetcher,tried);
+          const blockedModel=failures.get(credentialId(provider,activeEnv)+":"+(model||"audio"));
+          if(blockedModel?.until>Date.now())throw new ProviderError(blockedModel.code === "PROVIDER_RATE_LIMIT"?429:503,blockedModel.code,true,Math.ceil((blockedModel.until-Date.now())/1000));
+          if(model)tried.push(model);
+          report({provider,model:model||"whisper-large-v3-turbo",task:input.audio?"transcription":input.vision?"vision":input.task||"text",...(credential?{keySlot:credential.slot}:{}),code:"ROUTE_SELECTED"});
+          try{return{text:await runProvider(provider,input,activeEnv,fetcher,model,deadline),provider};}
+          catch(error){if(!(error instanceof ProviderError)||!error.retryable||error.code === "CREDENTIALS_REJECTED"||attempt === attempts-1||Date.now()>=deadline)throw error;report({provider,code:error.code});if(error.code!=="PROVIDER_RATE_LIMIT")await new Promise(resolve=>setTimeout(resolve,200*(attempt+1)));}
         }
-      }
-    }
-    catch (error) {
-      if (!(error instanceof ProviderError)) throw error;
-      last = error;
-      report({ provider, code: error.code });
-      if (!error.retryable) throw error;
+      }catch(error){if(!(error instanceof ProviderError))throw error;last=error;report({provider,...(credential?{keySlot:credential.slot}:{}),code:error.code});if(!error.retryable)throw error;}
     }
   }
-  throw last;
+  throw last || new ProviderError(503,"MODEL_UNAVAILABLE",true);
 }
-
-module.exports = { availableProviders, geminiPayload, generateStudy, ProviderError, clearProviderCaches: () => { models.clear(); failures.clear(); } };
+async function generateStudy(input,options={}){
+  const env=options.env||process.env;
+  const credentials=availableProviders(env).map(provider=>credentialId(provider,env)).join(":")+geminiCredentials(env).map(key=>key.id).join(":");
+  const key=createHash("sha256").update(credentials+JSON.stringify(input)).digest("hex"),cached=cache.get(key);
+  if(cached?.until>Date.now())return cached.value;
+  if(inFlight.has(key))return inFlight.get(key);
+  const work=routeStudy(input,options).then(value=>{if(["classification","style"].includes(input.task)){if(cache.size>=100)cache.delete(cache.keys().next().value);cache.set(key,{value,until:Date.now()+300000});}return value;});
+  if(inFlight.size<100)inFlight.set(key,work);
+  try{return await work;}finally{if(inFlight.get(key)===work)inFlight.delete(key);}
+}
+module.exports={availableProviders,geminiPayload,generateStudy,ProviderError,clearProviderCaches:()=>{models.clear();failures.clear();cache.clear();inFlight.clear();clearGeminiPool();}};

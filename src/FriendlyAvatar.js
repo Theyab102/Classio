@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 
-const cache = new Map();
+const cache = new Map(), textureKeys=new Map();
+function fingerprint(text){let a=2166136261,b=5381;for(let i=0;i<text.length;i++){const c=text.charCodeAt(i);a=Math.imul(a^c,16777619);b=Math.imul(b,33)^c;}return(a>>>0).toString(36)+(b>>>0).toString(36);}
+function visualKey(look){return JSON.stringify(Object.fromEntries(Object.entries(look).map(([key,value])=>{if(!key.startsWith("custom")||!value?.texture)return[key,value];let hash=textureKeys.get(value.texture);if(!hash){hash=fingerprint(value.texture);if(textureKeys.size>=60)textureKeys.delete(textureKeys.keys().next().value);textureKeys.set(value.texture,hash);}return[key,{texture:hash,baseStyle:value.baseStyle,length:value.length,fringe:value.fringe,textureAmount:value.textureAmount}];})));}
 let rendering = Promise.resolve();
 function snapshot(key, character, options) {
   if (cache.has(key)) return Promise.resolve(cache.get(key));
@@ -10,7 +12,7 @@ function snapshot(key, character, options) {
   })).then(async () => {
     if (cache.has(key)) return cache.get(key);
     const { renderCharacter } = await import("./avatarScene");
-    const result = renderCharacter(character, options);
+    const result = await renderCharacter(character, options);
     if (cache.size >= 256) cache.delete(cache.keys().next().value);
     cache.set(key, result); return result;
   });
@@ -18,8 +20,8 @@ function snapshot(key, character, options) {
 }
 
 export default function FriendlyAvatar({ character = {}, size = 40, framing = "portrait", yaw = -.10 }) {
-  const look = Object.fromEntries(Object.entries(character).filter(([field]) => field !== "name"));
-  const key = JSON.stringify([look, framing, yaw]);
+  const look = Object.fromEntries(Object.entries(character).filter(([field]) => !["name","designs","randomizerPreset","appStyle","previousAppStyle"].includes(field)));
+  const key = JSON.stringify([visualKey(look), framing, yaw]);
   const [picture, setPicture] = useState(() => cache.get(key) || "");
   const [failed, setFailed] = useState(false);
   useEffect(() => {

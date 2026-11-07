@@ -1,3 +1,4 @@
+import {normalizeMathSource} from "./mathSyntax";
 import { Marked } from "marked";
 import katex from "katex";
 
@@ -29,7 +30,7 @@ const parser = new Marked({ gfm: true, extensions: [
 
 export function parseStudyMarkdown(source) {
   const text = String(source || "").replace(/^\s*```(?:markdown|md)\s*\n([\s\S]*)\n```\s*$/i, "$1");
-  return parser.parse(text);
+  return parser.parse(normalizeMathSource(text));
 }
 
 export function recoverLegacyMath(root) {
@@ -65,6 +66,6 @@ export function typesetMath(root, output = "htmlAndMathml") {
     const latex = node.getAttribute("data-latex") || "";
     node.classList.add("study-equation"); node.classList.toggle("is-display", node.getAttribute("data-display") === "block");
     node.setAttribute("role", "math"); node.setAttribute("aria-label", latex);
-    node.innerHTML = katex.renderToString(latex, { displayMode: node.getAttribute("data-display") === "block", output, throwOnError: false, trust: false, maxExpand: 500, strict: "ignore" });
+    try { node.innerHTML = katex.renderToString(latex, { displayMode: node.getAttribute("data-display") === "block", output, throwOnError: true, trust: false, maxExpand: 500, strict: "ignore" }); } catch { node.textContent = "Equation needs review"; node.classList.add("math-needs-review"); node.setAttribute("title", "This expression could not be parsed safely. Edit the equation to clarify its notation."); }
   });
 }

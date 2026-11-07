@@ -18,11 +18,11 @@ export function decorateDeckExport(pptx, slide, { layout, index, total, cover, b
   return { x, fontFace, bg };
 }
 
-export function addDeckExportPoints(pptx, slide, points, { layout, x, width, accent, bg, text, sub, fontFace, hasImage }) {
+export function addDeckExportPoints(pptx, slide, points, { layout, x, width, accent, bg, text, sub, fontFace, hasImage, y:startY=1.94, height:availableHeight=4.45 }) {
   const columns = hasImage ? 1 : 2, gap = .22, w = (width - gap * (columns - 1)) / columns;
-  const height = Math.min(1.2, 4.45 / Math.max(1, Math.ceil(points.length / columns)) - .16);
+  const height = Math.min(1.2, availableHeight / Math.max(1, Math.ceil(points.length / columns)) - .16);
   points.forEach((point, index) => {
-    const cx = x + index % columns * (w + gap), y = 1.94 + Math.floor(index / columns) * (height + .16);
+    const cx = x + index % columns * (w + gap), y = startY + Math.floor(index / columns) * (height + .16);
     if (layout === "editorial") {
       slide.addShape(pptx.ShapeType.rect, { x: cx, y, w, h: .014, line: { transparency: 100 }, fill: { color: accent, transparency: 55 } });
       slide.addText(point, { x: cx, y: y + .15, w, h: height - .15, fontSize: 20, fontFace, color: sub, fit: "shrink", valign: "top", margin: 0 });
