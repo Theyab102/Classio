@@ -1,5 +1,6 @@
 import { safeImageSource } from "./documentMedia";
 import { markdownToNoteHtml, noteHtmlToMarkdown } from "./noteFormat";
+import { insertNoteFigure, removeEmptyImageSections } from "./noteFigures";
 
 export async function readLinkSource(url, signal) {
   const response = await fetch("/api/source", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }), signal });
@@ -16,20 +17,32 @@ export function sourceTables(tables = []) {
 }
 export function notesWithSourceImages(markdown, source) {
   const images = (source?.images || []).slice(0, 6), used = new Set();
-  const figure = index => {
-    const image = images[index]; if (!image || !safeImageSource(image.src) || used.has(index)) return "";
-    used.add(index);
-    const alt = (image.title || "Source figure").replaceAll("[", " ").replaceAll("]", " ").replace(/[<>\r\n]/g, " ").slice(0, 250);
-    return `\n\n![${alt}](<${image.src.replace(/[<>]/g, "")}>)\n\n[Figure from the source page](<${(image.source || source.url).replace(/[<>]/g, "")}>)\n\n`;
-  };
-  let text = String(markdown).replace(/^\s*\[\[SOURCE_IMAGE:\s*(\d+)\]\]\s*$/gim, (_match, n) => figure(Number(n) - 1));
-  // A provider can omit figure markers; the real source images remain available
-  // as a clearly labelled appendix instead of being replaced with invented art.
-  if (images.some(image => safeImageSource(image.src)) && !used.size) text += "\n\n## Source figures\n" + images.map((image, i) => ({ image, i })).filter(({ image }) => safeImageSource(image.src)).slice(0, 2).map(({ i }) => figure(i)).join("\n");
-  const host = document.createElement("div"); host.innerHTML = markdownToNoteHtml(text);
+  const host = document.createElement("div"); host.innerHTML = markdownToNoteHtml(String(markdown));
   const supplied = new Set(images.filter(image => safeImageSource(image.src)).map(image => image.src));
   host.querySelectorAll("img").forEach(image => {
     if (!supplied.has(image.getAttribute("src"))) image.remove();
+    else used.add(images.findIndex(item => item.src === image.getAttribute("src")));
   });
+  const slots = [], walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT), nodes = [];
+  while (walker.nextNode()) if (!walker.currentNode.parentElement.closest("pre,code,[data-classio-equation]")) nodes.push(walker.currentNode);
+  for (const node of nodes) {
+    const pattern = /\[\[(SOURCE_IMAGE|IMAGE|PDF):\s*([^\]]+)\]\]/gi, fragment = document.createDocumentFragment(); let match, start = 0, found = false;
+    while ((match = pattern.exec(node.textContent))) {
+      found = true; fragment.append(node.textContent.slice(start, match.index));
+      if (match[1].toUpperCase() === "SOURCE_IMAGE") { const anchor = document.createElement("span"); fragment.append(anchor); slots.push({ index: Number(match[2]) - 1, anchor }); }
+      start = pattern.lastIndex;
+    }
+    if (found) { fragment.append(node.textContent.slice(start)); node.replaceWith(fragment); }
+  }
+  if (!slots.length) images.slice(0, 2).forEach((_image, index) => slots.push({ index }));
+  for (const { index, anchor } of slots) {
+    const image = images[index];
+    if (image && !used.has(index)) {
+      const figure = { ...image, source: image.source || source.url };
+      if (insertNoteFigure(host, figure, image.title, anchor) || insertNoteFigure(host, figure, image.title + " " + (source.title || ""), anchor)) used.add(index);
+    }
+    anchor?.remove();
+  }
+  removeEmptyImageSections(host);
   return noteHtmlToMarkdown(host.innerHTML);
 }

@@ -1,10 +1,19 @@
 import * as THREE from "three";
+import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
 
 // Original, procedural Classio characters. No third-party character assets.
 const sphere = new THREE.SphereGeometry(1, 36, 24);
 const capsule = new THREE.CapsuleGeometry(.5, 1, 8, 20);
 const box = new THREE.BoxGeometry(1, 1, 1);
 const hairCap = new THREE.SphereGeometry(1, 44, 24, 0, Math.PI * 2, 0, 1.30);
+// Keep the hairline higher at the forehead and lower around the sides.
+for (let i = 0; i < hairCap.attributes.position.count; i++) {
+  const p = hairCap.attributes.position, x = p.getX(i), y = p.getY(i), z = p.getZ(i), theta = Math.acos(Math.min(1, Math.max(-1, y)));
+  const radial = Math.hypot(x, z); if (radial < .0001) continue;
+  const front = Math.max(0, z / radial), next = theta / 1.30 * (1.36 - .26 * front ** 4), scale = Math.sin(next) / radial;
+  p.setXYZ(i, x * scale, Math.cos(next), z * scale);
+}
+hairCap.computeVertexNormals();
 const validColor = (value, fallback) => /^#[\da-f]{3}(?:[\da-f]{3})?$/i.test(value || "") ? value : fallback;
 const material = (color, roughness = .78) => new THREE.MeshStandardMaterial({ color, roughness, metalness: 0 });
 
@@ -72,14 +81,39 @@ export function createCharacter(character = {}) {
   }
   mesh(hairCap, hair, [0, 2.16, -.008], [.67, .635, .575]);
   // The fringe and every extension intersect the crown, rather than floating.
-  if (![0, 8, 16].includes(style)) {
+  if (![0, 8, 14, 16].includes(style)) {
     const fringe = new THREE.Shape();
-    fringe.moveTo(-.59, 2.43); fringe.bezierCurveTo(-.55, 2.72, -.25, 2.83, .20, 2.73); fringe.bezierCurveTo(.50, 2.69, .60, 2.52, .58, 2.34);
-    if ([2, 12, 14].includes(style)) { fringe.lineTo(.36, 2.43); fringe.lineTo(.20, 2.31); fringe.lineTo(.04, 2.43); fringe.lineTo(-.13, 2.32); fringe.lineTo(-.28, 2.45); fringe.lineTo(-.46, 2.32); }
-    else { fringe.bezierCurveTo(.43, 2.39, .35, 2.59, .20, 2.55); fringe.bezierCurveTo(-.06, 2.38, -.36, 2.48, -.59, 2.32); }
+    fringe.moveTo(-.60, 2.44); fringe.bezierCurveTo(-.52, 2.68, -.16, 2.80, .20, 2.72); fringe.bezierCurveTo(.44, 2.66, .59, 2.53, .59, 2.40);
+    if (style === 2) { fringe.lineTo(.40, 2.32); fringe.quadraticCurveTo(.31, 2.28, .24, 2.22); fringe.lineTo(.12, 2.34); fringe.quadraticCurveTo(-.05, 2.27, -.19, 2.25); fringe.lineTo(-.27, 2.36); fringe.lineTo(-.48, 2.29); }
+    else if (style === 4) { fringe.quadraticCurveTo(.48, 2.22, .35, 2.23); fringe.quadraticCurveTo(.17, 2.46, 0, 2.55); fringe.quadraticCurveTo(-.17, 2.46, -.36, 2.24); fringe.lineTo(-.55, 2.29); }
+    else if (style === 5 || style === 15) { fringe.quadraticCurveTo(.36, 2.32, .20, 2.25); fringe.quadraticCurveTo(.01, 2.28, -.05, 2.42); fringe.quadraticCurveTo(-.28, 2.49, -.57, 2.37); }
+    else if (style === 3 || style === 10) { fringe.quadraticCurveTo(.36, 2.48, .30, 2.36); fringe.quadraticCurveTo(.10, 2.48, .02, 2.36); fringe.quadraticCurveTo(-.14, 2.47, -.25, 2.33); fringe.lineTo(-.53, 2.40); }
+    else if (style === 12) { fringe.lineTo(.36, 2.46); fringe.lineTo(.20, 2.42); fringe.lineTo(.04, 2.49); fringe.lineTo(-.16, 2.43); fringe.lineTo(-.48, 2.46); }
+    else { fringe.quadraticCurveTo(.38, 2.46, .20, 2.55); fringe.quadraticCurveTo(-.08, 2.44, -.30, 2.46); fringe.lineTo(-.58, 2.40); }
     fringe.closePath();
-    const geometry = new THREE.ExtrudeGeometry(fringe, { depth: .055, bevelEnabled: true, bevelSegments: 4, steps: 1, bevelSize: .035, bevelThickness: .025, curveSegments: 24 });
-    mesh(geometry, hair, [0, 0, .39], [1, 1, 1], root, true);
+    const flat = new THREE.ExtrudeGeometry(fringe, { depth: .045, bevelEnabled: true, bevelSegments: 4, steps: 1, bevelSize: .022, bevelThickness: .018, curveSegments: 24 });
+    // Tessellate before wrapping: large flat triangles otherwise cut across the
+    // curved forehead and make the fringe look faceted or intersect the face.
+    const vertices = [], source = flat.attributes.position;
+    const midpoint = (a, b) => a.map((v, i) => (v + b[i]) / 2);
+    function subdivide(a, b, c, depth = 0) {
+      const distance = (u, v) => Math.hypot(...u.map((n, i) => n - v[i]));
+      if (depth < 4 && Math.max(distance(a, b), distance(b, c), distance(c, a)) > .10) {
+        const ab = midpoint(a, b), bc = midpoint(b, c), ca = midpoint(c, a);
+        subdivide(a, ab, ca, depth + 1); subdivide(ab, b, bc, depth + 1);
+        subdivide(ca, bc, c, depth + 1); subdivide(ab, bc, ca, depth + 1);
+      } else vertices.push(...a, ...b, ...c);
+    }
+    for (let i = 0; i < source.count; i += 3) subdivide(...[0, 1, 2].map(j => [source.getX(i + j), source.getY(i + j), source.getZ(i + j)]));
+    const wrapped = new THREE.BufferGeometry(); wrapped.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+    const geometry = mergeVertices(wrapped); flat.dispose(); wrapped.dispose();
+    const positions = geometry.attributes.position;
+    for (let i = 0; i < positions.count; i++) {
+      const x = positions.getX(i), y = positions.getY(i), surface = .575 * Math.sqrt(Math.max(.025, 1 - (x / .69) ** 2 - ((y - 2.16) / .65) ** 2));
+      positions.setZ(i, surface + .035 + positions.getZ(i));
+    }
+    geometry.computeVertexNormals();
+    mesh(geometry, hair, [0, 0, 0], [1, 1, 1], root, true);
   }
   if (style === 0 || style === 16) tube(hair, [[-.53, 2.44, .34], [-.2, 2.52, .5], [.22, 2.55, .49], [.52, 2.43, .31]], style === 0 ? .07 : .10);
   if (style === 3 || style === 10 || style === 8) {
@@ -112,8 +146,9 @@ export function createCharacter(character = {}) {
       if (eyeShape === 3) oval(skin, 0, .127, .049, .14, .055, .025, eye);
       if (eyeShape === 2) for (let i = 0; i < 3; i++) tube(ink, [[sign * .10, .09 - i * .035, .018], [sign * (.16 + i * .008), .12 - i * .03, .022]], .012, eye);
     }
-    const brow = Number(ch.eyebrow) || 0, middle = brow === 1 ? 2.43 : brow === 3 ? 2.46 : 2.47;
-    tube(hair, [[x - .105, 2.415 + (brow === 4 && sign === -1 ? .04 : 0), faceZ(x - .105, 2.42) + .021], [x, middle, faceZ(x, middle) + .025], [x + .105, 2.42, faceZ(x + .105, 2.42) + .021]], brow === 2 ? .029 : .018);
+    const brow = Number(ch.eyebrow) || 0, raised = brow === 4 && sign === -1 ? .025 : 0, middle = (brow === 1 ? 2.382 : brow === 3 ? 2.425 : 2.405) + raised;
+    const browPoints = [[x - .10, 2.375 + raised], [x, middle], [x + .10, 2.378 + raised]].map(([bx, by]) => [bx, by, faceZ(bx, by) + .022]);
+    tube(hair, browPoints, brow === 2 ? .023 : .014);
   }
   oval(skin, 0, 2.065, .566, .062, .070, .065);
   if (ch.blush) { const blush = material("#d98b85"); blush.transparent = true; blush.opacity = .35; for (const sign of [-1, 1]) oval(blush, sign * .405, 1.995, faceZ(sign * .405, 1.995) + .008, .095, .045, .012); }

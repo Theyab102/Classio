@@ -56,9 +56,13 @@ module.exports = async function study(req, res) {
       VISION_MODEL_UNAVAILABLE: "Image analysis is unavailable for the configured provider. You can still ask a text question.",
       MODEL_CATALOG_UNAVAILABLE: "The AI provider could not list available models. Try again shortly.",
       OUTPUT_LIMIT: "The answer was too long to finish. Ask for a shorter response or a smaller course.",
+      REQUEST_TOO_LARGE: "This request exceeds the provider’s token allowance. Use a shorter section or ask for fewer notes or slides. Small questions are still available.",
+      NETWORK: "The AI provider did not respond in time. Your work is saved; try this question again.",
+      EMPTY_RESPONSE: "The AI provider returned an empty answer. Try this question again.",
+      INVALID_RESPONSE: "The AI provider returned an unreadable answer. Try this question again.",
     };
     const status = error.status || 503;
-    if (status === 429) res.setHeader("Retry-After", "30");
+    if (status === 429) res.setHeader("Retry-After", String(error.retryAfter || 30));
     return res.status(status).json({ error: messages[code] || (status === 429
       ? "The free AI services are busy. Try again shortly."
       : "The AI service could not complete this request. Your work is still open; try again shortly."), code });

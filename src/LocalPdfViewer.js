@@ -1,3 +1,4 @@
+import ChoiceMenu from "./ChoiceMenu";
 import { useEffect, useRef, useState } from "react";
 import { openPdf } from "./pdf";
 import { useStudyActivity } from "./LearningSession";
@@ -152,9 +153,9 @@ export default function LocalPdfViewer({ file, fileObj, onUpdate, explain }) {
         onKeyDown={event => { if (event.key === "Enter") event.target.blur(); }} /></label>
       <span>of {document?.pdf.numPages || "…"}</span>
       <button type="button" aria-label="Next PDF page" disabled={page >= (document?.pdf.numPages || 1)} onClick={() => goTo(page + 1)}>Next</button>
-      <label>Zoom <select aria-label="PDF zoom" value={zoom} onChange={event => changeZoom(event.target.value)}>
+      <label>Zoom <ChoiceMenu aria-label="PDF zoom" value={zoom} onChange={event => changeZoom(event.target.value)}>
         <option value="fit">Fit width</option>{[50, 75, 100, 125, 150, 175, 200].map(value => <option key={value} value={value}>{value}%</option>)}
-      </select></label>
+      </ChoiceMenu></label>
       <label className="document-search"><UiIcon name="search" /><input type="search" aria-label="Search PDF" placeholder="Find in PDF" value={query} onChange={event => setQuery(event.target.value)} /></label>
       <button type="button" disabled={!ready} onClick={() => explain(explainPage, `PDF page ${page}`)}>Explain page</button>
     </div>

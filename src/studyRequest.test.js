@@ -27,3 +27,10 @@ test("an interrupted tool request preserves cancellation instead of displaying a
     await expect(pending).rejects.toHaveProperty("name", "AbortError");
   } finally { global.fetch = previousFetch; }
 });
+
+test("provider rate-limit responses retain their code and retry interval", async () => {
+  const previousFetch = global.fetch;
+  global.fetch = jest.fn(async () => ({ ok: false, status: 429, headers: { get: () => "12" }, json: async () => ({ error: "Please wait before retrying.", code: "PROVIDER_RATE_LIMIT" }) }));
+  try { await expect(sendStudyRequest({})).rejects.toMatchObject({ status: 429, code: "PROVIDER_RATE_LIMIT", retryAfter: 12, message: "Please wait before retrying." }); }
+  finally { global.fetch = previousFetch; }
+});

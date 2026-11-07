@@ -1,4 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import UiIcon from "./UiIcon";
 
 const inkTools = [["pan", "Scroll"], ["pen", "Pen"], ["highlight", "Highlighter"], ["erase", "Eraser"]];
 
@@ -11,9 +12,9 @@ export function useInkTool() {
 
 export function InkToolbar({ ink, strokes, onChange }) {
   return <div className="studio-controls" role="toolbar" aria-label="Annotation tools">
-    {inkTools.map(([id, label]) => <button type="button" key={id} aria-pressed={ink.tool === id} onClick={() => ink.setTool(id)}>{label}</button>)}
-    <label>Color <input type="color" aria-label="Ink color" value={ink.color} onChange={event => ink.setColor(event.target.value)} /></label>
-    <label>Size <input type="range" aria-label="Ink size" min="1" max="12" value={ink.size} onChange={event => ink.setSize(Number(event.target.value))} /></label>
+    <div className="ink-tool-choices">{inkTools.map(([id, label]) => <button type="button" key={id} aria-pressed={ink.tool === id} onClick={() => ink.setTool(id)}><UiIcon name={id === "pen" ? "edit" : id === "highlight" ? "highlight" : id === "erase" ? "eraser" : "hand"} size={16} />{label}</button>)}</div>
+    <div className="ink-colors" role="group" aria-label="Ink colors">{[["#b52332", "Red"], ["#286a9b", "Blue"], ["#2f7b59", "Green"], ["#d19a16", "Gold"], ["#7b54a0", "Purple"]].map(([color, name]) => <button type="button" key={color} className="ink-color-swatch" aria-label={name + " ink"} aria-pressed={ink.color === color} style={{ "--swatch": color }} onClick={() => ink.setColor(color)}>{ink.color === color && <UiIcon name="check" size={13} />}</button>)}<label className="ink-custom-color" title="Custom ink color"><span style={{ background: ink.color }} /><input type="color" aria-label="Ink color" value={ink.color} onChange={event => ink.setColor(event.target.value)} /></label></div>
+    <div className="ink-size-choices" role="group" aria-label="Ink size">{[[2, "Fine"], [5, "Medium"], [10, "Broad"]].map(([size, name]) => <button type="button" key={size} aria-label={name + " stroke"} aria-pressed={size === (ink.size <= 3 ? 2 : ink.size <= 7 ? 5 : 10)} onClick={() => ink.setSize(size)}><span style={{ width: size + 3, height: size + 3 }} /><small>{name}</small></button>)}</div>
     <button type="button" disabled={!strokes.length} onClick={() => onChange(strokes.slice(0, -1))}>Undo ink</button>
     <button type="button" disabled={!strokes.length} onClick={() => onChange([])}>Clear ink</button>
   </div>;

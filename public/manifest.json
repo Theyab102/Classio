@@ -3,8 +3,8 @@
   "name": "Classio Study Workspace",
   "icons": [
     {
-      "src": "ClassioLogo.png",
-      "sizes": "1024x1024",
+      "src": "ClassioLogo-transparent.png",
+      "sizes": "1254x1254",
       "type": "image/png",
       "purpose": "any"
     }

@@ -16,12 +16,14 @@ test("follows the device until an explicit appearance is chosen, and remembers t
     const view = render(<ThemePage />);
     expect(screen.getByRole("status")).toHaveTextContent("dark");
     expect(document.documentElement.dataset.theme).toBe("dark");
-    fireEvent.change(screen.getByLabelText("Appearance"), { target: { value: "light" } });
+    fireEvent.click(screen.getByRole("combobox", { name: "Appearance" }));
+    fireEvent.click(screen.getByRole("option", { name: "Light", exact: true }));
     expect(screen.getByRole("status")).toHaveTextContent("light");
     view.unmount();
     render(<ThemePage />);
     expect(screen.getByRole("status")).toHaveTextContent("light");
-    fireEvent.change(screen.getByLabelText("Appearance"), { target: { value: "system" } });
+    fireEvent.click(screen.getByRole("combobox", { name: "Appearance" }));
+    fireEvent.click(screen.getByRole("option", { name: "Use device setting", exact: true }));
     act(() => { media.matches = false; for (const fn of listeners) fn(); });
     expect(screen.getByRole("status")).toHaveTextContent("light");
     act(() => { media.matches = true; for (const fn of listeners) fn(); });

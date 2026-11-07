@@ -1,12 +1,13 @@
 import { InkLayer, InkToolbar, useInkTool } from "./DocumentInk";
 import { safeImageSource } from "./documentMedia";
 import { SlideTable } from "./PowerPointViewer";
+import UiIcon from "./UiIcon";
 import "./documentStudio.css";
 
 export const deckDesigns = [
-  { id: "lecture", name: "Lecture", theme: "teal", description: "Dark cover, prominent titles and high-contrast points." },
-  { id: "editorial", name: "Editorial", theme: "minimal", description: "Light paper, serif headings and spacious typography." },
-  { id: "visual", name: "Visual", theme: "ocean", description: "An accent rail and side-by-side visuals." },
+  { id: "lecture", name: "Lecture", theme: "teal", description: "A bold dark cover, numbered ideas and focused teaching cards." },
+  { id: "editorial", name: "Editorial", theme: "minimal", description: "Paper tones, generous serif type and an open magazine layout." },
+  { id: "visual", name: "Visual", theme: "ocean", description: "A graphic cover, a subtle grid and colorful panels beside your images." },
 ];
 
 export function normalizeSlideTable(rows) {
@@ -51,8 +52,11 @@ export function DeckSlide({ slide, theme, layout = "lecture", index, total, chil
   return <div className={`deck-canvas deck-${layout} deck-kind-${slide.type}`}
     style={{ "--slide-bg": theme.bg, "--slide-accent": theme.accent, "--slide-text": theme.text, "--slide-sub": theme.sub }}>
     {background && <img className="deck-background" src={image} alt="" referrerPolicy="no-referrer" />}
+    <div className="deck-decoration" aria-hidden="true"><span /><span /></div>
     <div className="deck-slide-body">
-      <span className="deck-slide-number">{index + 1} / {total}</span>
+      <span className="deck-kicker">{layout === "editorial" ? "CLASSIO / FIELD NOTES" : layout === "visual" ? "CLASSIO / EXPLORE" : "CLASSIO / STUDY SESSION"}</span>
+      <span className="deck-slide-number">{String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}</span>
+      {slide.type === "title" && <span className="deck-cover-index" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>}
       {slide.type === "quote" ? <blockquote><p>“{slide.quote}”</p><cite>{slide.author}</cite></blockquote> : <>
         <h3>{slide.title}</h3>
         <div className={`deck-slide-content ${image && !background ? "deck-with-media" : ""}`}>
@@ -83,7 +87,7 @@ export function DeckDesignPicker({ layouts, deck, themes, onChoose, onCancel }) 
         <h4>{layout.name}</h4><p>{layout.description}</p>
         <DeckSlide slide={deck.slides[0]} layout={layout.id} theme={themes.find(theme => theme.id === layout.theme)} index={0} total={deck.slides.length} />
         {deck.slides[1] && <DeckSlide slide={deck.slides[1]} layout={layout.id} theme={themes.find(theme => theme.id === layout.theme)} index={1} total={deck.slides.length} />}
-        <div className="studio-controls"><button type="button" onClick={() => onChoose(layout)}>Use {layout.name}</button></div>
+        <div className="studio-controls"><button type="button" className="quiet-button is-primary" onClick={() => onChoose(layout)}><UiIcon name="check" size={16} />Use {layout.name}</button></div>
       </article>)}
     </div>
     <div className="studio-controls"><button type="button" onClick={onCancel}>Discard options</button></div>

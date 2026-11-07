@@ -1,3 +1,5 @@
+import ChoiceMenu from "./ChoiceMenu";
+import { addDeckExportPoints, decorateDeckExport } from "./deckExportDesign";
 import { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
 import JSZip from "jszip";
@@ -32,7 +34,7 @@ import PowerPointViewer from "./PowerPointViewer";
 import { loadPptxExporter } from "./pptxExport";
 import { renderInkImage } from "./DocumentInk";
 import { AnnotatedDeckSlide, DeckDesignPicker, DeckSlide, deckDesigns, normalizeSlideTable, parseDeckResponse } from "./DeckDesign";
-import { getPdfFigures, isPdfFile, likelyStudyImage, prepareNoteImage, safeImageSource, searchStudyImages } from "./documentMedia";
+import { getPdfFigures, getPresentationFigures, isPdfFile, likelyStudyImage, prepareNoteImage, prepareSourceFigure, safeImageSource, searchStudyImages } from "./documentMedia";
 import { escapeHtml, sanitizeDocumentHtml } from "./safeContent";
 import { signInErrorMessage, withRestoreTimeout } from "./authErrors";
 import ResponsiveSidebar from "./ResponsiveSidebar";
@@ -764,7 +766,16 @@ function useResponsive() {
 // ─── THEME SYSTEM ─────────────────────────────────────────────────────────────
 // ── Gradient helper used on buttons/bars ─────────────────────────────────────
 const PRIMARY = "#b8ddf8";
-function primaryInk(background, fallback) { return background === PRIMARY ? "#163b56" : fallback; }
+function primaryInk(background, fallback) {
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(background || "");
+  if (!hex) return fallback;
+  const value = hex[1].length === 3 ? hex[1].split("").map(c => c + c).join("") : hex[1];
+  const luminance = text => [0, 2, 4].map(i => parseInt(text.slice(i, i + 2), 16) / 255).map(c => c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4).reduce((sum, c, i) => sum + c * [.2126, .7152, .0722][i], 0);
+  const light = luminance(value), dark = luminance("163b56");
+  const darkContrast = (light + .05) / (dark + .05), whiteContrast = 1.05 / (light + .05);
+  if (Math.max(darkContrast, whiteContrast) < 4.5) return "#081119";
+  return darkContrast >= whiteContrast ? "#163b56" : "#fff";
+}
 
 const THEMES = {
   light: {
@@ -1534,7 +1545,7 @@ const TUTORIAL_STEPS = [
   { icon:I.notes, title:"AI Notes", desc:"Open any file and go to the Notes tab. The AI generates structured study notes automatically. Ask the assistant panel any question about your notes.", tip:"The AI assistant on the right is always open — ask it anything." },
   { icon:I.cards, title:"Study Cards", desc:"The Study Cards tab generates flashcards from your file. Flip through one at a time in Study mode, or browse the grid. Mark cards as known to track progress.", tip:"Press Space to flip a card, and arrow keys to navigate." },
   { icon:I.mic, title:"AI Podcast", desc:"Voice and Podcast tab, then AI Podcast. The AI explains your notes out loud like a personal tutor. Tap the mic button to ask questions any time — it pauses and answers, then continues.", tip:"The podcast remembers where it was and resumes from that exact point." },
-  { icon:I.game, title:"Game Mode and More", desc:"Make studying fun with Game Mode — quiz games, matching, and more all generated from your notes. Use the YouTube tab to turn any video into study notes and flashcards.", tip:"Everything is powered by your own uploaded content." },
+  { icon:I.game, title:"Game Mode and More", desc:"Make studying fun with Game Mode — quiz games, matching, and more all generated from your notes. Use Link to turn a readable webpage or video transcript into study notes and flashcards.", tip:"Everything is powered by your own uploaded content." },
 ];
 
 
@@ -1730,7 +1741,7 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
 
   return <ResponsiveSidebar mobile={isMobile} expanded={sidebarExpanded} onExpand={onToggleSidebar}
     mainActive={context === "dashboard" ? homeTab === "about" ? "guides" : homeTab === "settings" ? "settings" : "home" : undefined}
-    main={[NAV[0], { id: "assistant", label: "AI Assistant", icon: <UiIcon name="generate" /> }, ...NAV.slice(1)]}
+    main={[NAV[0], { id: "assistant", label: "AI Assistant", icon: <UiIcon name="generate" /> }, ...(context === "document" ? [] : [NAV[1]])]}
     tabs={context === "document" ? FILE_TABS : context === "folder" ? FOLDER_TABS : []}
     active={["ai", "learn"].includes(documentTab) ? "notes" : documentTab} onTab={setActiveTab} onNavigate={onNavigate} onSearch={onOpenSearch}
     onCharacter={onOpenCharacter} avatar={<MiniAvatar character={character || {}} size={28} />}
@@ -2380,8 +2391,8 @@ function WebLinkModal({ folders, onClose, onSaveDirect }) {
     onSaveDirect(address.href, target);
   }}><h2>Add a link</h2><p>Use a video transcript or readable webpage as study material.</p>
     <label>Link<input autoFocus type="url" maxLength={2048} required value={url} onChange={event => { setUrl(event.target.value); setError(""); }} placeholder="https://" /></label>
-    <label>Save to<select aria-label="Save link to" value={target} onChange={event => setTarget(event.target.value)}><option value="inbox">Library</option>
-      {folders.filter(folder => folder.id !== "inbox").map(folder => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></label>
+    <label>Save to<ChoiceMenu aria-label="Save link to" value={target} onChange={event => setTarget(event.target.value)}><option value="inbox">Library</option>
+      {folders.filter(folder => folder.id !== "inbox").map(folder => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</ChoiceMenu></label>
     {error && <p role="alert">{error}</p>}
     <footer><button className="quiet-button" type="button" onClick={onClose}>Cancel</button><button className="quiet-button is-primary" type="submit">Add link</button></footer>
   </form></Modal>;
@@ -4691,12 +4702,12 @@ function NotesImageInsert({ file, onInsert }) {
             placeholder="Describe the image (e.g. 'cell mitosis diagram')…"
             onKeyDown={e=>{ if(e.key==="Enter" && aiPrompt.trim()){ onInsert(`[AIImage: ${aiPrompt.trim()} | ${aiStyle}]`); setAiPrompt(""); setShowAI(false); } }}
             style={{ width:"100%", border:`1px solid ${T.border}`, borderRadius:8, padding:"6px 10px", fontSize:12, outline:"none", color:T.text, background:T.bg, boxSizing:"border-box", marginBottom:6 }}/>
-          <select value={aiStyle} onChange={e=>setAiStyle(e.target.value)}
+          <ChoiceMenu value={aiStyle} onChange={e=>setAiStyle(e.target.value)}
             style={{ width:"100%", border:`1px solid ${T.border}`, borderRadius:8, padding:"6px 8px", fontSize:12, color:T.text, background:T.bg, cursor:"pointer", outline:"none", marginBottom:8 }}>
             {[["diagram","Educational Diagram"],["infographic","Infographic"],["illustration","Illustration"],["realistic","Realistic"],["flat","Flat Design"],["academic","Academic"],["minimal","Minimal"],["render3d","3D Render"]].map(([v,l])=>(
               <option key={v} value={v}>{l}</option>
             ))}
-          </select>
+          </ChoiceMenu>
           <button onClick={()=>{ if(aiPrompt.trim()){ onInsert(`[AIImage: ${aiPrompt.trim()} | ${aiStyle}]`); setAiPrompt(""); setShowAI(false); } }}
             disabled={!aiPrompt.trim()}
             style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"7px", borderRadius:8, border:"none",
@@ -5909,16 +5920,16 @@ Cover EVERY section. Only use content from the source.`,
       </div>
 
       <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:16, padding:"18px 20px", marginBottom:20 }}>
-        <label className="link-note-style">Note style<select aria-label="Link note style" value={mode} onChange={event => setMode(event.target.value)}>
+        <label className="link-note-style">Note style<ChoiceMenu aria-label="Link note style" value={mode} onChange={event => setMode(event.target.value)}>
           <option value="detailed">Detailed</option><option value="simple">Simple explanations</option><option value="quick">Five key points</option><option value="expert">Technical detail</option>
-        </select></label>
+        </ChoiceMenu></label>
 
         {/* URL input */}
         <div style={{ display:"flex", gap:10 }}>
           <input
             value={url} onChange={e => { setUrl(e.target.value); setError(""); }}
             onKeyDown={e => { if (e.key==="Enter" && url.trim()) analyze(); }}
-            aria-label="Source link" placeholder="Website or YouTube URL"
+            aria-label="Source link" placeholder="Website or video URL"
             style={{ flex:1, minWidth:0, border:`1.5px solid ${error?C.red:C.border}`, borderRadius:10, padding:"10px 14px",
               fontSize:14, outline:"none", color:C.text, background:C.bg }}
           />
@@ -5999,15 +6010,7 @@ Only include what's in the transcript.`,
         </div>
       )}
 
-      {!result && !loading && (
-        <div style={{ textAlign:"center", padding:"40px 0", color:C.muted }}>
-          <div style={{ width:52,height:52,borderRadius:16,background:"#fef2f2",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px" }}>
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="#dc2626"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8z"/><polygon fill="#fff" points="9.75,15.5 15.5,12 9.75,8.5"/></svg>
-          </div>
-          <p style={{ fontSize:14, fontWeight:600, marginBottom:4 }}>Paste a YouTube link above</p>
-          <p style={{ fontSize:13 }}>Video notes are based on the transcript. You can paste it if it is unavailable.</p>
-        </div>
-      )}
+      {!result && !loading && <div className="link-source-empty"><span><UiIcon name="link" size={26} /></span><h3>Paste a website or video link above</h3><p>Turn readable webpages and available video transcripts into notes, tables and flashcards.</p></div>}
     </div>
   );
 }
@@ -6024,25 +6027,25 @@ function ManualTranscriptInput({ onGenerate }) {
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           {open ? <path d="M18 15l-6-6-6 6"/> : <path d="M6 9l6 6 6-6"/>}
         </svg>
-        {open ? "Hide" : "Video not working? Paste transcript manually"}
+        {open ? "Hide" : "Paste source text or a transcript instead"}
       </button>
       {open && (
         <div style={{ marginTop:8, background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:12, padding:14 }}>
           <p style={{ fontSize:12, color:C.muted, marginBottom:8 }}>
-            Copy the transcript from YouTube (click ⋯ → Show transcript) and paste it here:
+            Paste text from the webpage or a video transcript. For YouTube, open ⋯ → Show transcript, then copy the text:
           </p>
           <textarea value={text} onChange={e => setText(e.target.value)}
-            placeholder="Paste video transcript here…"
+            placeholder="Paste webpage text or a video transcript here…"
             style={{ width:"100%", minHeight:100, border:`1.5px solid ${C.border}`, borderRadius:8, padding:"9px 12px",
               fontSize:13, outline:"none", resize:"vertical", color:C.text, background:C.bg,
               fontFamily:"inherit", lineHeight:1.5, boxSizing:"border-box" }}
           />
           <button onClick={() => { onGenerate(text); setOpen(false); setText(""); }}
             disabled={!text.trim()}
-            style={{ marginTop:8, background:text.trim()?C.accent:"#ccc", color:"#fff", border:"none",
+            style={{ marginTop:8, background:text.trim()?C.accent:C.border, color:primaryInk(text.trim()?C.accent:C.border, C.text), border:"none",
               borderRadius:8, padding:"8px 18px", fontSize:13, fontWeight:700,
               cursor:text.trim()?"pointer":"not-allowed" }}>
-            Generate Notes from Transcript
+            Generate notes from source text
           </button>
         </div>
       )}
@@ -6324,11 +6327,11 @@ Simple language, give an example, under 100 words. No markdown.`,
             <span style={{ fontSize:11, fontWeight:700, color:C.purple }}>Explaining…</span>
           </div>
         )}
-        <select value={voiceIdx} onChange={e => setVoiceIdx(Number(e.target.value))}
+        <ChoiceMenu value={voiceIdx} onChange={e => setVoiceIdx(Number(e.target.value))}
           style={{ marginLeft:"auto", border:`1.5px solid ${C.border}`, borderRadius:8,
             padding:"6px 10px", fontSize:12, color:C.text, background:"#fff", outline:"none", cursor:"pointer" }}>
           {GLOBAL_PERSONAS.map((p, i) => <option key={p.id} value={i}>{p.label} ({p.gender})</option>)}
-        </select>
+        </ChoiceMenu>
       </div>
 
       {/* Transcript */}
@@ -6433,6 +6436,7 @@ function PresentationTab({ file, onUpdate }) {
   const [optionCount, setOptionCount] = useState(3);
   const [proposedDeck, setProposedDeck] = useState(null);
   const [deckError, setDeckError] = useState("");
+  const [includeFigures, setIncludeFigures] = useState(true);
   const [inkIndex, setInkIndex] = useState(null);
   const [imageMatches, setImageMatches] = useState([]);
   const [findingImages, setFindingImages] = useState(false);
@@ -6604,7 +6608,20 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
         `Topic: "${topicStr}"\n${context}\n\nCreate a ${slideCount}-slide presentation covering all key concepts thoroughly.`,
         4000
       );
-      setProposedDeck(parseDeckResponse(raw, slideCount));
+      const proposal = parseDeckResponse(raw, slideCount);
+      if (includeFigures) {
+        const sourceFigures = fileObj && /\.pptx$/i.test(fileObj.name) ? await getPresentationFigures(fileObj).catch(() => []) : [];
+        const used = new Set();
+        await Promise.all(proposal.slides.slice(0, 4).map(async slide => {
+          if (slide.type === "quote" || !slide.imageSearch) return;
+          try {
+            const candidate = likelyStudyImage(slide.imageSearch, sourceFigures) || likelyStudyImage(slide.imageSearch, await searchStudyImages(slide.imageSearch, AbortSignal.timeout(7000)));
+            const image = candidate ? await prepareSourceFigure(candidate) : null;
+            if (image && !used.has(image.src)) { used.add(image.src); Object.assign(slide, { image: image.src, imageAlt: image.title, imageCredit: image.credit }); }
+          } catch { /* The complete editable slide remains usable without an image. */ }
+        }));
+      }
+      setProposedDeck(proposal);
     } catch(error) { setDeckError(error.message || "Could not generate this presentation."); }
     finally { setGenerating(false); }
   };
@@ -6683,10 +6700,8 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
       const text = hex(currentTheme.text, "182420");
       const sub = hex(currentTheme.sub, "45594F");
       const bg = hex(currentTheme.bg, "FFFFFF");
-      const x = layout === "visual" ? 1.2 : layout === "editorial" ? .95 : .6;
-      const fontFace = layout === "editorial" ? "Georgia" : "Arial";
       let omittedImages = 0;
-      for (const item of slides) {
+      for (const [slideIndex, item] of slides.entries()) {
         const slide = pptx.addSlide();
         slide.background = { color: bg };
         if (safeImageSource(item.image) && item.imageMode === "background") {
@@ -6695,19 +6710,17 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
             slide.addImage({ ...source, x: 0, y: 0, w: 13.333, h: 7.5, transparency: 77 });
           } catch { omittedImages++; }
         }
-        const visual = layout === "visual";
-        slide.addShape(pptx.ShapeType.rect, { x:0, y:layout === "lecture" ? 7.38 : 0,
-          w:visual ? .22 : 13.333, h:visual ? 7.5 : .12, line:{ transparency:100 }, fill:{ color:accent } });
+        const { x, fontFace } = decorateDeckExport(pptx, slide, { layout, index: slideIndex, total: slides.length, cover: item.type === "title", bg, accent, sub });
         if (item.type === "quote") {
           slide.addText(item.quote || "", { x, y:2.2, w:11.3, h:2, fontSize:32, color:text, italic:true, fontFace, fit:"shrink" });
           slide.addText(item.author || "", { x, y:4.35, w:11.3, h:.5, fontSize:16, color:sub, fontFace });
         } else {
           const cover = item.type === "title";
           const inlineImage = safeImageSource(item.image) && item.imageMode !== "background";
-          const titleY = cover ? 2.3 : .55;
+          const titleY = cover ? 2.1 : 1.02;
           const contentW = inlineImage ? 7.1 : 12.2 - x;
           slide.addText(item.title || "", { x, y:titleY, w:cover ? contentW : 12.1 - x,
-            h:cover ? 1.45 : 1, fontSize:cover ? 40 : 29, bold:true, color:text, fontFace, fit:"shrink" });
+            h:cover ? 1.8 : .7, fontSize:cover ? 54 : 32, bold:layout !== "editorial", color:text, fontFace, fit:"shrink" });
           if (cover) {
             slide.addText(item.subtitle || "", { x, y:4.05, w:contentW, h:1, fontSize:20, color:sub, fontFace });
           } else if (item.type === "two-col") {
@@ -6724,8 +6737,7 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
             slide.addTable(table, { x, y:1.8, w:contentW, border:{ color:accent, pt:.8 }, fontFace,
               fontSize:table.length > 6 ? 13 : 16, margin:.1, autoPage:false });
           } else {
-            slide.addText((item.bullets || []).map(line => `• ${line}`).join("\n"), {
-              x, y:1.8, w:contentW, h:4.7, fontSize:21, color:sub, valign:"top", fontFace, fit:"shrink" });
+            addDeckExportPoints(pptx, slide, item.bullets || [], { layout, x, width: contentW, accent, bg, text, sub, fontFace, hasImage: inlineImage });
           }
           if (inlineImage) {
             try {
@@ -6842,14 +6854,16 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
           </button>
         </div>
 
-        <details className="deck-options"><summary>Design and slide options</summary>
+        <details className="deck-options"><summary><UiIcon name="grid" size={19} /><span><strong>Presentation design</strong><small>{deckDesigns.find(choice => choice.id === layout)?.name || "Lecture"} layout · {currentTheme.label} theme</small></span><span className="deck-customize-label">Customize <UiIcon name="down" size={16} /></span></summary>
+        <div className="deck-layout-gallery" role="group" aria-label="Presentation layouts">{deckDesigns.map(choice => <button type="button" key={choice.id} aria-label={"Layout: " + choice.name} aria-pressed={layout === choice.id} onClick={() => { setLayout(choice.id); setTheme(choice.theme); onUpdate({ ...file, presentationLayout: choice.id, presentationTheme: choice.theme }); }}><div className={"deck-style-sample sample-" + choice.id} aria-hidden="true"><i /><b>Aa</b><em /><em /></div><strong>{choice.name}{layout === choice.id && <UiIcon name="check" size={15} />}</strong><small>{choice.description}</small></button>)}</div>
         <div className="studio-controls" style={{ marginBottom:8 }}>
-          <label>Design options <select value={optionCount} onChange={event => setOptionCount(Number(event.target.value))} disabled={!!proposedDeck}>
+          <label>Design options <ChoiceMenu value={optionCount} onChange={event => setOptionCount(Number(event.target.value))} disabled={!!proposedDeck}>
             <option value="2">Two</option><option value="3">Three</option>
-          </select></label>
-          <label>Slide layout <select value={layout} onChange={event => {
+          </ChoiceMenu></label>
+          <label>Slide layout <ChoiceMenu value={layout} onChange={event => {
             const selected = event.target.value; setLayout(selected); onUpdate({ ...file, presentationLayout: selected });
-          }}>{deckDesigns.map(choice => <option key={choice.id} value={choice.id}>{choice.name}</option>)}</select></label>
+          }}>{deckDesigns.map(choice => <option key={choice.id} value={choice.id}>{choice.name}</option>)}</ChoiceMenu></label>
+          <label className="studio-check"><input type="checkbox" checked={includeFigures} onChange={event => setIncludeFigures(event.target.checked)} />Add relevant source or web images</label>
         </div>
         <div style={{ display:"flex", flexWrap:"wrap", gap:16, alignItems:"flex-start" }}>
           <div>
@@ -6968,7 +6982,7 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
                           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                           {isEditing?"Close":"Edit"}
                         </button>
-                        <button type="button" className="workspace-action" onClick={() => setInkIndex(idx)}>Annotate</button>
+                        <button type="button" className="quiet-button is-small" onClick={() => setInkIndex(idx)}><UiIcon name="edit" size={14} />Annotate</button>
                         <button onClick={()=>{ const ns=slides.filter((_,i)=>i!==idx); setSlides(ns); onUpdate({...file,presentation:ns}); setEditIdx(null); setInkIndex(null); }} className="no-min-h"
                           style={{ width:28, height:28, borderRadius:7, border:`1px solid ${C.red}44`, background:C.redL, cursor:"pointer", color:C.red, display:"flex", alignItems:"center", justifyContent:"center" }}>
                           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
@@ -7072,12 +7086,12 @@ For content and title slides, include an "imageSearch" field with a 1-3 word sea
                             <input value={aiImgPrompt} onChange={e=>setAiImgPrompt(e.target.value)}
                               placeholder="Describe the image… or leave blank to auto-suggest from slide content"
                               style={{ flex:1, minWidth:160, border:`1px solid ${C.border}`, borderRadius:8, padding:"6px 10px", fontSize:12, outline:"none", color:C.text, background:C.surface }}/>
-                            <select value={aiImgStyle} onChange={e=>setAiImgStyle(e.target.value)}
+                            <ChoiceMenu value={aiImgStyle} onChange={e=>setAiImgStyle(e.target.value)}
                               style={{ border:`1px solid ${C.border}`, borderRadius:8, padding:"6px 8px", fontSize:12, color:C.text, background:C.surface, cursor:"pointer", outline:"none" }}>
                               {[["realistic","Realistic"],["illustration","Illustration"],["diagram","Educational Diagram"],["infographic","Infographic"],["flat","Flat Design"],["corporate","Corporate"],["modern","Modern"],["startup","Startup"],["academic","Academic"],["futuristic","Futuristic"],["minimal","Minimal"],["creative","Creative"],["render3d","3D Render"]].map(([v,l])=>(
                                 <option key={v} value={v}>{l}</option>
                               ))}
-                            </select>
+                            </ChoiceMenu>
                           </div>
                           <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
                             <button onClick={async()=>{
@@ -7213,30 +7227,30 @@ function GameTab({ file }) {
 
   const GAMES = [
     {id:"mcq",      icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.accent}     strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,      title:"Multiple Choice",  desc:"4 options — pick the right one",                              bg:C.accentL,   accent:C.accent},
-    {id:"voice",    icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7c3aed"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>,  title:"Voice Answer",     desc:"Speak your answer out loud — AI grades it",                   bg:"#f5f3ff",   accent:"#7c3aed"},
-    {id:"flashcard",icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7c3aed"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/></svg>,                                                                                                                    title:"Flashcard Flip",   desc:"Flip cards and track what you know",                          bg:"#f5f3ff",   accent:"#7c3aed"},
-    {id:"quizshow", icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#dc2626"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>,                                                                                                  title:"Quiz Show",        desc:"Who Wants to Be a Millionaire style with lifelines",          bg:"#fef2f2",   accent:"#dc2626"},
+    {id:"voice",    icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7c3aed"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>,  title:"Voice Answer",     desc:"Speak your answer out loud — AI grades it",                   bg:"var(--game-purple-bg)",   accent:"#7c3aed"},
+    {id:"flashcard",icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7c3aed"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/></svg>,                                                                                                                    title:"Flashcard Flip",   desc:"Flip cards and track what you know",                          bg:"var(--game-purple-bg)",   accent:"#7c3aed"},
+    {id:"quizshow", icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#dc2626"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>,                                                                                                  title:"Quiz Show",        desc:"Who Wants to Be a Millionaire style with lifelines",          bg:"var(--error-bg)",   accent:"#dc2626"},
     {id:"fillblank",icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0694a2"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="17" y1="18" x2="3" y2="18"/></svg>,                                               title:"Fill in the Blank", desc:"Complete the sentence with the right answer",                bg:"#ecfeff",   accent:"#0694a2"},
-    {id:"rapidfire",icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#059669"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,                                                                                                                                               title:"Rapid Fire",       desc:"Type as many correct answers as you can in 45s",             bg:"#f0fdf4",   accent:"#059669"},
-    {id:"truefalse",icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6B46C1"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>,                                                                                                                                                                              title:"True or False",    desc:"Decide if the statement is true or false",                    bg:"#FAF5FF",   accent:"#6B46C1"},
-    {id:"memory",   icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C53030"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="9" height="9" rx="1"/><rect x="13" y="3" width="9" height="9" rx="1"/><rect x="2" y="13" width="9" height="9" rx="1"/><rect x="13" y="13" width="9" height="9" rx="1"/></svg>,       title:"Memory Flip",      desc:"Match question cards to answer cards",                        bg:"#FFF5F5",   accent:"#C53030"},
+    {id:"rapidfire",icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#059669"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,                                                                                                                                               title:"Rapid Fire",       desc:"Type as many correct answers as you can in 45s",             bg:"var(--success-bg)",   accent:"#059669"},
+    {id:"truefalse",icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6B46C1"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>,                                                                                                                                                                              title:"True or False",    desc:"Decide if the statement is true or false",                    bg:"var(--game-purple-bg)",   accent:"#6B46C1"},
+    {id:"memory",   icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C53030"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="9" height="9" rx="1"/><rect x="13" y="3" width="9" height="9" rx="1"/><rect x="2" y="13" width="9" height="9" rx="1"/><rect x="13" y="13" width="9" height="9" rx="1"/></svg>,       title:"Memory Flip",      desc:"Match question cards to answer cards",                        bg:"var(--error-bg)",   accent:"#C53030"},
     {id:"match",    icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.green}      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>,                                                       title:"Matching Pairs",   desc:"Connect each term to its definition",                         bg:C.greenL,    accent:C.green},
     {id:"scramble", icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.warm}       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>,                                                  title:"Word Scramble",    desc:"AI scrambles a key word — rearrange the letter tiles",        bg:C.warmL,     accent:C.warm},
-    {id:"speedrun", icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#D69E2E"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,                                                                                                                                    title:"Speed Run",        desc:"Answer as many as you can in 60 seconds",                    bg:"#FFFFF0",   accent:"#D69E2E"},
-    {id:"tower",    icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2C7A7B"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="16" width="16" height="4" rx="1"/><rect x="6" y="11" width="12" height="4" rx="1"/><rect x="8" y="6" width="8" height="4" rx="1"/></svg>,                                                      title:"Answer Tower",     desc:"Build a tower — answer correctly to stack blocks",            bg:"#E6FFFA",   accent:"#2C7A7B"},
+    {id:"speedrun", icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#D69E2E"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,                                                                                                                                    title:"Speed Run",        desc:"Answer as many as you can in 60 seconds",                    bg:"var(--warning-bg)",   accent:"#D69E2E"},
+    {id:"tower",    icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2C7A7B"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="16" width="16" height="4" rx="1"/><rect x="6" y="11" width="12" height="4" rx="1"/><rect x="8" y="6" width="8" height="4" rx="1"/></svg>,                                                      title:"Answer Tower",     desc:"Build a tower — answer correctly to stack blocks",            bg:"var(--panel-soft)",   accent:"#2C7A7B"},
     {id:"falling",  icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.purple}     strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><line x1="14" y1="17" x2="21" y2="17"/></svg>,               title:"Falling Blocks",   desc:"Type the answer before the block falls",                     bg:C.purpleL,   accent:C.purple},
-    {id:"listening",icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#059669"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>,                      title:"Listening Quiz",   desc:"Listen to the question — answer without reading it",         bg:"#f0fdf4",   accent:"#059669"},
-    {id:"wordfill", icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ea580c"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="7" y1="14" x2="7" y2="17"/><line x1="12" y1="14" x2="12" y2="17"/></svg>,                                 title:"Word Fill",        desc:"Key words are blanked out — tap tiles to fill them in",       bg:"#fff7ed",   accent:"#ea580c"},
+    {id:"listening",icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#059669"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>,                      title:"Listening Quiz",   desc:"Listen to the question — answer without reading it",         bg:"var(--success-bg)",   accent:"#059669"},
+    {id:"wordfill", icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ea580c"      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="7" y1="14" x2="7" y2="17"/><line x1="12" y1="14" x2="12" y2="17"/></svg>,                                 title:"Word Fill",        desc:"Key words are blanked out — tap tiles to fill them in",       bg:"var(--warning-bg)",   accent:"#ea580c"},
   ];
 
   return (
-    <div style={{ maxWidth:760, margin:"0 auto" }}>
+    <div className="study-games" style={{ maxWidth:760, margin:"0 auto" }}>
       <h2 style={{ fontFamily:"'Fraunces Variable',serif", fontSize:26, fontWeight:700, color:C.text, marginBottom:6 }}>Game Mode</h2>
       <p style={{ fontSize:14, color:C.muted, marginBottom:28 }}>{cards.length} cards ready · Choose a game</p>
       <div className="game-grid" style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(auto-fill,minmax(200px,1fr))", gap:14 }}>
         {GAMES.map(g => (
-          <button key={g.id} onClick={()=>setActiveGame(g.id)}
-            style={{ background:g.bg, border:`1.5px solid ${g.accent}22`, borderRadius:8, padding:"20px 18px", textAlign:"left", cursor:"pointer", transition:"transform .15s,box-shadow .15s" }}
+          <button className="game-choice" key={g.id} onClick={()=>setActiveGame(g.id)}
+            style={{ "--game-tone":g.accent, background:g.bg, border:`1.5px solid ${g.accent}22`, borderRadius:8, padding:"20px 18px", textAlign:"left", cursor:"pointer", transition:"transform .15s,box-shadow .15s" }}
             onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-3px)";e.currentTarget.style.boxShadow=`0 8px 24px ${g.accent}33`;}}
             onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow="none";}}>
             <div style={{ marginBottom:10, display:"flex" }}>{g.icon}</div>
@@ -7257,7 +7271,7 @@ function GHeader({ title, score, curr, total, onBack, accent }) {
         <button onClick={onBack} style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:14, padding:0 }}>
           <Icon d={I.back} size={16} color={C.muted} /> All Games
         </button>
-        <span style={{ fontSize:14, fontWeight:700, color:accent }}>Score: {score}</span>
+        <span style={{ fontSize:14, fontWeight:700, color:(C.isDark ? C.link : accent) }}>Score: {score}</span>
       </div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
         <h3 style={{ fontFamily:"'Fraunces Variable',serif", fontSize:20, fontWeight:700, color:C.text }}>{title}</h3>
@@ -7295,9 +7309,9 @@ function AILoadingScreen({ title, message, accent }) {
   }, []);
   return (
     <div style={{ maxWidth:480, margin:"0 auto", textAlign:"center", padding:"60px 20px" }}>
-      <div style={{ width:64,height:64,borderRadius:20,background:"#ede9fe",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 18px" }}><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.46 2.5 2.5 0 0 1-1.98-3 2.5 2.5 0 0 1-1.32-4.24 3 3 0 0 1 .34-5.58 2.5 2.5 0 0 1 1.96-3.41A2.5 2.5 0 0 1 9.5 2zM14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.46 2.5 2.5 0 0 0 1.98-3 2.5 2.5 0 0 0 1.32-4.24 3 3 0 0 0-.34-5.58 2.5 2.5 0 0 0-1.96-3.41A2.5 2.5 0 0 0 14.5 2z"/></svg></div>
-      <p style={{ fontSize:20, fontWeight:800, color:"#111", marginBottom:8 }}>{title}</p>
-      <p style={{ fontSize:15, color:"#555", marginBottom:32 }}>{message}{dots}</p>
+      <div style={{ width:64,height:64,borderRadius:20,background:"var(--game-purple-bg)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 18px" }}><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.46 2.5 2.5 0 0 1-1.98-3 2.5 2.5 0 0 1-1.32-4.24 3 3 0 0 1 .34-5.58 2.5 2.5 0 0 1 1.96-3.41A2.5 2.5 0 0 1 9.5 2zM14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.46 2.5 2.5 0 0 0 1.98-3 2.5 2.5 0 0 0 1.32-4.24 3 3 0 0 0-.34-5.58 2.5 2.5 0 0 0-1.96-3.41A2.5 2.5 0 0 0 14.5 2z"/></svg></div>
+      <p style={{ fontSize:20, fontWeight:800, color:"var(--app-text)", marginBottom:8 }}>{title}</p>
+      <p style={{ fontSize:15, color:"var(--app-muted)", marginBottom:32 }}>{message}{dots}</p>
       <div style={{ display:"flex", gap:8, justifyContent:"center" }}>
         {[0,1,2].map(i => (
           <div key={i} style={{ width:12, height:12, borderRadius:"50%", background:accent,
@@ -7413,7 +7427,7 @@ Keep it under 150 words. Be encouraging.`,
               </p>
             </div>
             <button onClick={fetchLearnMore}
-              style={{ display:"flex", alignItems:"center", gap:6, background:"#7c3aed", color:"#fff",
+              style={{ display:"flex", alignItems:"center", gap:6, background:"#7c3aed", color:primaryInk("#7c3aed", "#fff"),
                 border:"none", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700,
                 cursor:"pointer", boxShadow:"0 3px 10px rgba(124,58,237,.35)", whiteSpace:"nowrap" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
@@ -7431,7 +7445,7 @@ Keep it under 150 words. Be encouraging.`,
                 </div>
               ) : (
                 <div>
-                  <p style={{ fontSize:12, fontWeight:800, color:"#7c3aed", letterSpacing:.8, textTransform:"uppercase", marginBottom:8 }}>
+                  <p style={{ fontSize:12, fontWeight:800, color:"var(--game-purple-ink)", letterSpacing:.8, textTransform:"uppercase", marginBottom:8 }}>
                     What to Know
                   </p>
                   <p style={{ fontSize:13, color:C.text, lineHeight:1.7, margin:0 }}>
@@ -7445,7 +7459,7 @@ Keep it under 150 words. Be encouraging.`,
       )}
 
       {sel && (
-        <button onClick={next} style={{ marginTop:12, width:"100%", background:C.accent, color:"#fff", border:"none", borderRadius:8, padding:"13px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
+        <button onClick={next} style={{ marginTop:12, width:"100%", background:C.accent, color:primaryInk(C.accent, "#fff"), border:"none", borderRadius:8, padding:"13px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
           {curr + 1 >= deck.length ? "See Results" : "Next →"}
         </button>
       )}
@@ -7564,10 +7578,10 @@ function ScrambleGame({ deck, onBack }) {
           {sentenceParts[0]}
           <span style={{
             display:"inline-block", minWidth:80, padding:"2px 10px",
-            background: result==="correct"?"#f0fdf4": result==="wrong"?"#fff1f1":"#f0f4ff",
+            background: result==="correct"?"var(--success-bg)": result==="wrong"?"var(--error-bg)":"var(--panel-soft)",
             border:`2px solid ${result==="correct"?"#16a34a":result==="wrong"?C.red:C.accentS}`,
             borderRadius:8, marginLeft:2, marginRight:2,
-            color: result==="correct"?"#16a34a": result==="wrong"?C.red: C.link,
+            color: result==="correct"?"var(--success-ink)": result==="wrong"?C.red: C.link,
             fontWeight:800, fontSize:17, letterSpacing:1,
             transition:"all .2s", verticalAlign:"middle"
           }}>
@@ -7580,8 +7594,8 @@ function ScrambleGame({ deck, onBack }) {
       {/* Result banner */}
       {result && (
         <div style={{ textAlign:"center", marginBottom:12, padding:"10px", borderRadius:12,
-          background:result==="correct"?"#f0fdf4":"#fff1f1" }}>
-          <span style={{ fontSize:16, fontWeight:800, color:result==="correct"?"#16a34a":C.red }}>
+          background:result==="correct"?"var(--success-bg)":"var(--error-bg)" }}>
+          <span style={{ fontSize:16, fontWeight:800, color:result==="correct"?"var(--success-ink)":C.red }}>
             {result==="correct" ? "Correct!" : `Wrong: ${item.word}`}
           </span>
         </div>
@@ -7593,7 +7607,7 @@ function ScrambleGame({ deck, onBack }) {
           {pool.map(tile => (
             <button key={tile.id} onClick={() => pick(tile)} disabled={tile.used} style={{
               width:52, height:58, fontSize:24, fontWeight:900,
-              background: tile.used?"#ececec":C.warmL,
+              background: tile.used?"var(--app-border)":C.warmL,
               color: tile.used?"#bbb":C.warm,
               border:`2.5px solid ${tile.used?"#ddd":C.warm}`,
               borderRadius:8, cursor:tile.used?"default":"pointer",
@@ -7612,7 +7626,7 @@ function ScrambleGame({ deck, onBack }) {
           {placed.map(tile => (
             <button key={tile.id} onClick={() => remove(tile.id)} style={{
               width:52, height:58, fontSize:24, fontWeight:900,
-              background:C.accent, color:"#fff", border:"none",
+              background:C.accent, color:primaryInk(C.accent, "#fff"), border:"none",
               borderRadius:8, cursor:"pointer",
               boxShadow:"0 3px 10px rgba(0,0,0,.2)",
               transition:"all .12s"
@@ -7625,16 +7639,16 @@ function ScrambleGame({ deck, onBack }) {
       {!result ? (
         <div style={{ display:"flex", gap:8 }}>
           <button onClick={clear} disabled={placed.length===0}
-            style={{ flex:1, background:"#eee", color:placed.length>0?"#555":"#bbb", border:"none", borderRadius:8, padding:"13px", fontSize:14, fontWeight:700, cursor:placed.length>0?"pointer":"not-allowed" }}>
+            style={{ flex:1, background:"var(--panel-soft)", color:placed.length>0?"var(--app-muted)":"#bbb", border:"none", borderRadius:8, padding:"13px", fontSize:14, fontWeight:700, cursor:placed.length>0?"pointer":"not-allowed" }}>
             Clear
           </button>
           <button onClick={check} disabled={placed.length===0}
-            style={{ flex:2, background:placed.length>0?C.warm:"#ccc", color:"#fff", border:"none", borderRadius:8, padding:"13px", fontSize:15, fontWeight:700, cursor:placed.length>0?"pointer":"not-allowed", transition:"background .15s" }}>
+            style={{ flex:2, background:placed.length>0?C.warm:"#ccc", color:primaryInk(placed.length>0?C.warm:"#ccc", "#fff"), border:"none", borderRadius:8, padding:"13px", fontSize:15, fontWeight:700, cursor:placed.length>0?"pointer":"not-allowed", transition:"background .15s" }}>
             Check ✓
           </button>
         </div>
       ) : (
-        <button onClick={next} style={{ width:"100%", background:C.warm, color:"#fff", border:"none", borderRadius:8, padding:"14px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
+        <button onClick={next} style={{ width:"100%", background:C.warm, color:primaryInk(C.warm, "#fff"), border:"none", borderRadius:8, padding:"14px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
           {curr+1>=deck.length ? "See Results" : "Next →"}
         </button>
       )}
@@ -7708,7 +7722,7 @@ function Falling({ cards, onBack }) {
       <div style={{ display:"flex", gap:10 }}>
         <input ref={inpRef} value={inp} onChange={e=>setInp(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")check();}} placeholder="Type answer and press Enter…"
           style={{ flex:1, border:`1.5px solid ${C.border}`, borderRadius:12, padding:"12px 16px", fontSize:15, outline:"none", color:C.text, background:C.bg }} disabled={!!res} />
-        <button onClick={check} disabled={!inp.trim()||!!res} style={{ background:C.purple, color:"#fff", border:"none", borderRadius:8, padding:"12px 20px", fontSize:14, fontWeight:700, cursor:"pointer" }}>Submit</button>
+        <button onClick={check} disabled={!inp.trim()||!!res} style={{ background:C.purple, color:primaryInk(C.purple, "#fff"), border:"none", borderRadius:8, padding:"12px 20px", fontSize:14, fontWeight:700, cursor:"pointer" }}>Submit</button>
       </div>
     </div>
   );
@@ -7745,15 +7759,15 @@ function Tower({ cards, onBack }) {
           <p style={{ fontSize:16, color:C.text, lineHeight:1.6 }}>{deck[curr].question}</p>
         </div>
         <input value={inp} onChange={e=>{if(!res)setInp(e.target.value);}} onKeyDown={e=>{if(e.key==="Enter"&&inp.trim()&&!res)check();}}
-          placeholder="Type answer…" style={{ width:"100%", border:`1.5px solid ${res==="correct"?teal:res==="wrong"?C.red:C.border}`, borderRadius:10, padding:"11px 14px", fontSize:15, outline:"none", background:res==="correct"?"#E6FFFA":res==="wrong"?C.redL:C.bg, marginBottom:10 }} />
+          placeholder="Type answer…" style={{ width:"100%", border:`1.5px solid ${res==="correct"?teal:res==="wrong"?C.red:C.border}`, borderRadius:10, padding:"11px 14px", fontSize:15, outline:"none", background:res==="correct"?"var(--panel-soft)":res==="wrong"?C.redL:C.bg, marginBottom:10 }} />
         {res&&<p style={{ fontSize:14, fontWeight:600, color:res==="correct"?teal:C.red, marginBottom:10 }}>{res==="correct"?"Block added!":"✗ "+deck[curr].answer}</p>}
         <button onClick={()=>inp.trim()&&!res&&check()} disabled={!inp.trim()||!!res}
-          style={{ width:"100%", background:inp.trim()&&!res?teal:"#ccc", color:"#fff", border:"none", borderRadius:10, padding:"12px", fontSize:15, fontWeight:700, cursor:"pointer" }}>Stack Block</button>
+          style={{ width:"100%", background:inp.trim()&&!res?teal:"#ccc", color:primaryInk(inp.trim()&&!res?teal:"#ccc", "#fff"), border:"none", borderRadius:10, padding:"12px", fontSize:15, fontWeight:700, cursor:"pointer" }}>Stack Block</button>
       </div>
       {/* Tower visual */}
       <div style={{ width:100, display:"flex", flexDirection:"column-reverse", gap:3, justifyContent:"flex-start", paddingTop:40 }}>
         {tower.map((b,i)=>(
-          <div key={i} style={{ background:b.color, borderRadius:6, height:28, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, color:"#fff", fontWeight:700, overflow:"hidden", padding:"0 4px", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+          <div key={i} style={{ background:b.color, borderRadius:6, height:28, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, color:primaryInk(b.color, "#fff"), fontWeight:700, overflow:"hidden", padding:"0 4px", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
             {i+1}
           </div>
         ))}
@@ -7800,20 +7814,20 @@ function Speedrun({ cards, onBack }) {
       </div>
       {!started?(
         <div style={{ textAlign:"center", padding:"40px 0" }}>
-          <div style={{ width:56,height:56,borderRadius:16,background:"#fef9c3",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px" }}><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ca8a04" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
+          <div style={{ width:56,height:56,borderRadius:16,background:"var(--warning-bg)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px" }}><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ca8a04" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
           <p style={{ fontSize:18, fontWeight:700, color:C.text, marginBottom:8 }}>Speed Run</p>
           <p style={{ fontSize:14, color:C.muted, marginBottom:24 }}>Answer as many as you can in 60 seconds!</p>
-          <button onClick={()=>setStarted(true)} style={{ background:gold, color:"#fff", border:"none", borderRadius:8, padding:"14px 40px", fontSize:16, fontWeight:700, cursor:"pointer" }}>Start!</button>
+          <button onClick={()=>setStarted(true)} style={{ background:gold, color:primaryInk(gold, "#fff"), border:"none", borderRadius:8, padding:"14px 40px", fontSize:16, fontWeight:700, cursor:"pointer" }}>Start!</button>
         </div>
       ):(
         <>
-          <div style={{ background:flash==="correct"?"#E6FFFA":flash==="wrong"?C.redL:C.surface, border:`1.5px solid ${flash==="correct"?"#2C7A7B":flash==="wrong"?C.red:C.border}`, borderRadius:16, padding:24, marginBottom:14, transition:"background .2s" }}>
+          <div style={{ background:flash==="correct"?"var(--panel-soft)":flash==="wrong"?C.redL:C.surface, border:`1.5px solid ${flash==="correct"?"#2C7A7B":flash==="wrong"?C.red:C.border}`, borderRadius:16, padding:24, marginBottom:14, transition:"background .2s" }}>
             <p style={{ fontSize:16, color:C.text, lineHeight:1.6 }}>{card.question}</p>
           </div>
           <div style={{ display:"flex", gap:10 }}>
             <input autoFocus value={inp} onChange={e=>setInp(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")submit();}}
               placeholder="Quick! Type the answer…" style={{ flex:1, border:`1.5px solid ${C.border}`, borderRadius:10, padding:"11px 14px", fontSize:15, outline:"none" }} />
-            <button onClick={submit} style={{ background:gold, color:"#fff", border:"none", borderRadius:10, padding:"11px 20px", fontSize:14, fontWeight:700, cursor:"pointer" }}>→</button>
+            <button onClick={submit} style={{ background:gold, color:primaryInk(gold, "#fff"), border:"none", borderRadius:10, padding:"11px 20px", fontSize:14, fontWeight:700, cursor:"pointer" }}>→</button>
           </div>
         </>
       )}
@@ -7823,7 +7837,7 @@ function Speedrun({ cards, onBack }) {
 
 // ─── TRUE OR FALSE ────────────────────────────────────────────────────────────
 function TrueFalse({ cards, onBack }) {
-  const purple="#6B46C1";
+  const purple=C.isDark ? "#d1bbff" : "#6B46C1";
   // AI-generated false statements: each wrong statement uses a plausible
   // but incorrect answer about the SAME concept (not a random card's answer)
   const [deck,    setDeck]    = useState(null);
@@ -7905,17 +7919,17 @@ Return ONLY: [{"id":"<same id>","wrong":"<plausible wrong answer>"}, ...]`
         <p style={{ fontSize:15, color:C.text, lineHeight:1.7 }}>{card.statement}</p>
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
-        {[{val:true,label:"True",bg:"#E6FFFA",color:"#2C7A7B"},{val:false,label:"False",bg:C.redL,color:C.red}].map(opt=>{
-          let bg=opt.bg; let border=`1.5px solid ${opt.color}33`;
+        {[{val:true,label:"True",bg:"var(--panel-soft)",color:"var(--app-link)"},{val:false,label:"False",bg:C.redL,color:C.red}].map(opt=>{
+          let bg=opt.bg; let border=`1.5px solid color-mix(in srgb, ${opt.color} 25%, transparent)`;
           if(res){
-            if(opt.val===card.correct){ bg="#E6FFFA"; border="2px solid #2C7A7B"; }
+            if(opt.val===card.correct){ bg="var(--panel-soft)"; border="2px solid #2C7A7B"; }
             else if(res.chosen===opt.val&&!res.ok){ bg=C.redL; border=`2px solid ${C.red}`; }
           }
           return <button key={String(opt.val)} onClick={()=>answer(opt.val)}
             style={{ background:bg, border, borderRadius:8, padding:"20px", fontSize:18, fontWeight:700, color:opt.color, cursor:res?"default":"pointer", transition:"all .2s" }}>{opt.label}</button>;
         })}
       </div>
-      {res&&<p style={{ textAlign:"center", marginTop:14, fontSize:14, fontWeight:600, color:res.ok?"#2C7A7B":C.red }}>{res.ok?"Correct!":"Answer: "+card.orig.answer}</p>}
+      {res&&<p style={{ textAlign:"center", marginTop:14, fontSize:14, fontWeight:600, color:res.ok?"var(--app-link)":C.red }}>{res.ok?"Correct!":"Answer: "+card.orig.answer}</p>}
     </div>
   );
 }
@@ -8021,8 +8035,8 @@ function FillBlank({ cards, onBack }) {
   return (
     <div style={{ maxWidth: 540, margin: "0 auto" }}>
       <GHeader title="Fill in the Blank" score={score} curr={curr} total={deck.length} onBack={onBack} accent={accent} />
-      <div style={{ background: "#E6FFFE", border: `2px solid ${accent}33`, borderRadius: 18, padding: "30px 28px", marginBottom: 20, textAlign: "center" }}>
-        <p style={{ fontSize: 11, fontWeight: 700, color: accent, letterSpacing: 1, marginBottom: 14, textTransform: "uppercase" }}>Complete the sentence</p>
+      <div style={{ background: "var(--panel-soft)", border: `2px solid ${accent}33`, borderRadius: 18, padding: "30px 28px", marginBottom: 20, textAlign: "center" }}>
+        <p style={{ fontSize: 11, fontWeight: 700, color: (C.isDark ? C.link : accent), letterSpacing: 1, marginBottom: 14, textTransform: "uppercase" }}>Complete the sentence</p>
         <p style={{ fontSize: 20, fontWeight: 600, color: C.text, lineHeight: 1.5 }}>{questionWithBlank}</p>
       </div>
       {result === null ? (
@@ -8032,13 +8046,13 @@ function FillBlank({ cards, onBack }) {
             placeholder="Type your answer…"
             style={{ flex: 1, border: `2px solid ${C.border}`, borderRadius: 12, padding: "12px 16px", fontSize: 15, outline: "none", color: C.text }} />
           <button onClick={check} disabled={!inp.trim()}
-            style={{ background: accent, color: "#fff", border: "none", borderRadius: 8, padding: "12px 22px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>Check</button>
+            style={{ background: accent, color: primaryInk(accent, "#fff"), border: "none", borderRadius: 8, padding: "12px 22px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>Check</button>
         </div>
       ) : (
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: 44, marginBottom: 10 }}>{result ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg> : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.red} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>}</div>
           {!result && <p style={{ color: C.red, fontSize: 15, marginBottom: 6 }}>Correct answer: <strong>{card.answer}</strong></p>}
-          <button onClick={next} style={{ background: accent, color: "#fff", border: "none", borderRadius: 8, padding: "12px 32px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
+          <button onClick={next} style={{ background: accent, color: primaryInk(accent, "#fff"), border: "none", borderRadius: 8, padding: "12px 32px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
             {curr + 1 >= deck.length ? "See Results" : "Next →"}
           </button>
         </div>
@@ -8070,11 +8084,11 @@ function FlashcardFlip({ cards, onBack }) {
     <div style={{ maxWidth: 480, margin: "0 auto", textAlign: "center", padding: "40px 0" }}>
       <div style={{ fontSize: 56, marginBottom: 12 }}>{known >= deck.length * .8 ? "★" : "↺"}</div>
       <h2 style={{ fontFamily: "'Fraunces Variable',serif", fontSize: 26, fontWeight: 700, color: C.text, marginBottom: 8 }}>Done!</h2>
-      <p style={{ fontSize: 32, fontWeight: 700, color: accent, marginBottom: 4 }}>{known}/{deck.length} known</p>
+      <p style={{ fontSize: 32, fontWeight: 700, color: (C.isDark ? C.link : accent), marginBottom: 4 }}>{known}/{deck.length} known</p>
       <p style={{ fontSize: 14, color: C.muted, marginBottom: 28 }}>{reviewing.length > 0 ? `${reviewing.length} cards to review again` : "You knew them all!"}</p>
       <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-        {reviewing.length > 0 && <button onClick={() => { /* restart with reviewing cards */ }} style={{ background: "#FFF5F5", color: C.red, border: `1.5px solid ${C.red}33`, borderRadius: 8, padding: "11px 22px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Review {reviewing.length} missed</button>}
-        <button onClick={onBack} style={{ background: accent, color: "#fff", border: "none", borderRadius: 8, padding: "11px 22px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>← Back</button>
+        {reviewing.length > 0 && <button onClick={() => { /* restart with reviewing cards */ }} style={{ background: "var(--error-bg)", color: C.red, border: `1.5px solid ${C.red}33`, borderRadius: 8, padding: "11px 22px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Review {reviewing.length} missed</button>}
+        <button onClick={onBack} style={{ background: accent, color: primaryInk(accent, "#fff"), border: "none", borderRadius: 8, padding: "11px 22px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>← Back</button>
       </div>
     </div>
   );
@@ -8082,22 +8096,22 @@ function FlashcardFlip({ cards, onBack }) {
   return (
     <div style={{ maxWidth: 540, margin: "0 auto" }}>
       <GHeader title="Flashcard Flip" score={known} curr={curr} total={deck.length} onBack={onBack} accent={accent} />
-      <div onClick={() => setFlipped(f => !f)} style={{ cursor: "pointer", perspective: 900, height: 240, marginBottom: 20 }}>
+      <div role="button" tabIndex={0} aria-label={flipped ? "Flashcard answer. Flip to question" : "Flashcard question. Flip to answer"} onClick={() => setFlipped(f => !f)} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setFlipped(f => !f); } }} style={{ cursor: "pointer", perspective: 900, height: 240, marginBottom: 20 }}>
         <div style={{ position: "relative", width: "100%", height: "100%", transformStyle: "preserve-3d", transition: "transform .5s", transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)" }}>
-          <div style={{ position: "absolute", inset: 0, backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden", background: `#eaf3ef`, border: `2px solid ${accent}33`, borderRadius: 20, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 28px", textAlign: "center" }}>
-            <p style={{ fontSize: 12, fontWeight: 700, color: accent, letterSpacing: 1, marginBottom: 12 }}>Question. Tap to flip.</p>
+          <div style={{ position: "absolute", inset: 0, backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden", background: "var(--game-purple-bg)", border: `2px solid ${accent}33`, borderRadius: 20, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 28px", textAlign: "center" }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: (C.isDark ? C.link : accent), letterSpacing: 1, marginBottom: 12 }}>Question. Tap to flip.</p>
             <p style={{ fontSize: 19, fontWeight: 600, color: C.text, lineHeight: 1.5 }}>{card.question}</p>
           </div>
-          <div style={{ position: "absolute", inset: 0, backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden", transform: "rotateY(180deg)", background: `linear-gradient(135deg, #f0fdf4, #dcfce7)`, border: "2px solid #16a34a33", borderRadius: 20, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 28px", textAlign: "center" }}>
-            <p style={{ fontSize: 12, fontWeight: 700, color: "#16a34a", letterSpacing: 1, marginBottom: 12 }}>ANSWER</p>
+          <div style={{ position: "absolute", inset: 0, backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden", transform: "rotateY(180deg)", background: "var(--success-bg)", border: "2px solid #16a34a33", borderRadius: 20, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 28px", textAlign: "center" }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: "var(--success-ink)", letterSpacing: 1, marginBottom: 12 }}>ANSWER</p>
             <p style={{ fontSize: 19, fontWeight: 600, color: C.text, lineHeight: 1.5 }}>{card.answer}</p>
           </div>
         </div>
       </div>
       {flipped && (
         <div style={{ display: "flex", gap: 12 }}>
-          <button onClick={() => respond(false)} style={{ flex: 1, background: "#FFF5F5", color: C.red, border: `2px solid ${C.red}33`, borderRadius: 8, padding: "14px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}> Still learning</button>
-          <button onClick={() => respond(true)} style={{ flex: 1, background: "#f0fdf4", color: "#16a34a", border: "2px solid #16a34a33", borderRadius: 8, padding: "14px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}> Got it!</button>
+          <button onClick={() => respond(false)} style={{ flex: 1, background: "var(--error-bg)", color: C.red, border: `2px solid ${C.red}33`, borderRadius: 8, padding: "14px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}> Still learning</button>
+          <button onClick={() => respond(true)} style={{ flex: 1, background: "var(--success-bg)", color: "var(--success-ink)", border: "2px solid #16a34a33", borderRadius: 8, padding: "14px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}> Got it!</button>
         </div>
       )}
       {!flipped && <p style={{ textAlign: "center", color: C.muted, fontSize: 13 }}>Tap the card to reveal the answer</p>}
@@ -8162,22 +8176,22 @@ function QuizShow({ cards, onBack }) {
   return (
     <div style={{ maxWidth: 580, margin: "0 auto" }}>
       <GHeader title="Quiz Show" score={score} curr={curr} total={deck.length} onBack={onBack} accent={accent} />
-      {streak >= 3 && <div style={{ background: "#fef9c3", border: "1.5px solid #ca8a04", borderRadius: 10, padding: "6px 14px", marginBottom: 12, fontSize: 13, fontWeight: 700, color: "#92400e", textAlign: "center" }}>{streak} in a row! Double points!</div>}
-      <div style={{ background: "linear-gradient(135deg,#fef2f2,#fee2e2)", border: `2px solid ${accent}22`, borderRadius: 18, padding: "26px 24px", marginBottom: 20, textAlign: "center" }}>
-        <p style={{ fontSize: 12, fontWeight: 700, color: accent, letterSpacing: 1, marginBottom: 12 }}>QUESTION {curr + 1}</p>
+      {streak >= 3 && <div style={{ background: "var(--warning-bg)", border: "1.5px solid #ca8a04", borderRadius: 10, padding: "6px 14px", marginBottom: 12, fontSize: 13, fontWeight: 700, color: "var(--warning-ink)", textAlign: "center" }}>{streak} in a row! Double points!</div>}
+      <div style={{ background: "var(--error-bg)", border: `2px solid ${accent}22`, borderRadius: 18, padding: "26px 24px", marginBottom: 20, textAlign: "center" }}>
+        <p style={{ fontSize: 12, fontWeight: 700, color: (C.isDark ? C.link : accent), letterSpacing: 1, marginBottom: 12 }}>QUESTION {curr + 1}</p>
         <p style={{ fontSize: 19, fontWeight: 600, color: C.text, lineHeight: 1.5 }}>{card.question}</p>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
         {visibleOpts.map((opt, i) => {
-          let bg = "#fff", border = `1.5px solid ${C.border}`, color = C.text;
+          let bg = "var(--app-surface)", border = `1.5px solid ${C.border}`, color = C.text;
           if (sel !== null) {
-            if (opt === card.answer) { bg = "#f0fdf4"; border = "2px solid #16a34a"; color = "#16a34a"; }
-            else if (opt === sel) { bg = "#fef2f2"; border = `2px solid ${accent}`; color = accent; }
+            if (opt === card.answer) { bg = "var(--success-bg)"; border = "2px solid #16a34a"; color = "var(--success-ink)"; }
+            else if (opt === sel) { bg = "var(--error-bg)"; border = `2px solid ${accent}`; color = accent; }
           }
           return (
             <button key={opt} onClick={() => choose(opt)} disabled={sel !== null}
               style={{ background: bg, border, borderRadius: 8, padding: "14px 12px", fontSize: 14, fontWeight: 600, color, cursor: sel !== null ? "default" : "pointer", textAlign: "left", display: "flex", gap: 10, alignItems: "center", transition: "all .15s" }}>
-              <span style={{ width: 24, height: 24, borderRadius: "50%", background: accent + "22", color: accent, fontSize: 12, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{OPTION_LABELS[i]}</span>
+              <span style={{ width: 24, height: 24, borderRadius: "50%", background: accent + "22", color: (C.isDark ? C.link : accent), fontSize: 12, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{OPTION_LABELS[i]}</span>
               {opt}
             </button>
           );
@@ -8185,11 +8199,11 @@ function QuizShow({ cards, onBack }) {
       </div>
       <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
         <button onClick={useFifty} disabled={!lifelines.fifty || sel !== null}
-          style={{ background: lifelines.fifty ? "#fef9c3" : "#f3f4f6", color: lifelines.fifty ? "#92400e" : C.muted, border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: lifelines.fifty ? "pointer" : "not-allowed" }}>
+          style={{ background: lifelines.fifty ? "var(--warning-bg)" : "var(--panel-soft)", color: lifelines.fifty ? "var(--warning-ink)" : C.muted, border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: lifelines.fifty ? "pointer" : "not-allowed" }}>
           50/50 {!lifelines.fifty ? "(used)" : ""}
         </button>
         <button onClick={useSkip} disabled={!lifelines.skip || sel !== null}
-          style={{ background: lifelines.skip ? "#eff6ff" : "#f3f4f6", color: lifelines.skip ? "#1d4ed8" : C.muted, border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: lifelines.skip ? "pointer" : "not-allowed" }}>
+          style={{ background: lifelines.skip ? "var(--panel-soft)" : "var(--panel-soft)", color: lifelines.skip ? "var(--app-link)" : C.muted, border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: lifelines.skip ? "pointer" : "not-allowed" }}>
           Skip {!lifelines.skip ? "(used)" : ""}
         </button>
       </div>
@@ -8237,11 +8251,11 @@ function RapidFire({ cards, onBack }) {
 
   if (done) return (
     <div style={{ maxWidth: 420, margin: "0 auto", textAlign: "center", padding: "40px 0" }}>
-      <div style={{ width:64,height:64,borderRadius:20,background:"#fef9c3",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px" }}><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ca8a04" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
+      <div style={{ width:64,height:64,borderRadius:20,background:"var(--warning-bg)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px" }}><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ca8a04" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
       <h2 style={{ fontFamily: "'Fraunces Variable',serif", fontSize: 28, fontWeight: 700, color: C.text, marginBottom: 8 }}>Time Up!</h2>
-      <p style={{ fontSize: 48, fontWeight: 700, color: accent, marginBottom: 4 }}>{score}</p>
+      <p style={{ fontSize: 48, fontWeight: 700, color: (C.isDark ? C.link : accent), marginBottom: 4 }}>{score}</p>
       <p style={{ fontSize: 16, color: C.muted, marginBottom: 28 }}>correct answers in {TOTAL_TIME}s</p>
-      <button onClick={onBack} style={{ background: accent, color: "#fff", border: "none", borderRadius: 8, padding: "13px 32px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>← Back to Games</button>
+      <button onClick={onBack} style={{ background: accent, color: primaryInk(accent, "#fff"), border: "none", borderRadius: 8, padding: "13px 32px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>← Back to Games</button>
     </div>
   );
 
@@ -8255,13 +8269,13 @@ function RapidFire({ cards, onBack }) {
           <Icon d={I.back} size={16} color={C.muted} /> All Games
         </button>
         <span style={{ fontSize: 28, fontWeight: 800, color: timeLeft <= 10 ? C.red : accent }}>{timeLeft}s</span>
-        <span style={{ fontSize: 16, fontWeight: 700, color: accent }}>✓ {score}</span>
+        <span style={{ fontSize: 16, fontWeight: 700, color: (C.isDark ? C.link : accent) }}>✓ {score}</span>
       </div>
       <div style={{ height: 8, background: C.border, borderRadius: 4, marginBottom: 20, overflow: "hidden" }}>
         <div style={{ height: "100%", width: `${pct}%`, background: timeLeft <= 10 ? C.red : accent, borderRadius: 4, transition: "width 1s linear, background .3s" }} />
       </div>
-      <div style={{ background: flash === "correct" ? "#f0fdf4" : flash === "wrong" ? "#fef2f2" : "#f8f9ff", border: `2px solid ${flash === "correct" ? "#16a34a" : flash === "wrong" ? C.red : accent}33`, borderRadius: 18, padding: "28px 24px", marginBottom: 20, textAlign: "center", transition: "all .2s" }}>
-        <p style={{ fontSize: 12, fontWeight: 700, color: accent, letterSpacing: 1, marginBottom: 10 }}>TYPE THE ANSWER</p>
+      <div style={{ background: flash === "correct" ? "var(--success-bg)" : flash === "wrong" ? "var(--error-bg)" : "var(--panel-soft)", border: `2px solid ${flash === "correct" ? "#16a34a" : flash === "wrong" ? C.red : accent}33`, borderRadius: 18, padding: "28px 24px", marginBottom: 20, textAlign: "center", transition: "all .2s" }}>
+        <p style={{ fontSize: 12, fontWeight: 700, color: (C.isDark ? C.link : accent), letterSpacing: 1, marginBottom: 10 }}>TYPE THE ANSWER</p>
         <p style={{ fontSize: 20, fontWeight: 600, color: C.text }}>{card.question}</p>
       </div>
       <div style={{ display: "flex", gap: 10 }}>
@@ -8270,7 +8284,7 @@ function RapidFire({ cards, onBack }) {
           placeholder="Answer…"
           style={{ flex: 1, border: `2px solid ${C.border}`, borderRadius: 12, padding: "12px 16px", fontSize: 15, outline: "none", color: C.text }} />
         <button onClick={submit} disabled={!inp.trim()}
-          style={{ background: accent, color: "#fff", border: "none", borderRadius: 8, padding: "12px 22px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>Go</button>
+          style={{ background: accent, color: primaryInk(accent, "#fff"), border: "none", borderRadius: 8, padding: "12px 22px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>Go</button>
       </div>
       <p style={{ textAlign: "center", color: C.muted, fontSize: 12, marginTop: 10 }}>Press Enter to submit fast!</p>
     </div>
@@ -8429,9 +8443,9 @@ Is the student correct? Reply only YES or NO.`
       <GHeader title="Voice Answer" score={score} curr={curr} total={deck.length} onBack={onBack} accent={accent} />
 
       {/* Question card */}
-      <div style={{ background: "#eaf3ef", border: `2px solid ${accent}22`, borderRadius: 20, padding: "30px 28px", marginBottom: 24, textAlign: "center" }}>
-        <p style={{ fontSize: 11, fontWeight: 700, color: accent, letterSpacing: 1, marginBottom: 14, textTransform: "uppercase" }}>Speak your answer</p>
-        <p style={{ fontSize: 21, fontWeight: 600, color: "#1a1a2e", lineHeight: 1.5 }}>{card.question}</p>
+      <div style={{ background: "var(--game-purple-bg)", border: `2px solid ${accent}22`, borderRadius: 20, padding: "30px 28px", marginBottom: 24, textAlign: "center" }}>
+        <p style={{ fontSize: 11, fontWeight: 700, color: (C.isDark ? C.link : accent), letterSpacing: 1, marginBottom: 14, textTransform: "uppercase" }}>Speak your answer</p>
+        <p style={{ fontSize: 21, fontWeight: 600, color: "var(--app-text)", lineHeight: 1.5 }}>{card.question}</p>
       </div>
 
       {/* Mic button */}
@@ -8453,7 +8467,7 @@ Is the student correct? Reply only YES or NO.`
               }
             }}
             style={{
-              width: 88, height: 88, borderRadius: "50%", border: "none", cursor: "pointer",
+              color: primaryInk(listening ? "#dc2626" : accent, "#fff"), width: 88, height: 88, borderRadius: "50%", border: "none", cursor: "pointer",
               background: listening ? "#dc2626" : accent,
               boxShadow: listening ? "0 0 0 12px rgba(220,38,38,.2), 0 0 0 24px rgba(220,38,38,.08)" : `0 4px 20px ${accent}44`,
               display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36,
@@ -8462,32 +8476,32 @@ Is the student correct? Reply only YES or NO.`
             }}>
             {listening ? <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>}
           </button>
-          <p style={{ marginTop: 14, fontSize: 13, color: listening ? "#dc2626" : voiceCountdown !== null ? "#7c3aed" : "#6b7280", fontWeight: 600 }}>
+          <p style={{ marginTop: 14, fontSize: 13, color: listening ? "var(--app-error)" : voiceCountdown !== null ? "var(--game-purple-ink)" : "var(--app-muted)", fontWeight: 600 }}>
             {listening ? "Listening… tap to stop" : voiceCountdown !== null ? "Tap mic to speak again" : "Tap to speak your answer"}
           </p>
           {transcript && !listening && !voiceCountdown && (
-            <p style={{ marginTop: 8, fontSize: 13, color: "#6b7280", fontStyle: "italic" }}>
+            <p style={{ marginTop: 8, fontSize: 13, color: "var(--app-muted)", fontStyle: "italic" }}>
               Heard: "{transcript}"
             </p>
           )}
           {listening && transcript && (
-            <p style={{ marginTop: 8, fontSize: 13, color: accent, fontStyle: "italic" }}>
+            <p style={{ marginTop: 8, fontSize: 13, color: (C.isDark ? C.link : accent), fontStyle: "italic" }}>
               "{transcript}"
             </p>
           )}
           {voiceCountdown !== null && (
             <div style={{ marginTop: 16, textAlign: "center" }}>
-              <p style={{ fontSize: 13, color: "#6b7280", marginBottom: 6, fontStyle: "italic" }}>Heard: "{transcript}"</p>
-              <div style={{ display: "inline-flex", alignItems: "center", gap: 10, background: "#f5f3ff", border: `2px solid ${accent}33`, borderRadius: 12, padding: "10px 20px" }}>
-                <div style={{ width: 36, height: 36, borderRadius: "50%", background: accent, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 800 }}>{voiceCountdown}</div>
+              <p style={{ fontSize: 13, color: "var(--app-muted)", marginBottom: 6, fontStyle: "italic" }}>Heard: "{transcript}"</p>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 10, background: "var(--game-purple-bg)", border: `2px solid ${accent}33`, borderRadius: 12, padding: "10px 20px" }}>
+                <div style={{ width: 36, height: 36, borderRadius: "50%", background: accent, color: primaryInk(accent, "#fff"), display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 800 }}>{voiceCountdown}</div>
                 <div>
-                  <p style={{ fontSize: 13, fontWeight: 700, color: accent }}>Submitting in {voiceCountdown}… tap mic to redo</p>
-                  <p style={{ fontSize: 11, color: "#6b7280" }}>Not right? tap Try again below</p>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: (C.isDark ? C.link : accent) }}>Submitting in {voiceCountdown}… tap mic to redo</p>
+                  <p style={{ fontSize: 11, color: "var(--app-muted)" }}>Not right? tap Try again below</p>
                 </div>
               </div>
               <div style={{ marginTop: 12 }}>
                 <button onClick={() => { clearInterval(countdownRef.current); setVoiceCountdown(null); setTranscript(""); }}
-                  style={{ background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 10, padding: "8px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                  style={{ background: "var(--panel-soft)", color: "var(--app-text)", border: "none", borderRadius: 10, padding: "8px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
                   Redo answer
                 </button>
               </div>
@@ -8502,7 +8516,7 @@ Is the student correct? Reply only YES or NO.`
           <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 10 }}>
             {[0,1,2].map(j => <div key={j} style={{ width: 8, height: 8, borderRadius: "50%", background: accent, animation: "bounce 1.2s infinite", animationDelay: `${j * .2}s` }} />)}
           </div>
-          <p style={{ fontSize: 13, color: "#6b7280" }}>Checking your answer…</p>
+          <p style={{ fontSize: 13, color: "var(--app-muted)" }}>Checking your answer…</p>
         </div>
       )}
 
@@ -8510,26 +8524,26 @@ Is the student correct? Reply only YES or NO.`
       {result !== null && (
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: 52, marginBottom: 12 }}>{result.ok ? <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg> : <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.red} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>}</div>
-          <p style={{ fontSize: 18, fontWeight: 700, color: result.ok ? "#16a34a" : "#dc2626", marginBottom: 8 }}>
+          <p style={{ fontSize: 18, fontWeight: 700, color: result.ok ? "var(--success-ink)" : "var(--app-error)", marginBottom: 8 }}>
             {result.ok ? "Correct!" : "Not quite"}
           </p>
-          <div style={{ background: "#f9fafb", border: `1px solid ${result.ok ? "#16a34a" : "#dc2626"}33`, borderRadius: 12, padding: "14px 18px", marginBottom: 20, textAlign: "left" }}>
-            <p style={{ fontSize: 12, color: "#6b7280", marginBottom: 4 }}>You said:</p>
-            <p style={{ fontSize: 14, color: "#1a1a2e", fontStyle: "italic", marginBottom: result.ok ? 0 : 10 }}>"{result.heard}"</p>
+          <div style={{ background: "var(--panel-soft)", border: `1px solid ${result.ok ? "#16a34a" : "#dc2626"}33`, borderRadius: 12, padding: "14px 18px", marginBottom: 20, textAlign: "left" }}>
+            <p style={{ fontSize: 12, color: "var(--app-muted)", marginBottom: 4 }}>You said:</p>
+            <p style={{ fontSize: 14, color: "var(--app-text)", fontStyle: "italic", marginBottom: result.ok ? 0 : 10 }}>"{result.heard}"</p>
             {!result.ok && (
               <>
-                <p style={{ fontSize: 12, color: "#6b7280", marginBottom: 4 }}>Correct answer:</p>
-                <p style={{ fontSize: 14, fontWeight: 700, color: "#16a34a" }}>{result.correct}</p>
+                <p style={{ fontSize: 12, color: "var(--app-muted)", marginBottom: 4 }}>Correct answer:</p>
+                <p style={{ fontSize: 14, fontWeight: 700, color: "var(--success-ink)" }}>{result.correct}</p>
               </>
             )}
           </div>
           <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
             <button onClick={() => { clearInterval(countdownRef.current); setVoiceCountdown(null); setResult(null); setTranscript(""); }}
-              style={{ background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 8, padding: "11px 22px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+              style={{ background: "var(--panel-soft)", color: "var(--app-text)", border: "none", borderRadius: 8, padding: "11px 22px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
               Try again
             </button>
             <button onClick={next}
-              style={{ background: accent, color: "#fff", border: "none", borderRadius: 8, padding: "11px 22px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+              style={{ background: accent, color: primaryInk(accent, "#fff"), border: "none", borderRadius: 8, padding: "11px 22px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
               {curr + 1 >= deck.length ? "See Results" : "Next →"}
             </button>
           </div>
@@ -8545,7 +8559,7 @@ Is the student correct? Reply only YES or NO.`
 // player taps letter tiles to fill it in (no typing).
 function WordFill({ cards, onBack }) {
   const accent = "#ea580c";
-  const accentL = "#fff7ed";
+  const accentL = "var(--warning-bg)";
 
   // For each card, prepare a "blank" puzzle. We'll do this lazily per card.
   const [deck] = useState(() => [...cards].sort(() => Math.random() - .5).slice(0, 12));
@@ -8652,12 +8666,12 @@ Return ONLY this JSON: {"word":"THEWORD","sentence":"The answer with _____ where
       <GHeader title="Word Fill" score={score} curr={curr} total={deck.length} onBack={onBack} accent={accent} />
 
       {/* Question */}
-      <div style={{ background: "#fff7ed", border: `1.5px solid ${accent}33`, borderRadius: 18, padding: "20px 22px", marginBottom: 14 }}>
-        <p style={{ fontSize: 11, fontWeight: 700, color: accent, letterSpacing: 1, textTransform: "uppercase", marginBottom: 7 }}>Fill in the blank</p>
-        <p style={{ fontSize: 15, fontWeight: 600, color: "#1a1a2e", lineHeight: 1.55, marginBottom: 10 }}>{card.question}</p>
+      <div style={{ background: "var(--warning-bg)", border: `1.5px solid ${accent}33`, borderRadius: 18, padding: "20px 22px", marginBottom: 14 }}>
+        <p style={{ fontSize: 11, fontWeight: 700, color: (C.isDark ? C.link : accent), letterSpacing: 1, textTransform: "uppercase", marginBottom: 7 }}>Fill in the blank</p>
+        <p style={{ fontSize: 15, fontWeight: 600, color: "var(--app-text)", lineHeight: 1.55, marginBottom: 10 }}>{card.question}</p>
         {/* Sentence with blank */}
         {puzzle && !loading && (
-          <p style={{ fontSize: 17, color: "#374151", lineHeight: 1.7, background: "#fff", borderRadius: 10, padding: "12px 14px", border: `1px solid ${accent}22` }}>
+          <p style={{ fontSize: 17, color: "var(--app-text)", lineHeight: 1.7, background: "var(--app-surface)", borderRadius: 10, padding: "12px 14px", border: `1px solid ${accent}22` }}>
             {puzzle.sentence.replace("_____",
               placed.length > 0
                 ? `[${placed.map(t => t.letter).join("")}]`
@@ -8665,7 +8679,7 @@ Return ONLY this JSON: {"word":"THEWORD","sentence":"The answer with _____ where
             )}
           </p>
         )}
-        {loading && <div style={{ textAlign: "center", padding: "20px 0", color: "#999", fontSize: 13 }}>Preparing puzzle…</div>}
+        {loading && <div style={{ textAlign: "center", padding: "20px 0", color: "var(--app-muted)", fontSize: 13 }}>Preparing puzzle…</div>}
       </div>
 
       {/* Answer tray */}
@@ -8673,23 +8687,23 @@ Return ONLY this JSON: {"word":"THEWORD","sentence":"The answer with _____ where
         <>
           <div style={{
             minHeight: 58, padding: "10px 12px", marginBottom: 10,
-            background: result === "correct" ? "#f0fdf4" : result === "wrong" ? "#fff1f1" : "#f9fafb",
+            background: result === "correct" ? "var(--success-bg)" : result === "wrong" ? "var(--error-bg)" : "var(--panel-soft)",
             border: `2.5px ${result ? "solid" : "dashed"} ${result === "correct" ? "#16a34a" : result === "wrong" ? "#dc2626" : accent}`,
             borderRadius: 14, display: "flex", flexWrap: "wrap", gap: 7, alignItems: "center", transition: "all .2s"
           }}>
             {placed.length === 0 && !result && (
-              <span style={{ color: "#9ca3af", fontSize: 13, fontStyle: "italic" }}>Tap letters to build the missing word…</span>
+              <span style={{ color: "var(--app-muted)", fontSize: 13, fontStyle: "italic" }}>Tap letters to build the missing word…</span>
             )}
             {placed.map(tile => (
               <button key={tile.id} onClick={() => removeTile(tile.id)} disabled={!!result}
-                style={{ width: 42, height: 46, background: result === "correct" ? "#16a34a" : result === "wrong" ? "#dc2626" : accent, color: "#fff", border: "none", borderRadius: 10, fontSize: 20, fontWeight: 800, cursor: result ? "default" : "pointer", boxShadow: "0 2px 8px rgba(0,0,0,.18)" }}>
+                style={{ width: 42, height: 46, background: result === "correct" ? "#16a34a" : result === "wrong" ? "#dc2626" : accent, color: primaryInk(result === "correct" ? "#16a34a" : result === "wrong" ? "#dc2626" : accent, "#fff"), border: "none", borderRadius: 10, fontSize: 20, fontWeight: 800, cursor: result ? "default" : "pointer", boxShadow: "0 2px 8px rgba(0,0,0,.18)" }}>
                 {tile.letter}
               </button>
             ))}
           </div>
 
           {result && (
-            <p style={{ textAlign: "center", marginBottom: 10, fontSize: 15, fontWeight: 700, color: result === "correct" ? "#16a34a" : "#dc2626" }}>
+            <p style={{ textAlign: "center", marginBottom: 10, fontSize: 15, fontWeight: 700, color: result === "correct" ? "var(--success-ink)" : "var(--app-error)" }}>
               {result === "correct" ? "Correct!" : `Answer: ${puzzle.word}`}
             </p>
           )}
@@ -8699,7 +8713,7 @@ Return ONLY this JSON: {"word":"THEWORD","sentence":"The answer with _____ where
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", padding: "6px 0 14px" }}>
               {pool.map(tile => (
                 <button key={tile.id} onClick={() => pickTile(tile)} disabled={tile.used}
-                  style={{ width: 48, height: 54, background: tile.used ? "#e5e7eb" : accentL, color: tile.used ? "#9ca3af" : accent, border: `2.5px solid ${tile.used ? "#d1d5db" : accent}`, borderRadius: 8, fontSize: 22, fontWeight: 800, cursor: tile.used ? "default" : "pointer", transition: "all .14s", transform: tile.used ? "scale(.88)" : "scale(1)", boxShadow: tile.used ? "none" : "0 3px 10px rgba(0,0,0,.12)", opacity: tile.used ? 0.4 : 1 }}>
+                  style={{ width: 48, height: 54, background: tile.used ? "var(--app-border)" : accentL, color: tile.used ? "var(--app-muted)" : accent, border: `2.5px solid ${tile.used ? "#d1d5db" : accent}`, borderRadius: 8, fontSize: 22, fontWeight: 800, cursor: tile.used ? "default" : "pointer", transition: "all .14s", transform: tile.used ? "scale(.88)" : "scale(1)", boxShadow: tile.used ? "none" : "0 3px 10px rgba(0,0,0,.12)", opacity: tile.used ? 0.4 : 1 }}>
                   {tile.letter}
                 </button>
               ))}
@@ -8709,14 +8723,14 @@ Return ONLY this JSON: {"word":"THEWORD","sentence":"The answer with _____ where
           {!result ? (
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={clearAll} disabled={placed.length === 0}
-                style={{ flex: 1, background: "#eee", color: placed.length > 0 ? "#555" : "#bbb", border: "none", borderRadius: 8, padding: "12px", fontSize: 14, fontWeight: 700, cursor: placed.length > 0 ? "pointer" : "not-allowed" }}>Clear</button>
+                style={{ flex: 1, background: "var(--panel-soft)", color: placed.length > 0 ? "var(--app-muted)" : "#bbb", border: "none", borderRadius: 8, padding: "12px", fontSize: 14, fontWeight: 700, cursor: placed.length > 0 ? "pointer" : "not-allowed" }}>Clear</button>
               <button onClick={check} disabled={placed.length === 0 || checking}
-                style={{ flex: 2, background: placed.length > 0 ? accent : "#ccc", color: "#fff", border: "none", borderRadius: 8, padding: "12px", fontSize: 15, fontWeight: 700, cursor: placed.length > 0 ? "pointer" : "not-allowed" }}>
+                style={{ flex: 2, background: placed.length > 0 ? accent : "#ccc", color: primaryInk(placed.length > 0 ? accent : "#ccc", "#fff"), border: "none", borderRadius: 8, padding: "12px", fontSize: 15, fontWeight: 700, cursor: placed.length > 0 ? "pointer" : "not-allowed" }}>
                 {checking ? "Checking…" : `Check (${placed.length}/${pool.length})`}
               </button>
             </div>
           ) : (
-            <button onClick={next} style={{ width: "100%", background: accent, color: "#fff", border: "none", borderRadius: 8, padding: "13px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
+            <button onClick={next} style={{ width: "100%", background: accent, color: primaryInk(accent, "#fff"), border: "none", borderRadius: 8, padding: "13px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
               {curr + 1 >= deck.length ? "See Results" : "Next →"}
             </button>
           )}
@@ -8731,7 +8745,7 @@ Return ONLY this JSON: {"word":"THEWORD","sentence":"The answer with _____ where
 // They answer by typing. AI judges correctness.
 function ListeningGame({ cards, onBack }) {
   const accent  = "#059669";
-  const accentL = "#f0fdf4";
+  const accentL = "var(--success-bg)";
 
   // ── Uses shared GLOBAL_PERSONAS + getSmartVoice ──────────────────────────
   const [allVoices,    setAllVoices]    = useState([]);
@@ -8819,45 +8833,45 @@ function ListeningGame({ cards, onBack }) {
       {/* Voice picker */}
       <div style={{ marginBottom:14 }}>
         <button onClick={() => setShowVoicePick(v => !v)}
-          style={{ display:"flex", alignItems:"center", gap:7, background:"#fff", border:`1.5px solid ${showVoicePick?accent:"#e5e7eb"}`, borderRadius:8, padding:"6px 14px", fontSize:12, fontWeight:700, cursor:"pointer", color:showVoicePick?accent:"#6b7280" }}>
+          style={{ display:"flex", alignItems:"center", gap:7, background:"var(--app-surface)", border:`1.5px solid ${showVoicePick?accent:"var(--app-border)"}`, borderRadius:8, padding:"6px 14px", fontSize:12, fontWeight:700, cursor:"pointer", color:showVoicePick?accent:"var(--app-muted)" }}>
           Voice: {persona.label} ▾
         </button>
         {showVoicePick && (
-          <div style={{ marginTop:8, background:"#fff", border:"1.5px solid #e5e7eb", borderRadius:14, padding:"10px 12px", display:"flex", flexWrap:"wrap", gap:8 }}>
+          <div style={{ marginTop:8, background:"var(--app-surface)", border:"1.5px solid #e5e7eb", borderRadius:14, padding:"10px 12px", display:"flex", flexWrap:"wrap", gap:8 }}>
             {GLOBAL_PERSONAS.map((p, i) => (
               <button key={p.id} onClick={() => { setPersonaIdx(i); setShowVoicePick(false); }}
                 style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", borderRadius:8, border:"none", cursor:"pointer", fontSize:12, fontWeight:700,
-                  background: personaIdx===i ? accent : "#f3f4f6",
-                  color: personaIdx===i ? "#fff" : "#374151",
+                  background: personaIdx===i ? accent : "var(--panel-soft)",
+                  color: personaIdx===i ? primaryInk(personaIdx===i ? accent : "var(--panel-soft)", "#fff") : "var(--app-text)",
                   boxShadow: personaIdx===i ? `0 2px 10px ${accent}44` : "none" }}>
                 <span style={{width:10,height:10,borderRadius:"50%",background:p.color,display:"inline-block",flexShrink:0,verticalAlign:"middle",marginRight:5}}></span>{p.label}
               </button>
             ))}
-            <p style={{ width:"100%", fontSize:10, color:"#9ca3af", marginTop:4 }}>Using: {getSmartVoiceLabel(personaIdx, allVoices, "en-US")} · ♀ = Female · ♂ = Male</p>
+            <p style={{ width:"100%", fontSize:10, color:"var(--app-muted)", marginTop:4 }}>Using: {getSmartVoiceLabel(personaIdx, allVoices, "en-US")} · ♀ = Female · ♂ = Male</p>
           </div>
         )}
       </div>
 
       {/* Audio card */}
-      <div style={{ background: speaking?"#ecfdf5":accentL, border:`2px solid ${speaking?accent:accent+"33"}`, borderRadius:20, padding:"28px 24px", marginBottom:18, textAlign:"center", transition:"all .3s" }}>
+      <div style={{ background: speaking?"var(--success-bg)":accentL, border:`2px solid ${speaking?accent:accent+"33"}`, borderRadius:20, padding:"28px 24px", marginBottom:18, textAlign:"center", transition:"all .3s" }}>
         <div style={{ fontSize:46, marginBottom:12 }}>{speaking ? <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg> : <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>}</div>
-        <p style={{ fontSize:14, color:speaking?accent:"#6b7280", fontWeight:600, marginBottom:16 }}>
+        <p style={{ fontSize:14, color:speaking?accent:"var(--app-muted)", fontWeight:600, marginBottom:16 }}>
           {speaking ? "Listen carefully…" : hasPlayed ? "Choose the correct answer below" : "Press play to hear the question"}
         </p>
         <div style={{ display:"flex", gap:10, justifyContent:"center", flexWrap:"wrap" }}>
           <button onClick={() => speak(card.question)} disabled={speaking}
-            style={{ background:accent, color:"#fff", border:"none", borderRadius:8, padding:"10px 22px", fontSize:14, fontWeight:700, cursor:speaking?"not-allowed":"pointer", opacity:speaking?.6:1, display:"flex", alignItems:"center", gap:7 }}>
+            style={{ background:accent, color:primaryInk(accent, "#fff"), border:"none", borderRadius:8, padding:"10px 22px", fontSize:14, fontWeight:700, cursor:speaking?"not-allowed":"pointer", opacity:speaking?.6:1, display:"flex", alignItems:"center", gap:7 }}>
             {speaking ? "Playing…" : "Play Question"}
           </button>
           {hasPlayed && !result && (
             <button onClick={() => setRevealed(r => !r)}
-              style={{ background:"#fff", color:"#6b7280", border:"1.5px solid #e5e7eb", borderRadius:8, padding:"10px 16px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+              style={{ background:"var(--app-surface)", color:"var(--app-muted)", border:"1.5px solid #e5e7eb", borderRadius:8, padding:"10px 16px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
               {revealed ? "Hide" : "Peek"}
             </button>
           )}
         </div>
         {revealed && !result && (
-          <p style={{ marginTop:12, fontSize:15, color:"#374151", fontStyle:"italic", background:"#fff", borderRadius:10, padding:"10px 14px", border:"1px solid #e5e7eb" }}>
+          <p style={{ marginTop:12, fontSize:15, color:"var(--app-text)", fontStyle:"italic", background:"var(--app-surface)", borderRadius:10, padding:"10px 14px", border:"1px solid #e5e7eb" }}>
             "{card.question}"
           </p>
         )}
@@ -8865,7 +8879,7 @@ function ListeningGame({ cards, onBack }) {
 
       {/* A/B/C/D choices */}
       {!hasPlayed ? (
-        <div style={{ textAlign:"center", padding:"18px", background:"#f9fafb", borderRadius:16, color:"#9ca3af", fontSize:14, fontWeight:600 }}>
+        <div style={{ textAlign:"center", padding:"18px", background:"var(--panel-soft)", borderRadius:16, color:"var(--app-muted)", fontSize:14, fontWeight:600 }}>
           Listen to the question first, then choose your answer
         </div>
       ) : (
@@ -8873,20 +8887,20 @@ function ListeningGame({ cards, onBack }) {
           {choices.map((choice, idx) => {
             const isCorrect = choice === card.answer;
             const isSelected = selected === idx;
-            let bg = "#fff", border = "#e5e7eb", col = "#374151";
+            let bg = "var(--app-surface)", border = "var(--app-border)", col = "var(--app-text)";
             if (result) {
-              if (isCorrect) { bg="#f0fdf4"; border="#16a34a"; col="#16a34a"; }
-              else if (isSelected && !isCorrect) { bg="#fff1f1"; border="#dc2626"; col="#dc2626"; }
+              if (isCorrect) { bg="var(--success-bg)"; border="#16a34a"; col="var(--success-ink)"; }
+              else if (isSelected && !isCorrect) { bg="var(--error-bg)"; border="#dc2626"; col="var(--app-error)"; }
             } else if (isSelected) {
-              bg="#eff6ff"; border="#3b82f6"; col="#1d4ed8";
+              bg="var(--panel-soft)"; border="#3b82f6"; col="var(--app-link)";
             }
             return (
               <button key={idx} onClick={() => choose(idx)} disabled={!!result || !hasPlayed}
                 style={{ display:"flex", alignItems:"center", gap:14, width:"100%", padding:"14px 16px",
                   background:bg, border:`2px solid ${border}`, borderRadius:8, cursor:result?"default":"pointer",
                   textAlign:"left", transition:"all .18s", boxShadow: isSelected && !result?"0 2px 12px rgba(59,130,246,.2)":"none" }}>
-                <span style={{ width:34, height:34, borderRadius:"50%", background:result?(isCorrect?"#16a34a":isSelected?"#dc2626":"#e5e7eb"):"#4361ee",
-                  color:result?(isCorrect||isSelected?"#fff":"#9ca3af"):"#fff", display:"flex", alignItems:"center", justifyContent:"center",
+                <span style={{ width:34, height:34, borderRadius:"50%", background:result?(isCorrect?"#16a34a":isSelected?"#dc2626":"var(--app-border)"):"#4361ee",
+                  color:result?(isCorrect||isSelected?primaryInk(result?(isCorrect?"#16a34a":isSelected?"#dc2626":"var(--app-border)"):"#4361ee", "#fff"):"var(--app-muted)"):primaryInk(result?(isCorrect?"#16a34a":isSelected?"#dc2626":"var(--app-border)"):"#4361ee", "#fff"), display:"flex", alignItems:"center", justifyContent:"center",
                   fontSize:14, fontWeight:900, flexShrink:0, transition:"all .18s" }}>
                   {LABELS[idx]}
                 </span>
@@ -8901,21 +8915,21 @@ function ListeningGame({ cards, onBack }) {
 
       {/* Result feedback */}
       {result && (
-        <div style={{ marginTop:14, background:result==="correct"?"#f0fdf4":"#fff1f1", border:`1.5px solid ${result==="correct"?"#16a34a":"#dc2626"}33`, borderRadius:14, padding:"16px 18px", textAlign:"center" }}>
-          <p style={{ fontSize:16, fontWeight:700, color:result==="correct"?"#16a34a":"#dc2626", marginBottom:result==="correct"?0:8 }}>
+        <div style={{ marginTop:14, background:result==="correct"?"var(--success-bg)":"var(--error-bg)", border:`1.5px solid ${result==="correct"?"#16a34a":"#dc2626"}33`, borderRadius:14, padding:"16px 18px", textAlign:"center" }}>
+          <p style={{ fontSize:16, fontWeight:700, color:result==="correct"?"var(--success-ink)":"var(--app-error)", marginBottom:result==="correct"?0:8 }}>
             {result === "correct" ? "Correct!" : "Not quite"}
           </p>
           {result !== "correct" && (
             <>
-              <p style={{ fontSize:12, color:"#6b7280", marginBottom:4 }}>Correct answer:</p>
-              <p style={{ fontSize:14, fontWeight:700, color:"#374151" }}>{card.answer}</p>
+              <p style={{ fontSize:12, color:"var(--app-muted)", marginBottom:4 }}>Correct answer:</p>
+              <p style={{ fontSize:14, fontWeight:700, color:"var(--app-text)" }}>{card.answer}</p>
             </>
           )}
         </div>
       )}
 
       {result && (
-        <button onClick={next} style={{ marginTop:12, width:"100%", background:accent, color:"#fff", border:"none", borderRadius:8, padding:"13px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
+        <button onClick={next} style={{ marginTop:12, width:"100%", background:accent, color:primaryInk(accent, "#fff"), border:"none", borderRadius:8, padding:"13px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
           {curr + 1 >= deck.length ? "See Results" : "Next →"}
         </button>
       )}

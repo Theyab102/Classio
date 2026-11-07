@@ -1,3 +1,4 @@
+import ChoiceMenu from "./ChoiceMenu";
 import { useEffect, useSyncExternalStore } from "react";
 
 const key = "classio_theme";
@@ -63,10 +64,10 @@ export function useThemeMode() {
 export function ThemeSelector() {
   const { mode, setMode } = useThemeMode();
   return <label className="theme-selector"><span className="theme-label">Appearance</span>
-    <select aria-label="Appearance" value={mode} onChange={event => setMode(event.target.value)}>
+    <ChoiceMenu aria-label="Appearance" value={mode} onChange={event => setMode(event.target.value)}>
       <option value="system">Use device setting</option>
       <option value="light">Light</option>
       <option value="dark">Dark</option>
-    </select>
+    </ChoiceMenu>
   </label>;
 }

@@ -1,3 +1,4 @@
+import ChoiceMenu from "./ChoiceMenu";
 import { useMemo, useState } from "react";
 import ActionMenu from "./ActionMenu";
 import UiIcon from "./UiIcon";
@@ -54,8 +55,8 @@ export default function LibraryHome({ folders, guest, signIn, signInPending, sig
       <div className="recent-grid">{recent.map(({ file, folder }) => <button key={file.id} onClick={() => openFile(file, folder)}><UiIcon name={materialKind(file).icon} /><span><strong>{file.name}</strong><small>{folder.id === "inbox" ? "Library" : folder.name}</small></span><UiIcon name="arrow" size={16} /></button>)}</div></section>}
     <section className="library-materials" aria-label="Learning materials"><div className="section-heading"><h2>Your materials</h2><button className="text-button" onClick={newFolder}><UiIcon name="plus" size={15} />New folder</button></div>
       <div className="library-filters"><label className="library-search"><UiIcon name="search" /><input type="search" aria-label="Search library" placeholder="Search notes, files or folders" value={query} onChange={event => setQuery(event.target.value)} /></label>
-        <select aria-label="Filter materials" value={filter} onChange={event => setFilter(event.target.value)}><option value="all">All materials</option><option value="notes">Notes & courses</option><option value="documents">Documents</option><option value="audio">Audio</option><option value="links">Links</option></select>
-        <select aria-label="Sort materials" value={sort} onChange={event => setSort(event.target.value)}><option value="recent">Recently opened</option><option value="name">Name A–Z</option><option value="type">File type</option></select>
+        <ChoiceMenu aria-label="Filter materials" value={filter} onChange={event => setFilter(event.target.value)}><option value="all">All materials</option><option value="notes">Notes & courses</option><option value="documents">Documents</option><option value="audio">Audio</option><option value="links">Links</option></ChoiceMenu>
+        <ChoiceMenu aria-label="Sort materials" value={sort} onChange={event => setSort(event.target.value)}><option value="recent">Recently opened</option><option value="name">Name A–Z</option><option value="type">File type</option></ChoiceMenu>
         <button className="quiet-button library-layout-toggle" aria-label={layout === "grid" ? "Switch to list view" : "Switch to card view"} onClick={() => setLayout(value => value === "grid" ? "list" : "grid")}><UiIcon name={layout === "grid" ? "list" : "grid"} /></button></div>
       {!!matchedFolders.length && filter === "all" && <div className="library-folder-grid" aria-label="Folders">{matchedFolders.map(folder => <article className="folder-card" key={folder.id}>
         <button className="folder-open" aria-label={`Open folder ${folder.name}`} onClick={() => openFolder(folder)}><span style={{ color: folder.color || "var(--app-link)" }}><UiIcon name="folder" size={28} /></span><strong>{folder.name}</strong><small>{folder.files?.length || 0} {(folder.files?.length || 0) === 1 ? "file" : "files"}</small></button>

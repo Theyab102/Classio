@@ -1,10 +1,11 @@
 const { providerKey, credentialId } = require("./ai-settings");
 class ProviderError extends Error {
-  constructor(status, code, retryable = false) {
+  constructor(status, code, retryable = false, retryAfter = 0) {
     super(code);
     this.status = status;
     this.code = code;
     this.retryable = retryable;
+    this.retryAfter = retryAfter;
   }
 }
 
@@ -19,7 +20,7 @@ function availableProviders(env = process.env) {
 }
 
 const models = new Map(), failures = new Map();
-async function chooseModel(provider, input, env, fetcher) {
+async function chooseModel(provider, input, env, fetcher, tried = []) {
   const explicit = provider === "gemini" ? env.GEMINI_MODEL : input.vision ? env.GROQ_VISION_MODEL : env.GROQ_TEXT_MODEL;
   if (explicit && /^[\w./-]+$/.test(explicit)) return explicit.replace(/^models\//, "");
   const key = credentialId(provider, env);
@@ -42,8 +43,11 @@ async function chooseModel(provider, input, env, fetcher) {
   }
   const preferred = provider === "gemini" ? ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-pro"]
     : input.vision ? ["meta-llama/llama-4-scout-17b-16e-instruct", "meta-llama/llama-4-maverick-17b-128e-instruct"]
-      : ["llama-3.3-70b-versatile", "openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama-3.1-8b-instant"];
-  const model = preferred.find(id => catalog.ids.includes(id)) || (provider === "gemini" ? catalog.ids.find(id => /^gemini-.*flash/.test(id) && !/image|audio|tts|live/.test(id)) : null);
+      : input.maxTokens <= 1600 ? ["llama-3.1-8b-instant", "openai/gpt-oss-20b", "llama-3.3-70b-versatile", "openai/gpt-oss-120b"]
+        : ["llama-3.3-70b-versatile", "openai/gpt-oss-20b", "openai/gpt-oss-120b", "llama-3.1-8b-instant"];
+  const usable = id => !tried.includes(id) && !(failures.get(key + ":" + id)?.until > Date.now());
+  const model = preferred.find(id => catalog.ids.includes(id) && usable(id)) || (provider === "gemini" ? catalog.ids.find(id => /^gemini-.*flash/.test(id) && !/image|audio|tts|live/.test(id) && usable(id)) : null);
+  if (!model && preferred.some(id => catalog.ids.includes(id) && failures.get(key + ":" + id)?.code === "PROVIDER_RATE_LIMIT")) throw new ProviderError(429, "PROVIDER_RATE_LIMIT", true, 30);
   if (!model) throw new ProviderError(503, input.vision ? "VISION_MODEL_UNAVAILABLE" : "MODEL_UNAVAILABLE", true);
   return model;
 }
@@ -77,10 +81,11 @@ function audioMime(filename) {
     wav: "audio/wav", webm: "audio/webm", ogg: "audio/ogg", flac: "audio/flac" }[extension];
 }
 
-async function providerResponse(provider, input, env, fetcher) {
-  if (provider === "gemini") return fetcher(`https://generativelanguage.googleapis.com/v1beta/models/${await chooseModel("gemini", input, env, fetcher)}:generateContent`, {
+async function providerResponse(provider, input, env, fetcher, model, deadline) {
+  const timeout = () => AbortSignal.timeout(Math.max(1, Math.min(provider === "groq" ? 14000 : 18000, deadline - Date.now())));
+  if (provider === "gemini") return fetcher(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": providerKey("gemini", env) },
-    body: JSON.stringify(geminiPayload(input)), signal: AbortSignal.timeout(18000),
+    body: JSON.stringify(geminiPayload(input)), signal: timeout(),
   });
   const base = "https://api.groq.com/openai/v1";
   if (input.audio) {
@@ -88,29 +93,34 @@ async function providerResponse(provider, input, env, fetcher) {
     body.set("model", "whisper-large-v3-turbo");
     body.set("file", new Blob([Buffer.from(input.audio, "base64")]), input.filename);
     return fetcher(`${base}/audio/transcriptions`, { method: "POST", headers: { Authorization: `Bearer ${providerKey("groq", env)}` },
-      body, signal: AbortSignal.timeout(18000) });
+      body, signal: timeout() });
   }
   return fetcher(`${base}/chat/completions`, {
     method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${providerKey("groq", env)}` },
-    body: JSON.stringify({ model: await chooseModel("groq", input, env, fetcher),
-      messages: input.messages, max_completion_tokens: input.maxTokens }), signal: AbortSignal.timeout(18000),
+    body: JSON.stringify({ model,
+      messages: input.messages, max_completion_tokens: input.maxTokens }), signal: timeout(),
   });
 }
 
-async function runProvider(provider, input, env, fetcher) {
+async function runProvider(provider, input, env, fetcher, model, deadline) {
   let response;
-  try { response = await providerResponse(provider, input, env, fetcher); }
+  try { response = await providerResponse(provider, input, env, fetcher, model, deadline); }
   catch (error) { if (error instanceof ProviderError) throw error; throw new ProviderError(503, "NETWORK", true); }
   if (!response.ok) {
     let details;
     try { details = await response.json(); } catch {}
     if (["content_policy_violation", "moderation_blocked"].includes(details?.error?.code)) throw new ProviderError(422, "CONTENT_BLOCKED");
-    const code = response.status === 401 || response.status === 403 ? "CREDENTIALS_REJECTED" : response.status === 429 ? "PROVIDER_RATE_LIMIT" : `HTTP_${response.status}`;
+    const unavailable = ["model_decommissioned", "model_not_found"].includes(details?.error?.code);
+    const tooLarge = response.status === 413 || (response.status === 429 && /request too large/i.test(details?.error?.message || ""));
+    const code = response.status === 401 || response.status === 403 ? "CREDENTIALS_REJECTED" : tooLarge ? "REQUEST_TOO_LARGE" : response.status === 429 ? "PROVIDER_RATE_LIMIT" : unavailable ? "MODEL_UNAVAILABLE" : `HTTP_${response.status}`;
+    const seconds = Math.min(Math.max(Number(response.headers?.get?.("retry-after")) || (response.status === 429 ? 60 : 300), 1), 600);
     if ([401, 403, 429].includes(response.status)) {
-      const seconds = Number(response.headers?.get?.("retry-after")) || (response.status === 429 ? 60 : 300);
-      failures.set(credentialId(provider, env), { until: Date.now() + Math.min(Math.max(seconds, 30), 600) * 1000, code });
+      // A token limit belongs to the selected model, not every tool on the key.
+      // Oversized requests must not disable later small requests at all.
+      if (!tooLarge) failures.set(credentialId(provider, env) + (response.status === 429 ? ":" + (model || (input.audio ? "audio" : "gemini")) : ""), { until: Date.now() + seconds * 1000, code });
     }
-    throw new ProviderError(response.status === 429 ? 429 : 502, code, [401, 403, 404, 408, 429].includes(response.status) || response.status >= 500);
+    if (unavailable && model) failures.set(credentialId(provider, env) + ":" + model, { until: Date.now() + 300000, code });
+    throw new ProviderError(tooLarge ? 422 : response.status === 429 ? 429 : 502, code, unavailable || [401, 403, 404, 408, 413, 429].includes(response.status) || response.status >= 500, response.status === 429 && !tooLarge ? seconds : 0);
   }
   let data;
   try { data = await response.json(); } catch { throw new ProviderError(502, "INVALID_RESPONSE", true); }
@@ -133,12 +143,24 @@ async function runProvider(provider, input, env, fetcher) {
 async function generateStudy(input, { env = process.env, fetcher = global.fetch, report = () => {} } = {}) {
   const providers = availableProviders(env);
   if (!providers.length) throw new ProviderError(503, "NOT_CONFIGURED");
-  let last;
+  let last; const deadline = Date.now() + 40000;
   for (const provider of providers) {
     try {
       const blocked = failures.get(credentialId(provider, env));
       if (blocked?.until > Date.now()) throw new ProviderError(blocked.code === "PROVIDER_RATE_LIMIT" ? 429 : 502, blocked.code, true);
-      return { text: await runProvider(provider, input, env, fetcher), provider };
+      const explicit = input.vision ? env.GROQ_VISION_MODEL : env.GROQ_TEXT_MODEL;
+      const attempts = provider === "groq" && !input.audio && !explicit ? 2 : 1, tried = [];
+      for (let attempt = 0; attempt < attempts; attempt++) {
+        const model = provider === "groq" && input.audio ? undefined : await chooseModel(provider, input, env, fetcher, tried);
+        const cooldown = failures.get(credentialId(provider, env) + ":" + (model || "audio"));
+        if (cooldown?.until > Date.now()) throw new ProviderError(cooldown.code === "PROVIDER_RATE_LIMIT" ? 429 : 503, cooldown.code, true, Math.ceil((cooldown.until - Date.now()) / 1000));
+        if (model) tried.push(model);
+        try { return { text: await runProvider(provider, input, env, fetcher, model, deadline), provider }; }
+        catch (error) {
+          if (!(error instanceof ProviderError) || !error.retryable || error.code === "CREDENTIALS_REJECTED" || attempt === attempts - 1 || Date.now() >= deadline) throw error;
+          report({ provider, code: error.code });
+        }
+      }
     }
     catch (error) {
       if (!(error instanceof ProviderError)) throw error;

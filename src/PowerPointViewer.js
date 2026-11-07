@@ -52,7 +52,7 @@ const relsFor = (zip, name) => {
 };
 const resolved = (path, target) => new URL(target, `https://classio.local/${path}`).pathname.slice(1);
 
-async function readSlides(file) {
+export async function readSlides(file) {
   const { default: JSZip } = await import("jszip");
   const zip = await JSZip.loadAsync(await file.arrayBuffer());
   const presentationName = "ppt/presentation.xml";

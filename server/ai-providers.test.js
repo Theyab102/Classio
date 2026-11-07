@@ -99,3 +99,27 @@ test("a rejected credential is not repeatedly sent by the same warm server", asy
   await assert.rejects(generateStudy(input, options), error => error.code === "CREDENTIALS_REJECTED");
   assert.equal(calls, 1);
 });
+
+test("a busy Groq model falls back to a listed model without disabling transcription", async () => {
+  const seen = [], options = { env: { Groq_Key: "fixture-model-fallback" }, fetcher: async (url, request) => {
+    if (url.endsWith("/models")) return { ok: true, json: async () => ({ data: ["llama-3.1-8b-instant", "openai/gpt-oss-20b"].map(id => ({ id })) }) };
+    if (url.endsWith("/transcriptions")) return { ok: true, json: async () => ({ text: "A recorded question." }) };
+    const body = JSON.parse(request.body); seen.push(body.model);
+    return body.model === "llama-3.1-8b-instant" ? { ok: false, status: 429, headers: { get: () => "12" }, json: async () => ({}) }
+      : { ok: true, json: async () => ({ choices: [{ message: { content: "A real response from the available model." } }] }) };
+  } };
+  assert.equal((await generateStudy(input, options)).provider, "groq");
+  assert.deepEqual(seen, ["llama-3.1-8b-instant", "openai/gpt-oss-20b"]);
+  assert.equal((await generateStudy({ audio: "dGVzdA==", filename: "question.webm" }, options)).text, "A recorded question.");
+  await generateStudy(input, options); assert.equal(seen.at(-1), "openai/gpt-oss-20b");
+});
+
+test("an oversized generation does not put a later small greeting into cooldown", async () => {
+  const options = { env: { Groq_Key: "fixture-size" }, fetcher: async (url, request) => {
+    if (url.endsWith("/models")) return { ok: true, json: async () => ({ data: ["llama-3.1-8b-instant", "llama-3.3-70b-versatile", "openai/gpt-oss-20b"].map(id => ({ id })) }) };
+    return JSON.parse(request.body).max_completion_tokens > 500 ? { ok: false, status: 429, json: async () => ({ error: { message: "Request too large for the model token allowance." } }) }
+      : { ok: true, json: async () => ({ choices: [{ message: { content: "Hello!" } }] }) };
+  } };
+  await assert.rejects(generateStudy({ ...input, maxTokens: 5500 }, options), error => error.code === "REQUEST_TOO_LARGE");
+  assert.equal((await generateStudy({ ...input, maxTokens: 200 }, options)).text, "Hello!");
+});

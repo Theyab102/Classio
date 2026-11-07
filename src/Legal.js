@@ -87,7 +87,7 @@ export function LegalLinks() {
 export function LegalPage({ page }) {
   return (
     <div className="entry-shell">
-      <header className="entry-header"><a className="entry-brand" href="/"><img src="/ClassioLogo.png" width="32" height="32" alt="" />Classio</a><ThemeSelector /></header>
+      <header className="entry-header"><a className="entry-brand" href="/"><img src="/ClassioLogo-transparent.png" width="32" height="32" alt="" />Classio</a><ThemeSelector /></header>
       <main className="legal-page">
         <h1>{page.title}</h1>
         {page.content}

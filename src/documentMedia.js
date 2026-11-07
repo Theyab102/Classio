@@ -42,6 +42,12 @@ export async function prepareNoteImage(file) {
   }
 }
 
+export async function prepareSourceFigure(figure) {
+  if (!figure?.src?.startsWith("data:") || figure.src.length < 180000) return figure;
+  const image = new Image(); image.src = figure.src; await image.decode();
+  return { ...figure, src: compactImage(image, image.naturalWidth, image.naturalHeight) };
+}
+
 export async function getPdfContext(file, limit = 15000) {
   const pdf = await openPdf({ data: new Uint8Array(await file.arrayBuffer()) });
   try {
@@ -139,9 +145,9 @@ export async function searchStudyImages(query, signal) {
   const term = query.trim().slice(0, 100);
   if (!term) return [];
   const params = new URLSearchParams({
-    action: "query", generator: "search", gsrsearch: `${term} filetype:bitmap`, gsrnamespace: "6",
+    action: "query", generator: "search", gsrsearch: term, gsrnamespace: "6",
     gsrlimit: "12", prop: "imageinfo", iiprop: "url|mime|extmetadata", iiurlwidth: "720",
-    iiextmetadatafilter: "LicenseShortName|Artist", format: "json", origin: "*",
+    iiextmetadatafilter: "LicenseShortName|Artist|ImageDescription", format: "json", origin: "*",
   });
   const response = await fetch(`https://commons.wikimedia.org/w/api.php?${params}`, { signal, referrerPolicy: "no-referrer" });
   if (!response.ok) throw new Error("Wikimedia Commons image search is temporarily unavailable.");
@@ -149,24 +155,34 @@ export async function searchStudyImages(query, signal) {
   if (data.error) throw new Error("Wikimedia Commons could not complete this search.");
   return Object.values(data.query?.pages || {}).sort((a, b) => a.index - b.index).flatMap(page => {
     const info = page.imageinfo?.[0];
-    if (!info || !/^image\/(jpeg|png|webp|gif)$/.test(info.mime) || !info.thumburl?.startsWith("https://upload.wikimedia.org/") ||
+    if (!info || !/^image\/(jpeg|png|webp|gif|svg\+xml)$/.test(info.mime) || !info.thumburl?.startsWith("https://upload.wikimedia.org/") ||
         !info.descriptionurl?.startsWith("https://commons.wikimedia.org/")) return [];
     const license = info.extmetadata?.LicenseShortName?.value;
     if (!license) return [];
     const title = page.title.replace(/^File:|\.[a-z]+$/gi, "").replace(/_/g, " ");
     const artist = new DOMParser().parseFromString(info.extmetadata?.Artist?.value || "", "text/html").body.textContent.trim();
+    const context = new DOMParser().parseFromString(info.extmetadata?.ImageDescription?.value || "", "text/html").body.textContent.trim().slice(0, 800);
     const credit = [title, artist, license].filter(Boolean).join(" · ");
-    return [{ src: info.thumburl, source: info.descriptionurl, title, credit }];
+    return [{ src: info.thumburl, source: info.descriptionurl, title, credit, context }];
   }).slice(0, 8);
 }
 
 export function likelyStudyImage(query, results) {
-  const tokens = value => new Set(value.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []);
-  const generic = new Set(["the", "and", "for", "diagram", "image", "picture", "labeled", "illustration", "photo", "model"]);
+  const tokens = value => new Set((value.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []).map(word => word.replace(/s$/, "")));
+  const generic = new Set(["the", "and", "for", "with", "from", "diagram", "image", "picture", "labeled", "illustration", "photo", "model"]);
   const subject = [...tokens(query)].filter(word => !generic.has(word));
   if (!subject.length) return null;
-  return results.find(result => {
-    const title = tokens(result.title);
-    return subject.every(word => title.has(word) || title.has(word + "s"));
-  }) || null;
+  const ranked = results.map(result => {
+    const title = tokens((result.context || "") + " " + result.title);
+    return { result, matches: subject.filter(word => title.has(word)).length };
+  }).sort((a, b) => b.matches - a.matches);
+  return ranked[0]?.matches >= Math.max(1, Math.ceil(subject.length * .6)) ? ranked[0].result : null;
+}
+
+export async function getPresentationFigures(file) {
+  const { readSlides } = await import("./PowerPointViewer");
+  const { slides } = await readSlides(file);
+  return slides.flatMap((slide, index) => slide.items.filter(item => item.type === "image" && (!item.position || (parseFloat(item.position.width) >= 14 && parseFloat(item.position.height) >= 14))).slice(0, 3).map((item, imageIndex) => ({
+    src: item.src, title: slide.texts[0] || "Source slide figure", context: slide.texts.join(" ").slice(0, 1000), credit: "Source slide " + (index + 1) + " · figure " + (imageIndex + 1),
+  })));
 }

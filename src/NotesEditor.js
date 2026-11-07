@@ -1,3 +1,4 @@
+import ChoiceMenu from "./ChoiceMenu";
 import { useEffect, useRef, useState } from "react";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -14,7 +15,8 @@ import UiIcon from "./UiIcon";
 import ActionMenu from "./ActionMenu";
 import StudioDialog from "./StudioDialog";
 import { MATH_OUTPUT_GUIDE, typesetMath } from "./mathMarkdown";
-import { getPdfContext, getPdfFigures, isPdfFile, likelyStudyImage, prepareNoteImage, searchStudyImages } from "./documentMedia";
+import { enrichNoteImages, insertNoteFigure } from "./noteFigures";
+import { getPdfContext, getPdfFigures, isPdfFile, prepareNoteImage, searchStudyImages } from "./documentMedia";
 import { markdownToNoteHtml, noteHtmlToMarkdown, sanitizeNoteHtml } from "./noteFormat";
 import { downloadStudyFile, sendStudyRequest } from "./studyTools";
 import "./documentStudio.css";
@@ -29,71 +31,6 @@ const editorExtensions = [
   TextAlign.configure({ types: ["heading", "paragraph"] }),
 ];
 
-function insertFigure(target, image) {
-  const figure = document.createElement("img");
-  figure.src = image.src;
-  figure.alt = image.title;
-  target.before(figure);
-  const caption = document.createElement("p");
-  if (image.source) {
-    const link = document.createElement("a");
-    link.href = image.source;
-    link.textContent = image.credit;
-    caption.append(link);
-  } else caption.textContent = image.title;
-  target.before(caption);
-  target.remove();
-}
-
-async function enrichDraft(markdown, pdfFile, useWeb, signal, originalHtml) {
-  const root = document.createElement("div");
-  root.innerHTML = markdownToNoteHtml(markdown);
-  root.querySelectorAll("img").forEach(image => image.replaceWith(image.alt || ""));
-  const seen = new Set();
-  let figures = 0;
-  for (const paragraph of [...root.querySelectorAll("p")]) {
-    const match = paragraph.textContent.trim().match(/^\[\[(PDF|IMAGE):\s*([^\]]+)\]\]$/i);
-    if (!match) continue;
-    const [, kind, value] = match;
-    const key = value.trim().toLowerCase();
-    if (signal.aborted || seen.has(key) || figures >= 3) { paragraph.remove(); continue; }
-    seen.add(key);
-    try {
-      if (kind.toUpperCase() === "PDF" && pdfFile) {
-        const images = await getPdfFigures(pdfFile, Number(value));
-        if (!signal.aborted && images[0]) { insertFigure(paragraph, images[0]); figures++; continue; }
-      }
-      if (kind.toUpperCase() === "IMAGE" && useWeb) {
-        const results = await searchStudyImages(value, signal);
-        const match = likelyStudyImage(value, results);
-        if (match && !signal.aborted && !seen.has(match.src)) {
-          seen.add(match.src);
-          insertFigure(paragraph, match);
-          figures++;
-          continue;
-        }
-        paragraph.textContent = `Suggested illustration: ${value}. Review matches with the image search tool.`;
-        continue;
-      }
-    } catch {
-      paragraph.textContent = kind.toUpperCase() === "PDF" ? `Suggested source: PDF page ${value}.` : `Suggested illustration: ${value}.`;
-      continue;
-    }
-    paragraph.remove();
-  }
-  if (originalHtml) {
-    const original = document.createElement("div");
-    original.innerHTML = originalHtml;
-    const sources = new Set([...root.querySelectorAll("img")].map(image => image.getAttribute("src")));
-    const originals = [...original.querySelectorAll("img")].filter(image => !sources.has(image.getAttribute("src")));
-    if (originals.length) {
-      const heading = document.createElement("h2");
-      heading.textContent = "Original figures";
-      root.append(heading, ...originals);
-    }
-  }
-  return sanitizeNoteHtml(root.innerHTML);
-}
 
 export default function NotesEditor({ file, fileObj, getFileText, onUpdate, readSavedNotes, initialMode, onModeChange }) {
   const [error, setError] = useState("");
@@ -192,9 +129,23 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
     const imageHtml = document.createElement("div");
     const marker = document.createElement("p");
     imageHtml.append(marker);
-    insertFigure(marker, image);
+    insertNoteFigure(imageHtml, image, image.title, marker); marker.remove();
     editor.chain().focus().insertContent(sanitizeNoteHtml(imageHtml.innerHTML)).run();
     setStatus(`Added ${image.title}.`);
+  }
+
+  async function placeSuggestedImages() {
+    if (searching || busy) return;
+    mediaRequest.current?.abort(); const controller = new AbortController(); mediaRequest.current = controller;
+    const originalHtml = editor.getHTML(); setSearching(true); setError(""); setStatus("Finding illustrations for your notes…");
+    try {
+      const result = await enrichNoteImages("", { existingHtml: originalHtml, pdfFile, fileObj, useWeb: true, signal: controller.signal });
+      if (controller.signal.aborted) return;
+      if (editor.getHTML() !== originalHtml) { setStatus("Your notes changed during the image search. Choose Place suggested images again when you’re ready."); return; }
+      editor.chain().command(({ tr }) => { closeHistory(tr); return true; }).selectAll().insertContent(result.html).run();
+      setPanel(current => current === "images" ? null : current); setStatus((result.added ? `${result.added} illustration${result.added === 1 ? "" : "s"} placed beside the related explanation.` : "Image suggestions cleaned up.") + (result.missing ? " Some images were unavailable; you can choose another image with Images." : "") + " You can undo this change.");
+    } catch (failure) { if (!controller.signal.aborted) setError(failure.message); }
+    finally { if (!controller.signal.aborted) setSearching(false); }
   }
 
   async function findImages(source) {
@@ -238,10 +189,11 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
         ? "Return one compact GFM Markdown table based on the notes. Include clear column names and only supported information."
         : `Create ${style.toLowerCase()} study notes. Use a clear H1 title, H2 sections, concise paragraphs, lists, bold key terms and callout blockquotes. Use GFM Markdown tables for comparisons or structured facts. ${action === "organize" ? "Preserve the author's facts and order where useful. Fix wording and organization without inventing facts." : "Stay grounded in the source when provided."}`;
       const raw = await sendStudyRequest({ messages: [
-        { role: "system", content: `${instruction} Language: ${language}. ${MATH_OUTPUT_GUIDE} Return Markdown only. Do not write raw HTML or external URLs. ${pdfFile ? "For up to three relevant source figures, put [[PDF:3]] on a separate line with an actual page number from the source markers." : ""} ${webImages && action !== "table" ? "Suggest up to three precise visual searches using [[IMAGE:specific subject]] on their own lines. Skip decorative or uncertain images." : ""}` },
+        { role: "system", content: `${instruction} Language: ${language}. ${MATH_OUTPUT_GUIDE} Return Markdown only. Do not write raw HTML or external URLs. ${pdfFile ? "For up to three relevant source figures, put [[PDF:3]] on a separate line with an actual page number from the source markers." : ""} ${webImages && action !== "table" ? "Include up to three relevant illustrations using [[IMAGE:specific subject]] on their own lines immediately after the paragraph that explains that subject. Never collect image searches or figure markers into a section at the end. Skip decorative or uncertain images." : ""}` },
         { role: "user", content: `Topic: ${topic.trim() || file.name}\n\n${(source || "").slice(0, 16000)}` },
       ], maxTokens: action === "table" ? 1500 : 5500 }, controller.signal);
-      const html = await enrichDraft(raw.replace(/^\s*```(?:markdown|md)?\s*\n|\n```\s*$/g, ""), pdfFile, webImages, controller.signal, action === "organize" ? originalHtml : "");
+      const enriched = await enrichNoteImages(raw.replace(/^\s*```(?:markdown|md)?\s*\n|\n```\s*$/g, ""), { pdfFile, fileObj, useWeb: webImages, signal: controller.signal, originalHtml: action === "organize" ? originalHtml : "" });
+      const html = enriched.html;
       if (!controller.signal.aborted) {
         if (action === "table") {
           const document = new DOMParser().parseFromString(html, "text/html");
@@ -257,7 +209,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
           chain.insertContent(html).run();
           editor.setEditable(true); setPreview(false); setView("write"); onModeChange?.("write");
           updateFields({ notesMode: "write" }); setPanel(null);
-          setStatus(wasEmpty ? "Notes generated and saved in your notebook." : replace ? "Notes organized. Undo restores your previous writing." : "Generated notes added below your writing. You can undo this change.");
+          setStatus((wasEmpty ? "Notes generated and saved in your notebook." : replace ? "Notes organized. Undo restores your previous writing." : "Generated notes added below your writing. You can undo this change.") + (enriched.missing ? " Some illustrations were unavailable. Use Images to choose another source." : ""));
           editor.commands.focus(wasEmpty ? "start" : "end", { scrollIntoView: false });
         }
       }
@@ -297,7 +249,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
 
   return <section ref={workspace} className="notes-studio notes-workspace" aria-label="Notes workspace">
     <header className="notes-workspace-header">
-      <div className="notes-mode-choice"><h2>Notes</h2><label><span className="sr-only">Notes mode</span><select aria-label="Notes mode" value={view} onChange={event => { const mode = event.target.value; setView(mode); setPanel(null); onModeChange?.(mode); updateFields({ notesMode: mode }); }}><option value="write">Write & generate notes</option><option value="lessons">Guided lessons with questions</option></select></label></div>
+      <div className="notes-mode-choice"><h2>Notes</h2><ChoiceMenu aria-label="Notes mode" variant="notebook" icon={view === "lessons" ? "book" : "notes"} descriptions={{ write: "Write freely or generate notes into your notebook.", lessons: "Learn step by step, with worked examples and practice questions." }} value={view} onChange={event => { const mode = event.target.value; setView(mode); setPanel(null); onModeChange?.(mode); updateFields({ notesMode: mode }); }}><option value="write">Write & generate notes</option><option value="lessons">Guided lessons with questions</option></ChoiceMenu></div>
       <div className="notes-primary-actions">
         <button className="quiet-button is-primary" type="button" hidden={view === "lessons"} aria-expanded={panel === "generate"} onClick={() => openPanel("generate")}><UiIcon name="generate" /><span>Generate</span></button>
         <ActionMenu label="Note options" items={[
@@ -315,12 +267,12 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
       }} /> : <div className="notes-layout">
       <article className="note-workspace">
         <div className="note-toolbar" role="toolbar" aria-label="Note formatting">
-          <select aria-label="Font family" disabled={preview} value={tools?.fontFamily || "DM Sans Variable"} onChange={event => run(chain => chain.setFontFamily(event.target.value))}>
+          <ChoiceMenu aria-label="Font family" disabled={preview} value={tools?.fontFamily || "DM Sans Variable"} onChange={event => run(chain => chain.setFontFamily(event.target.value))}>
             <option value="DM Sans Variable">Sans</option><option value="Fraunces Variable">Serif</option><option value="ui-monospace">Mono</option>
-          </select>
-          <select aria-label="Font size" disabled={preview} value={tools?.fontSize || "16px"} onChange={event => run(chain => chain.setFontSize(event.target.value))}>
+          </ChoiceMenu>
+          <ChoiceMenu aria-label="Font size" disabled={preview} value={tools?.fontSize || "16px"} onChange={event => run(chain => chain.setFontSize(event.target.value))}>
             {[12, 14, 16, 18, 20, 24, 28, 32].map(size => <option key={size} value={`${size}px`}>{size}</option>)}
-          </select>
+          </ChoiceMenu>
           <span className="toolbar-divider" />
           {action("Bold", "bold", chain => chain.toggleBold(), tools?.bold)}
           {action("Italic", "italic", chain => chain.toggleItalic(), tools?.italic)}
@@ -333,15 +285,15 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
           <button type="button" aria-label="More formatting" title="More formatting" aria-expanded={moreTools} onClick={() => setMoreTools(value => !value)}><UiIcon name="more" /></button>
         </div>
         {moreTools && <div className="studio-controls note-more-formatting" aria-label="Additional formatting">
-          <select aria-label="Paragraph style" disabled={preview} value={tools?.heading || 0} onChange={event => {
+          <ChoiceMenu aria-label="Paragraph style" disabled={preview} value={tools?.heading || 0} onChange={event => {
             const level = Number(event.target.value); run(chain => level ? chain.setHeading({ level }) : chain.setParagraph());
-          }}><option value="0">Paragraph</option><option value="1">Title</option><option value="2">Heading</option><option value="3">Subheading</option></select>
+          }}><option value="0">Paragraph</option><option value="1">Title</option><option value="2">Heading</option><option value="3">Subheading</option></ChoiceMenu>
           <button type="button" disabled={preview} aria-pressed={tools?.ordered} onClick={() => run(chain => chain.toggleOrderedList())}>Numbered list</button>
           <button type="button" disabled={preview} aria-pressed={tools?.callout} onClick={() => run(chain => chain.toggleBlockquote())}>Callout</button>
           <button type="button" disabled={preview} aria-pressed={tools?.strike} onClick={() => run(chain => chain.toggleStrike())}>Strike</button>
-          <select aria-label="Align text" disabled={preview} value="" onChange={event => run(chain => chain.setTextAlign(event.target.value))}>
+          <ChoiceMenu aria-label="Align text" disabled={preview} value="" onChange={event => run(chain => chain.setTextAlign(event.target.value))}>
             <option value="" disabled>Align</option><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option><option value="justify">Justify</option>
-          </select>
+          </ChoiceMenu>
           {action("Undo", "undo", chain => chain.undo())}{action("Redo", "redo", chain => chain.redo())}
         </div>}
         {tools?.table && <div className="studio-controls note-table-tools" aria-label="Table actions">
@@ -361,8 +313,8 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
           {panel === "generate" && <div className="notes-panel-body">
             <p>Notes go straight into your notebook. Existing writing is kept; you can undo generation.</p>
             <label>Topic<input value={topic} onChange={event => setTopic(event.target.value)} placeholder="Optional with source material" /></label>
-            <div className="notes-panel-options"><label>Style<select aria-label="Note style" value={style} onChange={event => setStyle(event.target.value)}><option>Detailed</option><option>Exam review</option><option>Concise summary</option><option>Simple explanations</option></select></label>
-              <label>Language<select aria-label="Note language" value={language} onChange={event => setLanguage(event.target.value)}><option>Same as source</option><option>English</option><option>Arabic</option><option>Chinese</option><option>French</option><option>Spanish</option></select></label></div>
+            <div className="notes-panel-options"><label>Style<ChoiceMenu aria-label="Note style" value={style} onChange={event => setStyle(event.target.value)}><option>Detailed</option><option>Exam review</option><option>Concise summary</option><option>Simple explanations</option></ChoiceMenu></label>
+              <label>Language<ChoiceMenu aria-label="Note language" value={language} onChange={event => setLanguage(event.target.value)}><option>Same as source</option><option>English</option><option>Arabic</option><option>Chinese</option><option>French</option><option>Spanish</option></ChoiceMenu></label></div>
             <label className="studio-check"><input type="checkbox" checked={webImages} onChange={event => setWebImages(event.target.checked)} /> Include relevant images</label>
             <button className="quiet-button is-primary" type="button" disabled={busy} onClick={() => generate("generate")}>{busy ? "Generating…" : "Generate notes"}</button>
             <details><summary>Use my writing</summary><div className="studio-controls">
@@ -372,6 +324,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
 
           </div>}
           {panel === "images" && <div className="notes-panel-body">
+            {/\[\[(?:IMAGE|PDF):/i.test(editor.getText()) && <><p>Your notes include suggested illustrations. Place real images next to their related explanations while keeping your writing and formatting.</p><button type="button" className="quiet-button is-primary" disabled={searching || busy} onClick={placeSuggestedImages}>{searching ? "Placing images…" : "Place suggested images"}</button></>}
             <button type="button" className="quiet-button" onClick={() => upload.current?.click()}><UiIcon name="image" />Upload image</button>
             <input ref={upload} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={event => { const image = event.target.files[0]; event.target.value = ""; if (image) uploadImage(image); }} />
             {pdfFile && <form onSubmit={event => { event.preventDefault(); findImages("pdf"); }}><label>PDF page<input type="number" min="1" value={pdfPage} onChange={event => setPdfPage(event.target.value)} /></label><button type="submit" className="quiet-button" disabled={searching}>Extract figures</button></form>}
@@ -386,8 +339,8 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
           </form>}
           {panel === "versions" && <div className="notes-panel-body"><form onSubmit={saveVersion}><label>Version name<input value={versionName} onChange={event => setVersionName(event.target.value)} placeholder="e.g. Before exam review" /></label>
             <button className="quiet-button" type="submit" disabled={!versionName.trim()}>Save version</button></form>
-            {saved.length > 0 && <label>Restore version<select aria-label="Restore version" value="" onChange={event => { const version = saved[Number(event.target.value)]; if (version) editor.commands.setContent(version.html ? sanitizeNoteHtml(version.html) : markdownToNoteHtml(version.text)); }}>
-              <option value="" disabled>Choose a version</option>{saved.map((version, index) => <option key={version.name} value={index}>{version.name}</option>)}</select></label>}
+            {saved.length > 0 && <label>Restore version<ChoiceMenu aria-label="Restore version" value="" onChange={event => { const version = saved[Number(event.target.value)]; if (version) editor.commands.setContent(version.html ? sanitizeNoteHtml(version.html) : markdownToNoteHtml(version.text)); }}>
+              <option value="" disabled>Choose a version</option>{saved.map((version, index) => <option key={version.name} value={index}>{version.name}</option>)}</ChoiceMenu></label>}
           </div>}
         </div>
       </StudioDialog>}

@@ -7,7 +7,7 @@ export default class WorkspaceBoundary extends Component {
   render() {
     if (!this.state.failed) return this.props.children;
     return <main className="workspace-recovery" role="alert">
-      <img src="/ClassioLogo.png" width="40" height="40" alt="" />
+      <img src="/ClassioLogo-transparent.png" width="40" height="40" alt="" />
       <h1>The workspace could not open</h1>
       <p>A file may have failed to download. Check your connection, then reload Classio.</p>
       <p>Reloading ends an open guest session. It does not clear your saved browser files.</p>

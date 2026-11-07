@@ -44,11 +44,12 @@ export default function ResponsiveSidebar({ mobile, expanded, onExpand, main, ma
   const menu = <aside ref={drawer} id="classio-navigation" className={`classio-navigation ${full ? "is-expanded" : "is-compact"}`}
     role={mobile ? "dialog" : undefined} aria-modal={mobile ? "true" : undefined} aria-label="Workspace navigation">
     <div className="navigation-brand">
-      <button type="button" onClick={() => mobile ? setOpen(false) : onExpand(value => !value)}
-        aria-label={mobile ? "Close menu" : expanded ? "Collapse sidebar" : "Expand sidebar"}>
-        {mobile ? <MenuIcon close /> : <img src="/ClassioLogo.png" alt="" width="28" height="28" />}
+      {full && <><img src="/ClassioLogo-transparent.png" alt="" width="28" height="28" /><span>Classio</span></>}
+      <button type="button" className="sidebar-toggle" onClick={() => mobile ? setOpen(false) : onExpand(value => !value)}
+        aria-label={mobile ? "Close menu" : expanded ? "Collapse sidebar" : "Expand sidebar"} aria-expanded={mobile ? open : expanded}
+        title={mobile ? "Close menu" : expanded ? "Collapse sidebar" : "Expand sidebar"}>
+        {mobile ? <MenuIcon close /> : <UiIcon name="sidebar" size={21} style={{ transform: expanded ? undefined : "rotate(180deg)" }} />}
       </button>
-      {full && <span>Classio</span>}
     </div>
     <div className="navigation-scroll">
       <button className="navigation-item" type="button" onClick={() => choose(onSearch)} aria-label="Search files" title="Search files">
@@ -69,18 +70,19 @@ export default function ResponsiveSidebar({ mobile, expanded, onExpand, main, ma
           {item.icon}{full && <span>{item.label}</span>}
         </button>)}
       </nav>}
+    </div>
       <div className="navigation-account">
+        <button type="button" className="navigation-item navigation-profile" onClick={() => choose(onCharacter)} title="Edit character" aria-label="Edit character">
+          {avatar}{full && <span><strong>{account || "Guest"}</strong><small>Your character</small></span>}
+        </button>
+        <button type="button" className="navigation-item navigation-settings" aria-label="Settings" title="Settings" aria-current={mainActive === "settings" ? "page" : undefined} onClick={() => choose(() => onNavigate("settings"))}><UiIcon name="settings" />{full && <span>Settings</span>}</button>
         {full ? <ThemeSelector /> : <button type="button" className="navigation-item" onClick={onToggleTheme}
           aria-label={dark ? "Switch to light mode" : "Switch to dark mode"} title="Change appearance">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1 1M18 18l1 1M5 19l1-1M18 6l1-1" /></svg>
         </button>}
-        <button type="button" className="navigation-item" onClick={() => choose(onCharacter)} title="Edit character" aria-label="Edit character">
-          {avatar}{full && <span>{account || "Guest"}</span>}
-        </button>
         {full && <p className="navigation-session">{guest ? "Guest work clears when this session ends." : "Signed in. Progress syncs with your account."}</p>}
         {full && <button type="button" className="navigation-item" onClick={() => choose(onSignOut)}>{guest ? "End guest session" : "Sign out"}</button>}
       </div>
-    </div>
   </aside>;
 
   return <>

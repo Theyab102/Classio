@@ -50,6 +50,7 @@ export function recoverLegacyMath(root) {
       }
       if (depth) continue;
       const latex = value.slice(i + 1, end);
+      if (/^\[?(?:IMAGE|PDF|SOURCE_IMAGE):/i.test(latex)) continue;
       if (!/\\[a-zA-Z]+|[A-Za-z][_^](?:\{[^}]+\}|[A-Za-z0-9])/.test(latex)) continue;
       found = true; fragment.append(value.slice(start, i));
       const host = document.createElement("span"); host.innerHTML = equationHtml(latex, open === "[");

@@ -12,7 +12,10 @@ export async function sendStudyRequest(payload, signal) {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || typeof data.text !== "string" || !data.text.trim()) {
-      throw new Error(data.error || "The AI service could not finish this request. Your work is still open.");
+      const error = new Error(data.error || "The AI service could not finish this request. Your work is still open.");
+      error.code = data.code || "STUDY_UNAVAILABLE"; error.status = response.status;
+      error.retryAfter = Math.min(600, Math.max(0, Number(response.headers.get("retry-after")) || 0));
+      throw error;
     }
     return data.text;
   } catch (error) {
