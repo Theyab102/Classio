@@ -1,5 +1,19 @@
 import { TTS_SPACE_URL } from "./studyTools";
 
+export function spokenTurn(text) {
+  // Speaker names belong in transcript labels, not in the spoken sentence.
+  return String(text || "").replace(/^(?:\s*\*{0,2}(?:Mira|Jules|Host\s*[AB12]|Speaker\s*[AB12]|[AB])\*{0,2}\s*[:：]\s*)+/i, "").trim();
+}
+
+export async function synthesizeSpeech(text, voice, signal) {
+  if (!TTS_SPACE_URL) throw new Error("Audio generation is not connected.");
+  const response = await fetch(`${TTS_SPACE_URL}/generate-podcast`, { method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store", signal: AbortSignal.any([signal, AbortSignal.timeout(90000)]), body: JSON.stringify({ text: spokenTurn(text), voice, speed: 1 }) });
+  if (!response.ok || !response.headers.get("content-type")?.startsWith("audio/")) throw new Error("The voice service could not create audio. Your transcript is still available.");
+  const blob = await response.blob();
+  if (blob.size > 15000000) throw new Error("This audio section is too large. Try a shorter answer.");
+  return blob;
+}
+
 export function parseEpisode(raw) {
   const value = JSON.parse(raw.trim().replace(/^```(?:json)?\s*|\s*```$/gi, ""));
   if (!value || typeof value.title !== "string" || !value.title.trim() || !Array.isArray(value.turns) || value.turns.length < 4 || value.turns.length > 12) throw new Error("The AI returned an incomplete podcast. Try again.");
@@ -7,7 +21,9 @@ export function parseEpisode(raw) {
   const turns = value.turns.map(turn => {
     if (!turn || !["A", "B"].includes(turn.speaker) || typeof turn.text !== "string" || !turn.text.trim() || typeof turn.section !== "string" || !turn.section.trim()) throw new Error("A podcast section was incomplete. Try again.");
     length += turn.text.length;
-    return { speaker: turn.speaker, text: turn.text.trim().slice(0, 1800), section: turn.section.trim().slice(0, 100) };
+    const text = spokenTurn(turn.text);
+    if (!text) throw new Error("A podcast turn contains a label without an explanation. Try again.");
+    return { speaker: turn.speaker, text: text.slice(0, 1800), section: turn.section.trim().slice(0, 100) };
   });
   if (length > 11000 || !turns.some(turn => turn.speaker === "A") || !turns.some(turn => turn.speaker === "B")) throw new Error("The podcast needs a shorter conversation with both hosts. Try again.");
   return { title: value.title.trim().slice(0, 150), turns };
@@ -31,16 +47,14 @@ export async function synthesizeEpisode(episode, voices, signal, onProgress = ()
   for (let index = 0; index < episode.turns.length; index++) {
     if (signal.aborted) throw new DOMException("Stopped", "AbortError");
     const turn = episode.turns[index]; onProgress(index + 1, episode.turns.length);
-    const response = await fetch(`${TTS_SPACE_URL}/generate-podcast`, { method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store", signal: AbortSignal.any([signal, AbortSignal.timeout(90000)]), body: JSON.stringify({ text: turn.text, voice: voices[turn.speaker], speed: 1 }) });
-    if (!response.ok || !response.headers.get("content-type")?.startsWith("audio/")) throw new Error("The voice service could not create this episode. Your transcript is saved; try preparing audio again.");
-    const bytes = await response.arrayBuffer();
-    if (bytes.byteLength > 15000000) throw new Error("An audio section is too large. Generate a shorter episode.");
+    const spoken = spokenTurn(turn.text);
+    const bytes = await (await synthesizeSpeech(spoken, voices[turn.speaker], signal)).arrayBuffer();
     let buffer;
     try { buffer = await context.decodeAudioData(bytes); } catch { throw new Error("The voice service returned an unreadable audio file. Try preparing audio again."); }
     if (signal.aborted) throw new DOMException("Stopped", "AbortError");
     const samples = new Float32Array(buffer.length);
     for (let channel = 0; channel < buffer.numberOfChannels; channel++) { const source = buffer.getChannelData(channel); for (let i = 0; i < samples.length; i++) samples[i] += source[i] / buffer.numberOfChannels; }
-    turns.push({ ...turn, start: frames / 22050, end: (frames + samples.length) / 22050 });
+    turns.push({ ...turn, text: spoken, start: frames / 22050, end: (frames + samples.length) / 22050 });
     chunks.push(samples); frames += samples.length;
     if (frames > 22050 * 1200) throw new Error("The episode exceeds 20 minutes. Generate a shorter review.");
   }

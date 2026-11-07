@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { downloadStudyFile, makeStudyId, sendStudyRequest, TTS_SPACE_URL } from "./studyTools";
-import { parseEpisode, synthesizeEpisode } from "./podcastAudio";
+import { parseEpisode, synthesizeEpisode, spokenTurn } from "./podcastAudio";
 import { useLearningSession, useStudyActivity } from "./LearningSession";
 import FriendlyAvatar from "./FriendlyAvatar";
 import { DEFAULT_CHARACTER } from "./avatarOptions";
 import WorkspaceArt from "./WorkspaceArt";
 import UiIcon from "./UiIcon";
 import StudioDialog from "./StudioDialog";
+import PodcastConversation from "./PodcastConversation";
 
 const timeLabel = seconds => `${Math.floor((seconds || 0) / 60)}:${String(Math.floor((seconds || 0) % 60)).padStart(2, "0")}`;
 const legacyTurns = script => (script.match(/[^.!?]+[.!?]*/g) || [script]).reduce((turns, sentence) => { const last = turns.at(-1); if (last && last.text.length + sentence.length < 900) last.text += sentence; else turns.push({ speaker: "A", text: sentence.trim(), section: "Saved episode" }); return turns; }, []);
@@ -17,6 +18,7 @@ export default function PodcastStudio({ file, onUpdate, getFileText, audioStore 
   const episode = episodes.find(item => item.id === selected) || episodes[0];
   const [phase, setPhase] = useState("idle"), [progress, setProgress] = useState(""), [error, setError] = useState(""), [audioUrl, setAudioUrl] = useState(""), [blob, setBlob] = useState(null);
   const [position, setPosition] = useState(episode?.position || 0), [duration, setDuration] = useState(0), [playing, setPlaying] = useState(false), [speed, setSpeed] = useState(1), [volume, setVolume] = useState(.85), [view, setView] = useState("sections"), [remove, setRemove] = useState(false);
+  const [talking, setTalking] = useState(false);
   const [voiceList, setVoiceList] = useState([]), [voices, setVoices] = useState({ A: "aria", B: "echo" });
   const audio = useRef(null), pending = useRef(null), latest = useRef({ file, onUpdate }), lastSaved = useRef(0), objectUrl = useRef(""); latest.current = { file, onUpdate };
   const { ask } = useLearningSession();
@@ -44,7 +46,7 @@ export default function PodcastStudio({ file, onUpdate, getFileText, audioStore 
     return () => { live = false; };
   // Audio is reloaded only when selecting an episode, not on each playback-position save.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [episode?.id, episode?.audioKey]);
+  }, [episode?.id, episode?.audioKey, episode?.audioRevision]);
   useEffect(() => { if (audio.current) { audio.current.playbackRate = speed; audio.current.volume = volume; } }, [speed, volume, audioUrl]);
   function updateEpisodes(next, active = selected) { const data = latest.current; data.onUpdate({ ...data.file, podcastEpisodes: next, podcastActiveId: active }); }
   function savePosition(value, force = false) {
@@ -61,7 +63,7 @@ export default function PodcastStudio({ file, onUpdate, getFileText, audioStore 
     const key = `podcast:${file.id}:${target.id}`;
     await audioStore.save(key, result.blob);
     if (controller.signal.aborted) return;
-    const next = { ...target, turns: result.turns, duration: result.duration, audioKey: key, position: 0, voices: { ...voices } };
+    const next = { ...target, turns: result.turns, duration: result.duration, audioKey: key, position: 0, voices: { ...voices }, audioVersion: 2, audioRevision: Date.now() };
     const items = latest.current.file.podcastEpisodes || episodes;
     updateEpisodes([next, ...items.filter(item => item.id !== target.id)], next.id); setSelected(next.id); setPosition(0); setError("");
   }
@@ -71,7 +73,7 @@ export default function PodcastStudio({ file, onUpdate, getFileText, audioStore 
     try {
       const source = (sourceVersion === "current" ? file.notes || await getFileText?.() : file.namedNotes?.[Number(sourceVersion)]?.text) || "";
       if (!source.trim()) throw new Error("Write notes or add readable source material before creating a podcast.");
-      const raw = await sendStudyRequest({ messages: [{ role: "system", content: `Write a natural, accurate two-host educational podcast grounded in the supplied study material. Return only JSON with title and turns. Each turn has speaker (A or B), section (short descriptive heading), text (plain spoken words). Hosts are Mira and Jules. Use ${length === "short" ? "6 turns and 900 to 1800 characters total" : "8 to 10 turns and 3000 to 5500 characters total"}. Both hosts must contribute; use conversational questions, explanations and worked examples. Avoid repetitive introductions, invented facts, markdown and stage directions. Speak symbols and equations naturally. Use the source language.` }, { role: "user", content: `${file.name}\n\n${source.slice(0, 15000)}` }], maxTokens: length === "short" ? 2000 : 4500 }, controller.signal);
+      const raw = await sendStudyRequest({ messages: [{ role: "system", content: `Write a natural, accurate two-host educational podcast grounded in the supplied study material. Return only JSON with title and turns. Each turn has speaker (A or B), section (short descriptive heading), text (plain spoken words). Hosts are Mira and Jules. Put speaker identity only in the speaker field. NEVER start text with Mira:, Jules:, Host A:, a speaker label or a self-introduction. They speak naturally, without announcing their names. Use ${length === "short" ? "6 turns and 900 to 1800 characters total" : "8 to 10 turns and 3000 to 5500 characters total"}. Both hosts must contribute; use conversational questions, explanations and worked examples. Avoid repetitive introductions, invented facts, markdown and stage directions. Speak symbols and equations naturally. Use the source language.` }, { role: "user", content: `${file.name}\n\n${source.slice(0, 15000)}` }], maxTokens: length === "short" ? 2000 : 4500 }, controller.signal);
       if (controller.signal.aborted) return;
       const parsed = parseEpisode(raw), target = { ...parsed, id: makeStudyId(), createdAt: Date.now(), position: 0 };
       const items = latest.current.file.podcastEpisodes || episodes;
@@ -92,7 +94,7 @@ export default function PodcastStudio({ file, onUpdate, getFileText, audioStore 
     catch { setError("Audio playback could not start. Try Play again or download the audio."); }
   }
   function seek(value) { if (!audio.current || !duration) return; const target = Math.max(0, Math.min(duration, value)); audio.current.currentTime = target; setPosition(target); savePosition(target, true); }
-  const sections = episode?.turns?.reduce((items, turn, index) => { const last = items.at(-1); if (last?.name === turn.section) last.text += " " + turn.text; else items.push({ name: turn.section, start: turn.start, text: turn.text, index }); return items; }, []) || [];
+  const sections = episode?.turns?.reduce((items, turn, index) => { const last = items.at(-1); if (last?.name === turn.section) last.text += " " + spokenTurn(turn.text); else items.push({ name: turn.section, start: turn.start, text: spokenTurn(turn.text), index }); return items; }, []) || [];
   const busy = phase !== "idle";
   return <section className="podcast-studio"><header className="tool-heading"><div><p className="eyebrow">LISTEN TO LEARN</p><h2>Podcasts</h2><p>A conversation built from your own study material.</p></div>{!!episodes.length && <label className="episode-picker"><span className="sr-only">Episode history</span><select aria-label="Episode history" value={episode?.id || ""} disabled={busy} onChange={event => { savePosition(position, true); setSelected(event.target.value); setError(""); }}>{episodes.map(item => <option key={item.id} value={item.id}>{item.title}{item.createdAt ? ` · ${new Date(item.createdAt).toLocaleDateString()}` : ""}</option>)}</select></label>}</header>
     <div className="podcast-generator"><label>Length<select aria-label="Podcast length" value={length} disabled={busy} onChange={event => setLength(event.target.value)}><option value="short">Quick review</option><option value="long">Deep dive</option></select></label>
@@ -107,12 +109,14 @@ export default function PodcastStudio({ file, onUpdate, getFileText, audioStore 
         <div className="podcast-controls"><button className="quiet-button" aria-label="Back 15 seconds" onClick={() => seek(position - 15)}><UiIcon name="rewind" /></button><button className="podcast-play" aria-label={playing ? "Pause podcast" : "Play podcast"} onClick={play}><UiIcon name={playing ? "pause" : "play"} size={27} /></button><button className="quiet-button" aria-label="Forward 15 seconds" onClick={() => seek(position + 15)}><UiIcon name="forward" /></button><select aria-label="Playback speed" value={speed} onChange={event => setSpeed(Number(event.target.value))}>{[.75, 1, 1.25, 1.5, 2].map(value => <option key={value} value={value}>{value}×</option>)}</select></div>
         <label className="podcast-volume"><UiIcon name="volume" size={18} /><span className="sr-only">Volume</span><input type="range" aria-label="Podcast volume" min="0" max="1" step="0.05" value={volume} onChange={event => setVolume(Number(event.target.value))} /></label></>
         : <div className="podcast-audio-missing"><p>{busy ? "Your transcript is ready. Audio is being prepared." : "The transcript is ready. Prepare real audio to listen."}</p><button className="quiet-button is-primary" disabled={busy} onClick={retryAudio}>Prepare audio</button></div>}
-      <div className="podcast-secondary-actions"><button className="text-button" onClick={() => downloadStudyFile(new Blob([episode.turns.map(turn => `${defaultHosts[turn.speaker].name}: ${turn.text}`).join("\n\n")], { type: "text/plain" }), "classio-podcast.txt")}><UiIcon name="download" size={16} />Transcript</button>{blob && <button className="text-button" onClick={() => downloadStudyFile(blob, "classio-podcast.wav")}>Download audio</button>}<button className="text-button" onClick={() => setRemove(true)}>Delete episode</button></div>
-      <button className="quiet-button podcast-ask" onClick={() => { audio.current?.pause(); ask(`Explain the ${episode.turns[activeTurn]?.section || episode.title} section of this podcast.`); }}><UiIcon name="generate" />Ask about this section</button>
+      {episode.turns.some(turn => spokenTurn(turn.text) !== turn.text) && <div className="podcast-audio-repair"><p>This saved audio may include spoken host labels.</p><button className="quiet-button" disabled={busy} onClick={retryAudio}>Rebuild audio without speaker labels</button></div>}
+      <div className="podcast-secondary-actions"><button className="text-button" onClick={() => downloadStudyFile(new Blob([episode.turns.map(turn => `${defaultHosts[turn.speaker].name}: ${spokenTurn(turn.text)}`).join("\n\n")], { type: "text/plain" }), "classio-podcast.txt")}><UiIcon name="download" size={16} />Transcript</button>{blob && <button className="text-button" onClick={() => downloadStudyFile(blob, "classio-podcast.wav")}>Download audio</button>}<button className="text-button" onClick={() => setRemove(true)}>Delete episode</button></div>
+      <button className="quiet-button podcast-ask" onClick={() => { audio.current?.pause(); setTalking(true); }}><UiIcon name="mic" />Ask the hosts aloud</button><button className="text-button" onClick={() => { audio.current?.pause(); ask(`Explain the ${episode.turns[activeTurn]?.section || episode.title} section of this podcast.`); }}>Open text tutor</button>
     </article><div className="podcast-transcript"><nav className="workspace-tabs" aria-label="Podcast transcript view"><button aria-pressed={view === "sections"} onClick={() => setView("sections")}>Sections</button><button aria-pressed={view === "transcript"} onClick={() => setView("transcript")}>Full transcript</button></nav>
       <div className="podcast-transcript-scroll">{view === "sections" ? sections.map((section, i) => <button className="podcast-section" key={i} disabled={!audioUrl || typeof section.start !== "number"} onClick={() => seek(section.start)} aria-current={activeTurn >= section.index && activeTurn < (sections[i + 1]?.index ?? episode.turns.length) ? "true" : undefined}><span><strong>{section.name}</strong>{typeof section.start === "number" && <small>{timeLabel(section.start)}</small>}</span><p>{section.text}</p></button>)
-        : episode.turns.map((turn, i) => <button className={`podcast-turn speaker-${turn.speaker}`} key={i} disabled={!audioUrl || typeof turn.start !== "number"} onClick={() => seek(turn.start)} aria-current={i === activeTurn ? "true" : undefined}><strong>{defaultHosts[turn.speaker].name}</strong><span>{turn.text}</span></button>)}</div>
+        : episode.turns.map((turn, i) => <button className={`podcast-turn speaker-${turn.speaker}`} key={i} disabled={!audioUrl || typeof turn.start !== "number"} onClick={() => seek(turn.start)} aria-current={i === activeTurn ? "true" : undefined}><strong>{defaultHosts[turn.speaker].name}</strong><span>{spokenTurn(turn.text)}</span></button>)}</div>
     </div></div> : !busy && <div className="tool-empty"><WorkspaceArt kind="audio" /><h3>Give your notes a voice</h3><p>Create a two-host episode from the current material. Real audio, a readable transcript and your playback position stay together.</p></div>}
+    {talking && episode && <PodcastConversation episode={episode} section={episode.turns[Math.max(0, activeTurn)]} voice={episode.voices?.[episode.turns[Math.max(0, activeTurn)]?.speaker || "A"] || voices.A} onClose={() => setTalking(false)} onResume={() => { setTalking(false); audio.current?.play().catch(() => setError("Tap Play to resume the episode.")); }} onSave={item => { const items = latest.current.file.podcastEpisodes || episodes; updateEpisodes(items.map(current => current.id === episode.id ? { ...current, voiceQuestions: [...(current.voiceQuestions || []), { ...item, position }].slice(-20) } : current)); }} />}
     {remove && <StudioDialog title="Delete podcast?" onClose={() => setRemove(false)}><p>This removes the selected episode and its saved audio from this workspace.</p><div className="dialog-actions"><button className="quiet-button" onClick={() => setRemove(false)}>Cancel</button><button className="quiet-button is-danger" onClick={() => { audio.current?.pause(); if (episode.audioKey) audioStore.remove?.(episode.audioKey); const next = episodes.filter(item => item.id !== episode.id); updateEpisodes(next, next[0]?.id || ""); setSelected(next[0]?.id || ""); setRemove(false); }}>Delete episode</button></div></StudioDialog>}
   </section>;
 }

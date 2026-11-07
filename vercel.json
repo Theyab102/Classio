@@ -39,6 +39,9 @@
     },
     "api/transcript.js": {
       "maxDuration": 30
+    },
+    "api/source.js": {
+      "maxDuration": 60
     }
   }
 }

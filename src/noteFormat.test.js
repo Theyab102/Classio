@@ -1,6 +1,5 @@
 import { sanitizeNoteHtml } from "./noteFormat";
 
-jest.mock("marked", () => ({ marked: { parse: jest.fn() } }));
 jest.mock("./pdf", () => ({ openPdf: jest.fn() }));
 
 test("notes retain supported font formatting while stripping executable and arbitrary styles", () => {

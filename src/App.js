@@ -15,13 +15,15 @@ import UiIcon from "./UiIcon";
 import "./workspace.css";
 import "./premium.css";
 import AssistantPanel from "./AssistantPanel";
-import InlineAssistant from "./InlineAssistant";
 import WorkspaceArt from "./WorkspaceArt";
 import FlashcardStudio from "./FlashcardStudio";
 import QuizStudio from "./QuizStudio";
 import PodcastStudio from "./PodcastStudio";
 import DocumentWorkspace from "./DocumentWorkspace";
 import StudioDialog from "./StudioDialog";
+import StudyMarkdown from "./StudyMarkdown";
+import { MATH_OUTPUT_GUIDE } from "./mathMarkdown";
+import { notesWithSourceImages, readLinkSource, sourceTables } from "./linkSource";
 import { LearningSession, useLearningSession } from "./LearningSession";
 import { DEFAULT_CHARACTER } from "./avatarOptions";
 import { encodeWorkspace, decodeWorkspace } from "./workspaceCodec";
@@ -1715,7 +1717,6 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
   const isBlankDoc = file?._isBlank || file?.isBlankDoc || file?.id?.startsWith("blank_") || file?.type === "text/youtube";
   const FILE_TABS = [
     { id:"notes", label:"Notes", icon:<UiIcon name="notes" /> },
-    { id:"learn", label:"Lessons", icon:<UiIcon name="book" /> },
     { id:"quiz", label:"Quizzes", icon:<UiIcon name="quiz" /> },
     { id:"cards", label:"Flashcards", icon:<UiIcon name="cards" /> },
     { id:"voice", label:"Podcasts", icon:<UiIcon name="podcast" /> },
@@ -1731,7 +1732,7 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
     mainActive={context === "dashboard" ? homeTab === "about" ? "guides" : homeTab === "settings" ? "settings" : "home" : undefined}
     main={[NAV[0], { id: "assistant", label: "AI Assistant", icon: <UiIcon name="generate" /> }, ...NAV.slice(1)]}
     tabs={context === "document" ? FILE_TABS : context === "folder" ? FOLDER_TABS : []}
-    active={documentTab === "ai" ? "notes" : documentTab} onTab={setActiveTab} onNavigate={onNavigate} onSearch={onOpenSearch}
+    active={["ai", "learn"].includes(documentTab) ? "notes" : documentTab} onTab={setActiveTab} onNavigate={onNavigate} onSearch={onOpenSearch}
     onCharacter={onOpenCharacter} avatar={<MiniAvatar character={character || {}} size={28} />}
     account={character?.name || user?.displayName?.split(" ")[0]} guest={isGuest} onSignOut={onSignOut}
     onToggleTheme={onToggleTheme} dark={T.isDark} documentName={context === "document" ? file?.name : context === "folder" ? folder?.name : null} />;
@@ -2403,7 +2404,7 @@ function ClassioApp() {
   const [activeFile, setActiveFile] = useState(null);
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [homeTab, setHomeTab] = useState("folders");
-  const [showHomeAI, setShowHomeAI] = useState(false);
+  const [showHomeAI, setShowHomeAI] = useState(() => window.innerWidth >= 1200);
   const [assistantMessages, setAssistantMessages] = useState([]);
   const [assistantPending, setAssistantPending] = useState(false);
   const [assistantDraft, setAssistantDraft] = useState("");
@@ -2696,11 +2697,11 @@ function ClassioApp() {
   }
   function renderAssistant() {
     const epoch = assistantEpoch.current;
-    return showHomeAI && <StandaloneAI context={screen === "file" ? activeFile : null} activity={activity} library={folders.flatMap(folder => folder.files.map(file => ({ name: file.name, folder: folder.name })))}
+    return showHomeAI ? <StandaloneAI context={screen === "file" ? activeFile : null} activity={activity} library={folders.flatMap(folder => folder.files.map(file => ({ name: file.name, folder: folder.name })))}
       readSource={file => extractFileText(file._fileObj || FILE_STORE.get(file.id))} controllerRef={assistantRequest}
       storageNotice={conversationNotice} draft={assistantDraft} onDraftChange={setAssistantDraft} onClose={() => setShowHomeAI(false)} messages={assistantMessages}
       onMessagesChange={messages => { if (epoch === assistantEpoch.current) saveConversation(messages); }}
-      pending={assistantPending} onPendingChange={pending => { if (epoch === assistantEpoch.current) setAssistantPending(pending); }} />;
+      pending={assistantPending} onPendingChange={pending => { if (epoch === assistantEpoch.current) setAssistantPending(pending); }} /> : <button className="assistant-dock" aria-label="Expand AI Assistant" aria-expanded="false" onClick={() => setShowHomeAI(true)}><UiIcon name="generate" /><span>Ask Classio</span><UiIcon name="chevron" size={15} /></button>;
   }
 
   const handleNavigate2 = (id) => {
@@ -2840,7 +2841,7 @@ function ClassioApp() {
       _isBlank: true, defaultTab: "notes", notesMode: mode };
     const folder = { ...inbox, files: [file, ...inbox.files] };
     setFoldersSave([folder, ...foldersRef.current.filter(item => item.id !== inbox.id)]);
-    setActiveFolder(folder); setActiveFile(file); setFileTab(mode === "lessons" ? "learn" : "notes"); setScreen("file");
+    setActiveFolder(folder); setActiveFile(file); setFileTab("notes"); setScreen("file");
   }
 
   const handleOpenFileFromSearch = (fi, folder) => {
@@ -3460,14 +3461,13 @@ function FolderView({ folder, onOpenFile, onUpdate, allFolders = [], onMoveFile,
 
 // ─── FILE VIEW ────────────────────────────────────────────────────────────────
 function FileView({ file, user, onUpdate, activeTab, onTabChange }) {
-  const { ask } = useLearningSession();
   const tab = activeTab || "view", blank = file._isBlank || file.isBlankDoc || file.id.startsWith("blank_");
   const selected = tab === "view" && blank ? file.defaultTab || "notes" : tab === "view" && file.type === "text/youtube" ? "youtube" : tab;
-  const mode = selected === "learn" ? "lessons" : selected === "notes" ? "write" : undefined;
+  const mode = selected === "learn" ? "lessons" : undefined;
   const effective = ["learn", "ai"].includes(selected) ? "notes" : selected;
   const readSource = () => extractFileText(file._fileObj || FILE_STORE.get(file.id));
   useEffect(() => () => { try { window.speechSynthesis?.cancel(); } catch {} document.querySelectorAll("audio").forEach(audio => audio.pause()); }, [effective]);
-  return <div className="document-screen premium-document-screen"><div className="file-assist-strip"><InlineAssistant onAsk={ask} contextLabel={file.name} /></div>
+  return <div className="document-screen premium-document-screen">
     {effective === "view" ? <ViewTab file={file} onUpdate={onUpdate} /> : <div className="document-inner">
       {effective === "notes" && <NotesTab key={file.id} file={file} onUpdate={onUpdate} user={user} onTabChange={onTabChange} initialMode={mode} />}
       {effective === "voice" && <VoicePodcastTab file={file} onUpdate={onUpdate} user={user} />}
@@ -5325,7 +5325,7 @@ function NotesTab({ file, onUpdate, user, onTabChange, initialMode }) {
     const snapshot = await getDoc(doc(db, "users", user.uid, "savedNotes", file.id));
     return snapshot.data()?.notes || [];
   }, [file.id, user?.uid]);
-  return <Suspense fallback={<div className="note-initial-frame" aria-busy="true" aria-label="Notes" />}><NotesEditor file={file} fileObj={fileObj} onUpdate={onUpdate} initialMode={initialMode} onModeChange={mode => onTabChange?.(mode === "lessons" ? "learn" : "notes")}
+  return <Suspense fallback={<div className="note-initial-frame" aria-busy="true" aria-label="Notes" />}><NotesEditor file={file} fileObj={fileObj} onUpdate={onUpdate} initialMode={initialMode} onModeChange={() => onTabChange?.("notes")}
     getFileText={() => extractFileText(fileObj)} readSavedNotes={readSavedNotes}
     /></Suspense>;
 }
@@ -5820,7 +5820,7 @@ function YouTubeTab({ file, onUpdate }) {
     const type = detectUrlType(address.hostname);
 
     try {
-      let content = "", title = "", sourceLabel = "";
+      let content = "", title = "", sourceLabel = "", sourcePage = null;
 
       if (type === "youtube") {
         const vid = extractVideoId(trimmedUrl);
@@ -5835,25 +5835,18 @@ function YouTubeTab({ file, onUpdate }) {
         } else {
           throw new Error("The video transcript is unavailable. Paste its transcript below to generate notes.");
         }
-      } else if (type === "wikipedia") {
-        setStatus("Fetching Wikipedia article…");
-        const wiki = await fetchWikipedia(trimmedUrl);
-        if (wiki?.text) {
-          content = wiki.text; title = wiki.title; sourceLabel = "Wikipedia article";
-        } else {
-          const raw = await fetchPageContent(trimmedUrl);
-          content = raw; title = "Wikipedia Article"; sourceLabel = "page content";
-        }
       } else {
-        setStatus("Fetching page content…");
-        const raw = await fetchPageContent(trimmedUrl);
-        if (!raw) {
-          setError("Could not read that page. Try pasting the text manually below.");
-          setLoading(false); setStatus(""); return;
+        setStatus("Reading the page, tables and source images…");
+        try {
+          sourcePage = await readLinkSource(trimmedUrl, AbortSignal.timeout(55000));
+          content = sourcePage.text + (sourcePage.tables?.length ? "\n\nSOURCE TABLES:\n" + sourceTables(sourcePage.tables) : "");
+          title = sourcePage.title; sourceLabel = "source webpage";
+        } catch (failure) {
+          const wiki = type === "wikipedia" ? await fetchWikipedia(trimmedUrl) : null;
+          const fallback = wiki?.text || await fetchPageContent(trimmedUrl);
+          if (!fallback) throw failure;
+          content = fallback; title = wiki?.title || address.hostname; sourceLabel = "webpage content";
         }
-        content = raw;
-        try { title = new URL(trimmedUrl).hostname.replace("www.", ""); } catch { title = "Web Page"; }
-        sourceLabel = "webpage content";
       }
 
       if (!content?.trim()) throw new Error("Could not read that source. Paste the source text below.");
@@ -5869,14 +5862,14 @@ function YouTubeTab({ file, onUpdate }) {
           `You are an expert note-taker. Generate structured study notes from the provided ${sourceLabel}.
 ${modeGuide}
 FORMAT: # Main Heading, ## Sub-heading, **bold** key terms, > definitions/formulas, - bullets.
-Add [Image: search term] after sections with visual concepts.
-For comparisons use: TABLE_START / headers: Col1|Col2 / row: val|val / TABLE_END
+${MATH_OUTPUT_GUIDE}
+Use GFM Markdown tables for comparisons. ${sourcePage?.images?.length ? "Use relevant images from this list only, inserting [[SOURCE_IMAGE:n]] on a separate line next to the explanation. " + sourcePage.images.map((image, i) => `${i + 1}: ${image.title}`).join("; ") : "Do not invent images or image placeholders."}
 Cover EVERY section. Only use content from the source.`,
           `Title: "${title}"\n\nSource (${sourceLabel}):\n${content}\n\nGenerate structured study notes.`,
           4000
         );
 
-      setResult(notes);
+      setResult(notesWithSourceImages(notes, sourcePage));
     } catch(e) {
       setError("Failed: " + (e.message || "Unknown error"));
     }
@@ -5953,7 +5946,7 @@ Cover EVERY section. Only use content from the source.`,
         try {
           const notes = await callClaude(
             `You are an expert note-taker. Generate clean structured study notes from this transcript.
-ALL CAPS headings, dash bullets, no asterisks, no pound signs.
+Use Markdown headings, bold key terms, lists and useful GFM tables. ${MATH_OUTPUT_GUIDE}
 ${mode === "simple" ? "Use simple language." : "Be detailed and thorough."}
 Only include what's in the transcript.`,
             `TRANSCRIPT:\n${text.slice(0,16000)}\n\nCreate study notes.`,
@@ -5991,11 +5984,7 @@ Only include what's in the transcript.`,
               </button>
             </div>
           </div>
-          <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:14, padding:"18px 20px",
-            fontSize:13, color:C.text, lineHeight:1.8, whiteSpace:"pre-wrap", wordBreak:"break-word",
-            maxHeight:520, overflowY:"auto" }}>
-            {result}
-          </div>
+          <div className="link-generated-notes" aria-label="Generated link notes"><StudyMarkdown text={result} allowImages /></div>
           {ytTableData && <ClassioTable data={ytTableData} onClose={()=>setYtTableData(null)} />}
         </div>
       )}

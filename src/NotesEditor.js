@@ -12,6 +12,8 @@ import katex from "katex";
 import { useStudyActivity } from "./LearningSession";
 import UiIcon from "./UiIcon";
 import ActionMenu from "./ActionMenu";
+import StudioDialog from "./StudioDialog";
+import { MATH_OUTPUT_GUIDE, typesetMath } from "./mathMarkdown";
 import { getPdfContext, getPdfFigures, isPdfFile, likelyStudyImage, prepareNoteImage, searchStudyImages } from "./documentMedia";
 import { markdownToNoteHtml, noteHtmlToMarkdown, sanitizeNoteHtml } from "./noteFormat";
 import { downloadStudyFile, sendStudyRequest } from "./studyTools";
@@ -103,15 +105,12 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
   const [language, setLanguage] = useState("Same as source");
   const [webImages, setWebImages] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [draft, setDraft] = useState("");
   const [panel, setPanel] = useState(file.notesMode === "generate" ? "generate" : null);
   const [view, setView] = useState(initialMode || ((file.notesMode || (file.defaultTab === "learn" ? "lessons" : "write")) === "lessons" ? "lessons" : "write"));
   useEffect(() => { if (initialMode) setView(initialMode); }, [initialMode]);
   useStudyActivity(view === "write" ? file.id : null, "Notes", file.notes || "", file.name);
   const workspace = useRef(null);
   const [moreTools, setMoreTools] = useState(false);
-  const [narrow, setNarrow] = useState(() => window.innerWidth < 900);
-  const panelRef = useRef(null);
   const latest = useRef({ file, onUpdate });
   latest.current = { file, onUpdate };
   const updateFields = patch => {
@@ -182,30 +181,6 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
     return () => { active = false; };
   }, [file.id, file.namedNotes, readSavedNotes]);
 
-  useEffect(() => {
-    if (!workspace.current) return;
-    const node = workspace.current, update = () => setNarrow(node.clientWidth < 800);
-    update();
-    const observer = new ResizeObserver(update); observer.observe(node);
-    return () => observer.disconnect();
-  }, [editor]);
-
-  useEffect(() => {
-    if (!narrow || !panel || !panelRef.current) return;
-    const before = document.activeElement, overflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    panelRef.current.querySelector("button")?.focus();
-    const keyboard = event => {
-      if (event.key === "Escape") setPanel(null);
-      if (event.key !== "Tab") return;
-      const controls = [...panelRef.current.querySelectorAll("button:not(:disabled), input:not([hidden]), select, summary, a[href]")];
-      if (event.shiftKey && document.activeElement === controls[0]) { event.preventDefault(); controls.at(-1)?.focus(); }
-      else if (!event.shiftKey && document.activeElement === controls.at(-1)) { event.preventDefault(); controls[0]?.focus(); }
-    };
-    window.addEventListener("keydown", keyboard);
-    return () => { document.body.style.overflow = overflow; window.removeEventListener("keydown", keyboard); if (before?.isConnected) before.focus(); };
-  }, [narrow, panel, editor]);
-
   async function uploadImage(image) {
     try {
       const src = await prepareNoteImage(image);
@@ -249,7 +224,6 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
     const controller = new AbortController();
     aiRequest.current = controller;
     setError("");
-    setDraft("");
     setBusy(true);
     setStatus(action === "organize" ? "Organizing your writing…" : "Preparing study notes…");
     try {
@@ -264,7 +238,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
         ? "Return one compact GFM Markdown table based on the notes. Include clear column names and only supported information."
         : `Create ${style.toLowerCase()} study notes. Use a clear H1 title, H2 sections, concise paragraphs, lists, bold key terms and callout blockquotes. Use GFM Markdown tables for comparisons or structured facts. ${action === "organize" ? "Preserve the author's facts and order where useful. Fix wording and organization without inventing facts." : "Stay grounded in the source when provided."}`;
       const raw = await sendStudyRequest({ messages: [
-        { role: "system", content: `${instruction} Language: ${language}. Return Markdown only. Do not write raw HTML or external URLs. ${pdfFile ? "For up to three relevant source figures, put [[PDF:3]] on a separate line with an actual page number from the source markers." : ""} ${webImages && action !== "table" ? "Suggest up to three precise visual searches using [[IMAGE:specific subject]] on their own lines. Skip decorative or uncertain images." : ""}` },
+        { role: "system", content: `${instruction} Language: ${language}. ${MATH_OUTPUT_GUIDE} Return Markdown only. Do not write raw HTML or external URLs. ${pdfFile ? "For up to three relevant source figures, put [[PDF:3]] on a separate line with an actual page number from the source markers." : ""} ${webImages && action !== "table" ? "Suggest up to three precise visual searches using [[IMAGE:specific subject]] on their own lines. Skip decorative or uncertain images." : ""}` },
         { role: "user", content: `Topic: ${topic.trim() || file.name}\n\n${(source || "").slice(0, 16000)}` },
       ], maxTokens: action === "table" ? 1500 : 5500 }, controller.signal);
       const html = await enrichDraft(raw.replace(/^\s*```(?:markdown|md)?\s*\n|\n```\s*$/g, ""), pdfFile, webImages, controller.signal, action === "organize" ? originalHtml : "");
@@ -276,8 +250,15 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
           editor.chain().focus().insertContent(table.outerHTML).run();
           setStatus("Table inserted. You can edit every cell.");
         } else {
-          setDraft(html);
-          setStatus("Review the draft before applying it.");
+          const wasEmpty = editor.isEmpty;
+          const replace = action === "organize" && editor.getHTML() === originalHtml;
+          const chain = editor.chain().command(({ tr }) => { closeHistory(tr); return true; });
+          if (replace) chain.selectAll(); else chain.focus("end");
+          chain.insertContent(html).run();
+          editor.setEditable(true); setPreview(false); setView("write"); onModeChange?.("write");
+          updateFields({ notesMode: "write" }); setPanel(null);
+          setStatus(wasEmpty ? "Notes generated and saved in your notebook." : replace ? "Notes organized. Undo restores your previous writing." : "Generated notes added below your writing. You can undo this change.");
+          editor.commands.focus(wasEmpty ? "start" : "end", { scrollIntoView: false });
         }
       }
     } catch (failure) {
@@ -310,26 +291,15 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
   const openPanel = name => { setView("write"); onModeChange?.("write"); setPanel(value => value === name ? null : name); };
   const exportNotes = () => {
     const content = document.createElement("div"); content.innerHTML = sanitizeNoteHtml(editor.getHTML());
-    content.querySelectorAll("[data-classio-equation]").forEach(node => { node.innerHTML = katex.renderToString(node.getAttribute("data-latex") || "", { output: "mathml", throwOnError: false, trust: false, maxExpand: 500 }); });
+    typesetMath(content, "mathml");
     downloadStudyFile(new Blob([`<!doctype html><meta charset="utf-8"><title>Classio notes</title><style>body{max-width:760px;margin:40px auto;padding:20px;font:16px/1.7 system-ui;color:#253648}table{border-collapse:collapse;width:100%}td,th{border:1px solid #c7d5e0;padding:.5rem}th{background:#edf4fa}img{max-width:100%}math{font-size:1.15em}</style>${content.innerHTML}`], { type: "text/html" }), "classio-notes.html");
-  };
-
-  const applyDraft = append => {
-    const chain = editor.chain().focus(append ? "end" : undefined).command(({ tr }) => { closeHistory(tr); return true; });
-    if (!append) chain.selectAll();
-    chain.insertContent(draft).run();
-    setDraft(""); setPanel(null); updateFields({ notesMode: "write" });
-    setStatus("Notes updated. You can undo this change.");
   };
 
   return <section ref={workspace} className="notes-studio notes-workspace" aria-label="Notes workspace">
     <header className="notes-workspace-header">
-      <nav className="workspace-tabs" aria-label="Notes modes">
-        <button type="button" aria-pressed={view === "write"} onClick={() => { setView("write"); onModeChange?.("write"); updateFields({ notesMode: "write" }); }}>Notes</button>
-        <button type="button" aria-pressed={view === "lessons"} onClick={() => { setView("lessons"); onModeChange?.("lessons"); setPanel(null); updateFields({ notesMode: "lessons" }); }}>Lessons</button>
-      </nav>
+      <div className="notes-mode-choice"><h2>Notes</h2><label><span className="sr-only">Notes mode</span><select aria-label="Notes mode" value={view} onChange={event => { const mode = event.target.value; setView(mode); setPanel(null); onModeChange?.(mode); updateFields({ notesMode: mode }); }}><option value="write">Write & generate notes</option><option value="lessons">Guided lessons with questions</option></select></label></div>
       <div className="notes-primary-actions">
-        <button className="quiet-button is-primary" type="button" aria-expanded={panel === "generate"} onClick={() => openPanel("generate")}><UiIcon name="generate" /><span>Generate</span></button>
+        <button className="quiet-button is-primary" type="button" hidden={view === "lessons"} aria-expanded={panel === "generate"} onClick={() => openPanel("generate")}><UiIcon name="generate" /><span>Generate</span></button>
         <ActionMenu label="Note options" items={[
           { label: "Download notes", icon: "download", run: exportNotes },
           ...(file.transcript ? [{ label: "Download transcript", run: () => downloadStudyFile(new Blob([file.transcript], { type: "text/plain" }), "classio-transcript.txt") }] : []),
@@ -342,7 +312,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
       onUseAsNotes={markdown => {
         editor.chain().focus("end").command(({ tr }) => { closeHistory(tr); return true; }).insertContent(markdownToNoteHtml(markdown)).run();
         setView("write"); onModeChange?.("write"); updateFields({ notesMode: "write" }); setStatus("Lessons added to your notes.");
-      }} /> : <div className={`notes-layout ${panel && !narrow ? "has-inspector" : ""}`}>
+      }} /> : <div className="notes-layout">
       <article className="note-workspace">
         <div className="note-toolbar" role="toolbar" aria-label="Note formatting">
           <select aria-label="Font family" disabled={preview} value={tools?.fontFamily || "DM Sans Variable"} onChange={event => run(chain => chain.setFontFamily(event.target.value))}>
@@ -382,17 +352,14 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
         </div>}
         {tools?.image && !preview && <div className="studio-controls note-table-tools"><button onClick={() => run(chain => chain.deleteSelection())}>Remove selected image</button></div>}
         <div className="note-document-meta"><span>{editor.getText().trim() ? editor.getText().trim().split(/\s+/).length : 0} words</span><span>{savedAt ? "Saved in workspace" : "Changes save automatically"}</span></div>
+        {busy && <div className="note-generation-status" role="status"><span className="mini-spinner" />Generating notes for your notebook…<button className="text-button" onClick={() => { aiRequest.current?.abort(); aiRequest.current = null; setBusy(false); setStatus("Generation cancelled. Your writing is unchanged."); }}>Cancel generation</button></div>}
         <div className={`note-paper ${preview ? "is-reading" : ""}`}><EditorContent editor={editor} /></div>
         {status && !busy && <p className="note-local-status" role="status">{status}</p>}
       </article>
-      {panel && <>
-        {narrow && <button className="notes-panel-backdrop" aria-label="Close note tools backdrop" onClick={() => setPanel(null)} />}
-        <aside ref={panelRef} className={`notes-inspector ${narrow ? "is-drawer" : ""}`} role={narrow ? "dialog" : "complementary"} aria-modal={narrow || undefined}
-          aria-label={panel === "generate" ? "AI note tools" : panel === "images" ? "Note images" : panel === "equation" ? "Equation editor" : "Saved versions"}>
-          <header><h2>{panel === "generate" ? "Generate notes" : panel === "images" ? "Images" : panel === "equation" ? "Equation" : "Versions"}</h2>
-            <button type="button" className="quiet-button" aria-label="Close note tools" onClick={() => setPanel(null)}><UiIcon name="close" /></button></header>
+      {panel && <StudioDialog title={panel === "generate" ? "Generate notes" : panel === "images" ? "Images" : panel === "equation" ? "Equation" : "Saved versions"} onClose={() => setPanel(null)}>
+        <div className="notes-tool-dialog">
           {panel === "generate" && <div className="notes-panel-body">
-            <p>Start with a topic or use the material in this file.</p>
+            <p>Notes go straight into your notebook. Existing writing is kept; you can undo generation.</p>
             <label>Topic<input value={topic} onChange={event => setTopic(event.target.value)} placeholder="Optional with source material" /></label>
             <div className="notes-panel-options"><label>Style<select aria-label="Note style" value={style} onChange={event => setStyle(event.target.value)}><option>Detailed</option><option>Exam review</option><option>Concise summary</option><option>Simple explanations</option></select></label>
               <label>Language<select aria-label="Note language" value={language} onChange={event => setLanguage(event.target.value)}><option>Same as source</option><option>English</option><option>Arabic</option><option>Chinese</option><option>French</option><option>Spanish</option></select></label></div>
@@ -402,10 +369,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
               <button type="button" disabled={busy} onClick={() => generate("organize")}>Organize notes</button>
               <button type="button" disabled={busy} onClick={() => generate("table")}>Make a table</button></div></details>
             {error && <p className="studio-error" role="alert">{error}</p>}
-            {draft && <section className="note-draft" aria-label="AI draft"><h3>Review draft</h3>
-              <div className="classio-note-content" dangerouslySetInnerHTML={{ __html: draft }} />
-              <div className="studio-controls"><button type="button" onClick={() => applyDraft(false)}>Replace notes</button><button type="button" onClick={() => applyDraft(true)}>Append</button><button type="button" onClick={() => setDraft("")}>Discard</button></div>
-            </section>}
+
           </div>}
           {panel === "images" && <div className="notes-panel-body">
             <button type="button" className="quiet-button" onClick={() => upload.current?.click()}><UiIcon name="image" />Upload image</button>
@@ -425,8 +389,8 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
             {saved.length > 0 && <label>Restore version<select aria-label="Restore version" value="" onChange={event => { const version = saved[Number(event.target.value)]; if (version) editor.commands.setContent(version.html ? sanitizeNoteHtml(version.html) : markdownToNoteHtml(version.text)); }}>
               <option value="" disabled>Choose a version</option>{saved.map((version, index) => <option key={version.name} value={index}>{version.name}</option>)}</select></label>}
           </div>}
-        </aside>
-      </>}
+        </div>
+      </StudioDialog>}
     </div>}
   </section>;
 }

@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import ActionMenu from "./ActionMenu";
 import UiIcon from "./UiIcon";
 import WorkspaceArt from "./WorkspaceArt";
-import InlineAssistant from "./InlineAssistant";
 
 export function materialKind(file) {
   const name = (file.name || "").toLowerCase(), type = file.type || "";
@@ -16,7 +15,7 @@ export function materialKind(file) {
 const shortPreview = file => (file.notes || file.transcript || "").replace(/<[^>]*>/g, " ").replace(/!?\[([^\]]*)\]\([^)]+\)/g, "$1").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/[#>*_`|]/g, "").replace(/\s+/g, " ").trim().slice(0, 125);
 
 export default function LibraryHome({ folders, guest, signIn, signInPending, signInError, createNote, upload, record, addLink,
-  newFolder, openFile, openFolder, rename, remove, move, onAsk = () => {} }) {
+  newFolder, openFile, openFolder, rename, remove, move }) {
   const [query, setQuery] = useState(""), [filter, setFilter] = useState("all"), [sort, setSort] = useState("recent");
   const [layout, setLayout] = useState("grid");
   const all = useMemo(() => folders.flatMap(folder => (folder.files || []).map(file => ({ file, folder }))), [folders]);
@@ -51,7 +50,6 @@ export default function LibraryHome({ folders, guest, signIn, signInPending, sig
       ].map(item => <button type="button" className={`creation-card tone-${item.tone}`} aria-label={item.label} title={item.description} key={item.label} onClick={item.run}><span className="creation-icon"><UiIcon name={item.icon} size={23} /></span>
         <strong>{item.label}</strong><span>{item.description}</span><UiIcon name="arrow" size={17} /></button>)}
     </section>
-    <InlineAssistant onAsk={onAsk} contextLabel="your library" />
     {!!recent.length && !query && filter === "all" && <section className="library-recent" aria-label="Recently opened"><div className="section-heading"><h2>Pick up where you left off</h2><span>Recently opened</span></div>
       <div className="recent-grid">{recent.map(({ file, folder }) => <button key={file.id} onClick={() => openFile(file, folder)}><UiIcon name={materialKind(file).icon} /><span><strong>{file.name}</strong><small>{folder.id === "inbox" ? "Library" : folder.name}</small></span><UiIcon name="arrow" size={16} /></button>)}</div></section>}
     <section className="library-materials" aria-label="Learning materials"><div className="section-heading"><h2>Your materials</h2><button className="text-button" onClick={newFolder}><UiIcon name="plus" size={15} />New folder</button></div>

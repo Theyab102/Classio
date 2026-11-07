@@ -41,7 +41,7 @@ export default function Entry() {
 
   return (
     <div className="entry-shell">
-      <header className="entry-header"><a className="entry-brand" href="/"><img src="/classio-mark.svg" width="32" height="32" alt="" />Classio</a><ThemeSelector /></header>
+      <header className="entry-header"><a className="entry-brand" href="/"><img src="/ClassioLogo.png" width="32" height="32" alt="" />Classio</a><ThemeSelector /></header>
       <main className="entry-main">
         <div className="entry-intro">
           <p className="entry-kicker">Free study workspace · Ages 13+</p>

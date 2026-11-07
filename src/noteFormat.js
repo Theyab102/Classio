@@ -1,5 +1,5 @@
 import DOMPurify from "dompurify";
-import { marked } from "marked";
+import { parseStudyMarkdown, recoverLegacyMath } from "./mathMarkdown";
 import TurndownService from "turndown";
 import { gfm } from "turndown-plugin-gfm";
 import { safeImageSource } from "./documentMedia";
@@ -8,7 +8,7 @@ const toMarkdown = new TurndownService({ headingStyle: "atx", bulletListMarker: 
 toMarkdown.use(gfm);
 toMarkdown.addRule("studyEquations", {
   filter: node => node.nodeName === "SPAN" && node.hasAttribute("data-classio-equation"),
-  replacement: (_content, node) => `$${node.getAttribute("data-latex") || ""}$`,
+  replacement: (_content, node) => node.getAttribute("data-display") === "block" ? `\n\n\\[${node.getAttribute("data-latex") || ""}\\]\n\n` : `\\(${node.getAttribute("data-latex") || ""}\\)`,
 });
 toMarkdown.addRule("embeddedStudyImages", {
   filter: node => node.nodeName === "IMG" && /^data:/.test(node.getAttribute("src") || ""),
@@ -20,7 +20,7 @@ export function sanitizeNoteHtml(html) {
     RETURN_DOM_FRAGMENT: true, USE_PROFILES: { html: true },
     FORBID_TAGS: ["style", "form", "video", "audio", "input", "button", "iframe", "source"],
     FORBID_ATTR: ["srcset", "id", "class"],
-    ALLOW_DATA_ATTR: false, ADD_ATTR: ["data-classio-equation", "data-latex"],
+    ALLOW_DATA_ATTR: false, ADD_ATTR: ["data-classio-equation", "data-latex", "data-display"],
   });
   for (const node of fragment.querySelectorAll("[style]")) {
     const alignment = node.style.textAlign;
@@ -33,7 +33,7 @@ export function sanitizeNoteHtml(html) {
   }
   for (const node of fragment.querySelectorAll("[data-classio-equation],[data-latex]")) {
     if (node.tagName !== "SPAN" || !node.hasAttribute("data-classio-equation")) { node.removeAttribute("data-classio-equation"); node.removeAttribute("data-latex"); }
-    else { const latex = (node.getAttribute("data-latex") || "").slice(0, 600); node.setAttribute("data-latex", latex); node.textContent = `\\(${latex}\\)`; }
+    else { const latex = (node.getAttribute("data-latex") || "").slice(0, 5000); node.setAttribute("data-latex", latex); node.textContent = `\\(${latex}\\)`; }
   }
   for (const image of fragment.querySelectorAll("img")) {
     if (!safeImageSource(image.getAttribute("src"))) image.replaceWith(image.getAttribute("alt") || "");
@@ -41,6 +41,7 @@ export function sanitizeNoteHtml(html) {
   }
   const container = document.createElement("div");
   container.append(fragment);
+  recoverLegacyMath(container);
   return container.innerHTML;
 }
 
@@ -55,16 +56,7 @@ export function markdownToNoteHtml(markdown = "") {
   }).replace(/^\[WebImage:\s*(\S+?)(?:\s*\|\s*([^\]]*))?\]\s*$/gim, (_match, source, caption) => {
     return safeImageSource(source) ? `![${(caption || "Study image").replaceAll("[", "").replaceAll("]", "")}](<${source.replace(/[<>]/g, "")}>)` : (caption || "");
   }).replace(/^\[IMG:(https:\/\/[^\]]+)\]\s*$/gim, "![]($1)");
-  const host = document.createElement("div"); host.innerHTML = sanitizeNoteHtml(marked.parse(normalized, { gfm: true }));
-  const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT), nodes = [];
-  while (walker.nextNode()) if (!walker.currentNode.parentElement.closest("pre,code,[data-classio-equation]")) nodes.push(walker.currentNode);
-  for (const node of nodes) {
-    const pattern = /\$\$([\s\S]+?)\$\$|\$([^$\n]{1,600})\$/g, text = node.textContent;
-    let match, start = 0, found = false; const fragment = document.createDocumentFragment();
-    while ((match = pattern.exec(text))) { found = true; fragment.append(text.slice(start, match.index)); const span = document.createElement("span"); const latex = (match[1] || match[2]).slice(0, 600); span.setAttribute("data-classio-equation", "true"); span.setAttribute("data-latex", latex); span.textContent = `\\(${latex}\\)`; fragment.append(span); start = pattern.lastIndex; }
-    if (found) { fragment.append(text.slice(start)); node.replaceWith(fragment); }
-  }
-  return host.innerHTML;
+  return sanitizeNoteHtml(parseStudyMarkdown(normalized));
 }
 
 export function noteHtmlToMarkdown(html) {

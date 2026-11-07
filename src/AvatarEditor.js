@@ -1,3 +1,4 @@
+import { lockBodyScroll } from "./bodyScrollLock";
 import { useEffect, useRef, useState } from "react";
 import FriendlyAvatar from "./FriendlyAvatar";
 import UiIcon from "./UiIcon";
@@ -5,12 +6,12 @@ import { AVATAR_COLORS, AVATAR_OPTIONS, DEFAULT_CHARACTER, randomCharacter } fro
 
 const hex = (value, fallback) => /^#[\da-f]{6}$/i.test(value || "") ? value : /^#[\da-f]{3}$/i.test(value || "") ? "#" + [...value.slice(1)].map(x => x + x).join("") : fallback;
 export default function AvatarEditor({ character, onChange, onClose }) {
-  const [tab, setTab] = useState("Face"), [draft, setDraft] = useState(() => ({ ...DEFAULT_CHARACTER, ...character }));
+  const [tab, setTab] = useState("Face"), [draft, setDraft] = useState(() => ({ ...DEFAULT_CHARACTER, ...character })), [yaw, setYaw] = useState(-.10);
   const panel = useRef(null), closeRef = useRef(onClose); closeRef.current = onClose;
   const patch = (key, value) => setDraft(current => ({ ...current, [key]: value }));
   useEffect(() => {
-    const before = document.activeElement, overflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden"; panel.current.querySelector("button")?.focus({ preventScroll: true });
+    const before = document.activeElement, unlock = lockBodyScroll();
+    panel.current.querySelector("button")?.focus({ preventScroll: true });
     const keyboard = event => {
       if (event.key === "Escape") closeRef.current();
       if (event.key !== "Tab") return;
@@ -19,18 +20,18 @@ export default function AvatarEditor({ character, onChange, onClose }) {
       else if (!event.shiftKey && document.activeElement === controls.at(-1)) { event.preventDefault(); controls[0]?.focus(); }
     };
     window.addEventListener("keydown", keyboard);
-    return () => { document.body.style.overflow = overflow; window.removeEventListener("keydown", keyboard); if (before?.isConnected) before.focus({ preventScroll: true }); };
+    return () => { unlock(); window.removeEventListener("keydown", keyboard); if (before?.isConnected) before.focus({ preventScroll: true }); };
   }, []);
   const palette = (key, label) => <fieldset className="avatar-field"><legend>{label}</legend><div className="avatar-colors">{AVATAR_COLORS[key].map(value => <button key={value} type="button" aria-label={`${label} ${value}`} aria-pressed={draft[key]?.toLowerCase() === value} style={{ background: value }} onClick={() => patch(key, value)} />)}
     <label className="avatar-custom-color">Custom<input type="color" aria-label={`Custom ${label.toLowerCase()}`} value={hex(draft[key], AVATAR_COLORS[key][0])} onChange={event => patch(key, event.target.value)} /></label></div></fieldset>;
   const choices = (key, label, extra = {}) => <fieldset className="avatar-field"><legend>{label}</legend><div className={`avatar-option-grid for-${key}`}>
     {AVATAR_OPTIONS[key].map((name, value) => <button type="button" key={name} aria-label={`${label}: ${name}`} aria-pressed={(draft[key] || 0) === value} onClick={() => patch(key, value)}>
-      <span className="avatar-option-visual"><FriendlyAvatar character={{ ...draft, ...extra, [key]: value }} size={72} /></span><span>{name}</span>{(draft[key] || 0) === value && <span className="avatar-selection-mark"><UiIcon name="check" size={12} /></span>}
+      <span className="avatar-option-visual"><FriendlyAvatar character={{ ...draft, ...extra, [key]: value }} framing={key === "topStyle" ? "full" : "portrait"} size={72} /></span><span>{name}</span>{(draft[key] || 0) === value && <span className="avatar-selection-mark"><UiIcon name="check" size={12} /></span>}
     </button>)}</div></fieldset>;
   const detailColor = (key, label) => <label className="avatar-detail-color">{label}<input type="color" aria-label={label} value={hex(draft[key], "#739db8")} onChange={event => patch(key, event.target.value)} /></label>;
   return <div className="avatar-editor-overlay" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}><section className="avatar-editor premium-avatar-editor" ref={panel} role="dialog" aria-modal="true" aria-labelledby="avatar-title">
     <header><div><p className="eyebrow">MAKE IT YOURS</p><h2 id="avatar-title">Your Classio character</h2></div><button type="button" className="quiet-button" aria-label="Close character editor" onClick={onClose}><UiIcon name="close" /></button></header>
-    <div className="avatar-editor-body"><div className="avatar-preview-column"><div className="avatar-stage"><FriendlyAvatar character={draft} size={184} /><span className="avatar-stage-shadow" /></div>
+    <div className="avatar-editor-body"><div className="avatar-preview-column"><div className="avatar-stage avatar-stage-3d"><FriendlyAvatar character={draft} framing="full" yaw={yaw} size={240} /></div><div className="avatar-turn-controls"><button className="quiet-button" aria-label="Turn character left" onClick={() => setYaw(value => value - .45)}><UiIcon name="back" /></button><span>3D preview</span><button className="quiet-button" aria-label="Turn character right" onClick={() => setYaw(value => value + .45)}><UiIcon name="arrow" /></button></div>
       <label>Display name<input maxLength={40} value={draft.name || ""} onChange={event => patch("name", event.target.value)} placeholder="Your name" /></label>
       <div className="avatar-preview-actions"><button type="button" className="quiet-button" onClick={() => setDraft(current => randomCharacter(current))}><UiIcon name="shuffle" />Randomize</button>
         <button type="button" className="text-button" onClick={() => setDraft({ ...DEFAULT_CHARACTER, name: draft.name || "" })}>Reset look</button></div><p>Changes are saved when you choose Save changes.</p></div>

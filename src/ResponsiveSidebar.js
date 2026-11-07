@@ -1,3 +1,4 @@
+import { lockBodyScroll } from "./bodyScrollLock";
 import { useEffect, useRef, useState } from "react";
 import { ThemeSelector } from "./theme";
 import UiIcon from "./UiIcon";
@@ -18,8 +19,7 @@ export default function ResponsiveSidebar({ mobile, expanded, onExpand, main, ma
 
   useEffect(() => {
     if (!mobile || !open) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const unlock = lockBodyScroll();
     const previousFocus = document.activeElement;
     const menuTrigger = trigger.current;
     drawer.current?.querySelector("button")?.focus();
@@ -33,7 +33,7 @@ export default function ResponsiveSidebar({ mobile, expanded, onExpand, main, ma
     };
     window.addEventListener("keydown", keyboard);
     return () => {
-      document.body.style.overflow = previousOverflow;
+      unlock();
       window.removeEventListener("keydown", keyboard);
       if (menuTrigger?.isConnected) menuTrigger.focus();
       else if (previousFocus?.isConnected) previousFocus.focus();
@@ -46,7 +46,7 @@ export default function ResponsiveSidebar({ mobile, expanded, onExpand, main, ma
     <div className="navigation-brand">
       <button type="button" onClick={() => mobile ? setOpen(false) : onExpand(value => !value)}
         aria-label={mobile ? "Close menu" : expanded ? "Collapse sidebar" : "Expand sidebar"}>
-        {mobile ? <MenuIcon close /> : <img src="/classio-mark.svg" alt="" width="28" height="28" />}
+        {mobile ? <MenuIcon close /> : <img src="/ClassioLogo.png" alt="" width="28" height="28" />}
       </button>
       {full && <span>Classio</span>}
     </div>
