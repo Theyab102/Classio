@@ -1,6 +1,7 @@
+import useVisualViewport from "./useVisualViewport";
 import { MATH_OUTPUT_GUIDE } from "./mathMarkdown";
 import { lockBodyScroll } from "./bodyScrollLock";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { prepareNoteImage } from "./documentMedia";
 import { sendStudyRequest } from "./studyTools";
 import UiIcon from "./UiIcon";
@@ -28,13 +29,8 @@ export default function AssistantPanel({ onClose, context, activity, library = [
     input.current?.focus({ preventScroll: true });
     return () => { recognition.current?.abort(); if (previous?.isConnected) previous.focus({ preventScroll: true }); };
   }, []);
-  useEffect(() => {
-    if (!compact || !window.visualViewport) return;
-    const view = window.visualViewport;
-    const update = () => { panel.current?.style.setProperty("--assistant-mobile-height", `${view.height}px`); panel.current?.style.setProperty("--assistant-mobile-top", `${view.offsetTop}px`); };
-    update(); view.addEventListener("resize", update); view.addEventListener("scroll", update);
-    return () => { view.removeEventListener("resize", update); view.removeEventListener("scroll", update); };
-  }, [compact]);
+  useVisualViewport(panel);
+  useLayoutEffect(()=>{const node=input.current;if(!node)return;node.style.height="auto";node.style.height=Math.min(node.scrollHeight,compact?144:180)+"px";},[draft,compact]);
   useEffect(() => {
     const unlock = compact ? lockBodyScroll() : () => {};
     const keyboard = event => {
@@ -106,7 +102,7 @@ export default function AssistantPanel({ onClose, context, activity, library = [
       </div>
       <div className="assistant-composer-wrap">{storageNotice && <p className="conversation-storage" role="status">{storageNotice}</p>}{error && <div className="assistant-error" role="alert"><p>{error}</p></div>}
         {attachment && <div className="attachment-preview"><img src={attachment.src} alt="Attachment preview" /><span>{attachment.name}</span><button aria-label="Remove attachment" onClick={() => setAttachment(null)}><UiIcon name="close" size={16} /></button></div>}
-        <form className="assistant-composer" aria-label="Message Classio" onSubmit={event => { event.preventDefault(); send(); }}><textarea ref={input} aria-label="Message" value={draft} maxLength={8000} rows={3} placeholder="Ask Classio anything..."
+        <form className="assistant-composer" aria-label="Message Classio" onSubmit={event => { event.preventDefault(); send(); }}><textarea ref={input} aria-label="Message" value={draft} maxLength={8000} rows={2} wrap="soft" placeholder="Ask Classio anything..."
           onChange={event => onDraftChange(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); send(); } }} />
           <div className="composer-actions"><button type="button" className="quiet-button" aria-label="Attach image" title="Attach a study image" onClick={() => upload.current.click()}><UiIcon name="image" /></button><input ref={upload} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={event => { attach(event.target.files?.[0]); event.target.value = ""; }} />
             {SpeechRecognition && <button type="button" className="quiet-button" aria-label={listening ? "Stop microphone" : "Dictate question"} aria-pressed={listening} onClick={dictate}><UiIcon name="mic" /></button>}

@@ -1,9 +1,11 @@
+import useVisualViewport from "./useVisualViewport";
 import { lockBodyScroll } from "./bodyScrollLock";
 import { useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import UiIcon from "./UiIcon";
 
 export default function StudioDialog({ title, onClose, children, wide = false }) {
+  const viewport=useRef(null);useVisualViewport(viewport);
   const ref = useRef(null), close = useRef(onClose), id = useId(); close.current = onClose;
   useEffect(() => {
     const before = document.activeElement, unlock = lockBodyScroll();
@@ -19,6 +21,6 @@ export default function StudioDialog({ title, onClose, children, wide = false })
     window.addEventListener("keydown", keys);
     return () => { unlock(); window.removeEventListener("keydown", keys); if (before?.isConnected) before.focus({ preventScroll: true }); };
   }, []);
-  return createPortal(<div className="studio-dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}><section className={`studio-dialog ${wide ? "is-wide" : ""}`} ref={ref} role="dialog" aria-modal="true" aria-labelledby={id}>
+  return createPortal(<div ref={viewport} className="studio-dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}><section className={`studio-dialog ${wide ? "is-wide" : ""}`} ref={ref} role="dialog" aria-modal="true" aria-labelledby={id}>
     <header><h2 id={id}>{title}</h2><button className="quiet-button" aria-label={`Close ${title}`} onClick={onClose}><UiIcon name="close" /></button></header><div className="studio-dialog-content">{children}</div></section></div>, document.body);
 }

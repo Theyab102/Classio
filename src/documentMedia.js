@@ -202,8 +202,8 @@ export function likelyStudyImage(query, results) {
 
 export async function getPresentationFigures(file) {
   const { readSlides } = await import("./PowerPointViewer");
-  const { slides } = await readSlides(file);
-  return slides.flatMap((slide, index) => slide.items.filter(item => item.type === "image" && (!item.position || (parseFloat(item.position.width) >= 14 && parseFloat(item.position.height) >= 14))).slice(0, 3).map((item, imageIndex) => ({
-    src: item.src, title: slide.texts[0] || "Source slide figure", context: slide.texts.join(" ").slice(0, 1000), credit: "Source slide " + (index + 1) + " · figure " + (imageIndex + 1),
+  const { slides,width,height } = await readSlides(file);
+  return slides.flatMap((slide, index) => slide.items.filter(item => item.type === "image" && (!item.position || (parseFloat(item.position.width)>=6&&parseFloat(item.position.height)>=6&&parseFloat(item.position.width)*parseFloat(item.position.height)>=160))).slice(0, 3).map((item, imageIndex) => ({
+    src: item.src, title: slide.texts[0] || "Source slide figure", context: slide.texts.join(" ").slice(0, 1000), credit: "Source slide " + (index + 1) + " · figure " + (imageIndex + 1),...(item.position?{width:parseFloat(item.position.width)*width/100,height:parseFloat(item.position.height)*height/100}:{}),
   })));
 }

@@ -1,5 +1,7 @@
 # Classio refinement implementation report
 
+**Current follow-up:** [Phone layout and generation fixes](CLASSIO-PHONE-GENERATION-FOLLOWUP.md) supersedes the earlier creator and browser-fit claims. The texture-based creator has been withdrawn from the UI; built-in customization and saved assets remain. The baseline page-width checks below missed clipped child controls.
+
 This continues the existing redesign at `fc30e5e`; it does not replace the workspace or discard completed features. The numbered sections below follow the supplied request. The later request for hats, shoes, glasses and accessories extends section 2.
 
 Implemented features and production dependencies are distinguished below. Local browser tests use explicit provider fixtures and real browser rendering, microphone capture, audio bytes, image alpha and exported documents. They establish integration behavior, not live provider availability or AI design quality. This environment has no production credentials and blocks the relevant external provider domains.
@@ -10,15 +12,9 @@ Content-sized controls, bounded dropdowns, stable icon dimensions, compact dialo
 
 ## 2. Custom clothing and hairstyle creation, expanded to wearable items
 
-The character editor opens a real drawing canvas for clothing, hair, hats, shoes, glasses and accessories. Supported shapes include shirts, hoodies, jackets, pants, shorts, dresses, 17 hairstyles, eight hats, four shoe fits, seven glasses fits, badges, backpacks, wings, tails and jewelry. Brushes, erasing, brush sizes, custom colors, undo/redo, text instructions, preview, regeneration, editing, private drafts, wear and submission actions have working handlers.
+The earlier implementation provided sketch-guided textures on fitted, parameterized avatar meshes. It did not generate arbitrary new hair or garment geometry. Following the user's instruction to remove the feature if it cannot produce actual requested new shapes, the sketch creator and community gallery have been withdrawn from the character UI. Built-in Face/Hair/Outfit/Details customization, colors, presets, rotation, undo/redo and save/cancel remain. Previously worn and privately saved designs are retained, with wear/remove/download controls; no user assets were deleted.
 
-The actual sketch bytes reach the configured image model with explicit preservation instructions. Vision analysis can suggest a compatible fit; low-confidence guesses are discarded. Generated textures are validated, compressed and applied to actual avatar meshes. Front-projected UV coordinates keep centered sketch details on the visible garment front. Hair offers bounded length, fringe and texture adjustments. An undone drawing cannot leave a stale preview available to wear. Switching to built-in items clears the appropriate custom slot in one undoable action. Existing character options remain accessible.
-
-Four private catalog slots complement the worn slots. Worn designs remain editable when the catalog is full; existing drafts are never silently evicted. Account assets use `users/{uid}/preferences/character`, leaving the materials document separate. Google-authenticated submissions enter a private moderation queue; only approved assets appear publicly. Reporting is a real authenticated server action.
-
-Files: `src/AvatarDesigner.js`, `AvatarEditor.js`, `AvatarGallery.js`, `avatarDesigns.js`, `avatarFit.js`, `avatarItemTypes.js`, `avatarScene.js`, `FriendlyAvatar.js`, `shared/avatar-schema.js`, `src/App.js`, `api/images.js`, `api/avatar-designs.js`, `server/image-service.js`, `server/avatar-sharing.js`. Validation: schema/slot/fit tests, every wearable fit’s actual textured mesh and UV checks, server image and publication-input tests, account restore/save regression and browser sketch-to-wear flow with real WebGL rendering.
-
-**Dependencies and boundaries:** AI image editing requires enabled Gemini image-model access and `GEMINI_IMAGE_MODEL`; publishing requires Firebase Admin, an enabled sharing service and an operator reviewing the moderation queue. No live publication or model-quality claim is made. Shapes use compatible, parameterized meshes with fitted textures; arbitrary sketch-to-new-3D-mesh generation is not implemented. Guests retain creations for the current session. Browser WebGL support is required for new 3D renders; existing poster fallbacks remain.
+Prototype creator, mesh, fit and service code remains in the repository. It is not an available sketch-to-new-3D creation or publication feature. A genuine geometry-generation and avatar-fitting pipeline, with validated device performance and design preservation, is still required before exposing that workflow again. Current integration checks do not establish live model availability or sketch fidelity.
 
 ## 3. Gender selection for the randomizer
 
@@ -130,7 +126,7 @@ All slide text uses the shared renderer. PowerPoint math paragraphs use standalo
 
 Files: `src/DeckDesign.js`, `deckGeometry.js`, `deckMathExport.js`, `deckExportDesign.js`, `PresentationImageEditor.js`, `presentationImages.js`, `documentMedia.js`, `documentStudio.css`, `App.js`, `server/image-search.js`, `image-service.js`, `api/images.js`. Validation: geometry tests for every layout/placement; server image/search tests; browser large-preview/cutout flows; actual PPTX ZIP inspection for vector math, image alpha, theme primitives and native text. PowerPoint equations are vector artwork, not native editable Office equations. Live image-model/background-removal/search accounts, licensing of each real selected asset and visual opening in desktop PowerPoint remain production checks. Browser PDF print previews are checked; pagination/rendering still depends on the installed print engine.
 
-## Verification and remaining deployment work
+## Earlier baseline verification and deployment dependencies
 
 Verification completed on 7 November 2026: Secrets are server-only. No production setting was silently enabled, no public design was published from this environment, and fixture outputs are never shipped as app responses.
 

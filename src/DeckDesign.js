@@ -1,3 +1,4 @@
+import {normalizeDeckDesign,deckStyleVariables} from "./deckStyle";
 import { InkLayer, InkToolbar, useInkTool } from "./DocumentInk";
 import { safeImageSource } from "./documentMedia";
 import UiIcon from "./UiIcon";
@@ -38,25 +39,26 @@ export function parseDeckResponse(raw, count) {
       quote: text(value?.quote, 500), author: text(value?.author, 100),
       left: side(value?.left), right: side(value?.right),
       imageSearch: text(value?.imageSearch, 100),
+      ...(Number.isInteger(value?.sourceFigure)&&value.sourceFigure>=0?{sourceFigure:value.sourceFigure}:{}),
       imageRole: ["diagram","graph","screenshot","photo","object"].includes(value?.imageRole) ? value.imageRole : "diagram",
       ...(["left","right","below"].includes(value?.imagePlacement) ? {imagePlacement:value.imagePlacement} : {}),
       ...(table ? { table } : {}),
       note: text(value?.note, 500),
     };
   });
-  return { title: text(parsed.title, 150) || slides[0].title || "Presentation", slides };
+  return { title: text(parsed.title, 150) || slides[0].title || "Presentation", slides, designs:Array.isArray(parsed.designs)?parsed.designs.slice(0,3).map(normalizeDeckDesign):[] };
 }
 
 const list = points => <ul>{(points || []).map((point, index) => <li key={index}><StudyMarkdown inline text={point}/></li>)}</ul>;
 const noStrokes = [];
 
-export function DeckSlide({ slide, theme, layout = "lecture", index, total, children }) {
+export function DeckSlide({ slide, theme, layout = "lecture", index, total, children, design }) {
   const image = safeImageSource(slide.image) ? slide.image : null;
   const table = normalizeSlideTable(slide.table);
   const background = image && slide.imageMode === "background";
   const placement=mediaPlacement(slide,index),density=[slide.title,slide.subtitle,...(slide.bullets||[])].join('').length>600?'is-dense':'';
-  return <div className={`deck-canvas deck-${layout} deck-kind-${slide.type} ${image&&!background?'deck-has-image media-'+placement:''} ${density}`}
-    style={{ "--slide-bg": theme.bg, "--slide-accent": theme.accent, "--slide-text": theme.text, "--slide-sub": theme.sub }}>
+  return <div className={`deck-canvas deck-${layout} deck-kind-${slide.type} ${image&&!background?'deck-has-image media-'+placement:''} ${density} ${design?"deck-custom-design deck-pattern-"+design.pattern:""}`}
+    style={{ "--slide-bg": theme.bg, "--slide-accent": theme.accent, "--slide-text": theme.text, "--slide-sub": theme.sub,...deckStyleVariables(design,theme) }}>
     {background && <img className="deck-background" src={image} alt="" referrerPolicy="no-referrer" />}
     <div className="deck-decoration" aria-hidden="true"><span /><span /></div>
     <div className="deck-slide-body">
@@ -90,24 +92,24 @@ export function DeckDesignPicker({ layouts, deck, themes, onChoose, onCancel }) 
     <h3>Choose a presentation design</h3>
     <p>Compare the same deck in different layouts. Your current slides stay in place until you choose a design.</p>
     <div className="deck-choice-grid">
-      {layouts.map(layout => <article key={layout.id}>
+      {layouts.map((layout,choiceIndex) => <article key={layout.id||`${layout.name}-${choiceIndex}`}>
         <h4>{layout.name}</h4><p>{layout.description}</p>
-        <DeckSlide slide={deck.slides[0]} layout={layout.id} theme={themes.find(theme => theme.id === layout.theme)} index={0} total={deck.slides.length} />
-        {deck.slides[1] && <DeckSlide slide={deck.slides[1]} layout={layout.id} theme={themes.find(theme => theme.id === layout.theme)} index={1} total={deck.slides.length} />}
+        <DeckSlide slide={deck.slides[0]} design={layout.layout?layout:undefined} layout={layout.layout||layout.id} theme={layout.bg?layout:themes.find(theme => theme.id === layout.theme)} index={0} total={deck.slides.length} />
+        {deck.slides[1] && <DeckSlide slide={deck.slides[1]} design={layout.layout?layout:undefined} layout={layout.layout||layout.id} theme={layout.bg?layout:themes.find(theme => theme.id === layout.theme)} index={1} total={deck.slides.length} />}
         <div className="studio-controls"><button type="button" className="quiet-button" onClick={()=>setPreview(layout)}>Preview large</button><button type="button" className="quiet-button is-primary" onClick={() => onChoose(layout)}><UiIcon name="check" size={16} />Use {layout.name}</button></div>
       </article>)}
     </div>
     <div className="studio-controls"><button type="button" onClick={onCancel}>Discard options</button></div>
-    {preview&&<StudioDialog title={preview.name+" presentation preview"} wide onClose={()=>setPreview(null)}><div className="deck-large-preview">{deck.slides.map((slide,index)=><DeckSlide key={index} slide={slide} layout={preview.id} theme={themes.find(theme=>theme.id===preview.theme)} index={index} total={deck.slides.length}/>)}</div><button className="quiet-button is-primary" onClick={()=>{onChoose(preview);setPreview(null);}}>Use {preview.name}</button></StudioDialog>}
+    {preview&&<StudioDialog title={preview.name+" presentation preview"} wide onClose={()=>setPreview(null)}><div className="deck-large-preview">{deck.slides.map((slide,index)=><DeckSlide key={index} slide={slide} design={preview.layout?preview:undefined} layout={preview.layout||preview.id} theme={preview.bg?preview:themes.find(theme=>theme.id===preview.theme)} index={index} total={deck.slides.length}/>)}</div><button className="quiet-button is-primary" onClick={()=>{onChoose(preview);setPreview(null);}}>Use {preview.name}</button></StudioDialog>}
   </section>;
 }
 
-export function AnnotatedDeckSlide({ slide, theme, layout, index, total, onChange }) {
+export function AnnotatedDeckSlide({ slide, theme, layout, index, total, onChange,design }) {
   const ink = useInkTool();
   const strokes = slide.ink || noStrokes;
   return <section className="deck-annotation" aria-label="Annotate slide">
     <div className="document-toolbar"><InkToolbar ink={ink} strokes={strokes} onChange={onChange} /></div>
-    <DeckSlide slide={slide} theme={theme} layout={layout} index={index} total={total}>
+    <DeckSlide slide={slide} theme={theme} layout={layout} design={design} index={index} total={total}>
       <InkLayer ink={ink} strokes={strokes} onChange={onChange} />
     </DeckSlide>
   </section>;

@@ -29,16 +29,17 @@ export default function ChoiceMenu({ children, value, defaultValue, onChange, di
   };
   useLayoutEffect(() => {
     if (!open) return;
+    const view=window.visualViewport;
     const place = event => {
       if (event?.target instanceof Node && menu.current?.contains(event.target)) return;
       const box = trigger.current.getBoundingClientRect(), width = Math.min(Math.max(box.width, variant === "notebook" ? 315 : Math.min(240,Math.max(140,...options.map(option=>option.label.length*7+50)))), window.innerWidth - 24);
-      const roomBelow = window.innerHeight - box.bottom - 18, above = roomBelow < 190 && box.top > roomBelow;
-      const height = Math.min(360, Math.max(80, above ? box.top - 18 : roomBelow));
+      const visualTop=view?.offsetTop||0,visualHeight=view?.height||window.innerHeight,roomBelow=visualTop+visualHeight-box.bottom-18,roomAbove=box.top-visualTop-18,above=roomBelow<190&&roomAbove>roomBelow;
+      const height=Math.min(360,Math.max(60,Math.min(visualHeight-24,above?roomAbove:roomBelow)));
       setPosition({ width, left: Math.max(12, Math.min(box.left, window.innerWidth - width - 12)), maxHeight: height,
         ...(above ? { bottom: window.innerHeight - box.top + 7 } : { top: box.bottom + 7 }) });
     };
-    place(); window.addEventListener("resize", place); window.addEventListener("scroll", place, true);
-    return () => { window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); };
+    place(); window.addEventListener("resize", place); window.addEventListener("scroll", place, true);view?.addEventListener("resize",place);view?.addEventListener("scroll",place);
+    return () => { window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true);view?.removeEventListener("resize",place);view?.removeEventListener("scroll",place); };
   }, [open, variant, options]);
   useEffect(() => {
     if (!open) return;

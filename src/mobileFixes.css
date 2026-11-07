@@ -1,0 +1,65 @@
+/* Intrinsic, wrapping controls. The original blue Classio tokens stay shared. */
+.assistant-panel{top:var(--visual-top,0px);bottom:auto;height:var(--visual-height,100dvh);box-sizing:border-box}
+.classio-shell textarea,.studio-dialog textarea,.avatar-editor textarea{box-sizing:border-box;min-width:0;max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:normal;overflow-x:hidden}
+.avatar-colors{display:flex;flex-wrap:wrap;align-items:center;gap:10px!important}
+.avatar-colors>button{flex:0 0 34px!important;width:34px!important;min-width:34px!important;max-width:34px!important;height:34px!important;min-height:34px!important;max-height:34px!important;aspect-ratio:1;box-sizing:border-box;border-radius:50%!important;padding:0!important}
+.avatar-custom-color{flex:0 0 auto;white-space:nowrap}
+.avatar-editor-overlay{top:var(--visual-top,0px);bottom:auto;height:var(--visual-height,100dvh);box-sizing:border-box}
+.premium-avatar-editor{max-height:min(870px,calc(var(--visual-height,100dvh) - 32px))}
+.avatar-worn-item{display:flex;justify-content:space-between;gap:12px;font-size:.77rem}
+.avatar-private-designs summary{cursor:pointer;font-size:.8rem;font-weight:600}
+.deck-slide-card{container-type:inline-size;min-width:0}
+.deck-card-row{display:grid;grid-template-columns:150px minmax(100px,1fr) auto;align-items:center;gap:14px;padding:12px;min-width:0}
+.deck-card-thumbnail{display:block;width:150px;padding:0;border:0;overflow:hidden;aspect-ratio:16/9;border-radius:8px;background:var(--panel-soft);cursor:pointer;min-width:0}
+.deck-card-thumbnail>.deck-canvas{width:100%}
+.deck-slide-copy{min-width:0;overflow:hidden}.deck-slide-copy h3{font:650 .88rem/1.5 'DM Sans Variable',sans-serif;margin:5px 0;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.deck-slide-copy .study-markdown{font-family:inherit!important}.deck-slide-copy>p{margin:0;font-size:.73rem;line-height:1.5;color:var(--app-muted)}
+.deck-slide-meta{display:flex;align-items:center;flex-wrap:wrap;gap:6px;font-size:.65rem;line-height:1.6;color:var(--app-muted)}.deck-slide-meta>span:first-child{color:var(--app-link);background:var(--panel-soft);padding:2px 7px;border-radius:12px}
+.deck-slide-actions{display:flex;align-items:center;gap:5px;flex-wrap:wrap;min-width:0;max-width:100%}.deck-slide-actions>.quiet-button{min-height:34px!important;height:auto;padding:7px 9px;font-size:.72rem;white-space:normal;display:inline-flex;gap:5px;align-items:center;justify-content:center}
+.deck-slide-actions>.deck-icon-action{flex:0 0 34px;min-width:34px;max-width:34px;width:34px;height:34px;padding:7px}.deck-icon-action>svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.deck-generator-fields{display:grid;gap:12px;margin-bottom:15px;min-width:0}.deck-generator-fields label{display:grid;gap:6px;font-size:.8rem;font-weight:600;color:var(--app-text);min-width:0}.deck-generator-fields textarea{width:100%;min-height:66px;max-height:240px;padding:11px 12px;border:1px solid var(--app-border);border-radius:10px;background:var(--app-bg);color:var(--app-text);font:400 .88rem/1.65 'DM Sans Variable',sans-serif;resize:vertical;white-space:pre-wrap;overflow-wrap:anywhere;overflow-x:hidden}
+.deck-generator-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:flex-end}.deck-generator-actions>button{min-height:42px;padding:10px 17px;flex:0 0 auto;max-width:100%}.deck-generator-actions .deck-count{display:flex;gap:9px;align-items:center;flex:0 1 auto;min-width:0}.deck-count input{width:34px!important;min-width:0!important}
+@container(max-width:720px){.deck-card-row{grid-template-columns:112px minmax(0,1fr);gap:10px 12px}.deck-card-thumbnail{width:112px}.deck-slide-actions{grid-column:1/-1;border-top:1px solid var(--app-border);padding-top:9px}}
+@media(max-width:900px){.deck-card-row{grid-template-columns:112px minmax(0,1fr);gap:10px 12px}.deck-card-thumbnail{width:112px}.deck-slide-actions{grid-column:1/-1;border-top:1px solid var(--app-border);padding-top:9px}}
+@media(max-width:767px){
+ .assistant-panel{top:var(--visual-top,0px)!important;height:var(--visual-height,100dvh)!important;bottom:auto!important;min-height:0;overflow:hidden;box-sizing:border-box}
+ .assistant-panel-header,.assistant-context{flex-shrink:0}.assistant-messages{flex:1 1 0;min-height:0;overflow:auto;overscroll-behavior:contain}
+ .assistant-composer-wrap{padding:8px 10px max(8px,env(safe-area-inset-bottom));max-height:70%;overflow:auto;min-height:0}
+ .assistant-composer textarea{min-height:46px!important;max-height:min(144px,calc(var(--visual-height,100dvh) * .25))!important;height:auto;font-size:16px!important;line-height:1.5;padding:10px 11px;resize:none;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;overflow-x:hidden;overflow-y:auto}
+ .assistant-composer{padding:0!important}.composer-actions{gap:5px;padding:7px}.composer-actions small{display:none}.composer-actions button:last-child{margin-left:auto}.assistant-privacy{font-size:.64rem;line-height:1.5;margin:6px 0 0}
+ .assistant-panel[data-keyboard-open=true] .assistant-welcome{display:none}.assistant-panel[data-keyboard-open=true] .conversation-storage{display:none}
+ .material-grid,.library-folder-grid,.recent-grid{grid-template-columns:minmax(0,1fr)!important}.material-card{width:100%;max-width:100%}.library-filters>*{min-width:0}.library-filters .library-search{width:100%;flex-basis:100%}
+ .deck-layout-gallery,.deck-choice-grid{grid-template-columns:minmax(0,1fr)!important}.deck-layout-gallery>button{display:grid;grid-template-columns:100px minmax(0,1fr);gap:2px 12px;align-items:start}.deck-layout-gallery .deck-style-sample{grid-column:1;grid-row:1/span 2;width:100px}.deck-layout-gallery strong,.deck-layout-gallery small{grid-column:2;margin:0!important}
+ .deck-generator-fields textarea{font-size:16px}.deck-generator-actions{justify-content:flex-start}.deck-options>div{min-width:0}
+ .avatar-colors>button{flex-basis:36px!important;width:36px!important;min-width:36px!important;max-width:36px!important;height:36px!important;min-height:36px!important;max-height:36px!important}
+ .premium-avatar-editor{max-height:calc(var(--visual-height,100dvh) - 18px)}
+ .avatar-editor-overlay[data-keyboard-open=true] .avatar-stage,.avatar-editor-overlay[data-keyboard-open=true] .avatar-turn-controls,.avatar-editor-overlay[data-keyboard-open=true] .avatar-preview-actions,.avatar-editor-overlay[data-keyboard-open=true] .avatar-randomizer-field{display:none!important}
+ .avatar-editor-overlay[data-keyboard-open=true] .avatar-preview-column{display:block;max-height:75px;padding:8px 12px}.avatar-editor-overlay[data-keyboard-open=true] .avatar-customization{min-height:0}.avatar-editor-overlay[data-keyboard-open=true] .avatar-editor-options{min-height:0}
+}
+.deck-canvas.deck-custom-design .deck-slide-body,.deck-canvas.deck-custom-design .deck-slide-body>h3,.deck-canvas.deck-custom-design .deck-slide-content{font-family:var(--deck-font)!important}
+.deck-canvas.deck-custom-design .deck-slide-content>div>ul>li{border-radius:var(--deck-radius)}
+.deck-canvas.deck-custom-design:not(.deck-pattern-none) .deck-decoration{display:none}
+.material-source-thumbnail{display:grid;place-items:center;position:relative;min-width:0;width:100%;height:150px;overflow:hidden;background:var(--panel-soft);border-bottom:1px solid var(--app-border);padding:10px;box-sizing:border-box}
+.material-source-thumbnail>img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;border-radius:5px}
+.material-source-thumbnail>.ppt-page{max-height:100%;width:100%;overflow:hidden;border-radius:5px}
+.is-list .material-source-thumbnail{flex:0 0 92px;width:92px;height:80px;padding:6px;border:0;border-right:1px solid var(--app-border)}
+.deck-style-actions{margin:12px 0!important}.deck-generation-notice{font-size:.8rem;line-height:1.6;color:var(--app-muted)}
+.ink-colors .ink-color-swatch{box-sizing:border-box;flex:0 0 30px!important;width:30px!important;min-width:30px!important;max-width:30px!important;height:30px!important;min-height:30px!important;max-height:30px!important;aspect-ratio:1;border-radius:50%!important;padding:0!important}
+.studio-dialog-backdrop{top:var(--visual-top,0px);bottom:auto;height:var(--visual-height,100dvh);box-sizing:border-box}
+.studio-dialog{max-height:calc(var(--visual-height,100dvh) - 28px)}
+@media(max-width:767px){.classio-color-panel input:not([type=range]){font-size:16px}.studio-dialog-content{min-height:0;overscroll-behavior:contain}.deck-count>button{flex:0 0 28px}.deck-count{gap:7px!important;padding:7px 9px!important}}
+.deck-options summary small,.deck-choice h4,.deck-choice p{overflow-wrap:anywhere}
+.classio-note-content p,.classio-note-content li,.study-markdown p,.study-markdown li{overflow-wrap:anywhere;max-width:100%}
+@media(max-width:767px){
+ .classio-shell input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]),.studio-dialog input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]),.avatar-editor input:not([type=checkbox]):not([type=range]){font-size:16px!important;box-sizing:border-box}
+ .deck-count input{appearance:textfield;-moz-appearance:textfield}.deck-count input::-webkit-inner-spin-button,.deck-count input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+}
+
+.slide-image-field{min-width:0;flex-wrap:wrap}.slide-image-details{flex:1 1 160px!important;min-width:0}.slide-image-details input{min-width:0}
+/* Hardware and software keyboards can reduce tablet viewports too. */
+.assistant-panel[data-keyboard-open=true] .assistant-panel-header,.assistant-panel[data-keyboard-open=true] .assistant-context{flex-shrink:0}
+.assistant-panel[data-keyboard-open=true] .assistant-messages{padding:10px 14px;flex:1 1 0;min-height:0}
+.assistant-panel[data-keyboard-open=true] .assistant-composer-wrap{box-sizing:border-box;max-height:60%;min-height:0;overflow:auto}
+.assistant-panel[data-keyboard-open=true] .assistant-composer textarea{min-height:44px!important;max-height:min(120px,calc(var(--visual-height,100dvh) * .25))!important;font-size:16px!important;resize:none}
+.assistant-panel[data-keyboard-open=true] .assistant-welcome,.assistant-panel[data-keyboard-open=true] .conversation-storage{display:none}
+.assistant-panel[data-keyboard-open=true] .assistant-error{max-height:60px;overflow:auto}

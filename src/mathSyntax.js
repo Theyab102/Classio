@@ -23,7 +23,7 @@ export function plainMathToLatex(input){
 }
 export function normalizeMathSource(input){
   const protectedParts=[];
-  let text=String(input||'').replace(/```[\s\S]*?```|`[^`\n]+`|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$\n]+\$|https?:\/\/\S+/g,value=>{const key='CLASSIOPROTECTED'+protectedParts.length+'TOKEN';protectedParts.push(value);return key;});
+  let text=String(input||'').replace(/\[\[(?:IMAGE|PDF|SOURCE_IMAGE|SOURCE_FIGURE):[^\]\n]+\]\]|```[\s\S]*?```|`[^`\n]+`|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\$[^$\n]+\$|https?:\/\/\S+/g,value=>{const key='CLASSIOPROTECTED'+protectedParts.length+'TOKEN';protectedParts.push(value);return key;});
   const formula=value=>{const latex=/[A-Za-z_=^±]/.test(value)?plainMathToLatex(value):null;return latex?'\\('+latex+'\\)':value;};
   text=text.split('\n').map(line=>{if(/CLASSIOPROTECTED/.test(line))return line;if(/^\s*\|/.test(line))return line.split('|').map(cell=>formula(cell)).join('|');const match=/^(\s*(?:(?:#{1,6}|>|[-*•]|\d+[.)])\s+)+)(.*)$/.exec(line);return match?match[1]+formula(match[2]):formula(line);}).join('\n');
   text=text.replace(/\b([A-Za-z](?:_\{?[a-zA-Z0-9]+\}?)?\s*=\s*(?:sqrt\([^)]*\)|[A-Za-z0-9_{}^+*/()±-]|[ \t]){1,120}?)(?=\s+[A-Za-z]{3,}\b|[,;.!?]|$)/gm,(value)=>{const latex=plainMathToLatex(value);return latex?'\\('+latex+'\\)':value;});

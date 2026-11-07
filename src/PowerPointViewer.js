@@ -143,6 +143,11 @@ function SlideItem({ item }) {
   </div>;
 }
 
+export function SourceSlidePreview({slide,width=16,height=9}) {
+ if(!slide)return null;const positioned=slide.items.some(item=>item.position);
+ return <div className={`ppt-page ${positioned?"ppt-positioned-page":""}`} style={{aspectRatio:`${width} / ${height}`,background:slide.background}} aria-hidden="true">{slide.items.map((item,index)=><SlideItem key={index} item={positioned?item:{...item,position:null}}/>)}</div>;
+}
+
 export default function PowerPointViewer({ file = {}, fileObj, page, onTotalPages, onSlidesLoaded, onUpdate }) {
   const [deck, setDeck] = useState(null);
   const [error, setError] = useState("");

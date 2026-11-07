@@ -1,6 +1,7 @@
+import {getSourceFigures,resolveSourceFigure} from "./sourceFigures";
 import { acknowledgeStudyImage } from "./documentMedia";
 import { markdownToNoteHtml, sanitizeNoteHtml } from "./noteFormat";
-import { getPdfFigures, getPresentationFigures, likelyStudyImage, prepareSourceFigure, safeImageSource, searchStudyImages } from "./documentMedia";
+import { getPdfFigures, likelyStudyImage, safeImageSource, searchStudyImages } from "./documentMedia";
 
 const generic = new Set(["the", "and", "for", "with", "from", "image", "figure", "diagram", "picture", "illustration", "search", "suggested", "visual", "source", "labeled", "labelled", "specific", "subject"]);
 export const subjectWords = text => [...new Set((String(text || "").toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []).map(word => word.replace(/s$/, "")).filter(word => !generic.has(word)))];
@@ -54,14 +55,15 @@ export function removeEmptyImageSections(root) {
   });
 }
 
-export async function enrichNoteImages(markdown, { pdfFile, fileObj, useWeb, signal, originalHtml = "", existingHtml, search = searchStudyImages } = {}) {
+export async function enrichNoteImages(markdown, { pdfFile, fileObj, useWeb, signal, originalHtml = "", existingHtml, sourceFigures:providedFigures,sourceOnly=!!fileObj, search = searchStudyImages } = {}) {
   const root = document.createElement("div"); root.innerHTML = existingHtml === undefined ? markdownToNoteHtml(markdown) : sanitizeNoteHtml(existingHtml);
   if (existingHtml === undefined) root.querySelectorAll("img").forEach(image => image.replaceWith(image.alt || ""));
+  const sourceFigures=providedFigures||(fileObj&&useWeb?await getSourceFigures(fileObj).catch(()=>[]):[]);
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT), texts = [];
   while (walker.nextNode()) if (!walker.currentNode.parentElement.closest("pre,code,[data-classio-equation]")) texts.push(walker.currentNode);
   const markers = [];
   for (const node of texts) {
-    const pattern = /\[\[(PDF|IMAGE):\s*([^\]]+)\]\]/gi, fragment = document.createDocumentFragment(); let match, start = 0, found = false;
+    const pattern = /\[\[(PDF|IMAGE|SOURCE_FIGURE|SOURCE_IMAGE):\s*([^\]]+)\]\]/gi, fragment = document.createDocumentFragment(); let match, start = 0, found = false;
     while ((match = pattern.exec(node.textContent))) {
       found = true; fragment.append(node.textContent.slice(start, match.index));
       const anchor = document.createElement("span"); fragment.append(anchor);
@@ -69,16 +71,14 @@ export async function enrichNoteImages(markdown, { pdfFile, fileObj, useWeb, sig
     }
     if (found) { fragment.append(node.textContent.slice(start)); node.replaceWith(fragment); }
   }
-  const seen = new Set([...root.querySelectorAll("img")].map(image => image.getAttribute("src"))); let added = 0, missing = 0, sourceFigures;
+  const seen = new Set([...root.querySelectorAll("img")].map(image => image.getAttribute("src"))); let added = 0, missing = 0;
   const requests = markers.slice(0, 3).map(async marker => {
     try {
       if (signal?.aborted) return {};
       if (marker.kind === "PDF" && pdfFile) return { marker, image: (await getPdfFigures(pdfFile, Number(marker.query)))[0] };
-      if (!useWeb) return { marker };
-      if (fileObj && /\.pptx$/i.test(fileObj.name || "")) {
-        sourceFigures ||= getPresentationFigures(fileObj);
-        const source = likelyStudyImage(marker.query, await sourceFigures); if (source) return { marker, image: await prepareSourceFigure(source) };
-      }
+      if(marker.kind==="SOURCE_FIGURE"||marker.kind==="SOURCE_IMAGE"){const source=sourceFigures[Number(marker.query)-(marker.kind==="SOURCE_IMAGE"?1:0)];return{marker,image:source?await resolveSourceFigure(source,fileObj):null};}
+      const source=likelyStudyImage(marker.query,sourceFigures);if(source)return{marker,image:await resolveSourceFigure(source,fileObj)};
+      if(!useWeb||sourceOnly)return{marker};
       const controller = new AbortController(), cancel = () => controller.abort();
       signal?.addEventListener("abort", cancel, { once: true });
       const timer = setTimeout(cancel, 8000); let results;
@@ -91,8 +91,17 @@ export async function enrichNoteImages(markdown, { pdfFile, fileObj, useWeb, sig
     if (!marker || signal?.aborted) continue;
     if (image && seen.has(image.src)) continue;
     if(image)try{await acknowledgeStudyImage(image,signal);}catch{image=null;}
-    if (!image || !insertNoteFigure(root, image, marker.query, marker.anchor)) missing++;
+    const query = marker.kind.startsWith("SOURCE_") ? image?.title : marker.query;
+    if (!image || !insertNoteFigure(root, image, query, marker.anchor)) missing++;
     else { seen.add(image.src); added++; }
+  }
+  // Place real source figures even when a model omitted image markers.
+  if(useWeb&&sourceFigures.length){
+    const headings=[...root.querySelectorAll("h1,h2,h3")];
+    for(const heading of headings){if(added>=4||signal?.aborted)break;if(imageHeading(heading.textContent))continue;let next=heading.nextElementSibling,body="",hasImage=false;while(next&&!/^H[1-3]$/.test(next.tagName)){if(next.querySelector("img")||next.tagName==="IMG")hasImage=true;body+=" "+next.textContent;next=next.nextElementSibling;}if(hasImage)continue;
+      const available=sourceFigures.filter(item=>!seen.has(item.src||`page-${item.pageNumber}`)),source=likelyStudyImage(heading.textContent,available)||likelyStudyImage(body.slice(0,250),available);if(!source)continue;
+      try{const image=await resolveSourceFigure(source,fileObj);if(image&&insertNoteFigure(root,image,heading.textContent,heading)){seen.add(source.src||`page-${source.pageNumber}`);seen.add(image.src);added++;}}catch{}
+    }
   }
   markers.forEach(marker => marker.anchor.remove()); removeEmptyImageSections(root);
   if (originalHtml) {

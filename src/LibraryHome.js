@@ -1,3 +1,4 @@
+import FileThumbnail from "./FileThumbnail";
 import MaterialDetails from "./MaterialDetails";
 import {inferSubject,materialMatches,materialType} from "./materialMetadata";
 import ChoiceMenu from "./ChoiceMenu";
@@ -10,7 +11,7 @@ export const materialKind = materialType;
 const shortPreview = file => (file.notes || file.transcript || "").replace(/<[^>]*>/g, " ").replace(/!?\[([^\]]*)\]\([^)]+\)/g, "$1").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/[#>*_`|]/g, "").replace(/\s+/g, " ").trim().slice(0, 125);
 
 export default function LibraryHome({ folders, guest, signIn, signInPending, signInError, createNote, upload, record, addLink,
-  newFolder, openFile, openFolder, rename, remove, move, updateMaterial, classifyMaterial }) {
+  newFolder, openFile, openFolder, rename, remove, move, updateMaterial, classifyMaterial,getFileBlob }) {
   const [query, setQuery] = useState(""), [filter, setFilter] = useState("all"), [sort, setSort] = useState("recent");
   const [layout, setLayout] = useState("grid"), [details,setDetails] = useState(null);
   const attempted = useRef(new Set());
@@ -65,7 +66,7 @@ export default function LibraryHome({ folders, guest, signIn, signInPending, sig
         <button className="folder-open" aria-label={`Open folder ${folder.name}`} onClick={() => openFolder(folder)}><span style={{ color: folder.color || "var(--app-link)" }}><UiIcon name="folder" size={28} /></span><strong>{folder.name}</strong><small>{folder.files?.length || 0} {(folder.files?.length || 0) === 1 ? "file" : "files"}</small></button>
         <ActionMenu label={`Actions for ${folder.name}`} items={[{ label: "Rename", run: () => rename({ ...folder, type: "folder" }) }, { label: "Delete", danger: true, run: () => remove({ ...folder, type: "folder" }) }]} /></article>)}</div>}
       {items.length ? <div className={`material-grid is-${layout}`} aria-label="Notes and files">{items.map(({ file, folder }) => { const kind = materialKind(file); return <article className="material-card" key={file.id}>
-        <button className="material-open" aria-label={`Open ${file.name}`} onClick={() => openFile(file, folder)}><div className={`material-preview type-${kind.key}`} style={{"--material-color":file.color || "var(--app-link)"}}><UiIcon name={kind.icon} size={28} /><span>{kind.label}</span>{file.pinned&&<span className="material-pin" aria-label="Pinned"><UiIcon name="pin" size={15}/></span>}{shortPreview(file) && <p>{shortPreview(file)}</p>}</div>
+        <button className="material-open" aria-label={`Open ${file.name}`} onClick={() => openFile(file, folder)}><FileThumbnail file={file} getFileBlob={getFileBlob}><div className={`material-preview type-${kind.key}`} style={{"--material-color":file.color || "var(--app-link)"}}><UiIcon name={kind.icon} size={28} /><span>{kind.label}</span>{file.pinned&&<span className="material-pin" aria-label="Pinned"><UiIcon name="pin" size={15}/></span>}{shortPreview(file) && <p>{shortPreview(file)}</p>}</div></FileThumbnail>
           <div className="material-info"><strong className="material-subject">{inferSubject(file).label}</strong><h3 title={file.name}>{file.name}</h3><p>{folder.id === "inbox" ? "Library" : folder.name}{file.course?.units?.length ? ` · ${file.course.units.length} lessons` : file.studyCards?.length ? ` · ${file.studyCards.length} cards` : ""}</p></div></button>
         <ActionMenu label={`Actions for ${file.name}`} items={fileActions(file, folder)} /></article>; })}</div>
         : <div className="library-empty"><WorkspaceArt /><h2>{query || filter !== "all" ? "No matching materials" : "Start with something you’re learning"}</h2>

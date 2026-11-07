@@ -1,3 +1,4 @@
+import {getSourceFigures,sourceFigureGuide} from "./sourceFigures";
 import AIStyleDialog from "./AIStyleDialog";
 import {styleVariables,styleRequest,normalizeStyle} from "./styleConfig";
 import {activeTheme} from "./theme";
@@ -48,7 +49,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
   const [level,setLevel]=useState(file.noteGenerationPreferences?.level || "Standard");
   const [noteLength,setNoteLength]=useState(file.noteGenerationPreferences?.length || "Medium");
   const [language, setLanguage] = useState("Same as source");
-  const [webImages, setWebImages] = useState(false);
+  const [webImages, setWebImages] = useState(!!fileObj);
   const [busy, setBusy] = useState(false);
   const [panel, setPanel] = useState(file.notesMode === "generate" ? "generate" : null);
   const [view, setView] = useState(initialMode || ((file.notesMode || (file.defaultTab === "learn" ? "lessons" : "write")) === "lessons" ? "lessons" : "write"));
@@ -197,8 +198,9 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
       const instruction = action === "table"
         ? "Return one compact GFM Markdown table based on the notes. Include clear column names and only supported information."
         : `Create ${style.toLowerCase()} study notes. Use a clear H1 title, H2 sections, concise paragraphs, lists, bold key terms and callout blockquotes. Use GFM Markdown tables for comparisons or structured facts. ${action === "organize" ? "Preserve the author's facts and order where useful. Fix wording and organization without inventing facts." : "Stay grounded in the source when provided."}`;
+      const sourceFigures=webImages&&fileObj&&action!=="table"?await getSourceFigures(fileObj).catch(()=>[]):[];
       const raw = await sendStudyRequest({ messages: [
-        { role: "system", content: `${instruction} Language: ${language}. Explanation level: ${level}. Length: ${noteLength}. Organization: ${noteLayout}. ${noteLayout === "Cornell" ? "Use a two-column cues/notes table and a concise summary." : noteLayout === "Q&A" ? "Structure each section as a question and its answer." : noteLayout === "Revision Sheet" ? "Prioritize compact definitions, key formulas and quick worked examples." : ""} Apply the learner’s custom instructions to the actual explanations, structure, examples and formatting while keeping source facts accurate. Custom instructions: ${instructions || "Use the selected defaults."}. ${MATH_OUTPUT_GUIDE} Return Markdown only. Do not write raw HTML or external URLs. ${pdfFile ? "For up to three relevant source figures, put [[PDF:3]] on a separate line with an actual page number from the source markers." : ""} ${webImages && action !== "table" ? "Include up to three relevant illustrations using [[IMAGE:specific subject]] on their own lines immediately after the paragraph that explains that subject. Never collect image searches or figure markers into a section at the end. Skip decorative or uncertain images." : ""}` },
+        { role: "system", content: `${instruction} Language: ${language}. Explanation level: ${level}. Length: ${noteLength}. Organization: ${noteLayout}. ${noteLayout === "Cornell" ? "Use a two-column cues/notes table and a concise summary." : noteLayout === "Q&A" ? "Structure each section as a question and its answer." : noteLayout === "Revision Sheet" ? "Prioritize compact definitions, key formulas and quick worked examples." : ""} Apply the learner’s custom instructions to the actual explanations, structure, examples and formatting while keeping source facts accurate. Custom instructions: ${instructions || "Use the selected defaults."}. ${MATH_OUTPUT_GUIDE} Return Markdown only. Do not write raw HTML or external URLs. ${pdfFile ? "For up to three relevant source figures, put [[PDF:3]] on a separate line with an actual page number from the source markers." : ""} ${sourceFigures.length?"Use up to three numbered source figures by putting [[SOURCE_FIGURE:0]] immediately after the related paragraph. Only use IDs from the supplied catalog; do not invent figures. Available figures: "+sourceFigureGuide(sourceFigures):""} ${webImages && !fileObj && action !== "table" ? "Include up to three relevant illustrations using [[IMAGE:specific subject]] on their own lines immediately after the paragraph that explains that subject. Never collect image searches or figure markers into a section at the end. Skip decorative or uncertain images." : ""}` },
         { role: "user", content: `Topic: ${topic.trim() || file.name}\nLearner instructions: ${instructions}\n\n${(source || "").slice(0, 16000)}` },
       ], maxTokens: action === "table" ? 1500 : 5500 }, controller.signal);
       let generatedStyle=null,styleUnavailable=false;
@@ -206,7 +208,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
         try {const rawStyle=await sendStudyRequest(styleRequest(instructions),controller.signal);generatedStyle={...normalizeStyle(JSON.parse(rawStyle.trim().replace(/^```(?:json)?\s*|\s*```$/gi,""))),prompt:instructions};}
         catch { if(controller.signal.aborted)return;styleUnavailable=true; }
       }
-      const enriched = await enrichNoteImages(raw.replace(/^\s*```(?:markdown|md)?\s*\n|\n```\s*$/g, ""), { pdfFile, fileObj, useWeb: webImages, signal: controller.signal, originalHtml: action === "organize" ? originalHtml : "" });
+      const enriched = await enrichNoteImages(raw.replace(/^\s*```(?:markdown|md)?\s*\n|\n```\s*$/g, ""), { pdfFile, fileObj, useWeb: webImages, sourceFigures, sourceOnly:!!fileObj, signal: controller.signal, originalHtml: action === "organize" ? originalHtml : "" });
       const html = enriched.html;
       if (!controller.signal.aborted) {
         if (action === "table") {

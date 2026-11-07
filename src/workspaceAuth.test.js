@@ -107,7 +107,7 @@ test("custom wearable profiles restore separately and save without inflating the
  const root={metadata:{fromCache:false},data:()=>({folders:[],characterAssetProfile:true,character:{name:"Saved creator",hat:5}})};
  getDoc.mockResolvedValue(root).mockResolvedValueOnce(root).mockResolvedValueOnce({data:()=>({character:{name:"Saved creator",hat:5,customHat:design,designs:[design]}})});setDoc.mockResolvedValue();
  render(<App/>);mockAuth.currentUser={uid:"creator",displayName:"Creator"};await act(async()=>{await mockAuthListener(mockAuth.currentUser);});
- fireEvent.click(screen.getByRole("button",{name:"Edit character",exact:true}));expect(screen.getByRole("button",{name:"Edit Blue crown",exact:true})).toBeInTheDocument();
+ fireEvent.click(screen.getByRole("button",{name:"Edit character",exact:true}));expect(screen.getByText("Wearing Blue crown",{exact:true})).toBeInTheDocument();
  await act(async()=>{fireEvent.click(screen.getByRole("button",{name:"Save changes",exact:true}));});
  expect(setDoc.mock.calls.some(([,data])=>data.character?.customHat?.name==="Blue crown")).toBe(true);
  const workspace=setDoc.mock.calls.find(([,data])=>data.characterAssetProfile===true)?.[1];expect(workspace.character.customHat).toBeUndefined();expect(workspace.character.designs).toBeUndefined();expect(workspace.character.name).toBe("Saved creator");
