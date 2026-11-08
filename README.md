@@ -37,7 +37,7 @@ The welcome page follows the device color scheme by default. Its Appearance sele
 
 The Library restores the original **Blank document, Upload document, Record audio and Website link** actions. **Create new** also contains AI notes, a course and folder creation. Search, type filters, sorting and recent materials use real user content. Phones use a hamburger menu containing every study tool. Tablet and PC sidebars scroll, including account and appearance controls. **AI Assistant** in navigation and visible page composers open the same conversation. The assistant reserves space on larger desktops and becomes a dismissible drawer on smaller screens. It sends only the current material, the current study activity, conversation and user attachments; Library context includes titles and folder names, not every document's contents. A failed workspace download offers a reload action with an explanation that reloading ends guest work.
 
-Character customization keeps Face, Hair, Outfit and Details, with original 3D previews, live staged changes, color choices, Randomize and Reset look. Save changes commits the character; Cancel leaves the previous character intact. Profile and sidebar use the same renderer and saved character.
+Character customization keeps Face, Hair, Outfit and Details, with original 3D previews, live staged changes, color choices, Randomize and Reset look. The expanded catalog includes 36 shaped tops, 33 hair options, 10 shoes, selectable bottoms, more hats/glasses/jewelry, independent wardrobe colors and accessories. Collars, sleeves, cuffs, seams and pockets use actual fabric geometry. Save changes commits the character; Cancel leaves the previous character intact. Profile and sidebar use the same renderer and saved character.
 
 ## Before public launch
 
@@ -93,3 +93,5 @@ The podcast question flow starts the microphone after the user's intentional Ask
 Both Gemini credentials are supported, but keys from one project share a cooldown group by default. Only genuinely independent projects should use independent `GEMINI_QUOTA_GROUP_*` settings. Groq remains first by default; small tasks have bounded budgets, duplicate in-flight requests share work, and style/classification responses have a short cache. This does not create extra provider quota.
 
 See [the phone and generation follow-up](docs/CLASSIO-PHONE-GENERATION-FOLLOWUP.md) and [the numbered refinement implementation report](docs/CLASSIO-REFINEMENTS-REPORT.md) for changes, verification, dependencies and remaining production checks. Build-time lint warnings in the legacy monolithic application remain reported; this repository has no configured TypeScript check.
+
+See [equation coverage, expanded avatars and the keyboard gap](docs/CLASSIO-EQUATIONS-AVATARS.md) for the latest changes and verification.

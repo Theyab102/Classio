@@ -1,7 +1,9 @@
 import katex from 'katex';
 import {normalizeMathSource} from './mathSyntax';
+import {normalizeLatex} from './mathMarkdown';
 const operators={'=':'equals','+':'plus','−':'minus','-':'minus','×':'times','⋅':'times','/':'divided by','±':'plus or minus','≈':'approximately equals','→':'yields','θ':'theta','α':'alpha','β':'beta','π':'pi','∑':'sum','∫':'integral','∞':'infinity'};
 function speechMath(latex){
+  latex=normalizeLatex(latex);
   const simple=latex.replace(/[\s{}\\]/g,'');
   if(/^F=ma$/.test(simple))return 'Force equals mass multiplied by acceleration';
   if(/^v=u\+at$/.test(simple))return 'Final velocity equals initial velocity plus acceleration multiplied by time';

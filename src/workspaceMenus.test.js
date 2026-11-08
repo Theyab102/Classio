@@ -1,3 +1,4 @@
+jest.mock("./pdf",()=>({openPdf:jest.fn(),loadPdfLibrary:jest.fn()}));
 import { fireEvent, render, screen } from "@testing-library/react";
 import LibraryHome from "./LibraryHome";
 import ActionMenu from "./ActionMenu";

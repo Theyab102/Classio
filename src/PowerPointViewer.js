@@ -1,3 +1,4 @@
+import StudyMarkdown from "./StudyMarkdown";
 import { useEffect, useState } from "react";
 import { InkLayer, InkToolbar, useInkTool } from "./DocumentInk";
 import "./documentStudio.css";
@@ -127,7 +128,7 @@ export function SlideTable({ table }) {
     {columnWidth > 0 && <colgroup>{table.columns.map((value, index) => <col key={index} style={{ width: `${value / columnWidth * 100}%` }} />)}</colgroup>}
     <tbody>{table.rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, index) => {
       const Tag = rowIndex === 0 && table.header ? "th" : "td";
-      return <Tag key={index} colSpan={cell.colSpan} rowSpan={cell.rowSpan} style={{ backgroundColor: cell.fill }}>{cell.text}</Tag>;
+      return <Tag key={index} colSpan={cell.colSpan} rowSpan={cell.rowSpan} style={{ backgroundColor: cell.fill }}><StudyMarkdown inline text={cell.text}/></Tag>;
     })}</tr>)}</tbody>
   </table>;
 }
@@ -136,7 +137,7 @@ function SlideItem({ item }) {
   return <div className={item.position ? "ppt-positioned" : "ppt-flow-item"} style={item.position || undefined}>
     {item.type === "text" && item.paragraphs.map((paragraph, index) => <p key={index}
       style={{ fontSize: paragraph.size || (item.title ? "4cqw" : "2.3cqw"), fontWeight: paragraph.bold || item.title ? 700 : undefined, color: paragraph.color }}>
-      {paragraph.text}
+      <StudyMarkdown inline text={paragraph.text}/>
     </p>)}
     {item.type === "image" && <img src={item.src} alt="" />}
     {item.type === "table" && <SlideTable table={item.table} />}

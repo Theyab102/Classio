@@ -1,11 +1,12 @@
 import {normalizeMathSource} from './mathSyntax';
+import {normalizeLatex} from './mathMarkdown';
 const escape=value=>String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 let converter;
 async function mathConverter(){
   if(!converter)converter=Promise.all([import('mathjax-full/js/mathjax.js'),import('mathjax-full/js/input/tex.js'),import('mathjax-full/js/output/svg.js'),import('mathjax-full/js/adaptors/liteAdaptor.js'),import('mathjax-full/js/handlers/html.js'),import('mathjax-full/js/input/tex/AllPackages.js')]).then(([core,input,output,adapter,handler,packages])=>{const adaptor=adapter.liteAdaptor();handler.RegisterHTMLHandler(adaptor);const document=core.mathjax.document('',{InputJax:new input.TeX({packages:packages.AllPackages}),OutputJax:new output.SVG({fontCache:'none'})});return{adaptor,document};}).catch(error=>{converter=null;throw error;});
   return converter;
 }
-export function mathSegments(source){const text=normalizeMathSource(source),parts=[],regex=/\\\(([\s\S]*?)\\\)|\\\[([\s\S]*?)\\\]|\$\$([\s\S]*?)\$\$|\$([^$\n]+)\$/g;let match,start=0;while((match=regex.exec(text))){if(match.index>start)parts.push({text:text.slice(start,match.index)});parts.push({latex:match[1]||match[2]||match[3]||match[4]});start=regex.lastIndex;}if(start<text.length)parts.push({text:text.slice(start)});return parts;}
+export function mathSegments(source){const text=normalizeMathSource(source),parts=[],regex=/\\\(([\s\S]*?)\\\)|\\\[([\s\S]*?)\\\]|\$\$([\s\S]*?)\$\$|\$([^$\n]+)\$/g;let match,start=0;while((match=regex.exec(text))){if(match.index>start)parts.push({text:text.slice(start,match.index)});parts.push({latex:normalizeLatex(match[1]||match[2]||match[3]||match[4])});start=regex.lastIndex;}if(start<text.length)parts.push({text:text.slice(start)});return parts;}
 export const containsExportMath=text=>mathSegments(String(text||'')).some(part=>part.latex!==undefined);
 export async function richTextSvg(text,{width,fontSize=21,color='253648',fontFace='Arial',bold=false}){
   const pixels=width*96,font=fontSize*96/72,parts=mathSegments(text),canvas=document.createElement('canvas'),context=canvas.getContext('2d');context.font=(bold?'700 ':'400 ')+font+'px '+fontFace;

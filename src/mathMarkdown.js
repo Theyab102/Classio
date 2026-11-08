@@ -1,11 +1,12 @@
 import {normalizeMathSource} from "./mathSyntax";
 import { Marked } from "marked";
 import katex from "katex";
+import "katex/dist/contrib/mhchem.js";
 
 export const MATH_OUTPUT_GUIDE = String.raw`Write mathematics as LaTeX, using \( ... \) for inline math and \[ ... \] for display equations. Keep units inside math, for example \(100\,\mathrm{m/s}\). Never put equations in code fences. When returning JSON, encode each LaTeX backslash as two backslashes, for example {"answer":"\\(F=ma\\)"}, so the decoded string retains its delimiters. Define symbols, show substitutions with units, and check arithmetic and dimensions in worked examples. Use Markdown headings, bold text, lists and GFM tables for other content.`;
 const escape = text => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 export function normalizeLatex(value) {
-  return value.replace(/(?<!\\)\\\\(?=(?:frac|sqrt|theta|text|mathrm|times|approx|cdot|sin|cos|tan|alpha|beta|gamma|Delta|pi|left|right|vec|sum|int|begin|end)\b)/g, "\\")
+  return value.replace(/(?<!\\)\\\\(?=(?:frac|sqrt|theta|text|mathrm|times|approx|cdot|sin|cos|tan|alpha|beta|gamma|Delta|pi|left|right|vec|sum|int|begin|end|ce|pu|lim|log|ln|infty|partial|nabla|leq?|geq?|neq?|cdots|ldots|pm|to|rightarrow|overline|hat|bar|underbrace|overbrace|binom|prod|angle)\b)/g, "\\")
     .replaceAll(String.fromCharCode(12) + "rac", "\\frac").replaceAll(String.fromCharCode(8) + "egin", "\\begin")
     .replaceAll(String.fromCharCode(9) + "heta", "\\theta").replaceAll(String.fromCharCode(9) + "ext{", "\\text{").replaceAll(String.fromCharCode(9) + "imes", "\\times");
 }
@@ -66,6 +67,6 @@ export function typesetMath(root, output = "htmlAndMathml") {
     const latex = node.getAttribute("data-latex") || "";
     node.classList.add("study-equation"); node.classList.toggle("is-display", node.getAttribute("data-display") === "block");
     node.setAttribute("role", "math"); node.setAttribute("aria-label", latex);
-    try { node.innerHTML = katex.renderToString(latex, { displayMode: node.getAttribute("data-display") === "block", output, throwOnError: true, trust: false, maxExpand: 500, strict: "ignore" }); } catch { node.textContent = "Equation needs review"; node.classList.add("math-needs-review"); node.setAttribute("title", "This expression could not be parsed safely. Edit the equation to clarify its notation."); }
+    try { node.innerHTML = katex.renderToString(latex, { displayMode: node.getAttribute("data-display") === "block", output, throwOnError: true, trust: false, maxExpand: 500, maxSize: 20, strict: "ignore" }); } catch { node.textContent = "Equation needs review"; node.classList.add("math-needs-review"); node.setAttribute("title", "This expression could not be parsed safely. Edit the equation to clarify its notation."); }
   });
 }

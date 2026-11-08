@@ -63,3 +63,11 @@
 .assistant-panel[data-keyboard-open=true] .assistant-composer textarea{min-height:44px!important;max-height:min(120px,calc(var(--visual-height,100dvh) * .25))!important;font-size:16px!important;resize:none}
 .assistant-panel[data-keyboard-open=true] .assistant-welcome,.assistant-panel[data-keyboard-open=true] .conversation-storage{display:none}
 .assistant-panel[data-keyboard-open=true] .assistant-error{max-height:60px;overflow:auto}
+/* iOS' translucent keyboard accessory strip can extend past visualViewport.
+   Keep an opaque drawer surface behind it while the controls follow the keyboard. */
+.assistant-panel-backdrop::after{content:"";position:fixed;top:0;right:0;width:min(450px,100vw);height:100lvh;min-height:100%;background:var(--app-surface);pointer-events:none}
+.avatar-categories{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px}.avatar-categories>.quiet-button{font-size:.75rem;min-height:36px;padding:7px 11px}.avatar-categories>[aria-pressed=true]{color:var(--app-text);background:var(--app-accent-soft,var(--panel-soft));border-color:var(--app-link);box-shadow:inset 0 0 0 1px var(--app-link)}
+.game-answer-copy{min-width:0;flex:1}.study-markdown{min-width:0;max-width:100%}.study-equation:not(.is-display){display:inline-block;max-width:100%;overflow-x:auto;overflow-y:hidden;vertical-align:middle;padding:2px 0}.study-inline .katex{font-size:1.05em}.deck-canvas .study-equation:not(.is-display){overflow:hidden}
+.avatar-option-visual{position:relative}.avatar-option-visual:has(img[data-renderer=preparing]){background:var(--panel-soft)}.avatar-option-visual img[data-renderer=preparing]{opacity:0}.avatar-option-visual:has(img[data-renderer=preparing])::after{content:"";position:absolute;inset:calc(50% - 9px);width:18px;height:18px;border:2px solid var(--app-border);border-top-color:var(--app-link);border-radius:50%}
+@media(prefers-reduced-motion:no-preference){.avatar-option-visual:has(img[data-renderer=preparing])::after{animation:avatar-thumbnail-wait .8s linear infinite}}
+@keyframes avatar-thumbnail-wait{to{transform:rotate(360deg)}}

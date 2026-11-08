@@ -14,7 +14,6 @@ import { addDeckExportPoints, decorateDeckExport } from "./deckExportDesign";
 import { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
 import JSZip from "jszip";
-import katex from "katex";
 import "katex/dist/katex.min.css";
 import { LegalLinks } from "./Legal";
 import { makeStudyId, MAX_AUDIO_BYTES, mergeSessionFolders, sendStudyRequest, TTS_SPACE_URL } from "./studyTools";
@@ -363,7 +362,7 @@ async function buildAIOptions(cards) {
   const payload = subset.map(c => ({ id: c.id, q: c.question, a: c.answer }));
 
   const SYSTEM = `You are an expert quiz designer specialised in making believable wrong answers.
-Your ONLY output must be a valid JSON array. No markdown, no explanation, nothing else.`;
+Your ONLY output must be a valid JSON array. No markdown, no explanation, nothing else. Preserve mathematical notation in every answer. Use LaTeX with \\( ... \\) delimiters, and double every backslash inside JSON strings.`;
 
   const USER = `For each item below, write exactly 3 DISTRACTOR answers (wrong but plausible).
 
@@ -917,41 +916,6 @@ const I = {
 // ─── TEXT FORMATTER ───────────────────────────────────────────────────────────
 // Strip LaTeX math notation and render clean readable text
 // ─── KATEX MATH RENDERER ─────────────────────────────────────────────────────
-function renderMath(latex, displayMode) {
-  try {
-    return katex.renderToString(latex, { throwOnError: false, displayMode, trust: false, maxExpand: 1000, maxSize: 20 });
-  } catch {
-    return escapeHtml(latex);
-  }
-}
-
-// Split text into segments: math vs plain text
-// Handles $$...$$, $...$, \[...\], \(...\)
-function parseMathSegments(text) {
-  if (!text) return [{ type: "text", content: "" }];
-  const segments = [];
-  // Regex: match display math ($$...$$, \[...\]) or inline math ($...$, \(...\))
-  const mathRe = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\$[^$\n]{1,300}\$|\\\([\s\S]*?\\\))/g;
-  let last = 0;
-  let match;
-  while ((match = mathRe.exec(text)) !== null) {
-    if (match.index > last) {
-      segments.push({ type: "text", content: text.slice(last, match.index) });
-    }
-    const raw = match[0];
-    const isDisplay = raw.startsWith("$$") || raw.startsWith("\\[");
-    let latex = raw;
-    if (raw.startsWith("$$")) latex = raw.slice(2, -2);
-    else if (raw.startsWith("\\[")) latex = raw.slice(2, -2);
-    else if (raw.startsWith("$")) latex = raw.slice(1, -1);
-    else if (raw.startsWith("\\(")) latex = raw.slice(2, -2);
-    segments.push({ type: isDisplay ? "display" : "inline", content: latex.trim() });
-    last = match.index + raw.length;
-  }
-  if (last < text.length) segments.push({ type: "text", content: text.slice(last) });
-  return segments;
-}
-
 // stripLatex kept for podcast/TTS (audio can't render math visually)
 function stripLatex(text) {
   if (!text) return "";
@@ -981,21 +945,7 @@ function stripLatex(text) {
 
 // MathText: renders a string that may contain mixed math and plain text
 function MathText({ text, style }) {
-  const segments = parseMathSegments(text || "");
-  return (
-    <span style={style}>
-      {segments.map((seg, i) => {
-        if (seg.type === "text") return <span key={i}>{seg.content}</span>;
-        if (seg.type === "display") {
-          const html = renderMath(seg.content, true);
-          return <span key={i} style={{ display:"block", textAlign:"center", margin:"8px 0", overflowX:"auto" }}
-            dangerouslySetInnerHTML={{ __html: html }} />;
-        }
-        const html = renderMath(seg.content, false);
-        return <span key={i} dangerouslySetInnerHTML={{ __html: html }} />;
-      })}
-    </span>
-  );
+  return <span style={style}><StudyMarkdown inline text={text || ""} /></span>;
 }
 
 // ─── MERMAID DIAGRAM RENDERER ────────────────────────────────────────────────
@@ -3433,7 +3383,7 @@ NEVER use pipe-table markdown (| col | col |).`;
             <p style={{ margin:"0 0 8px", fontSize:11, fontWeight:700, color:C.link, letterSpacing:.8, textTransform:"uppercase" }}>
               {isPDF ? `Page ${pageNum} — Explanation` : "AI Explanation"}
             </p>
-            <p style={{ margin:0, fontSize:13, lineHeight:1.75, color:"#ddd", whiteSpace:"pre-wrap" }}>{explanation}</p>
+            <p style={{ margin:0, fontSize:13, lineHeight:1.75, color:"#ddd", whiteSpace:"pre-wrap" }}><StudyMarkdown inline text={explanation} /></p>
           </div>
         </div>
       )}
@@ -4413,7 +4363,7 @@ function ClassioTable({ data, onClose }) {
         </div>
       </div>
       {/* Explanation */}
-      {data.explanation && <div style={{ padding:"8px 14px", fontSize:13, color:C.text, background:C.bg, borderBottom:`1px solid ${C.border}` }}>{data.explanation}</div>}
+      {data.explanation && <div style={{ padding:"8px 14px", fontSize:13, color:C.text, background:C.bg, borderBottom:`1px solid ${C.border}` }}><StudyMarkdown inline text={data.explanation} /></div>}
       {/* Table */}
       <div style={{ overflowX:"auto" }}>
         <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
@@ -4421,7 +4371,7 @@ function ClassioTable({ data, onClose }) {
             <tr>
               {columns.map((col,ci)=>(
                 <th key={ci} style={{ padding:"10px 14px", textAlign:"left", fontWeight:700, color:C.link, background:C.accentL, borderBottom:`2px solid ${C.accentS}`, whiteSpace:"nowrap" }}>
-                  {col}
+                  <StudyMarkdown inline text={String(col??"")}/>
                 </th>
               ))}
             </tr>
@@ -4433,7 +4383,7 @@ function ClassioTable({ data, onClose }) {
                 onMouseLeave={e=>e.currentTarget.style.background=ri%2===0?C.surface:"transparent"}>
                 {row.map((cell,ci)=>(
                   <td key={ci} style={{ padding:"9px 14px", borderBottom:`1px solid ${C.border}`, color:C.text, lineHeight:1.5 }}>
-                    {cell}
+                    <StudyMarkdown inline text={String(cell??"")}/>
                   </td>
                 ))}
               </tr>
@@ -4826,17 +4776,7 @@ function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
   let _sectionCount = 0;
 
   // Rich inline markup: **bold**, *italic*, `code`, ==highlight==
-  const renderInlineMarkup = (text) => {
-    if (!text) return null;
-    const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|==[^=]+==)/g);
-    return parts.map((p, pi) => {
-      if (p.startsWith("**") && p.endsWith("**")) return <strong key={pi} style={{ fontWeight:700, color:C.text }}>{p.slice(2,-2)}</strong>;
-      if (p.startsWith("*") && p.endsWith("*") && p.length>2) return <em key={pi} style={{ fontStyle:"italic", color:C.link }}>{p.slice(1,-1)}</em>;
-      if (p.startsWith("`") && p.endsWith("`")) return <code key={pi} style={{ background:C.accentL, color:C.link, borderRadius:4, padding:"1px 6px", fontSize:12, fontFamily:"monospace" }}>{p.slice(1,-1)}</code>;
-      if (p.startsWith("==") && p.endsWith("==")) return <mark key={pi} style={{ background:C.accentL, color:C.link, padding:"0 3px", borderRadius:3 }}>{p.slice(2,-2)}</mark>;
-      return p;
-    });
-  };
+  const renderInlineMarkup = text => text ? String(text).split(/(==[^=]+==)/g).map((part,index) => part.startsWith("==")&&part.endsWith("==") ? <mark key={index} style={{background:C.accentL,color:C.link,padding:"0 3px",borderRadius:3}}><StudyMarkdown inline text={part.slice(2,-2)}/></mark> : <StudyMarkdown key={index} inline text={part}/>) : null;
 
   // Parse TABLE_START...TABLE_END blocks out of raw lines
   const parseContent = (raw) => {
@@ -4887,7 +4827,7 @@ function NotesViewer({ notes, tableData, isRTL, unsaved, onChange }) {
               <thead>
                 <tr style={{ background:"#286a9b" }}>
                   {cols.map((col,ci)=>(
-                    <th key={ci} style={{ padding:pad, textAlign:"left", fontWeight:700, color:"#fff", fontSize:fs-1, wordBreak:"break-word", verticalAlign:"top", borderRight:ci<n-1?"1px solid rgba(255,255,255,.15)":"none" }}>{col}</th>
+                    <th key={ci} style={{ padding:pad, textAlign:"left", fontWeight:700, color:"#fff", fontSize:fs-1, wordBreak:"break-word", verticalAlign:"top", borderRight:ci<n-1?"1px solid rgba(255,255,255,.15)":"none" }}><StudyMarkdown inline text={String(col??"")}/></th>
                   ))}
                 </tr>
               </thead>
@@ -5142,7 +5082,7 @@ function InlineClassioTable({ data }) {
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg>
         <span style={{ fontSize:10, fontWeight:800, color:C.link, letterSpacing:.6 }}>AI TABLE</span>
       </div>
-      {data.explanation && <p style={{ fontSize:11, color:C.muted, padding:"5px 12px 0", margin:0, lineHeight:1.4 }}>{data.explanation}</p>}
+      {data.explanation && <p style={{ fontSize:11, color:C.muted, padding:"5px 12px 0", margin:0, lineHeight:1.4 }}><StudyMarkdown inline text={data.explanation} /></p>}
       <div style={{ width:"100%", overflowX:"auto" }}>
         <table style={{ width:"100%", borderCollapse:"collapse", fontSize, tableLayout:"fixed" }}>
           <colgroup>
@@ -5151,7 +5091,7 @@ function InlineClassioTable({ data }) {
           <thead>
             <tr style={{ background:C.accentL }}>
               {columns.map((col,ci)=>(
-                <th key={ci} style={{ padding:cellPad, textAlign:"left", fontWeight:700, color:C.link, borderBottom:`2px solid ${C.accentS}`, fontSize:fontSize-1, wordBreak:"break-word", verticalAlign:"top" }}>{col}</th>
+                <th key={ci} style={{ padding:cellPad, textAlign:"left", fontWeight:700, color:C.link, borderBottom:`2px solid ${C.accentS}`, fontSize:fontSize-1, wordBreak:"break-word", verticalAlign:"top" }}><StudyMarkdown inline text={String(col??"")}/></th>
               ))}
             </tr>
           </thead>
@@ -5160,7 +5100,7 @@ function InlineClassioTable({ data }) {
               <tr key={ri} style={{ background:ri%2===0?C.surface:"transparent", borderBottom:`1px solid ${C.border}` }}>
                 {row.map((cell,ci)=>(
                   <td key={ci} style={{ padding:cellPad, color:C.text, lineHeight:1.45, fontSize, wordBreak:"break-word", verticalAlign:"top" }}>
-                    {String(cell||"")}
+                    <StudyMarkdown inline text={String(cell??"")}/>
                   </td>
                 ))}
               </tr>
@@ -5255,7 +5195,7 @@ Formatting: plain text only — no LaTeX, no dollar signs, no markdown asterisks
             borderBottomRightRadius: msg.role === "user" ? 3 : 10,
             borderBottomLeftRadius:  msg.role !== "user" ? 3 : 10,
           }}>
-            {msg.text}
+            <StudyMarkdown inline text={msg.text} />
           </div>
         ))}
         {loading && (
@@ -5316,92 +5256,7 @@ function clamp(len) {
 
 // ─── ASK ABOUT CARD — inline mini-chat for study mode ────────────────────────
 // ── Render rich markdown-like text for ELI5 responses ───────────────────────
-function RichText({ text }) {
-  const T = useTheme();
-  if (!text) return null;
-  const renderInline = (str) => {
-    const parts = str.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
-    return parts.map((p, pi) => {
-      if (p.startsWith("**") && p.endsWith("**")) return <strong key={pi} style={{ fontWeight:700 }}>{p.slice(2,-2)}</strong>;
-      if (p.startsWith("`") && p.endsWith("`")) return <code key={pi} style={{ background:T.isDark?"#2a2a3a":"#f0eeff", color:C.link, borderRadius:4, padding:"1px 6px", fontSize:12, fontFamily:"monospace" }}>{p.slice(1,-1)}</code>;
-      return p;
-    });
-  };
-  const lines = text.split("\n");
-  const els = [];
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i];
-    const trim = line.trim();
-    if (!trim) { els.push(<div key={i} style={{ height:8 }}/>); i++; continue; }
-    if (trim.startsWith("# ")) {
-      els.push(<h2 key={i} style={{ fontSize:17, fontWeight:800, color:T.text, margin:"16px 0 6px", borderBottom:`1px solid ${T.border}`, paddingBottom:6, fontFamily:"'DM Sans Variable',sans-serif" }}>{trim.slice(2)}</h2>);
-      i++; continue;
-    }
-    if (trim.startsWith("## ")) {
-      els.push(<h3 key={i} style={{ fontSize:15, fontWeight:700, color:T.text, margin:"12px 0 4px", fontFamily:"'DM Sans Variable',sans-serif" }}>{trim.slice(3)}</h3>);
-      i++; continue;
-    }
-    if (trim.startsWith("### ")) {
-      els.push(<h4 key={i} style={{ fontSize:14, fontWeight:700, color:C.link, margin:"10px 0 3px" }}>{trim.slice(4)}</h4>);
-      i++; continue;
-    }
-    if (trim.startsWith("|") && trim.endsWith("|")) {
-      const tableLines = [];
-      while (i < lines.length && lines[i].trim().startsWith("|")) { tableLines.push(lines[i].trim()); i++; }
-      const isSep = r => /^[\|\s\-:]+$/.test(r);
-      const rows = tableLines.filter(r => !isSep(r));
-      if (rows.length > 0) {
-        const parseRow = r => r.split("|").slice(1,-1).map(c => c.trim());
-        const headers = parseRow(rows[0]);
-        const body = rows.slice(1);
-        els.push(<div key={"t"+i} style={{ margin:"12px 0", overflowX:"auto", borderRadius:10, border:`1.5px solid ${T.border}` }}>
-          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
-            <thead><tr style={{ background:T.isDark?"#1b2b3a":"#f0eeff" }}>
-              {headers.map((h,ci) => <th key={ci} style={{ padding:"8px 12px", textAlign:"left", fontWeight:700, color:C.link, borderBottom:`2px solid ${T.border}`, whiteSpace:"nowrap" }}>{h}</th>)}
-            </tr></thead>
-            <tbody>{body.map((row,ri) => {
-              const cells = parseRow(row);
-              return <tr key={ri} style={{ borderBottom:`1px solid ${T.border}` }}>
-                {cells.map((c,ci) => <td key={ci} style={{ padding:"7px 12px", color:T.text, lineHeight:1.5 }}>{renderInline(c)}</td>)}
-              </tr>;
-            })}</tbody>
-          </table>
-        </div>);
-      }
-      continue;
-    }
-    if (trim.startsWith("> ")) {
-      els.push(<div key={i} style={{ borderLeft:"3px solid #286a9b", padding:"8px 14px", margin:"8px 0", color:C.link, fontSize:14, lineHeight:1.65, fontStyle:"italic", background:T.isDark?"#286a9b11":"#286a9b08", borderRadius:"0 8px 8px 0" }}>{renderInline(trim.slice(2))}</div>);
-      i++; continue;
-    }
-    if (trim.match(/^[-*\u2022] /)) {
-      const bullets = [];
-      while (i < lines.length && lines[i].trim().match(/^[-*\u2022] /)) { bullets.push(lines[i].trim().replace(/^[-*\u2022] /,"")); i++; }
-      els.push(<ul key={"ul"+i} style={{ margin:"6px 0", paddingLeft:0, listStyle:"none" }}>
-        {bullets.map((b,bi) => <li key={bi} style={{ display:"flex", gap:8, alignItems:"flex-start", margin:"3px 0" }}>
-          <span style={{ color:C.link, fontWeight:700, flexShrink:0, marginTop:2 }}>•</span>
-          <span style={{ fontSize:14, color:T.text, lineHeight:1.65 }}>{renderInline(b)}</span>
-        </li>)}
-      </ul>);
-      continue;
-    }
-    if (trim.match(/^\d+\. /)) {
-      const items = [];
-      while (i < lines.length && lines[i].trim().match(/^\d+\. /)) { items.push(lines[i].trim().replace(/^\d+\. /,"")); i++; }
-      els.push(<ol key={"ol"+i} style={{ margin:"6px 0", paddingLeft:0, listStyle:"none" }}>
-        {items.map((b,bi) => <li key={bi} style={{ display:"flex", gap:8, alignItems:"flex-start", margin:"3px 0" }}>
-          <span style={{ color:C.link, fontWeight:700, flexShrink:0, minWidth:20 }}>{bi+1}.</span>
-          <span style={{ fontSize:14, color:T.text, lineHeight:1.65 }}>{renderInline(b)}</span>
-        </li>)}
-      </ol>);
-      continue;
-    }
-    els.push(<p key={i} style={{ fontSize:14, color:T.text, lineHeight:1.75, margin:"3px 0" }}>{renderInline(trim)}</p>);
-    i++;
-  }
-  return <div style={{ fontFamily:"'DM Sans Variable',sans-serif" }}>{els}</div>;
-}
+function RichText({text}) { return text ? <StudyMarkdown text={text}/> : null; }
 
 function ELI5Panel({ card }) {
   const [open, setOpen] = useState(false);
@@ -7084,7 +6939,7 @@ function MCQ({ cards, onBack }) {
     try {
       const card = deck[curr];
       const explanation = await callClaude(
-        "You are a helpful study tutor. Explain a concept clearly and concisely. No markdown, no asterisks, plain text only.",
+        `You are a helpful study tutor. Explain the concept clearly and concisely. ${MATH_OUTPUT_GUIDE}`,
         `A student answered a quiz question wrong. Help them understand.
 
 Question: ${card.question}
@@ -7128,7 +6983,7 @@ Keep it under 150 words. Be encouraging.`,
           }
           return (
             <button key={i} onClick={() => pick(o)} style={{ background:bg, border:`1.5px solid ${bd}`, borderRadius:8, padding:"14px 18px", textAlign:"left", fontSize:15, color:col, cursor:sel?"default":"pointer", fontWeight:is||(sel&&ok)?600:400, transition:"all .2s", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-              <span><span style={{ fontWeight:700, marginRight:10, color:C.muted }}>{"ABCD"[i]}.</span>{o}</span>
+              <span className="game-answer-copy"><span style={{ fontWeight:700, marginRight:10, color:C.muted }}>{"ABCD"[i]}.</span><StudyMarkdown inline text={o} /></span>
               {sel && ok  && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.green} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>}
               {sel && is && !ok && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.red} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>}
             </button>
@@ -7143,7 +6998,7 @@ Keep it under 150 words. Be encouraging.`,
             <div>
               <p style={{ margin:0, fontSize:14, fontWeight:700, color:C.red }}>Not quite!</p>
               <p style={{ margin:"3px 0 0", fontSize:13, color:C.text }}>
-                Correct: <strong>{deck[curr].answer}</strong>
+                Correct: <strong><StudyMarkdown inline text={deck[curr].answer} /></strong>
               </p>
             </div>
             <button onClick={fetchLearnMore}
@@ -7169,7 +7024,7 @@ Keep it under 150 words. Be encouraging.`,
                     What to Know
                   </p>
                   <p style={{ fontSize:13, color:C.text, lineHeight:1.7, margin:0 }}>
-                    {learnMore}
+                    <StudyMarkdown inline text={learnMore} />
                   </p>
                 </div>
               )}
@@ -7295,7 +7150,7 @@ function ScrambleGame({ deck, onBack }) {
       <div style={{ background:C.surface, border:`1.5px solid ${C.border}`, borderRadius:18, padding:"22px 24px", marginBottom:16 }}>
         <p style={{ fontSize:11, fontWeight:700, color:C.muted, letterSpacing:1, textTransform:"uppercase", marginBottom:12 }}>Fill in the blank</p>
         <p style={{ fontSize:18, color:C.text, lineHeight:1.8, fontWeight:500 }}>
-          {sentenceParts[0]}
+          <StudyMarkdown inline text={sentenceParts[0]} />
           <span style={{
             display:"inline-block", minWidth:80, padding:"2px 10px",
             background: result==="correct"?"var(--success-bg)": result==="wrong"?"var(--error-bg)":"var(--panel-soft)",
@@ -7307,7 +7162,7 @@ function ScrambleGame({ deck, onBack }) {
           }}>
             {placed.length>0 ? placed.map(t=>t.letter).join("") : "?"}
           </span>
-          {sentenceParts[1] || ""}
+          <StudyMarkdown inline text={sentenceParts[1] || ""} />
         </p>
       </div>
 
@@ -7436,7 +7291,7 @@ function Falling({ cards, onBack }) {
           <p style={{ fontSize:15, color:C.text, lineHeight:1.4 }}><StudyMarkdown inline text={card.question} /></p>
         </div>
         {res && <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", background:res==="correct"?C.greenL+"cc":C.redL+"cc", borderRadius:20 }}>
-          <p style={{ fontSize:32, fontWeight:700, color:res==="correct"?C.green:C.red }}>{res==="correct"?"Correct!":res==="wrong"?card.answer:"Too slow!"}</p>
+          <p style={{ fontSize:32, fontWeight:700, color:res==="correct"?C.green:C.red }}><StudyMarkdown inline text={res==="correct"?"Correct!":res==="wrong"?card.answer:"Too slow!"} /></p>
         </div>}
       </div>
       <div style={{ display:"flex", gap:10 }}>
@@ -7480,7 +7335,7 @@ function Tower({ cards, onBack }) {
         </div>
         <input value={inp} onChange={e=>{if(!res)setInp(e.target.value);}} onKeyDown={e=>{if(e.key==="Enter"&&inp.trim()&&!res)check();}}
           placeholder="Type answer…" style={{ width:"100%", border:`1.5px solid ${res==="correct"?teal:res==="wrong"?C.red:C.border}`, borderRadius:10, padding:"11px 14px", fontSize:15, outline:"none", background:res==="correct"?"var(--panel-soft)":res==="wrong"?C.redL:C.bg, marginBottom:10 }} />
-        {res&&<p style={{ fontSize:14, fontWeight:600, color:res==="correct"?teal:C.red, marginBottom:10 }}>{res==="correct"?"Block added!":"✗ "+deck[curr].answer}</p>}
+        {res&&<p style={{ fontSize:14, fontWeight:600, color:res==="correct"?teal:C.red, marginBottom:10 }}><StudyMarkdown inline text={res==="correct"?"Block added!":"✗ "+deck[curr].answer} /></p>}
         <button onClick={()=>inp.trim()&&!res&&check()} disabled={!inp.trim()||!!res}
           style={{ width:"100%", background:inp.trim()&&!res?teal:"#ccc", color:primaryInk(inp.trim()&&!res?teal:"#ccc", "#fff"), border:"none", borderRadius:10, padding:"12px", fontSize:15, fontWeight:700, cursor:"pointer" }}>Stack Block</button>
       </div>
@@ -7649,7 +7504,7 @@ Return ONLY: [{"id":"<same id>","wrong":"<plausible wrong answer>"}, ...]`
             style={{ background:bg, border, borderRadius:8, padding:"20px", fontSize:18, fontWeight:700, color:opt.color, cursor:res?"default":"pointer", transition:"all .2s" }}>{opt.label}</button>;
         })}
       </div>
-      {res&&<p style={{ textAlign:"center", marginTop:14, fontSize:14, fontWeight:600, color:res.ok?"var(--app-link)":C.red }}>{res.ok?"Correct!":"Answer: "+card.orig.answer}</p>}
+      {res&&<p style={{ textAlign:"center", marginTop:14, fontSize:14, fontWeight:600, color:res.ok?"var(--app-link)":C.red }}><StudyMarkdown inline text={res.ok?"Correct!":"Answer: "+card.orig.answer} /></p>}
     </div>
   );
 }
@@ -7730,16 +7585,14 @@ function FillBlank({ cards, onBack }) {
   useEffect(() => { if (inputRef.current) inputRef.current.focus(); }, [curr]);
 
   const card = deck[curr];
-  // Hide last word of question to create blank
-  const words = (card?.question || "").trim().split(" ");
-  const blank = words.length > 1 ? words[words.length - 1].replace(/[?:.]/g, "") : card?.answer;
-  const questionWithBlank = words.length > 1 ? words.slice(0, -1).join(" ") + " ___?" : "What is the answer?";
+  // Keep formula delimiters intact; the answer belongs in a separate blank.
+  const questionWithBlank = /_{3,}/.test(card?.question || "") ? card.question : `${card?.question || "Write the answer"} _____`;
 
   const [checking, setChecking] = useState(false);
   const check = async () => {
     if (!inp.trim() || checking) return;
     setChecking(true);
-    const ok = await aiCheckAnswer(card.question, card.answer || blank, inp);
+    const ok = await aiCheckAnswer(card.question, card.answer || "", inp);
     setChecking(false);
     setResult(ok);
     if (ok) setScore(s => s + 1);
@@ -7771,7 +7624,7 @@ function FillBlank({ cards, onBack }) {
       ) : (
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: 44, marginBottom: 10 }}>{result ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg> : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.red} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>}</div>
-          {!result && <p style={{ color: C.red, fontSize: 15, marginBottom: 6 }}>Correct answer: <strong>{card.answer}</strong></p>}
+          {!result && <p style={{ color: C.red, fontSize: 15, marginBottom: 6 }}>Correct answer: <strong><StudyMarkdown inline text={card.answer} /></strong></p>}
           <button onClick={next} style={{ background: accent, color: primaryInk(accent, "#fff"), border: "none", borderRadius: 8, padding: "12px 32px", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
             {curr + 1 >= deck.length ? "See Results" : "Next →"}
           </button>
@@ -8201,17 +8054,17 @@ Is the student correct? Reply only YES or NO.`
           </p>
           {transcript && !listening && !voiceCountdown && (
             <p style={{ marginTop: 8, fontSize: 13, color: "var(--app-muted)", fontStyle: "italic" }}>
-              Heard: "{transcript}"
+              Heard: "<StudyMarkdown inline text={transcript} />"
             </p>
           )}
           {listening && transcript && (
             <p style={{ marginTop: 8, fontSize: 13, color: (C.isDark ? C.link : accent), fontStyle: "italic" }}>
-              "{transcript}"
+              "<StudyMarkdown inline text={transcript} />"
             </p>
           )}
           {voiceCountdown !== null && (
             <div style={{ marginTop: 16, textAlign: "center" }}>
-              <p style={{ fontSize: 13, color: "var(--app-muted)", marginBottom: 6, fontStyle: "italic" }}>Heard: "{transcript}"</p>
+              <p style={{ fontSize: 13, color: "var(--app-muted)", marginBottom: 6, fontStyle: "italic" }}>Heard: "<StudyMarkdown inline text={transcript} />"</p>
               <div style={{ display: "inline-flex", alignItems: "center", gap: 10, background: "var(--game-purple-bg)", border: `2px solid ${accent}33`, borderRadius: 12, padding: "10px 20px" }}>
                 <div style={{ width: 36, height: 36, borderRadius: "50%", background: accent, color: primaryInk(accent, "#fff"), display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 800 }}>{voiceCountdown}</div>
                 <div>
@@ -9254,7 +9107,7 @@ function EnhancedPodcastPlayer({ script, loading, topic, lang = "en-US", onClose
           <details style={{ borderTop:"1px solid rgba(255,255,255,.06)" }}>
             <summary style={{ padding:"10px 20px", color:C.link, fontSize:12, fontWeight:700, cursor:"pointer", userSelect:"none", letterSpacing:.5 }}>READ SCRIPT</summary>
             <div style={{ padding:"0 20px 20px", maxHeight:200, overflowY:"auto" }}>
-              <p style={{ fontSize:13, color:"#c7d2fe", lineHeight:1.9, whiteSpace:"pre-wrap" }}>{script}</p>
+              <p style={{ fontSize:13, color:"#c7d2fe", lineHeight:1.9, whiteSpace:"pre-wrap" }}><StudyMarkdown inline text={script} /></p>
             </div>
           </details>
 
@@ -9729,7 +9582,7 @@ function SGChatMessage({ msg, isSelf }) {
   if (isSystem) return (
     <div style={{ textAlign: "center", padding: "4px 0" }}>
       <span style={{ fontSize: 11, color: C.muted, background: C.bg,
-        border: `1px solid ${C.border}`, borderRadius: 20, padding: "3px 10px" }}>{msg.text}</span>
+        border: `1px solid ${C.border}`, borderRadius: 20, padding: "3px 10px" }}><StudyMarkdown inline text={msg.text} /></span>
     </div>
   );
   return (
@@ -9747,7 +9600,7 @@ function SGChatMessage({ msg, isSelf }) {
             {(msg.displayName || "User").split(" ")[0]}
           </p>
         )}
-        <p style={{ margin: 0, fontSize: 13, color: isSelf ? "#fff" : C.text, lineHeight: 1.45, wordBreak: "break-word" }}>{msg.text}</p>
+        <p style={{ margin: 0, fontSize: 13, color: isSelf ? "#fff" : C.text, lineHeight: 1.45, wordBreak: "break-word" }}><StudyMarkdown inline text={msg.text} /></p>
         <p style={{ margin: "3px 0 0", fontSize: 9, color: isSelf ? "rgba(255,255,255,.6)" : C.muted, textAlign: "right" }}>
           {msg.createdAt?.toDate ? msg.createdAt.toDate().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
         </p>
@@ -10089,7 +9942,7 @@ function SGSharedContent({ content, presenterName, isHost, db, groupId }) {
             <h3 style={{ margin:"0 0 14px", color:C.text, fontSize:17, fontWeight:700,
               fontFamily:"'Fraunces Variable',serif" }}>{content.title}</h3>
             <div style={{ color:C.text, fontSize:14, lineHeight:1.8,
-              whiteSpace:"pre-wrap", wordBreak:"break-word" }}>{content.body}</div>
+              whiteSpace:"pre-wrap", wordBreak:"break-word" }}><StudyMarkdown inline text={content.body} /></div>
           </div>
         </div>
       )}
@@ -10143,7 +9996,7 @@ function SGSharedContent({ content, presenterName, isHost, db, groupId }) {
                   {flipped[i]?"Answer":`Card ${i+1}`}
                 </p>
                 <p style={{ margin:0, fontSize:14, color:C.text, lineHeight:1.5, flex:1 }}>
-                  {flipped[i]?c.answer:c.question}
+                  <StudyMarkdown inline text={flipped[i]?c.answer:c.question} />
                 </p>
                 <p style={{ margin:0, fontSize:11, color:C.muted }}>Tap to flip</p>
               </div>
@@ -10790,9 +10643,9 @@ function SGAIFlashcardGen({ groupId, db, user, groupFile, onClose }) {
                     borderRadius:9, padding:"9px 12px", display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
                     <div style={{ flex:1, minWidth:0 }}>
                       <p style={{ margin:"0 0 2px", fontSize:12, fontWeight:700, color:C.text,
-                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.question}</p>
+                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}><StudyMarkdown inline text={c.question} /></p>
                       <p style={{ margin:0, fontSize:11, color:C.muted,
-                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.answer}</p>
+                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}><StudyMarkdown inline text={c.answer} /></p>
                     </div>
                     <button onClick={()=>setCards(p=>p.filter((_,j)=>j!==i))}
                       style={{ background:"none", border:"none", color:C.red, cursor:"pointer", fontSize:14, padding:"0 0 0 8px", flexShrink:0 }}>×</button>
@@ -11693,7 +11546,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
         <ProgressBar gameState={gameState} myScore={myScore} />
         <div style={{ background:C.surface, borderRadius:14, padding:"20px", border:`1px solid ${C.border}`,
           boxShadow:"0 2px 10px rgba(0,0,0,.06)", flex:1, display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <p style={{ color:C.text, fontSize:17, fontWeight:700, textAlign:"center", lineHeight:1.6, margin:0 }}>{tfQ.question}</p>
+          <p style={{ color:C.text, fontSize:17, fontWeight:700, textAlign:"center", lineHeight:1.6, margin:0 }}><StudyMarkdown inline text={tfQ.question} /></p>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
           {["True","False"].map(opt => {
@@ -11736,7 +11589,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
         </div>
         <ProgressBar gameState={gameState} myScore={myScore} hideScore />
         <div style={{ background:C.surface, borderRadius:14, padding:"18px", border:`1px solid ${C.border}` }}>
-          <p style={{ color:C.text, fontSize:16, fontWeight:700, margin:0, lineHeight:1.5 }}>{q.question}</p>
+          <p style={{ color:C.text, fontSize:16, fontWeight:700, margin:0, lineHeight:1.5 }}><StudyMarkdown inline text={q.question} /></p>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
           {(q.options||[]).map((opt,i) => {
@@ -11752,7 +11605,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
                   color:correct?C.green:wrong?C.red:chosen?C.link:C.text,
                   border:`1.5px solid ${correct?C.green:wrong?C.red:chosen?C.accent:C.border}`,
                   transition:"all .12s", boxShadow:"0 1px 4px rgba(0,0,0,.06)" }}>
-                <span style={{ opacity:.5, marginRight:6 }}>{["A","B","C","D"][i]}.</span>{opt}
+                <span style={{ opacity:.5, marginRight:6 }}>{["A","B","C","D"][i]}.</span><StudyMarkdown inline text={opt} />
               </button>
             );
           })}
@@ -11782,7 +11635,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
           <span style={{ color:C.link, fontSize:12, fontWeight:700 }}>Score: {myScore}</span>
         </div>
         <div style={{ background:C.surface, borderRadius:14, padding:"18px", border:`1px solid ${C.border}` }}>
-          <p style={{ color:C.text, fontSize:16, fontWeight:700, margin:0, lineHeight:1.5 }}>{q.question}</p>
+          <p style={{ color:C.text, fontSize:16, fontWeight:700, margin:0, lineHeight:1.5 }}><StudyMarkdown inline text={q.question} /></p>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
           {(q.options||[]).map((opt,i) => {
@@ -11803,7 +11656,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
                   border: `1.5px solid ${(isTimeout&&opt===q.answer)||correct?C.green:wrong?C.red:chosen?C.accent:C.border}`,
                   boxShadow:"0 1px 4px rgba(0,0,0,.06)",
                   transition:"all .12s" }}>
-                <span style={{ opacity:.5, marginRight:6 }}>{["A","B","C","D"][i]}.</span>{opt}
+                <span style={{ opacity:.5, marginRight:6 }}>{["A","B","C","D"][i]}.</span><StudyMarkdown inline text={opt} />
               </button>
             );
           })}
@@ -11811,7 +11664,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
         {localAnswer === "__timeout__" && (
           <div style={{ padding:"8px 14px", borderRadius:10, background:C.redL,
             border:`1px solid ${C.red}44`, color:C.red, fontSize:13, fontWeight:700, textAlign:"center" }}>
-            ⏰ Time's up! The answer was: {q.answer}
+            ⏰ Time's up! The answer was: <StudyMarkdown inline text={q.answer} />
           </div>
         )}
         {isHost && localAnswer !== null && <NextBtn onClick={nextQuestion} />}
@@ -11842,7 +11695,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
         </div>
         <ProgressBar gameState={gameState} myScore={myScore} />
         <div style={{ background:C.surface, borderRadius:14, padding:"18px", border:`1px solid ${C.border}` }}>
-          <p style={{ color:C.text, fontSize:16, fontWeight:700, margin:0, lineHeight:1.5 }}>{q.question}</p>
+          <p style={{ color:C.text, fontSize:16, fontWeight:700, margin:0, lineHeight:1.5 }}><StudyMarkdown inline text={q.question} /></p>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
           {(q.options||[]).map((opt,i) => {
@@ -11859,7 +11712,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
                   border:`1.5px solid ${correct?C.green:wrong?C.red:chosen?myT.c:C.border}`,
                   boxShadow:"0 1px 4px rgba(0,0,0,.06)",
                   transition:"all .12s" }}>
-                <span style={{ opacity:.5, marginRight:6 }}>{["A","B","C","D"][i]}.</span>{opt}
+                <span style={{ opacity:.5, marginRight:6 }}>{["A","B","C","D"][i]}.</span><StudyMarkdown inline text={opt} />
               </button>
             );
           })}
@@ -11884,7 +11737,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
       <ProgressBar gameState={gameState} myScore={myScore} />
       <div style={{ background:C.surface, borderRadius:14, padding:"18px 20px",
         border:`1px solid ${C.border}`, boxShadow:"0 2px 10px rgba(0,0,0,.06)" }}>
-        <p style={{ color:C.text, fontSize:16, fontWeight:700, margin:0, lineHeight:1.5 }}>{q.question}</p>
+        <p style={{ color:C.text, fontSize:16, fontWeight:700, margin:0, lineHeight:1.5 }}><StudyMarkdown inline text={q.question} /></p>
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
         {(q.options||[]).map((opt,i) => {
@@ -11901,7 +11754,7 @@ function SGQuizGame({ gameState, isHost, user, db, groupId, members }) {
                 color:correct?C.green:wrong?C.red:chosen?C.link:C.text,
                 boxShadow:"0 1px 4px rgba(0,0,0,.06)",
                 transition:"all .12s" }}>
-              <span style={{ opacity:.5, marginRight:6 }}>{["A","B","C","D"][i]}.</span>{opt}
+              <span style={{ opacity:.5, marginRight:6 }}>{["A","B","C","D"][i]}.</span><StudyMarkdown inline text={opt} />
             </button>
           );
         })}

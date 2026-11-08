@@ -15,7 +15,7 @@ function optionsFrom(children, group = "") {
 
 // A select-only combobox: focus stays on its trigger, including inside dialogs.
 export default function ChoiceMenu({ children, value, defaultValue, onChange, disabled, className = "", style,
-  variant = "", icon, descriptions = {}, onKeyDown, ...props }) {
+  variant = "", icon, renderLabel, descriptions = {}, onKeyDown, ...props }) {
   const options = useMemo(()=>optionsFrom(children),[children]), [local, setLocal] = useState(defaultValue ?? options[0]?.value ?? "");
   const selected = String(value ?? local), current = options.find(option => option.value === selected);
   const [open, setOpen] = useState(false), [active, setActive] = useState(0), [position, setPosition] = useState({});
@@ -68,14 +68,14 @@ export default function ChoiceMenu({ children, value, defaultValue, onChange, di
       aria-expanded={open} aria-controls={open ? id : undefined} aria-activedescendant={open ? id + "-" + active : undefined}
       className={"choice-trigger " + className + (variant ? " choice-" + variant : "")} style={style} onKeyDown={key}
       onClick={() => open ? close() : show()}>
-      {icon && <UiIcon name={icon} size={18} />}<span className="choice-value">{variant === "notebook" && <small>NOTEBOOK MODE</small>}{current?.label || props.placeholder || "Choose an option"}</span><UiIcon className="choice-chevron" name="down" size={17} />
+      {icon && <UiIcon name={icon} size={18} />}<span className="choice-value">{variant === "notebook" && <small>NOTEBOOK MODE</small>}{renderLabel?renderLabel(current?.label||props.placeholder||"Choose an option"):(current?.label || props.placeholder || "Choose an option")}</span><UiIcon className="choice-chevron" name="down" size={17} />
     </button>
     {open && createPortal(<div ref={menu} id={id} role="listbox" aria-label={props["aria-label"] || "Options"} className="choice-popover" style={position}>
       {options.map((option, index) => <Fragment key={option.value}>
         {option.group && option.group !== options[index - 1]?.group && <p className="choice-group">{option.group}</p>}
         <button type="button" id={id + "-" + index} role="option" data-value={option.value} tabIndex={-1} disabled={option.disabled} aria-selected={option.value === selected}
           data-active={active === index} onMouseDown={event => event.preventDefault()} onPointerMove={() => setActive(index)} onClick={() => choose(index)}>
-          <span><strong>{option.label}</strong>{descriptions[option.value] && <small>{descriptions[option.value]}</small>}</span>{option.value === selected && <UiIcon name="check" size={17} />}
+          <span><strong>{renderLabel?renderLabel(option.label):option.label}</strong>{descriptions[option.value] && <small>{descriptions[option.value]}</small>}</span>{option.value === selected && <UiIcon name="check" size={17} />}
         </button>
       </Fragment>)}
     </div>, document.body)}

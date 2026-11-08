@@ -1,3 +1,4 @@
+import {spokenMathText} from "./mathSpeech";
 import { MATH_OUTPUT_GUIDE } from "./mathMarkdown";
 import { useEffect, useRef, useState } from "react";
 import { sendStudyRequest } from "./studyTools";
@@ -50,7 +51,7 @@ export default function LearnMode({ file, getFileText, onUpdate, onUseAsNotes })
   function listen() {
     if (speaking) { window.speechSynthesis.cancel(); setSpeaking(false); return; }
     if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) { setError("Read aloud is not supported by this browser."); return; }
-    const speech = new SpeechSynthesisUtterance(`${unit.title}. ${unit.lesson.replace(/[#*_`]/g, "")}`);
+    const speech = new SpeechSynthesisUtterance(spokenMathText(`${unit.title}. ${unit.lesson}`));
     speech.lang = navigator.language; speech.rate = .95; speech.onend = () => setSpeaking(false); speech.onerror = () => { setSpeaking(false); setError("Read aloud stopped. You can continue reading the lesson."); };
     window.speechSynthesis.cancel(); window.speechSynthesis.speak(speech); setSpeaking(true);
   }
@@ -61,8 +62,8 @@ export default function LearnMode({ file, getFileText, onUpdate, onUseAsNotes })
     {!unit && !loading && <div className="tool-empty"><WorkspaceArt /><h3>Turn a chapter into a clear learning path</h3><p>Use the notes or source in this file, or enter a topic above. Your generated lessons and progress stay with this material.</p></div>}
     {loading && <div className="lesson-skeleton" role="status" aria-label="Generating lessons"><span /><span /><span /></div>}
     {unit && <><div className="course-progress"><div role="progressbar" aria-label="Course progress" aria-valuemin={0} aria-valuemax={units.length} aria-valuenow={completed.length}><span style={{ width: `${completed.length / units.length * 100}%` }} /></div><p role="status">{completed.length} of {units.length} lessons completed</p></div>
-      <div className="lesson-layout"><nav className="lesson-outline" aria-label="Course lessons">{units.map((item, index) => <button key={index} onClick={() => select(index)} aria-current={active === index ? "step" : undefined}><span>{completed.includes(index) ? <UiIcon name="check" size={15} /> : String(index + 1).padStart(2, "0")}</span><strong>{item.title}</strong></button>)}</nav>
-        <article className="lesson-paper"><div className="lesson-paper-heading"><p className="eyebrow">LESSON {active + 1} OF {units.length}</p>{window.speechSynthesis && <button className="quiet-button" onClick={listen} aria-pressed={speaking}><UiIcon name="volume" />{speaking ? "Stop reading" : "Listen"}</button>}</div><h3>{unit.title}</h3><StudyMarkdown text={unit.lesson} />
+      <div className="lesson-layout"><nav className="lesson-outline" aria-label="Course lessons">{units.map((item, index) => <button key={index} onClick={() => select(index)} aria-current={active === index ? "step" : undefined}><span>{completed.includes(index) ? <UiIcon name="check" size={15} /> : String(index + 1).padStart(2, "0")}</span><strong><StudyMarkdown inline text={item.title}/></strong></button>)}</nav>
+        <article className="lesson-paper"><div className="lesson-paper-heading"><p className="eyebrow">LESSON {active + 1} OF {units.length}</p>{window.speechSynthesis && <button className="quiet-button" onClick={listen} aria-pressed={speaking}><UiIcon name="volume" />{speaking ? "Stop reading" : "Listen"}</button>}</div><h3><StudyMarkdown inline text={unit.title}/></h3><StudyMarkdown text={unit.lesson} />
           <section className="lesson-check" aria-label="Knowledge check"><p className="eyebrow">CHECK YOUR UNDERSTANDING</p><StudyMarkdown className="lesson-check-question" text={unit.question} /><div className="answer-choices">{unit.options.map((option, index) => <button type="button" key={index} className={choice === index ? index === unit.correct ? "is-correct" : "is-incorrect" : ""} aria-pressed={choice === index} onClick={() => answer(index)}><span>{String.fromCharCode(65 + index)}</span><StudyMarkdown text={option} />{choice === index && <UiIcon name={index === unit.correct ? "check" : "close"} size={17} />}</button>)}</div>
           {choice !== null && <div className="answer-explanation" role="status"><strong>{choice === unit.correct ? "That’s right." : "Take another look."}</strong><StudyMarkdown text={unit.explanation} /></div>}</section>
           <footer className="lesson-navigation"><button className="quiet-button" disabled={active === 0} onClick={() => select(active - 1)}><UiIcon name="back" />Previous</button><span>{active + 1} / {units.length}</span>

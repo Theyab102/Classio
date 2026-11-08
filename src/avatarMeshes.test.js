@@ -13,5 +13,5 @@ for(const[kind,type]of Object.entries(ITEM_TYPES))test(`every ${kind} fit attach
 
 test('a centred shirt sketch is centred on the visible front, without mutating shared geometry',()=>{
  const texture=new THREE.Texture(),look=applyDesign(DEFAULT_CHARACTER,{kind:'clothing',region:'top',baseStyle:0,name:'Front star',texture:'data:image/png;base64,YWJj'}),model=createCharacter(look,{customClothing:texture});
- try{const body=model.children.find(mesh=>mesh.material?.map===texture&&mesh.geometry.type==='CapsuleGeometry'&&mesh.position.x===0),p=body.geometry.attributes.position,uv=body.geometry.attributes.uv;let checked=0;for(let i=0;i<p.count;i++)if(p.getZ(i)>.45&&Math.abs(p.getX(i))<.01){expect(Math.abs(uv.getX(i)-.5)).toBeLessThan(.03);checked++;}expect(checked).toBeGreaterThan(0);}finally{model.userData.dispose();texture.dispose();}
+ try{const body=model.children.find(mesh=>mesh.material?.map===texture&&mesh.userData.avatarPart==='shirt-body'),p=body.geometry.attributes.position,uv=body.geometry.attributes.uv;let checked=0;for(let i=0;i<p.count;i++)if(p.getZ(i)>.20&&Math.abs(p.getX(i))<.01){expect(Math.abs(uv.getX(i)-.5)).toBeLessThan(.03);checked++;}expect(checked).toBeGreaterThan(0);}finally{model.userData.dispose();texture.dispose();}
 });

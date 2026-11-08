@@ -15,6 +15,7 @@ export default function AvatarEditor({ character, onChange, onClose }) {
   const panel = useRef(null), closeRef = useRef(onClose); closeRef.current = onClose;
   const [draft,setDraft,history] = useActionHistory(() => ({...DEFAULT_CHARACTER,...character}),panel);
   const [tab,setTab] = useState("Face"), [yaw,setYaw] = useState(-.10);
+  const [outfitSection,setOutfitSection]=useState("Tops"),[detailSection,setDetailSection]=useState("Hats");
   const wearDesign=design=>setDraft(current=>applyDesign(current,design));
   const patch = (key, value) => setDraft(current => ({ ...current, [key]: value }));
   useEffect(() => {
@@ -32,10 +33,10 @@ export default function AvatarEditor({ character, onChange, onClose }) {
   }, []);
   const palette = (key, label) => <fieldset className="avatar-field"><legend>{label}</legend><div className="avatar-colors">{AVATAR_COLORS[key].map(value => <button key={value} type="button" aria-label={`${label} ${value}`} aria-pressed={draft[key]?.toLowerCase() === value} style={{ background: value }} onClick={() => patch(key, value)} />)}
     <label className="avatar-custom-color">Custom<ColorField aria-label={`Custom ${label.toLowerCase()}`} value={hex(draft[key], AVATAR_COLORS[key][0])} onChange={event => patch(key, event.target.value)} /></label></div></fieldset>;
-  const customSlot={hairStyle:"customHair",topStyle:"customClothing",hat:"customHat",glasses:"customGlasses",necklace:"customNecklace",earring:"customEarring"};
+  const customSlot={hairStyle:"customHair",topStyle:"customClothing",pantsStyle:"customBottom",shoeStyle:"customShoes",accessoryStyle:"customAccessory",hat:"customHat",glasses:"customGlasses",necklace:"customNecklace",earring:"customEarring"};
   const choices = (key, label, extra = {}) => <fieldset className="avatar-field"><legend>{label}</legend><div className={`avatar-option-grid for-${key}`}>
     {AVATAR_OPTIONS[key].map((name, value) => <button type="button" key={name} aria-label={`${label}: ${name}`} aria-pressed={(draft[key] || 0) === value} onClick={() => setDraft(current=>({...current,[key]:value,...(customSlot[key]?{[customSlot[key]]:null}:{})}))}>
-      <span className="avatar-option-visual"><FriendlyAvatar character={{ ...draft, ...extra, [key]: value, ...(customSlot[key]?{[customSlot[key]]:null}:{}) }} framing={key === "topStyle" ? "full" : "portrait"} size={72} /></span><span>{name}</span>{(draft[key] || 0) === value && <span className="avatar-selection-mark"><UiIcon name="check" size={12} /></span>}
+      <span className="avatar-option-visual"><FriendlyAvatar character={{ ...draft, ...extra, [key]: value, ...(customSlot[key]?{[customSlot[key]]:null}:{}) }} framing={["topStyle","pantsStyle","shoeStyle","accessoryStyle"].includes(key) ? "full" : "portrait"} size={72} lazy /></span><span>{name}</span>{(draft[key] || 0) === value && <span className="avatar-selection-mark"><UiIcon name="check" size={12} /></span>}
     </button>)}</div></fieldset>;
   const detailColor = (key, label) => <label className="avatar-detail-color">{label}<ColorField aria-label={label} value={hex(draft[key], "#739db8")} onChange={event => patch(key, event.target.value)} /></label>;
   return <div className="avatar-editor-overlay" ref={viewport} onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}><section className="avatar-editor premium-avatar-editor" ref={panel} role="dialog" aria-modal="true" aria-labelledby="avatar-title">
@@ -52,8 +53,19 @@ export default function AvatarEditor({ character, onChange, onClose }) {
           {tab === "Face" && <>{palette("skin", "Skin tone")}{palette("eyes", "Eye color")}{choices("eyeShape", "Eyes", { glasses: 0 })}{choices("mouth", "Expression", { facialHair: 0 })}{choices("eyebrow", "Eyebrows")}
             <div className="avatar-toggles"><label><input type="checkbox" checked={!!draft.blush} onChange={event => patch("blush", event.target.checked)} />Rosy cheeks</label><label><input type="checkbox" checked={!!draft.freckles} onChange={event => patch("freckles", event.target.checked)} />Freckles</label></div></>}
           {tab === "Hair" && <>{choices("hairStyle", "Hairstyle", { hat: 0 })}{palette("hair", "Hair color")}</>}
-          {tab === "Outfit" && <>{choices("topStyle", "Clothing")}{palette("top", "Clothing color")}{palette("bg", "Background")}</>}
-          {tab === "Details" && <>{choices("hat", "Hat")}{draft.hat > 0 && detailColor("hatColor", "Hat color")}{choices("glasses", "Glasses")}{draft.glasses > 0 && detailColor("glassesColor", "Glasses color")}{choices("facialHair", "Facial hair")}{choices("necklace", "Necklace")}{draft.necklace > 0 && detailColor("necklaceColor", "Necklace color")}{choices("earring", "Earrings")}{draft.earring > 0 && detailColor("earringColor", "Earring color")}</>}
+          {tab === "Outfit" && <><div className="avatar-categories" role="group" aria-label="Wardrobe category">{["Tops","Bottoms","Shoes","Colors"].map(name=><button className="quiet-button" key={name} aria-pressed={outfitSection===name} onClick={()=>setOutfitSection(name)}>{name}</button>)}</div>
+            {outfitSection==="Tops"&&<>{choices("topStyle","Clothing")}{palette("top","Clothing color")}{palette("outfitAccent","Collar and cuff color")}</>}
+            {outfitSection==="Bottoms"&&<>{choices("pantsStyle","Bottoms")}{palette("bottom","Bottoms color")}</>}
+            {outfitSection==="Shoes"&&<>{choices("shoeStyle","Shoes")}{palette("shoes","Shoe color")}</>}
+            {outfitSection==="Colors"&&<>{palette("top","Clothing color")}{palette("outfitAccent","Collar and cuff color")}{palette("bottom","Bottoms color")}{palette("shoes","Shoe color")}{palette("bg","Background")}</>}
+          </>}
+          {tab === "Details" && <><div className="avatar-categories" role="group" aria-label="Detail category">{["Hats","Glasses","Jewelry","Facial hair","Accessories"].map(name=><button className="quiet-button" key={name} aria-pressed={detailSection===name} onClick={()=>setDetailSection(name)}>{name}</button>)}</div>
+            {detailSection==="Hats"&&<>{choices("hat","Hat")}{draft.hat>0&&detailColor("hatColor","Hat color")}</>}
+            {detailSection==="Glasses"&&<>{choices("glasses","Glasses")}{draft.glasses>0&&detailColor("glassesColor","Glasses color")}</>}
+            {detailSection==="Jewelry"&&<>{choices("necklace","Necklace")}{draft.necklace>0&&detailColor("necklaceColor","Necklace color")}{choices("earring","Earrings")}{draft.earring>0&&detailColor("earringColor","Earring color")}</>}
+            {detailSection==="Facial hair"&&choices("facialHair","Facial hair")}
+            {detailSection==="Accessories"&&<>{choices("accessoryStyle","Accessory")}{palette("accessoryColor","Accessory color")}</>}
+          </>}
         </div>
       </div>
     </div><footer><button type="button" className="quiet-button" disabled={!history.canUndo} onClick={history.undo}>Undo look</button><button type="button" className="quiet-button" disabled={!history.canRedo} onClick={history.redo}>Redo look</button><button type="button" className="quiet-button" onClick={onClose}>Cancel</button><button type="button" className="quiet-button is-primary" onClick={() => { onChange({ ...draft, name: draft.name.trim() }); onClose(); }}>Save changes</button></footer>
