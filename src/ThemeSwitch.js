@@ -1,0 +1,6 @@
+import {useRef,useState} from 'react';
+import UiIcon from './UiIcon';
+export default function ThemeSwitch({dark,onChange}) {
+  const start=useRef(null), dragged=useRef(false),[position,setPosition]=useState(null);
+  return <button type="button" role="switch" aria-label="Dark mode" aria-checked={dark} data-dragging={position!==null} className="classio-switch theme-motion-switch" onPointerDown={event=>{start.current=event.clientX;dragged.current=false;event.currentTarget.setPointerCapture(event.pointerId);}} onPointerMove={event=>{if(start.current!==null){const dx=event.clientX-start.current;if(Math.abs(dx)>4){dragged.current=true;setPosition(Math.min(21,Math.max(0,(dark?21:0)+dx)));}}}} onPointerUp={event=>{if(start.current!==null&&Math.abs(event.clientX-start.current)>12){dragged.current=true;const next=event.clientX>start.current;if(next!==dark)onChange();}start.current=null;setPosition(null);}} onPointerCancel={()=>{start.current=null;setPosition(null);}} onClick={()=>{if(!dragged.current)onChange();dragged.current=false;}}><span style={position===null?undefined:{transform:`translateX(${position}px)`,transition:"none"}}><UiIcon key={dark?"dark":"light"} className="theme-mode-icon" name={dark?'moon':'sun'} size={15}/></span></button>;
+}

@@ -15,13 +15,15 @@ export function useInkTool(scopeKey) {
 }
 
 export function InkToolbar({ ink, strokes, onChange }) {
+  const [options,setOptions]=useState(()=>!!strokes.length);
   return <div className="studio-controls" role="toolbar" aria-label="Annotation tools">
     <div className="ink-tool-choices">{inkTools.map(([id, label]) => <button type="button" key={id} aria-pressed={ink.tool === id} onClick={() => ink.setTool(id)}><UiIcon name={id === "pen" ? "edit" : id === "highlight" ? "highlight" : id === "erase" ? "eraser" : "hand"} size={16} />{label}</button>)}</div>
-    <div className="ink-colors" role="group" aria-label="Ink colors">{[["#b52332", "Red"], ["#286a9b", "Blue"], ["#2f7b59", "Green"], ["#d19a16", "Gold"], ["#7b54a0", "Purple"]].map(([color, name]) => <button type="button" key={color} className="ink-color-swatch" aria-label={name + " ink"} aria-pressed={ink.color === color} style={{ "--swatch": color }} onClick={() => ink.setColor(color)}>{ink.color === color && <UiIcon name="check" size={13} />}</button>)}<label className="ink-custom-color" title="Custom ink color"><span style={{ background: ink.color }} /><ColorField aria-label="Ink color" value={ink.color} onChange={event => ink.setColor(event.target.value)} /></label></div>
+    <button type="button" aria-expanded={options||ink.tool!=="pan"} className="ink-options-toggle" onClick={()=>{if(ink.tool!=="pan"){ink.setTool("pan");setOptions(false);}else setOptions(open=>!open);}}>Drawing options</button>
+    <div className="ink-tool-details studio-controls" hidden={!options&&ink.tool==="pan"}><div className="ink-colors" role="group" aria-label="Ink colors">{[["#b52332", "Red"], ["#286a9b", "Blue"], ["#2f7b59", "Green"], ["#d19a16", "Gold"], ["#7b54a0", "Purple"]].map(([color, name]) => <button type="button" key={color} className="ink-color-swatch" aria-label={name + " ink"} aria-pressed={ink.color === color} style={{ "--swatch": color }} onClick={() => ink.setColor(color)}>{ink.color === color && <UiIcon name="check" size={13} />}</button>)}<label className="ink-custom-color" title="Custom ink color"><span style={{ background: ink.color }} /><ColorField aria-label="Ink color" value={ink.color} onChange={event => ink.setColor(event.target.value)} /></label></div>
     <div className="ink-size-choices" role="group" aria-label="Ink size">{[[2, "Fine"], [5, "Medium"], [10, "Broad"]].map(([size, name]) => <button type="button" key={size} aria-label={name + " stroke"} aria-pressed={size === (ink.size <= 3 ? 2 : ink.size <= 7 ? 5 : 10)} onClick={() => ink.setSize(size)}><span style={{ width: size + 3, height: size + 3 }} /><small>{name}</small></button>)}</div>
     <button type="button" disabled={!strokes.length&&!ink.past.length} onClick={()=>undoInk(ink,strokes,onChange)}>Undo ink</button>
     <button type="button" disabled={!ink.future.length} onClick={()=>redoInk(ink,strokes,onChange)}>Redo ink</button>
-    <button type="button" disabled={!strokes.length} onClick={()=>commitInk(ink,strokes,[],onChange)}>Clear ink</button>
+    <button type="button" disabled={!strokes.length} onClick={()=>commitInk(ink,strokes,[],onChange)}>Clear ink</button></div>
   </div>;
 }
 

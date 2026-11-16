@@ -1,3 +1,7 @@
+import ChoiceMenu from './ChoiceMenu';
+import StudioDialog from './StudioDialog';
+import {studySource,languageInstruction,responseLanguage} from './studyContext';
+import {parseAiJson} from './aiJson';
 import {spokenMathText} from "./mathSpeech";
 import { MATH_OUTPUT_GUIDE } from "./mathMarkdown";
 import { useEffect, useRef, useState } from "react";
@@ -9,8 +13,8 @@ import UiIcon from "./UiIcon";
 import "./studyTools.css";
 
 export function parseLessonPlan(raw) {
-  const value = JSON.parse(raw.replace(/^\s*```(?:json)?\s*|\s*```\s*$/gi, ""));
-  if (!Array.isArray(value) || value.length < 2 || value.length > 6) throw new Error("The AI returned an incomplete course. Try again.");
+  const value = parseAiJson(raw);
+  if (!Array.isArray(value) || value.length < 1 || value.length > 16) throw new Error("The AI returned an incomplete course. Try again.");
   const text = (input, max) => { if (typeof input !== "string" || !input.trim()) throw new Error("The AI returned an incomplete lesson. Try again."); return input.trim().slice(0, max); };
   return value.map(unit => {
     if (!unit || !Array.isArray(unit.options) || unit.options.length !== 3 || !Number.isInteger(unit.correct) || unit.correct < 0 || unit.correct > 2) throw new Error("A knowledge check was incomplete. Try generating the course again.");
@@ -18,7 +22,7 @@ export function parseLessonPlan(raw) {
   });
 }
 export default function LearnMode({ file, getFileText, onUpdate, onUseAsNotes }) {
-  const [topic, setTopic] = useState("");
+  const [topic, setTopic] = useState(""),[lessonCount,setLessonCount]=useState("auto"),[confirmation,setConfirmation]=useState(null);
   const [active, setActive] = useState(() => Math.max(0, Math.min(file.course?.active || 0, (file.course?.units?.length || 1) - 1)));
   const [choice, setChoice] = useState(() => file.course?.answers?.[file.course?.active || 0] ?? null), [loading, setLoading] = useState(false), [error, setError] = useState(""), [speaking, setSpeaking] = useState(false);
   const request = useRef(null), latest = useRef({ file, onUpdate }); latest.current = { file, onUpdate };
@@ -27,20 +31,26 @@ export default function LearnMode({ file, getFileText, onUpdate, onUseAsNotes })
   useEffect(() => () => { request.current?.abort(); window.speechSynthesis?.cancel(); }, []);
   const updateCourse = patch => { const current = latest.current; const course = { ...current.file.course, ...patch }; current.onUpdate({ ...current.file, course }); };
   async function generate(event) {
-    event.preventDefault(); if (loading) return;
-    if (units.length && !window.confirm("Generate a new course for this file? The current lesson plan will be replaced; your written notes stay saved.")) return;
+    event?.preventDefault(); if (loading) return;
+    if (units.length) {setConfirmation("replace");return;}
+    await generateCourse();
+  }
+  async function generateCourse() {
+    setConfirmation(null);
     const controller = new AbortController(); request.current = controller; setLoading(true); setError("");
     try {
-      const source = (file.notes || await getFileText?.() || "").slice(0, 15000);
+      const source = await studySource(file,getFileText);
+      const count=lessonCount==="auto"?Math.min(12,Math.max(3,Math.ceil(source.length/1800))):Number(lessonCount);
       if (!source.trim() && !topic.trim()) throw new Error("Enter a topic or add study material first.");
       const raw = await sendStudyRequest({ messages: [
-        { role: "system", content: `Build a short, accurate self-paced course. Output only a JSON array of 3 to 5 objects. Each object has title, lesson (Markdown with short titled sections, a worked example, and a short takeaway), question, options (exactly three strings), correct (zero-based index), and explanation. Use the learner's language. Stay grounded in the source, label supplemental explanations, and do not invent source content. ${MATH_OUTPUT_GUIDE}` },
+        { role: "system", content: `Build a short, accurate self-paced course. Output only a JSON array of ${count} objects, covering the source sections in order rather than repeating the first section. Each object has title, lesson (Markdown with short titled sections, a worked example, and a short takeaway), question, options (exactly three strings), correct (zero-based index), and explanation. ${languageInstruction(source)} Stay grounded in the source, label supplemental explanations, and do not invent source content. ${MATH_OUTPUT_GUIDE}` },
         { role: "user", content: `Topic: ${topic.trim() || file.name}\n\nStudy material:\n${source}` },
-      ], maxTokens: 5500 }, controller.signal);
+      ], maxTokens: Math.min(8000,1000+count*580) }, controller.signal);
       if (controller.signal.aborted) return;
-      updateCourse({ units: parseLessonPlan(raw), completed: [], active: 0, answers: {} }); setActive(0); setChoice(null);
+      const next=parseLessonPlan(raw);if(lessonCount!=="auto"&&next.length!==count)throw new Error(`The AI returned ${next.length} lessons instead of ${count}. Your current course is kept; try again.`);
+      updateCourse({ units: next, completed: [], active: 0, answers: {} }); setActive(0); setChoice(null);
     } catch (failure) { if (!controller.signal.aborted) setError(failure.message); }
-    finally { if (!controller.signal.aborted) setLoading(false); request.current = null; }
+    finally { if(request.current===controller){setLoading(false);request.current=null;} }
   }
   function select(index) {
     window.speechSynthesis?.cancel(); setSpeaking(false); setActive(index); setChoice(file.course?.answers?.[index] ?? null); updateCourse({ active: index });
@@ -52,12 +62,12 @@ export default function LearnMode({ file, getFileText, onUpdate, onUseAsNotes })
     if (speaking) { window.speechSynthesis.cancel(); setSpeaking(false); return; }
     if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) { setError("Read aloud is not supported by this browser."); return; }
     const speech = new SpeechSynthesisUtterance(spokenMathText(`${unit.title}. ${unit.lesson}`));
-    speech.lang = navigator.language; speech.rate = .95; speech.onend = () => setSpeaking(false); speech.onerror = () => { setSpeaking(false); setError("Read aloud stopped. You can continue reading the lesson."); };
+    speech.lang = responseLanguage(unit.lesson)==="Arabic"?"ar-SA":navigator.language; speech.rate = .95; speech.onend = () => setSpeaking(false); speech.onerror = () => { setSpeaking(false); setError("Read aloud stopped. You can continue reading the lesson."); };
     window.speechSynthesis.cancel(); window.speechSynthesis.speak(speech); setSpeaking(true);
   }
   return <section className="lesson-studio" aria-labelledby="learn-title"><header className="tool-heading"><div><p className="eyebrow">STEP BY STEP</p><h2 id="learn-title">Guided lessons</h2><p>AI explanations with worked examples and helpful questions after each lesson, saved inside Notes.</p></div>
     {unit && <span className="tool-count">{completed.length} / {units.length} complete</span>}</header>
-    <form onSubmit={generate} className={`course-generator ${unit ? "is-compact" : ""}`}><label htmlFor="course-topic">Topic<input id="course-topic" placeholder="Optional when this file has study material" value={topic} onChange={event => setTopic(event.target.value)} /></label><button className="quiet-button is-primary" disabled={loading}><UiIcon name="generate" />{loading ? "Generating lessons…" : unit ? "New course" : "Generate lessons"}</button></form>
+    <form onSubmit={generate} className={`course-generator ${unit ? "is-compact" : ""}`}><label htmlFor="course-topic">Topic<input id="course-topic" placeholder="Optional when this file has study material" value={topic} onChange={event => setTopic(event.target.value)} /></label><label>Lessons<ChoiceMenu aria-label="Number of lessons" value={lessonCount} onChange={event=>setLessonCount(event.target.value)}><option value="auto">Match the material</option>{[3,4,5,6,8,10,12].map(count=><option key={count} value={count}>{count}</option>)}</ChoiceMenu></label><button className="quiet-button is-primary" disabled={loading}><UiIcon name="generate" />{loading ? "Generating lessons…" : unit ? "New course" : "Generate lessons"}</button>{loading&&<button type="button" className="quiet-button" onClick={()=>{request.current?.abort();request.current=null;setLoading(false);}}>Cancel generation</button>}{unit&&<button type="button" className="quiet-button" onClick={()=>setConfirmation("restart")}>Restart lessons & questions</button>}</form>
     {error && <p role="alert" className="tool-error">{error}</p>}
     {!unit && !loading && <div className="tool-empty"><WorkspaceArt /><h3>Turn a chapter into a clear learning path</h3><p>Use the notes or source in this file, or enter a topic above. Your generated lessons and progress stay with this material.</p></div>}
     {loading && <div className="lesson-skeleton" role="status" aria-label="Generating lessons"><span /><span /><span /></div>}
@@ -69,5 +79,6 @@ export default function LearnMode({ file, getFileText, onUpdate, onUseAsNotes })
           <footer className="lesson-navigation"><button className="quiet-button" disabled={active === 0} onClick={() => select(active - 1)}><UiIcon name="back" />Previous</button><span>{active + 1} / {units.length}</span>
             {active < units.length - 1 ? <button className="quiet-button is-primary" onClick={() => select(active + 1)}>Continue<UiIcon name="arrow" /></button> : <button className="quiet-button is-primary" disabled={choice !== unit.correct && !completed.includes(active)} onClick={() => { if (!completed.includes(active)) updateCourse({ completed: [...completed, active] }); }}><UiIcon name="check" />Finish lesson</button>}</footer>
         </article></div>{onUseAsNotes && <button className="text-button lesson-save-notes" onClick={() => onUseAsNotes(units.map(item => `## ${item.title}\n\n${item.lesson}`).join("\n\n"))}><UiIcon name="notes" />Add lessons to notes</button>}</>}
+    {confirmation&&<StudioDialog title={confirmation==="replace"?"Generate a new course?":"Restart this course?"} onClose={()=>setConfirmation(null)}><p>{confirmation==="replace"?"Your current course stays available until the new lessons are ready. Your written notes are kept.":"Keep these lessons and start their questions again from the beginning."}</p><div className="dialog-actions"><button className="quiet-button" onClick={()=>setConfirmation(null)}>Cancel</button><button className="quiet-button is-primary" onClick={()=>{if(confirmation==="replace")generateCourse();else{setConfirmation(null);setActive(0);setChoice(null);updateCourse({active:0,answers:{},completed:[]});}}}>{confirmation==="replace"?"Generate new course":"Restart course"}</button></div></StudioDialog>}
   </section>;
 }

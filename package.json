@@ -45,7 +45,8 @@
     "test:server": "node --test server/*.test.js",
     "test:browser": "node scripts/test-browser.cjs",
     "build:icons": "node scripts/build-icons.cjs",
-    "test:presentation": "node scripts/presentation-browser.cjs"
+    "test:presentation": "node scripts/presentation-browser.cjs",
+    "test:workflows": "node scripts/workflow-browser.cjs"
   },
   "eslintConfig": {
     "extends": [

@@ -8,3 +8,11 @@ export function anySignal(signals){
  for(const signal of active){if(signal.aborted){cancel(signal);break;}const listener=()=>cancel(signal);listeners.push([signal,listener]);signal.addEventListener('abort',listener,{once:true});}
  return controller.signal;
 }
+
+export function timeoutSignal(milliseconds){
+ if(typeof AbortSignal.timeout==='function')return AbortSignal.timeout(milliseconds);
+ const controller=new AbortController();
+ const timer=setTimeout(()=>controller.abort(new DOMException('The request timed out.','TimeoutError')),milliseconds);
+ timer.unref?.();
+ return controller.signal;
+}

@@ -78,6 +78,6 @@ export default function ChoiceMenu({ children, value, defaultValue, onChange, di
           <span><strong>{renderLabel?renderLabel(option.label):option.label}</strong>{descriptions[option.value] && <small>{descriptions[option.value]}</small>}</span>{option.value === selected && <UiIcon name="check" size={17} />}
         </button>
       </Fragment>)}
-    </div>, document.body)}
+    </div>, document.fullscreenElement || document.body)}
   </>;
 }

@@ -14,6 +14,7 @@ export default function StudioDialog({ title, onClose, children, wide = false })
     const keys = event => {
       const dialogs=document.querySelectorAll('.studio-dialog');
       if(dialogs[dialogs.length-1]!==ref.current)return;
+      if (event.key === "Escape" && ref.current.querySelector(".is-presenting")) return;
       if (event.key === "Escape") { event.preventDefault(); close.current(); }
       if (event.key !== "Tab") return;
       const controls = [...ref.current.querySelectorAll("button:not(:disabled),input:not([disabled]):not([hidden]),textarea:not([disabled]),select:not([disabled]),a[href],[tabindex='0']")].filter(node=>node.getClientRects().length);
@@ -24,5 +25,5 @@ export default function StudioDialog({ title, onClose, children, wide = false })
     return () => { unlock(); window.removeEventListener("keydown", keys); if (before?.isConnected) before.focus({ preventScroll: true }); };
   }, []);
   return createPortal(<div ref={viewport} className="studio-dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}><section className={`studio-dialog ${wide ? "is-wide" : ""}`} ref={ref} role="dialog" aria-modal="true" aria-labelledby={id}>
-    <header><h2 id={id}>{title}</h2><button className="quiet-button" style={{minWidth:44,minHeight:44}} aria-label={`Close ${title}`} onClick={onClose}><UiIcon name="close" /></button></header><div className="studio-dialog-content">{children}</div></section></div>, document.body);
+    <header><h2 id={id}>{title}</h2><button className="quiet-button" style={{minWidth:44,minHeight:44}} aria-label={`Close ${title}`} onClick={onClose}><UiIcon name="close" /></button></header><div className="studio-dialog-content">{children}</div></section></div>, document.fullscreenElement || document.body);
 }

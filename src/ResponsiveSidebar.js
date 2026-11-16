@@ -11,7 +11,7 @@ function MenuIcon({ close = false }) {
 }
 
 export default function ResponsiveSidebar({ mobile, expanded, onExpand, main, mainActive, tabs, active, onTab, onNavigate,
-  onSearch, onCharacter, avatar, account, guest, onSignOut, onToggleTheme, dark, documentName }) {
+  onSearch, onCharacter, avatar, account, guest, onSignOut, onToggleTheme, dark, documentName, backLabel="Back to library" }) {
   const [open, setOpen] = useState(false);
   const drawer = useRef(null);
   const trigger = useRef(null);
@@ -78,7 +78,7 @@ export default function ResponsiveSidebar({ mobile, expanded, onExpand, main, ma
         <button type="button" className="navigation-item navigation-settings" aria-label="Settings" title="Settings" aria-current={mainActive === "settings" ? "page" : undefined} onClick={() => choose(() => onNavigate("settings"))}><UiIcon name="settings" />{full && <span>Settings</span>}</button>
         {full ? <ThemeSelector /> : <button type="button" className="navigation-item" onClick={onToggleTheme}
           aria-label={dark ? "Switch to light mode" : "Switch to dark mode"} title="Change appearance">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1 1M18 18l1 1M5 19l1-1M18 6l1-1" /></svg>
+          <UiIcon className="theme-mode-icon" name={dark?"moon":"sun"}/>
         </button>}
         {full && <p className="navigation-session">{guest ? "Guest work clears when this session ends." : "Signed in. Progress syncs with your account."}</p>}
         {full && <button type="button" className="navigation-item" onClick={() => choose(onSignOut)}>{guest ? "End guest session" : "Sign out"}</button>}
@@ -88,7 +88,7 @@ export default function ResponsiveSidebar({ mobile, expanded, onExpand, main, ma
   return <>
     <header className="workspace-topbar" style={{ insetInlineStart: mobile ? 0 : expanded ? 220 : 60 }}>
       {mobile && <button ref={trigger} type="button" className="quiet-button" aria-label="Open menu" aria-expanded={open} aria-controls="classio-navigation" onClick={() => setOpen(true)}><MenuIcon /></button>}
-      {documentName && <button type="button" className="quiet-button" aria-label="Back to library" onClick={() => onNavigate("home")}><UiIcon name="back" /></button>}
+      {(documentName||mainActive==="settings"||mainActive==="guides") && <button type="button" className="quiet-button" aria-label={backLabel} title={backLabel} onClick={() => onNavigate("back")}><UiIcon name="back" /></button>}
       <span className="workspace-topbar-title">{documentName || "Classio"}</span>
       <span className="workspace-session-tag">{guest ? "Guest workspace" : "Signed in"}</span>
     </header>

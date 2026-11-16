@@ -1,3 +1,4 @@
+import {parseAiJson} from './aiJson';
 import {normalizeDeckDesign,deckStyleVariables} from "./deckStyle";
 import { InkLayer, InkToolbar, useInkTool } from "./DocumentInk";
 import { safeImageSource } from "./documentMedia";
@@ -25,7 +26,7 @@ export function normalizeSlideTable(rows) {
 
 export function parseDeckResponse(raw, count) {
   const cleaned = raw.trim().replace(/^```(?:json)?\s*|\s*```$/gi, "");
-  const parsed = JSON.parse(cleaned);
+  const parsed = parseAiJson(cleaned);
   if (!Array.isArray(parsed.slides) || !parsed.slides.length) throw new Error("The AI returned no slides. Try a shorter topic.");
   const text = (value, max) => typeof value === "string" ? value.trim().slice(0, max) : "";
   const points = values => Array.isArray(values) ? values.filter(value => typeof value === "string").slice(0, 6).map(value => text(value, 280)) : [];

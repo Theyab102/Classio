@@ -1,5 +1,4 @@
 import {openDocumentArchive} from './documentArchive';
-import StudyMarkdown from "./StudyMarkdown";
 import { useEffect, useState } from "react";
 import { InkLayer, InkToolbar, useInkTool } from "./DocumentInk";
 import "./documentStudio.css";
@@ -115,8 +114,7 @@ export async function readSlides(file) {
     return {
       items,
       background: color(first(first(xml, "bgPr"), "solidFill")) || "#ffffff",
-      texts: items.flatMap(item => item.type === "text" ? item.paragraphs.map(paragraph => paragraph.text)
-        : item.type === "table" ? item.table.rows.flatMap(row => row.map(cell => cell.text)) : []),
+      texts: all(xml,"txBody").flatMap(body=>all(body,"p").map(plain)).filter(Boolean),
     };
   }));
   return { slides, width, height };
@@ -128,7 +126,7 @@ export function SlideTable({ table }) {
     {columnWidth > 0 && <colgroup>{table.columns.map((value, index) => <col key={index} style={{ width: `${value / columnWidth * 100}%` }} />)}</colgroup>}
     <tbody>{table.rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, index) => {
       const Tag = rowIndex === 0 && table.header ? "th" : "td";
-      return <Tag key={index} colSpan={cell.colSpan} rowSpan={cell.rowSpan} style={{ backgroundColor: cell.fill }}><StudyMarkdown inline text={cell.text}/></Tag>;
+      return <Tag key={index} colSpan={cell.colSpan} rowSpan={cell.rowSpan} style={{ backgroundColor: cell.fill }}><span dir="auto">{cell.text}</span></Tag>;
     })}</tr>)}</tbody>
   </table>;
 }
@@ -137,7 +135,7 @@ function SlideItem({ item }) {
   return <div className={item.position ? "ppt-positioned" : "ppt-flow-item"} style={item.position || undefined}>
     {item.type === "text" && item.paragraphs.map((paragraph, index) => <p key={index}
       style={{ fontSize: paragraph.size || (item.title ? "4cqw" : "2.3cqw"), fontWeight: paragraph.bold || item.title ? 700 : undefined, color: paragraph.color }}>
-      <StudyMarkdown inline text={paragraph.text}/>
+      <span dir="auto">{paragraph.text}</span>
     </p>)}
     {item.type === "image" && <img src={item.src} alt="" />}
     {item.type === "table" && <SlideTable table={item.table} />}
@@ -149,7 +147,7 @@ export function SourceSlidePreview({slide,width=16,height=9}) {
  return <div className={`ppt-page ${positioned?"ppt-positioned-page":""}`} style={{aspectRatio:`${width} / ${height}`,background:slide.background}} aria-hidden="true">{slide.items.map((item,index)=><SlideItem key={index} item={positioned?item:{...item,position:null}}/>)}</div>;
 }
 
-export default function PowerPointViewer({ file = {}, fileObj, page, onTotalPages, onSlidesLoaded, onUpdate }) {
+export default function PowerPointViewer({ file = {}, fileObj, page, onTotalPages, onSlidesLoaded, onDimensions, onUpdate }) {
   const [deck, setDeck] = useState(null);
   const [error, setError] = useState("");
   const ink = useInkTool(file.id+":"+page);
@@ -166,6 +164,7 @@ export default function PowerPointViewer({ file = {}, fileObj, page, onTotalPage
       if (!live) return;
       setDeck(result);
       onTotalPages?.(result.slides.length);
+      onDimensions?.(result.width,result.height);
       onSlidesLoaded?.(result.slides);
     }).catch(failure => { if (live) setError(failure.message || "Could not read this presentation."); });
     return () => { live = false; };

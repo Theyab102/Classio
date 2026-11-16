@@ -8,3 +8,9 @@ export function styleVariables(input,mode='light'){
   return{'--app-bg':p.background,'--app-surface':p.surface,'--app-text':p.text,'--app-muted':p.muted,'--app-link':p.accent,'--custom-radius':style.radius+'px','--custom-spacing':style.spacing,'--custom-shadow':style.shadow==='none'?'none':'0 4px 20px #1023320c','--study-font':style.font==='serif'?'"Fraunces Variable",Georgia,serif':style.font==='handwritten'?'"Caveat Variable",cursive':'"DM Sans Variable",system-ui,sans-serif'};
 }
 export function styleRequest(prompt){return{task:'style',messages:[{role:'system',content:'Interpret a visual style for an educational workspace. Return only JSON: {"name":"short name","font":"sans|serif|handwritten","radius":12,"spacing":1,"paper":"plain|ruled|grid","shadow":"soft|none","light":{"background":"#f6f8fb","surface":"#ffffff","text":"#253648","muted":"#526477","accent":"#2a658f"},"dark":{"background":"#151d28","surface":"#1d2937","text":"#eaf0f7","muted":"#aabbd0","accent":"#b2d9f6"}}. Use six-digit HEX colors, light surfaces in light mode, dark surfaces in dark mode, readable contrast and restrained spacing. Never return CSS, markup, scripts, URLs or executable code.'},{role:'user',content:prompt.slice(0,2000)}],maxTokens:900};}
+
+export const visualPresets = [
+  {...normalizeStyle({name:"Clean",font:"sans",shadow:"none"}),description:"Clear type and quiet surfaces"},
+  {...normalizeStyle({name:"Book",font:"serif",radius:8,shadow:"none"}),description:"Readable serif text and generous space"},
+  {...normalizeStyle({name:"Notebook",font:"handwritten",paper:"ruled",shadow:"none"}),description:"A handwritten page for your own notes"},
+];

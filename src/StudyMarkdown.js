@@ -11,5 +11,5 @@ export default function StudyMarkdown({ text = "", className = "", allowImages =
     return host.innerHTML;
   }, [text, allowImages, inline]);
   const Tag=inline?"span":"div";
-  return <Tag className={`study-markdown ${inline?"study-inline":""} ${className}`} dangerouslySetInnerHTML={{ __html: html }} />;
+  return <Tag dir="auto" className={`study-markdown ${inline?"study-inline":""} ${className}`} dangerouslySetInnerHTML={{ __html: html }} />;
 }

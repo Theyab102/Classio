@@ -1,4 +1,4 @@
-import {anySignal} from './abortSignal';
+import {anySignal,timeoutSignal} from './abortSignal';
 import { useEffect, useRef, useState } from "react";
 import { downloadStudyFile, TTS_SPACE_URL } from "./studyTools";
 
@@ -14,7 +14,7 @@ export default function PodcastDownload({ script }) {
   async function downloadAudio() {
     if (pending.current) return;
     const controller = new AbortController();
-    const timeout = AbortSignal.timeout(90000);
+    const timeout = timeoutSignal(90000);
     pending.current = controller;
     setLoading(true);
     setStatus("Preparing audio. A sleeping voice server can take a moment to start.");

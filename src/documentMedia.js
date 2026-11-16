@@ -163,7 +163,7 @@ async function commonsImages(query, signal) {
     const artist = new DOMParser().parseFromString(info.extmetadata?.Artist?.value || "", "text/html").body.textContent.trim();
     const context = new DOMParser().parseFromString(info.extmetadata?.ImageDescription?.value || "", "text/html").body.textContent.trim().slice(0, 800);
     const credit = [title, artist, license].filter(Boolean).join(" · ");
-    return [{ src: info.thumburl, source: info.descriptionurl, title, credit, context, ...(info.thumbwidth&&info.thumbheight?{width:info.thumbwidth,height:info.thumbheight}:{}) }];
+    return [{ kind:info.mime==="image/svg+xml"?"diagram":"image", src: info.thumburl, source: info.descriptionurl, title, credit, context, ...(info.thumbwidth&&info.thumbheight?{width:info.thumbwidth,height:info.thumbheight}:{}) }];
   }).slice(0, 8);
 }
 
@@ -193,7 +193,11 @@ export function likelyStudyImage(query, results) {
   const generic = new Set(["the", "and", "for", "with", "from", "diagram", "image", "picture", "labeled", "illustration", "photo", "model"]);
   const subject = [...tokens(query)].filter(word => !generic.has(word));
   if (!subject.length) return null;
-  const ranked = results.map(result => {
+  const ranked = results.filter(result=>{
+    const remote=/^https?:/.test(result.source||"")||result.provider;
+    if(!remote||/\b(photo|photograph|portrait)\b/i.test(query))return true;
+    return result.kind==="diagram"||/\b(?:diagram|schematic|chart|graph|illustration|labelled|labeled|trajectory|structure|cross.section|terminal velocity)\b/i.test(result.title+" "+(result.context||""));
+  }).map(result => {
     const title = tokens((result.context || "") + " " + result.title);
     return { result, matches: subject.filter(word => title.has(word)).length };
   }).sort((a, b) => b.matches - a.matches);

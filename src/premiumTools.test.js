@@ -52,6 +52,7 @@ test("flashcard generation appends real returned cards without clearing progress
   const changed = jest.fn();
   render(<Harness Component={FlashcardStudio} changed={changed} initial={{ id: "p", name: "Motion", notes: "Acceleration is a change in velocity per second.", studyCards: [{ id: "old", question: "Speed?", answer: "Distance per time." }], cardProgress: { starred: { old: true } } }} />);
   fireEvent.click(screen.getByRole("button", { name: "Generate cards", exact: true }));
+  fireEvent.change(screen.getByRole("spinbutton",{name:"Number of cards"}),{target:{value:"1"}});
   fireEvent.submit(screen.getByRole("dialog").querySelector("form"));
   await waitFor(() => expect(changed).toHaveBeenCalled());
   const next = changed.mock.calls.at(-1)[0]; expect(next.studyCards).toHaveLength(2); expect(next.cardProgress.starred.old).toBe(true);

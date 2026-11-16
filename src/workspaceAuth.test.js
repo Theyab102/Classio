@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import App from "./App";
 import { getDoc, setDoc } from "firebase/firestore";
 import { getAuth, signInWithPopup } from "firebase/auth";
@@ -17,7 +17,7 @@ jest.mock("firebase/auth", () => {
   };
 });
 jest.mock("firebase/firestore", () => ({
-  getFirestore: () => ({}), doc: jest.fn(), getDoc: jest.fn(), setDoc: jest.fn(),
+  deleteField:()=>"__delete_field__", getFirestore: () => ({}), doc: jest.fn(), getDoc: jest.fn(), setDoc: jest.fn(),
 }));
 jest.mock("./pdf", () => ({ openPdf: jest.fn(), loadPdfLibrary: jest.fn() }));
 jest.mock("./NotesEditor", () => () => null);
@@ -115,3 +115,9 @@ test("custom wearable profiles restore separately and save without inflating the
 });
 
  test('initial authentication keeps one loading shell instead of flashing an empty guest library',async()=>{render(<App/>);expect(screen.queryByRole('heading',{name:'Library'})).not.toBeInTheDocument();expect(screen.getByRole('status')).toHaveTextContent('Preparing your study workspace');await act(async()=>{await mockAuthListener(null);});expect(screen.getByRole('heading',{name:'Library'})).toBeInTheDocument();expect(screen.queryByText('Preparing your study workspace…')).not.toBeInTheDocument();});
+
+test('a pending legacy workspace publishes bounded records before removing the obsolete root copy',async()=>{
+ jest.useFakeTimers();const previousEncoder=global.TextEncoder;global.TextEncoder=require('util').TextEncoder;
+ try{localStorage.setItem('classio_workspace:sync-owner',JSON.stringify({folders:[{id:'notes',name:'Saved notes',files:[{id:'one',name:'Original',notes:'Keep this note'}]}],pending:true}));getDoc.mockResolvedValue({metadata:{fromCache:false},data:()=>({folders:[]})});setDoc.mockResolvedValue();render(<App/>);mockAuth.currentUser={uid:'sync-owner',displayName:'Owner'};await act(async()=>{await mockAuthListener(mockAuth.currentUser);});await act(async()=>{jest.advanceTimersByTime(500);});await waitFor(()=>expect(setDoc.mock.calls.some(([,value])=>value.folders==='__delete_field__')).toBe(true));const manifest=setDoc.mock.calls.findIndex(([,value])=>value.format==='classio-parts-v1'),cleanup=setDoc.mock.calls.findIndex(([,value])=>value.folders==='__delete_field__');expect(manifest).toBeGreaterThanOrEqual(0);expect(cleanup).toBeGreaterThan(manifest);expect(JSON.parse(localStorage.getItem('classio_workspace:sync-owner')).folders[0].files[0].notes).toBe('Keep this note');}
+ finally{global.TextEncoder=previousEncoder;jest.useRealTimers();}
+});

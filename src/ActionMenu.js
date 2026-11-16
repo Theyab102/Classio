@@ -61,6 +61,6 @@ export default function ActionMenu({ label, icon = "more", items, primary = fals
         onClick={() => { if (item.items) setBranch(item); else { close(); item.run?.(); } }}>
         {item.icon && <UiIcon name={item.icon} />}<span>{item.label}</span>{item.items && <UiIcon name="chevron" />}
       </button>)}
-    </div>, document.body)}
+    </div>, document.fullscreenElement || document.body)}
   </>;
 }

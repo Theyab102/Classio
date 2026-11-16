@@ -42,3 +42,9 @@ test("a greeting uses a real short request without extracting the current file",
   const payload = sendStudyRequest.mock.calls[0][0];
   expect(payload.maxTokens).toBe(200); expect(JSON.stringify(payload).length).toBeLessThan(700); expect(readSource).not.toHaveBeenCalled();
 });
+
+ test("a library study question works without an active document or learning activity",async()=>{
+  window.matchMedia=jest.fn(()=>({matches:false,addEventListener:jest.fn(),removeEventListener:jest.fn()}));HTMLElement.prototype.scrollIntoView=jest.fn();sendStudyRequest.mockClear();sendStudyRequest.mockResolvedValue("Start by recalling one main idea.");
+  function Harness(){const[messages,setMessages]=useState([]),[draft,setDraft]=useState("How should I review a new chapter?"),[pending,setPending]=useState(false);return <AssistantPanel context={null} activity={null} messages={messages} onMessagesChange={setMessages} draft={draft} onDraftChange={setDraft} pending={pending} onPendingChange={setPending} onClose={()=>{}}/>;}
+  render(<Harness/>);fireEvent.click(screen.getByRole("button",{name:"Send",exact:true}));await screen.findByText("Start by recalling one main idea.");expect(sendStudyRequest).toHaveBeenCalledTimes(1);expect(parseStudyRequest(sendStudyRequest.mock.calls[0][0])).not.toBeNull();
+ });

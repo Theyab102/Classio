@@ -1,3 +1,4 @@
+import {studyStyleInstruction} from './studyContext';
 export async function sendStudyRequest(payload, signal) {
   const controller = new AbortController();
   const cancel = () => controller.abort();
@@ -8,7 +9,7 @@ export async function sendStudyRequest(payload, signal) {
   try {
     const response = await fetch("/api/study", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload), signal: controller.signal,
+      body: JSON.stringify({...payload,messages:(payload.messages || []).map((message,index)=>index===0&&message.role==="system"&&!(["style","classification"].includes(payload.task))?{...message,content:message.content+"\n"+studyStyleInstruction()}:message)}), signal: controller.signal,
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || typeof data.text !== "string" || !data.text.trim()) {

@@ -1,4 +1,5 @@
-import {anySignal} from './abortSignal';
+import {parseAiJson} from './aiJson';
+import {anySignal,timeoutSignal} from './abortSignal';
 import {spokenMathText} from "./mathSpeech";
 import { TTS_SPACE_URL } from "./studyTools";
 
@@ -9,7 +10,9 @@ export function spokenTurn(text) {
 
 export async function synthesizeSpeech(text, voice, signal) {
   if (!TTS_SPACE_URL) throw new Error("Audio generation is not connected.");
-  const response = await fetch(`${TTS_SPACE_URL}/generate-podcast`, { method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store", signal: anySignal([signal, AbortSignal.timeout(90000)]), body: JSON.stringify({ text: spokenMathText(spokenTurn(text)), voice, speed: 1 }) });
+  const response = await fetch(`${TTS_SPACE_URL}/generate-podcast`, { method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store", signal: anySignal([signal, timeoutSignal(90000)]), body: JSON.stringify({ text: spokenMathText(spokenTurn(text)), voice, speed: 1 }) });
+  if(response.status===429){const wait=Math.min(600,Math.max(1,Number(response.headers.get("retry-after"))||60));throw new Error(`The voice service is busy. Try again in ${wait} seconds. Your transcript and previous audio are kept.`);}
+  if(response.status===400)throw new Error("This voice is unavailable on the connected service. Reload the voice catalog and choose another voice.");
   if (!response.ok || !response.headers.get("content-type")?.startsWith("audio/")) throw new Error("The voice service could not create audio. Your transcript is still available.");
   const blob = await response.blob();
   if (blob.size > 15000000) throw new Error("This audio section is too large. Try a shorter answer.");
@@ -17,7 +20,7 @@ export async function synthesizeSpeech(text, voice, signal) {
 }
 
 export function parseEpisode(raw) {
-  const value = JSON.parse(raw.trim().replace(/^```(?:json)?\s*|\s*```$/gi, ""));
+  const value = parseAiJson(raw);
   if (!value || typeof value.title !== "string" || !value.title.trim() || !Array.isArray(value.turns) || value.turns.length < 4 || value.turns.length > 12) throw new Error("The AI returned an incomplete podcast. Try again.");
   let length = 0;
   const turns = value.turns.map(turn => {
