@@ -15,6 +15,9 @@
   </head>
   <body>
     <noscript>Enable JavaScript to use Classio.</noscript>
-    <div id="root"></div>
+    <style>
+      .boot{min-height:100vh;background:#f7f9fc;color:#1b2d3e;font-family:system-ui,sans-serif}.boot header{height:60px;padding:18px 24px;border-bottom:1px solid #d0dce6;font-weight:700}.boot main{padding:48px 24px;max-width:1000px;margin:auto}.boot .blocks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin-top:32px}.boot i{display:block;height:150px;border-radius:12px;background:#d0dce6;animation:boot-pulse 1.5s ease-in-out infinite alternate}.boot p{margin:0;line-height:1.5}@keyframes boot-pulse{to{opacity:.45}}@media(prefers-color-scheme:dark){.boot{background:#111c27;color:#eef5fc}.boot header{border-color:#3b5266}.boot i{background:#3b5266}}@media(prefers-reduced-motion:reduce){.boot i{animation:none}}
+    </style>
+    <div id="root"><div class="boot" role="status" aria-busy="true"><header>Classio</header><main><p>Preparing your study workspace…</p><div class="blocks" aria-hidden="true"><i></i><i></i><i></i><i></i></div></main></div></div>
   </body>
 </html>

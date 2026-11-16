@@ -22,20 +22,8 @@ export function decorateDeckExport(pptx, slide, { layout, index, total, cover, b
     }
   }
   const x = layout === "editorial" ? 1.05 : .8;
-  if (!style||style.pattern==="none") {
-  if (layout === "lecture") {
-    shape("rect", { x: 0, y: 7.42, w: 13.333, h: .08 }, accent);
-    shape("ellipse", { x: 9.5, y: -2.1, w: 5.3, h: 5.3 }, accent, 92);
-  } else if (layout === "editorial") shape("rect", { x, y: .77, w: 11.2, h: .015 }, accent, 35);
-  else {
-    if (cover) shape("parallelogram", { x: 9.2, y: 0, w: 4.4, h: 7.5 }, accent, 84);
-    for (let i = .8; i < 13.3; i += .55) shape("rect", { x: i, y: .9, w: .007, h: 6.2 }, accent, 94);
-    for (let i = .9; i < 7.3; i += .55) shape("rect", { x: .8, y: i, w: 12, h: .007 }, accent, 94);
-  }
-  }
-  slide.addText(layout === "editorial" ? "CLASSIO / FIELD NOTES" : layout === "visual" ? "CLASSIO / EXPLORE" : "CLASSIO / STUDY SESSION", { x, y: .32, w: 6.5, h: .25, fontSize: 10, charSpacing: 2, bold: true, color: accent, fontFace: "Arial", margin: 0 });
-  slide.addText(String(index + 1).padStart(2, "0") + " / " + String(total).padStart(2, "0"), { x: 11.2, y: .32, w: 1.1, h: .25, fontSize: 10, color: sub, align: "right", margin: 0 });
-  if (cover) slide.addText(String(index + 1).padStart(2, "0"), { x: 9.3, y: 3.6, w: 3.2, h: 2.8, fontSize: layout === "visual" ? 200 : 170, fontFace, color: accent, transparency: layout === "visual" ? 70 : 90, margin: 0, bold: layout !== "editorial" });
+  if(!style||style.pattern==='none')shape('rect',{x,y:7.25,w:1.2,h:.04},accent);
+  slide.addText(String(index + 1).padStart(2, "0") + " / " + String(total).padStart(2, "0"), { x:11.2,y:.32,w:1.1,h:.25,fontSize:10,color:sub,align:'right',margin:0 });
   return { x, fontFace, bg };
 }
 

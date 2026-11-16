@@ -1,3 +1,4 @@
+import {anySignal} from './abortSignal';
 import { useEffect, useRef, useState } from "react";
 import { downloadStudyFile, TTS_SPACE_URL } from "./studyTools";
 
@@ -22,7 +23,7 @@ export default function PodcastDownload({ script }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         cache: "no-store",
-        signal: AbortSignal.any([controller.signal, timeout]),
+        signal: anySignal([controller.signal, timeout]),
         body: JSON.stringify({ text: script, voice: "aria", speed: 1 }),
       });
       if (!response.ok || !response.headers.get("content-type")?.startsWith("audio/")) {

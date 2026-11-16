@@ -1,0 +1,22 @@
+[
+  {
+    "name": "mammoth",
+    "file": "mammoth.min.js",
+    "sha384": "t9eMqh3OtJXZhvLtmol8r2+23t6vg1GDo1UeyP55BEQdCI67GW2u8Nso+Yzo5m9r"
+  },
+  {
+    "name": "mermaid",
+    "file": "mermaid.min.js",
+    "sha384": "enVdc7lTHDGtpROV85t9+VqPC2EyyB0hsRD0MrvQnHUsHmTHIz2D8SPP4EnBkstH"
+  },
+  {
+    "name": "chart.js",
+    "file": "chart.min.js",
+    "sha384": "dug+JxfBvklEQdJ4AYuBBAIScUz0bVN73xpy273gcAwHjb3qI0fXmuYNaNfdyYJG"
+  },
+  {
+    "name": "xlsx",
+    "file": "xlsx.min.js",
+    "sha384": "vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw"
+  }
+]

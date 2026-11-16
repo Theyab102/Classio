@@ -43,7 +43,7 @@ test("opens a signed-in cached workspace when Firebase never answers", async () 
     mockAuth.currentUser = { uid: "account-a", displayName: "Student" };
     let restore;
     await act(async () => { restore = mockAuthListener(mockAuth.currentUser); });
-    expect(screen.getByRole("progressbar", { name: "Preparing workspace" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Preparing your study workspace");
     await act(async () => { jest.advanceTimersByTime(8000); await restore; });
     expect(screen.getByRole("heading", { name: "Library" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open folder Physics", exact: true })).toBeInTheDocument();
@@ -54,6 +54,7 @@ test("opens a signed-in cached workspace when Firebase never answers", async () 
 test("explains an unauthorized Firebase hostname and keeps the guest dashboard open", async () => {
   signInWithPopup.mockRejectedValue({ code: "auth/unauthorized-domain" });
   render(<App />);
+  await act(async()=>{await mockAuthListener(null);});
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Sign in to save" })); });
   expect(screen.getByRole("alert")).toHaveTextContent("authorized domains");
   expect(screen.getByRole("heading", { name: "Library" })).toBeInTheDocument();
@@ -112,3 +113,5 @@ test("custom wearable profiles restore separately and save without inflating the
  expect(setDoc.mock.calls.some(([,data])=>data.character?.customHat?.name==="Blue crown")).toBe(true);
  const workspace=setDoc.mock.calls.find(([,data])=>data.characterAssetProfile===true)?.[1];expect(workspace.character.customHat).toBeUndefined();expect(workspace.character.designs).toBeUndefined();expect(workspace.character.name).toBe("Saved creator");
 });
+
+ test('initial authentication keeps one loading shell instead of flashing an empty guest library',async()=>{render(<App/>);expect(screen.queryByRole('heading',{name:'Library'})).not.toBeInTheDocument();expect(screen.getByRole('status')).toHaveTextContent('Preparing your study workspace');await act(async()=>{await mockAuthListener(null);});expect(screen.getByRole('heading',{name:'Library'})).toBeInTheDocument();expect(screen.queryByText('Preparing your study workspace…')).not.toBeInTheDocument();});

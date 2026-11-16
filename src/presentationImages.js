@@ -1,3 +1,4 @@
+import {inspectImage} from './shared/image-format';
 export async function imageDataForEditing(source,signal){
   if(/^data:image\/(?:png|jpeg|webp);base64,/i.test(source||''))return source;
   if(!/^https:\/\//i.test(source||''))throw new Error('Choose an uploaded or supported source image.');
@@ -12,3 +13,17 @@ export async function compactCutout(source){
 }
 export function mayRemoveBackground(slide,figure){return slide.imageRole==='object'&&!/diagram|graph|chart|screenshot|trajectory|formula|equation|illustration|labelled|labeled/i.test([slide.title,slide.imageSearch,figure?.title].join(' '));}
 export async function powerpointImage(source){if(!source.startsWith('data:image/webp'))return source;const image=new Image();image.src=source;await image.decode();const canvas=document.createElement('canvas');canvas.width=image.width;canvas.height=image.height;canvas.getContext('2d').drawImage(image,0,0);return canvas.toDataURL('image/png');}
+export async function preparePresentationImage(file){
+  if(!file||file.size>20*1024*1024)throw new Error('Choose an image under 20 MB.');
+  const format=inspectImage(new Uint8Array(await file.arrayBuffer()));
+  if(!format)throw new Error('Choose a valid PNG, JPEG, WebP or static GIF image.');
+  if(format.animated)throw new Error('Animated images cannot be edited as a still slide. Export the frame you want as PNG or JPEG.');
+  const url=URL.createObjectURL(file);
+  try{
+    const image=new Image();image.src=url;await image.decode();
+    if(image.naturalWidth*image.naturalHeight>40000000)throw new Error('This image is too large. Resize it before uploading.');
+    const canvas=document.createElement('canvas'),scale=Math.min(1,1400/Math.max(image.naturalWidth,image.naturalHeight));canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
+    for(const quality of [.9,.75,.6]){const src=canvas.toDataURL('image/webp',quality);if(src.length<240000)return{src,width:canvas.width,height:canvas.height};}
+    throw new Error('This image is too detailed to save. Try a smaller image.');
+  }finally{URL.revokeObjectURL(url);}
+}

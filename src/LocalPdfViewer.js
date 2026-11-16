@@ -27,7 +27,7 @@ export default function LocalPdfViewer({ file, fileObj, onUpdate, explain }) {
   useStudyActivity(file.id, "PDF page", pageText, `PDF page ${page}`);
   const scroll = useRef(null);
   const canvas = useRef(null);
-  const ink = useInkTool();
+  const ink = useInkTool(file.id+":"+page);
   const strokes = file.pdfInk?.[page] || noStrokes;
 
   useEffect(() => {

@@ -1,0 +1,30 @@
+[
+  {
+    "name": "mammoth",
+    "version": "1.11.0",
+    "registryIntegrity": "sha512-BcEqqY/BOwIcI1iR5tqyVlqc3KIaMRa4egSoK83YAVrBf6+yqdAAbtUcFDCWX8Zef8/fgNZ6rl4VUv+vVX8ddQ==",
+    "file": "mammoth.min.js",
+    "sha384": "t9eMqh3OtJXZhvLtmol8r2+23t6vg1GDo1UeyP55BEQdCI67GW2u8Nso+Yzo5m9r"
+  },
+  {
+    "name": "mermaid",
+    "version": "10.9.5",
+    "registryIntegrity": "sha512-eRlKEjzak4z1rcXeCd1OAlyawhrptClQDo8OuI8n6bSVqJ9oMfd5Lrf3Q+TdJHewi/9AIOc3UmEo8Fz+kNzzuQ==",
+    "file": "mermaid.min.js",
+    "sha384": "enVdc7lTHDGtpROV85t9+VqPC2EyyB0hsRD0MrvQnHUsHmTHIz2D8SPP4EnBkstH"
+  },
+  {
+    "name": "chart.js",
+    "version": "4.4.1",
+    "registryIntegrity": "sha512-C74QN1bxwV1v2PEujhmKjOZ7iUM4w6BWs23Md/6aOZZSlwMzeCIDGuZay++rBgChYru7/+QFeoQW0fQoP534Dg==",
+    "file": "chart.min.js",
+    "sha384": "dug+JxfBvklEQdJ4AYuBBAIScUz0bVN73xpy273gcAwHjb3qI0fXmuYNaNfdyYJG"
+  },
+  {
+    "name": "xlsx",
+    "version": "0.18.5",
+    "registryIntegrity": "sha512-dmg3LCjBPHZnQp5/F/+nnTa+miPJxUXB6vtk42YjBBKayDNagxGEeIdWApkYPOf3Z3pm3k62Knjzp7lMeTEtFQ==",
+    "file": "xlsx.min.js",
+    "sha384": "vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw"
+  }
+]

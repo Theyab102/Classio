@@ -1,3 +1,4 @@
+import {openDocumentArchive} from './documentArchive';
 import StudyMarkdown from "./StudyMarkdown";
 import { useEffect, useState } from "react";
 import { InkLayer, InkToolbar, useInkTool } from "./DocumentInk";
@@ -54,8 +55,7 @@ const relsFor = (zip, name) => {
 const resolved = (path, target) => new URL(target, `https://classio.local/${path}`).pathname.slice(1);
 
 export async function readSlides(file) {
-  const { default: JSZip } = await import("jszip");
-  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  const zip = await openDocumentArchive(file);
   const presentationName = "ppt/presentation.xml";
   const presentationFile = zip.file(presentationName);
   if (!presentationFile) throw new Error("Use a .pptx presentation.");
@@ -152,7 +152,7 @@ export function SourceSlidePreview({slide,width=16,height=9}) {
 export default function PowerPointViewer({ file = {}, fileObj, page, onTotalPages, onSlidesLoaded, onUpdate }) {
   const [deck, setDeck] = useState(null);
   const [error, setError] = useState("");
-  const ink = useInkTool();
+  const ink = useInkTool(file.id+":"+page);
   const strokes = file.powerPointInk?.[page] || noStrokes;
   const { slides, width, height } = deck || {};
   const slide = slides?.[page - 1];

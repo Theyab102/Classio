@@ -14,12 +14,21 @@ export async function resolveSourceFigure(figure,file){
  if(figure?.pageNumber&&isPdfFile(file)){const image=(await getPdfFigures(file,figure.pageNumber,{pagePreview:true}))[0];return image?{...figure,...image,context:figure.context,credit:figure.credit}:null;}
  return null;
 }
+// Presentations preserve alpha; notes retain their existing compact resolver.
+export async function resolvePresentationFigure(figure,file){
+ if(figure?.src?.startsWith('data:')){
+   const {preparePresentationImage}=await import('./presentationImages');
+   const blob=await(await fetch(figure.src)).blob(),prepared=await preparePresentationImage(blob);
+   return {...figure,...prepared,src:prepared.src};
+ }
+ return resolveSourceFigure(figure,file);
+}
 export function sourceFigureGuide(figures){return figures.map((image,id)=>`${id}: ${image.title}. ${(image.context||'').slice(0,180)}`).join('\n').slice(0,7500);}
 export function chooseSourceFigure(slide,figures,used=new Set()){
  if(Number.isInteger(slide.sourceFigure)&&figures[slide.sourceFigure])return figures[slide.sourceFigure];
  const available=figures.filter(image=>!used.has(image.src||image.pageNumber)),queries=[slide.imageSearch,slide.title,slide.subtitle,...(slide.bullets||[])].filter(Boolean);
  for(const query of queries){const image=likelyStudyImage(query,available);if(image)return image;}
- for(const query of queries){const image=likelyStudyImage(query,figures);if(image)return image;}return null;
+ return null;
 }
 export async function getSourceThumbnail(file){
  if(!file)return null;if(previewCache.has(file))return previewCache.get(file);

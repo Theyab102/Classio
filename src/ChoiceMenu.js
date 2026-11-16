@@ -35,7 +35,7 @@ export default function ChoiceMenu({ children, value, defaultValue, onChange, di
       const box = trigger.current.getBoundingClientRect(), width = Math.min(Math.max(box.width, variant === "notebook" ? 315 : Math.min(240,Math.max(140,...options.map(option=>option.label.length*7+50)))), window.innerWidth - 24);
       const visualTop=view?.offsetTop||0,visualHeight=view?.height||window.innerHeight,roomBelow=visualTop+visualHeight-box.bottom-18,roomAbove=box.top-visualTop-18,above=roomBelow<190&&roomAbove>roomBelow;
       const height=Math.min(360,Math.max(60,Math.min(visualHeight-24,above?roomAbove:roomBelow)));
-      setPosition({ width, left: Math.max(12, Math.min(box.left, window.innerWidth - width - 12)), maxHeight: height,
+      setPosition({ transformOrigin:above?'left bottom':'left top', width, left: Math.max(12, Math.min(box.left, window.innerWidth - width - 12)), maxHeight: height,
         ...(above ? { bottom: window.innerHeight - box.top + 7 } : { top: box.bottom + 7 }) });
     };
     place(); window.addEventListener("resize", place); window.addEventListener("scroll", place, true);view?.addEventListener("resize",place);view?.addEventListener("scroll",place);

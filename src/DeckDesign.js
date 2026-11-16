@@ -5,13 +5,15 @@ import UiIcon from "./UiIcon";
 import StudyMarkdown from "./StudyMarkdown";
 import { useState } from "react";
 import StudioDialog from "./StudioDialog";
-import { mediaPlacement } from "./deckGeometry";
+import { deckGeometry, mediaPlacement } from "./deckGeometry";
+import { imageCrop } from './presentationModel';
+import {deckTypography} from './deckTypography';
 import "./documentStudio.css";
 
 export const deckDesigns = [
-  { id: "lecture", name: "Lecture", theme: "teal", description: "A bold dark cover, numbered ideas and focused teaching cards." },
-  { id: "editorial", name: "Editorial", theme: "minimal", description: "Paper tones, generous serif type and an open magazine layout." },
-  { id: "visual", name: "Visual", theme: "ocean", description: "A graphic cover, a subtle grid and colorful panels beside your images." },
+  { id: "lecture", name: "Lecture", theme: "teal", description: "Numbered ideas and focused teaching cards." },
+  { id: "editorial", name: "Editorial", theme: "minimal", description: "Open spacing and a reading-first composition." },
+  { id: "visual", name: "Visual", theme: "ocean", description: "Clear panels and space for explanatory figures." },
 ];
 
 export function normalizeSlideTable(rows) {
@@ -28,10 +30,10 @@ export function parseDeckResponse(raw, count) {
   const text = (value, max) => typeof value === "string" ? value.trim().slice(0, max) : "";
   const points = values => Array.isArray(values) ? values.filter(value => typeof value === "string").slice(0, 6).map(value => text(value, 280)) : [];
   const side = value => ({ heading: text(value?.heading, 75), bullets: points(value?.bullets) });
-  const allowed = new Set(["title", "content", "two-col", "quote", "summary", "table"]);
+  const allowed = new Set(["title", "content", "image", "timeline", "two-col", "quote", "summary", "table"]);
   const slides = parsed.slides.slice(0, count).map(value => {
     const table = normalizeSlideTable(value?.table);
-    let type = allowed.has(value?.type) ? value.type : "content";
+    let type = value?.type==='comparison'?'two-col':allowed.has(value?.type) ? value.type : "content";
     if (type === "table" && !table) type = "content";
     return {
       type, title: text(value?.title, 150) || (type === "quote" ? "" : "Untitled slide"),
@@ -41,7 +43,7 @@ export function parseDeckResponse(raw, count) {
       imageSearch: text(value?.imageSearch, 100),
       ...(Number.isInteger(value?.sourceFigure)&&value.sourceFigure>=0?{sourceFigure:value.sourceFigure}:{}),
       imageRole: ["diagram","graph","screenshot","photo","object"].includes(value?.imageRole) ? value.imageRole : "diagram",
-      ...(["left","right","below"].includes(value?.imagePlacement) ? {imagePlacement:value.imagePlacement} : {}),
+      ...(["left","right","below","center","full"].includes(value?.imagePlacement) ? {imagePlacement:value.imagePlacement} : {}),
       ...(table ? { table } : {}),
       note: text(value?.note, 500),
     };
@@ -57,26 +59,26 @@ export function DeckSlide({ slide, theme, layout = "lecture", index, total, chil
   const table = normalizeSlideTable(slide.table);
   const background = image && slide.imageMode === "background";
   const placement=mediaPlacement(slide,index),density=[slide.title,slide.subtitle,...(slide.bullets||[])].join('').length>600?'is-dense':'';
-  return <div className={`deck-canvas deck-${layout} deck-kind-${slide.type} ${image&&!background?'deck-has-image media-'+placement:''} ${density} ${design?"deck-custom-design deck-pattern-"+design.pattern:""}`}
-    style={{ "--slide-bg": theme.bg, "--slide-accent": theme.accent, "--slide-text": theme.text, "--slide-sub": theme.sub,...deckStyleVariables(design,theme) }}>
+  const geometry=deckGeometry(slide,layout,index),type=deckTypography(slide,geometry),box=rect=>({position:'absolute',left:rect.x/13.333*100+'%',top:rect.y/7.5*100+'%',width:rect.w/13.333*100+'%',height:rect.h/7.5*100+'%'}),crop=imageCrop(slide.imageCrop);
+  const imageStyle={width:100/crop.w+'%',height:100/crop.h+'%',maxWidth:'none',objectFit:slide.imageFit==='cover'?'cover':'contain',transform:`translate(${-crop.x*100}%,${-crop.y*100}%)`,objectPosition:'center'};
+  return <div className={`deck-canvas deck-geometry deck-${layout} deck-kind-${slide.type} ${image&&!background?'deck-has-image media-'+placement:''} ${density} ${design?"deck-custom-design deck-pattern-"+design.pattern:""}`}
+    style={{ "--slide-bg": theme.bg, "--slide-accent": theme.accent, "--slide-text": theme.text, "--slide-sub": theme.sub,'--deck-title-size':type.title/9.6+'cqw','--deck-body-size':type.body/9.6+'cqw',...deckStyleVariables(design,theme) }}>
     {background && <img className="deck-background" src={image} alt="" referrerPolicy="no-referrer" />}
     <div className="deck-decoration" aria-hidden="true"><span /><span /></div>
     <div className="deck-slide-body">
-      <span className="deck-kicker">{layout === "editorial" ? "CLASSIO / FIELD NOTES" : layout === "visual" ? "CLASSIO / EXPLORE" : "CLASSIO / STUDY SESSION"}</span>
       <span className="deck-slide-number">{String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}</span>
-      {slide.type === "title" && <span className="deck-cover-index" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>}
-      {slide.type === "quote" ? <blockquote><p><StudyMarkdown inline text={'“'+slide.quote+'”'}/></p><cite>{slide.author}</cite></blockquote> : <>
-        <h3><StudyMarkdown inline text={slide.title}/></h3>
+      {slide.type === "quote" ? <blockquote style={box(geometry.body)} data-slide-element="body"><p><StudyMarkdown inline text={'“'+slide.quote+'”'}/></p><cite style={{position:'absolute',bottom:0,left:0,width:'100%'}}>{slide.author}</cite></blockquote> : <>
+        <h3 data-slide-element="title" style={box(geometry.title)}><StudyMarkdown inline text={slide.title}/></h3>
         <div className={`deck-slide-content ${image && !background ? "deck-with-media" : ""}`}>
-          <div>
+          <div data-slide-element="body" className="deck-content-box" style={box(geometry.body)}>
             {slide.type === "title" ? <p><StudyMarkdown inline text={slide.subtitle}/></p> : slide.type === "two-col" ? <div className="deck-columns">
               <section><h4><StudyMarkdown inline text={slide.left?.heading}/></h4>{list(slide.left?.bullets)}</section>
               <section><h4><StudyMarkdown inline text={slide.right?.heading}/></h4>{list(slide.right?.bullets)}</section>
             </div> : list(slide.bullets)}
             {table && <table className="native-slide-table"><tbody>{table.map((row,i)=><tr key={i}>{row.map((text,j)=>i===0?<th key={j}><StudyMarkdown inline text={text}/></th>:<td key={j}><StudyMarkdown inline text={text}/></td>)}</tr>)}</tbody></table>}
           </div>
-          {image && !background && <figure>
-            <img src={image} alt={slide.imageAlt || slide.imageSearch || ""} referrerPolicy="no-referrer" />
+          {image && !background && <figure data-slide-element="image" style={box(geometry.image)}>
+            <div className="deck-image-crop"><img style={imageStyle} src={image} alt={slide.imageAlt || slide.imageSearch || ""} referrerPolicy="no-referrer" /></div>
             {slide.imageCredit && <figcaption>{/^https:\/\//.test(slide.imageSource||"")?<a href={slide.imageSource} target="_blank" rel="noreferrer">{slide.imageCredit}</a>:slide.imageCredit}</figcaption>}
           </figure>}
         </div>
@@ -105,7 +107,7 @@ export function DeckDesignPicker({ layouts, deck, themes, onChoose, onCancel }) 
 }
 
 export function AnnotatedDeckSlide({ slide, theme, layout, index, total, onChange,design }) {
-  const ink = useInkTool();
+  const ink = useInkTool(slide.id||index);
   const strokes = slide.ink || noStrokes;
   return <section className="deck-annotation" aria-label="Annotate slide">
     <div className="document-toolbar"><InkToolbar ink={ink} strokes={strokes} onChange={onChange} /></div>

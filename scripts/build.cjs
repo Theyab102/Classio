@@ -1,5 +1,6 @@
 const { spawnSync } = require("node:child_process");
-const env = { ...process.env, CI: "false" };
+require('./check-vendor.cjs');
+const env = { ...process.env, CI: "false", GENERATE_SOURCEMAP: "false" };
 const blocked = Object.keys(env).filter(name => /^REACT_APP_.*(?:GROQ|GEMINI|OPENAI|ANTHROPIC|API_KEY|SERVICE_ACCOUNT|RATE_LIMIT_SECRET)/i.test(name));
 for (const name of blocked) delete env[name];
 if (blocked.length) console.warn("Excluded secret-related public build variable names:", blocked.join(", "));

@@ -41,7 +41,9 @@ async function invoke(overrides = {}) {
 
 test("a guest can generate a response without an authorization header", async context => {
   context.mock.method(global, "fetch", async (_url, options) => {
-    assert.deepEqual(JSON.parse(options.body).messages, messages);
+    const sent=JSON.parse(options.body).messages;
+    assert.match(sent[0].content,/not a clinician/);
+    assert.deepEqual(sent.slice(1), messages);
     return { ok: true, json: async () => ({ choices: [{ message: { content: "Gravity is attractive." } }] }) };
   });
   const reply = await invoke();

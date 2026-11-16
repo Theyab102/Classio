@@ -26,7 +26,7 @@ function captionText(raw) {
   return [...raw.matchAll(/<(?:text|p)\b[^>]*>([\s\S]*?)<\/(?:text|p)>/g)].map(match => decodeText(match[1])).filter(Boolean).join(" ");
 }
 async function publicTranscript(videoId, fetcher = global.fetch) {
-  const response = await fetcher(`https://www.youtube.com/watch?v=${videoId}`, { headers: { "Accept-Language": "en-US,en;q=0.8" }, signal: AbortSignal.timeout(8000) });
+  const response = await fetcher(`https://www.youtube.com/watch?v=${videoId}`, { redirect:"error", headers: { "Accept-Language": "en-US,en;q=0.8" }, signal: AbortSignal.timeout(8000) });
   if (!response.ok) throw new Error("TRANSCRIPT_UNAVAILABLE");
   const player = playerResponse((await response.text()).slice(0, 4000000));
   const tracks = player?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
@@ -35,7 +35,7 @@ async function publicTranscript(videoId, fetcher = global.fetch) {
   const url = new URL(track.baseUrl);
   if (url.protocol !== "https:" || !(url.hostname === "youtube.com" || url.hostname.endsWith(".youtube.com")) || url.username || url.password) throw new Error("TRANSCRIPT_UNAVAILABLE");
   url.searchParams.set("fmt", "json3");
-  const captions = await fetcher(url.href, { signal: AbortSignal.timeout(8000) });
+  const captions = await fetcher(url.href, { redirect:"error", signal: AbortSignal.timeout(8000) });
   if (!captions.ok) throw new Error("TRANSCRIPT_UNAVAILABLE");
   const transcript = captionText((await captions.text()).slice(0, 3000000)).slice(0, 80000);
   if (!transcript) throw new Error("TRANSCRIPT_UNAVAILABLE");

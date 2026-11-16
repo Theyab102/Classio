@@ -46,7 +46,7 @@ export function deckStyleVariables(design, theme) {
   if (!design) return {};
   const d = normalizeDeckDesign({ ...design, bg: theme.bg, text: theme.text, sub: theme.sub, accent: theme.accent });
   const ink = `rgba(${rgb(d.patternColor).join(',')},${d.patternOpacity})`;
-  const font = d.font === 'serif' ? '"Fraunces Variable",Georgia,serif' : d.font === 'handwritten' ? '"Caveat Variable",cursive' : '"DM Sans Variable",Arial,sans-serif';
+  const font = d.font === 'serif' ? 'Georgia,serif' : d.font === 'handwritten' ? '"Comic Sans MS",cursive' : 'Arial,sans-serif';
   const patterns = {
     checkerboard: `conic-gradient(${ink} 25%,transparent 0 50%,${ink} 0 75%,transparent 0)`,
     grid: `linear-gradient(${ink} 1px,transparent 1px),linear-gradient(90deg,${ink} 1px,transparent 1px)`,

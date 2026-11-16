@@ -3,6 +3,7 @@ const { parseAudioRequest, parseStudyRequest } = require("../server/study-reques
 
 const { generateStudy } = require("../server/ai-providers");
 const { configurationStatus } = require("../server/ai-configuration");
+const {safetyResponse,SAFETY_INSTRUCTION}=require('../server/study-safety');
 
 async function requestQuota(req, action) {
   let timer;
@@ -31,6 +32,9 @@ module.exports = async function study(req, res) {
   const audio = req.body?.kind === "audio";
   const input = audio ? parseAudioRequest(req.body) : parseStudyRequest(req.body);
   if (!input) return res.status(400).json({ error: "This request is invalid or too large. Check the file or shorten the input." });
+  const supportive=safetyResponse(input);
+  if(supportive)return res.status(200).json({text:supportive});
+  if(input.messages)input.messages=[{role:'system',content:SAFETY_INSTRUCTION},...input.messages];
   const report = configurationStatus();
   if (!configured() || !report.configured) {
     console.error("study_configuration", { missing: report.missing });

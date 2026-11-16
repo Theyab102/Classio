@@ -1,3 +1,4 @@
+import {anySignal} from './abortSignal';
 import StudyMarkdown from "./StudyMarkdown";
 import ChoiceMenu from "./ChoiceMenu";
 import { useEffect, useRef, useState } from "react";
@@ -30,7 +31,7 @@ export default function PodcastStudio({ file, onUpdate, getFileText, audioStore 
   useEffect(() => {
     if (!TTS_SPACE_URL) return;
     const controller = new AbortController();
-    fetch(`${TTS_SPACE_URL}/voices`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12000)]) }).then(response => response.ok ? response.json() : null).then(data => {
+    fetch(`${TTS_SPACE_URL}/voices`, { signal: anySignal([controller.signal, AbortSignal.timeout(12000)]) }).then(response => response.ok ? response.json() : null).then(data => {
       if (!data || controller.signal.aborted) return;
       const items = Array.isArray(data) ? data.map(voice => typeof voice === "string" ? { id: voice, label: voice } : voice) : Object.entries(data).map(([id, item]) => ({ id, ...(typeof item === "object" ? item : { label: id }) }));
       const valid = items.filter(item => typeof item.id === "string");
