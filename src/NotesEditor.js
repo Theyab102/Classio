@@ -5,11 +5,13 @@ import AIStyleDialog from "./AIStyleDialog";
 import {styleVariables,styleRequest,normalizeStyle} from "./styleConfig";
 import {activeTheme} from "./theme";
 import ChoiceMenu from "./ChoiceMenu";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useId } from "react";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
 import { TableKit } from "@tiptap/extension-table";
+import {TableMap} from '@tiptap/pm/tables';
+import {NoteTable,insertNoteTable,adjacentNoteCells,mergeNextNoteCell} from './noteTables';
 import TextAlign from "@tiptap/extension-text-align";
 import { closeHistory } from "@tiptap/pm/history";
 import { TextStyleKit } from "@tiptap/extension-text-style";
@@ -21,7 +23,7 @@ import UiIcon from "./UiIcon";
 import ActionMenu from "./ActionMenu";
 import StudioDialog from "./StudioDialog";
 import { MATH_OUTPUT_GUIDE, typesetMath } from "./mathMarkdown";
-import { enrichNoteImages, insertNoteFigure } from "./noteFigures";
+import { enrichNoteImages, insertNoteFigure, reviewNoteImages, removeNoteImage } from "./noteFigures";
 import { getPdfContext, getPdfFigures, isPdfFile, prepareNoteImage, searchStudyImages, acknowledgeStudyImage } from "./documentMedia";
 import { markdownToNoteHtml, noteHtmlToMarkdown, sanitizeNoteHtml } from "./noteFormat";
 import { downloadStudyFile, sendStudyRequest } from "./studyTools";
@@ -31,14 +33,15 @@ import "./workspace.css";
 const editorExtensions = [
   NoteEquation,
   StarterKit.configure({ link: { openOnClick: false, HTMLAttributes: { rel: "noopener noreferrer" } } }),
-  Image.configure({ allowBase64: true, resize: { enabled: true, minWidth: 60, minHeight: 45, alwaysPreserveAspectRatio: true }, HTMLAttributes: { referrerpolicy: "no-referrer" } }),
-  TableKit.configure({ table: { resizable: true, renderWrapper: true } }),
+  Image.extend({addAttributes(){return {...this.parent(),credit:{default:null,parseHTML:node=>node.getAttribute('data-classio-image-credit'),renderHTML:attrs=>attrs.credit?{'data-classio-image-credit':attrs.credit}:{}},origin:{default:null,parseHTML:node=>node.getAttribute('data-classio-image-origin'),renderHTML:attrs=>attrs.origin?{'data-classio-image-origin':attrs.origin}:{}},query:{default:null,parseHTML:node=>node.getAttribute('data-classio-image-query'),renderHTML:attrs=>attrs.query?{'data-classio-image-query':attrs.query}:{}}};}}).configure({ allowBase64: true, resize: { enabled: true, minWidth: 60, minHeight: 45, alwaysPreserveAspectRatio: true }, HTMLAttributes: { referrerpolicy: "no-referrer" } }),
+  TableKit.configure({table:false,tableRow:{HTMLAttributes:{role:"row"}},tableCell:{HTMLAttributes:{role:"cell"}},tableHeader:{HTMLAttributes:{role:"columnheader"}}}),NoteTable,
   TextStyleKit.configure({ color: false, backgroundColor: false, lineHeight: false }),
   TextAlign.configure({ types: ["heading", "paragraph"] }),
 ];
 
 
 export default function NotesEditor({ file, fileObj, getFileText, onUpdate, readSavedNotes, initialMode, onModeChange }) {
+  const topicId=useId();
   const [error, setError] = useState("");
   const [styleOpen,setStyleOpen]=useState(false);
   const [equation, setEquation] = useState("E = mc^2");
@@ -59,6 +62,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
   useStudyActivity(view === "write" ? file.id : null, "Notes", file.notes || "", file.name);
   const workspace = useRef(null);
   const [moreTools, setMoreTools] = useState(false);
+  const [tableRows,setTableRows]=useState('3'),[tableCols,setTableCols]=useState('3'),[tableHeader,setTableHeader]=useState(false);
   const latest = useRef({ file, onUpdate });
   latest.current = { file, onUpdate };
   const updateFields = patch => {
@@ -114,6 +118,8 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
       fontFamily: current?.getAttributes("textStyle").fontFamily,
       fontSize: current?.getAttributes("textStyle").fontSize,
       heading: [1, 2, 3].find(level => current?.isActive("heading", { level })) || 0,
+      alignment:current?.getAttributes('paragraph').textAlign || current?.getAttributes('heading').textAlign || 'left',
+      html:current?.getHTML() || '',
       outline: current?.getJSON().content?.filter(node => node.type === "heading").map(node => node.content?.map(part => part.text).join("") || "") || [],
     }),
   });
@@ -132,7 +138,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
   async function uploadImage(image) {
     try {
       const src = await prepareNoteImage(image);
-      editor?.chain().focus().setImage({ src, alt: image.name }).run();
+      editor?.chain().focus().setImage({ src, alt: image.name,origin:'manual' }).run();
     } catch (failure) { setError(failure.message); }
   }
 
@@ -141,7 +147,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
     const imageHtml = document.createElement("div");
     const marker = document.createElement("p");
     imageHtml.append(marker);
-    insertNoteFigure(imageHtml, image, image.title, marker); marker.remove();
+    insertNoteFigure(imageHtml, image, image.title, marker, 'manual'); marker.remove();
     editor.chain().focus().insertContent(sanitizeNoteHtml(imageHtml.innerHTML)).run();
     setStatus(`Added ${image.title}.`);
   }
@@ -199,7 +205,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
         throw new Error(action === "generate" ? "Enter a topic or choose a file with readable text." : "Write a few notes before using this tool.");
       }
       const instruction = action === "table"
-        ? "Return one compact GFM Markdown table based on the notes. Include clear column names and only supported information."
+        ? `Return one compact GFM Markdown table based on the notes, with at most ${columnLimit} columns so it fits this editor. Include clear column names and only supported information.`
         : `Create ${style.toLowerCase()} study notes. Use a clear H1 title, H2 sections, concise paragraphs, lists, bold key terms and callout blockquotes. Use GFM Markdown tables for comparisons or structured facts. ${action === "organize" ? "Preserve the author's facts and order where useful. Fix wording and organization without inventing facts." : "Stay grounded in the source when provided."}`;
       const sourceFigures=webImages&&fileObj&&action!=="table"?await getSourceFigures(fileObj).catch(()=>[]):[];
       const raw = await sendStudyRequest({ messages: [
@@ -218,8 +224,10 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
           const document = new DOMParser().parseFromString(html, "text/html");
           const table = document.querySelector("table");
           if (!table) throw new Error("The AI did not return a table. Try a clearer set of notes.");
-          editor.chain().focus().insertContent(table.outerHTML).run();
-          setStatus("Table inserted. You can edit every cell.");
+          const currentLimit=Math.max(1,Math.min(8,Math.floor((editor.view.dom.clientWidth-40)/72)));
+          if([...table.rows].some(row=>[...row.cells].reduce((sum,cell)=>sum+cell.colSpan,0)>currentLimit))throw new Error(`This table has too many columns for the editor. Request at most ${currentLimit} columns; your writing is kept.`);
+          insertNoteTable(editor,{html:table.outerHTML});
+          setPanel(null);setStatus("Table inserted below the current block. You can edit every cell.");
         } else {
           const wasEmpty = editor.isEmpty;
           const replace = action === "organize" && editor.getHTML() === originalHtml;
@@ -256,6 +264,10 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
   }
 
   if (!editor) return <section className="note-initial-frame" aria-busy="true" aria-label="Notes" />;
+  const columnLimit=Math.max(1,Math.min(8,Math.floor((editor.view.dom.clientWidth-40)/72)));
+  const tableImages=panel==='images'?reviewNoteImages(tools?.html||''):[];
+  let currentTable=null;const {$from}=editor.state.selection;
+  for(let depth=$from.depth;depth>0;depth--)if($from.node(depth).type.name==='table'){currentTable=$from.node(depth);break;}
   const run = operation => operation(editor.chain().focus()).run();
   const action = (label, icon, operation, pressed) => <button type="button" title={label} aria-label={label}
     disabled={preview} aria-pressed={pressed} onMouseDown={event => event.preventDefault()} onClick={() => run(operation)}><UiIcon name={icon} /></button>;
@@ -307,7 +319,8 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
           <button type="button" disabled={preview} aria-label="Insert equation" title="Insert equation" onMouseDown={event=>event.preventDefault()} onClick={() => openPanel("equation")}><UiIcon name="equation" /></button>
           {action("Bullets", "list", chain => chain.toggleBulletList(), tools?.bullet)}
           <span className="toolbar-divider" />
-          <button type="button" disabled={preview} aria-label="Insert table" title="Insert table" onMouseDown={event => event.preventDefault()} onClick={() => run(chain => chain.insertTable({ rows: 3, cols: 3, withHeaderRow: true }))}><UiIcon name="table" /></button>
+          <button type="button" disabled={preview} aria-label="Insert table" title="Insert table" onMouseDown={event => event.preventDefault()} onClick={() => {setTableCols(value=>String(Math.min(Number(value)||3,columnLimit)));openPanel('table');}}><UiIcon name="table" /><span>Table</span></button>
+          <button type="button" disabled={preview||busy} aria-label="Make a table with AI" onMouseDown={event=>event.preventDefault()} onClick={()=>generate('table')}><UiIcon name="generate" /><span>Make a table</span></button>
           <button type="button" disabled={preview} aria-label="Insert image" title="Insert image" aria-expanded={panel === "images"} onClick={() => openPanel("images")}><UiIcon name="image" /></button>
           <button type="button" aria-label="More formatting" title="More formatting" aria-expanded={moreTools} onClick={() => setMoreTools(value => !value)}><UiIcon name="more" /></button>
         </div>
@@ -318,42 +331,55 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
           <button type="button" disabled={preview} aria-pressed={tools?.ordered} onClick={() => run(chain => chain.toggleOrderedList())}>Numbered list</button>
           <button type="button" disabled={preview} aria-pressed={tools?.callout} onClick={() => run(chain => chain.toggleBlockquote())}>Callout</button>
           <button type="button" disabled={preview} aria-pressed={tools?.strike} onClick={() => run(chain => chain.toggleStrike())}>Strike</button>
-          <ChoiceMenu aria-label="Align text" disabled={preview} value="" onChange={event => run(chain => chain.setTextAlign(event.target.value))}>
-            <option value="" disabled>Align</option><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option><option value="justify">Justify</option>
+          <ChoiceMenu aria-label="Align text" disabled={preview} value={tools?.alignment||'left'} onChange={event => run(chain => chain.setTextAlign(event.target.value))}>
+            <option value="left">Left</option><option value="center">Center</option><option value="right">Right</option><option value="justify">Justify</option>
           </ChoiceMenu>
           {action("Undo", "undo", chain => chain.undo())}{action("Redo", "redo", chain => chain.redo())}
         </div>}
-        {tools?.table && <div className="studio-controls note-table-tools" aria-label="Table actions">
-          <button onClick={() => run(chain => chain.addRowAfter())}>Add row</button><button onClick={() => run(chain => chain.addColumnAfter())}>Add column</button>
-          <button onClick={() => run(chain => chain.deleteRow())}>Delete row</button><button onClick={() => run(chain => chain.deleteColumn())}>Delete column</button>
-          <button onClick={() => run(chain => chain.mergeCells())}>Merge cells</button><button onClick={() => run(chain => chain.splitCell())}>Split cell</button>
-          <button onClick={() => run(chain => chain.deleteTable())}>Delete table</button>
+        {tools?.table && !preview && <div className="studio-controls note-table-tools" aria-label="Table actions" onMouseDown={event=>{if(event.target.closest('button'))event.preventDefault();}}>
+          <button onClick={() => run(chain => chain.addRowAfter())}>Add row</button><button disabled={!currentTable||TableMap.get(currentTable).width>=columnLimit} title="Columns need room to stay readable" onClick={() => run(chain => chain.addColumnAfter())}>Add column</button>
+          <ActionMenu label="Table options" icon="table" items={[
+            {label:'Delete row',run:()=>run(chain=>chain.deleteRow())},{label:'Delete column',run:()=>run(chain=>chain.deleteColumn())},
+            {label:'Toggle header row',run:()=>run(chain=>chain.toggleHeaderRow())},{label:'Toggle header column',run:()=>run(chain=>chain.toggleHeaderColumn())},
+            {label:'Merge cells',disabled:!editor.can().mergeCells(),run:()=>run(chain=>chain.mergeCells())},{label:'Split cell',disabled:!editor.can().splitCell(),run:()=>run(chain=>chain.splitCell())},
+            {label:'Merge with next cell',disabled:!adjacentNoteCells(editor),run:()=>mergeNextNoteCell(editor)},
+            {label:'Delete table',danger:true,run:()=>run(chain=>chain.deleteTable())},
+          ]}>Table options</ActionMenu>
         </div>}
         {tools?.image && !preview && <div className="studio-controls note-table-tools"><button onClick={() => run(chain => chain.deleteSelection())}>Remove selected image</button></div>}
         <div className="note-document-meta"><span>{editor.getText().trim() ? editor.getText().trim().split(/\s+/).length : 0} words</span><span>{savedAt ? "Saved in workspace" : "Changes save automatically"}</span></div>
-        {busy && <div className="note-generation-status" role="status"><span className="mini-spinner" />Generating notes for your notebook…<button className="text-button" onClick={() => { aiRequest.current?.abort(); aiRequest.current = null; setBusy(false); setStatus("Generation cancelled. Your writing is unchanged."); }}>Cancel generation</button></div>}
+        {busy && <div className="note-generation-status" role="status"><span className="mini-spinner" />{status||'Preparing your notes…'}<button className="text-button" onClick={() => { aiRequest.current?.abort(); aiRequest.current = null; setBusy(false); setStatus("Generation cancelled. Your writing is unchanged."); }}>Cancel generation</button></div>}
+        {error&&!panel&&<p className="studio-error" role="alert">{error}</p>}
         <div className={`note-paper note-layout-${(file.noteLayout || noteLayout).toLowerCase().replace(/[^a-z]/g, "")} ${preview ? "is-reading" : ""}`}><EditorContent dir="auto" editor={editor} /></div>
         {status && !busy && <p className="note-local-status" role="status">{status}</p>}
       </article>
-      {panel && <StudioDialog title={panel === "generate" ? "Generate notes" : panel === "images" ? "Images" : panel === "equation" ? "Equation" : "Saved versions"} onClose={closePanel}>
+      {panel && <StudioDialog title={panel === "table" ? "Insert table" : panel === "generate" ? "Generate notes" : panel === "images" ? "Images" : panel === "equation" ? "Equation" : "Saved versions"} onClose={closePanel}>
         <div className="notes-tool-dialog">
+          {panel==='table'&&<form className="notes-panel-body" onSubmit={event=>{event.preventDefault();insertNoteTable(editor,{rows:Number(tableRows),cols:Number(tableCols),header:tableHeader});setPanel(null);setStatus('Table inserted after the current block. Use Table actions to edit its structure.');}}>
+            <p>Add a table below your current paragraph or table. Text stays intact.</p>
+            <div className="notes-panel-options"><label>Rows<input type="number" aria-label="Table rows" min="1" max="30" value={tableRows} onChange={event=>setTableRows(event.target.value)} required /></label><label>Columns<input type="number" aria-label="Table columns" min="1" max={columnLimit} value={tableCols} onChange={event=>setTableCols(event.target.value)} required /></label></div>
+            <label className="studio-check"><input type="checkbox" checked={tableHeader} onChange={event=>setTableHeader(event.target.checked)}/>Header row</label>
+            <p>Up to {columnLimit} columns fit this editor width. Rows grow with your writing.</p>
+            <button type="submit" className="quiet-button is-primary">Add table</button>
+          </form>}
           {panel === "generate" && <div className="notes-panel-body">
             <p>Notes go straight into your notebook. Existing writing is kept; you can undo generation.</p>
-            <label>Topic<input value={topic} onChange={event => setTopic(event.target.value)} placeholder="Optional with source material" /></label>
+            <div className="note-topic-field"><label htmlFor={topicId}>Topic</label><textarea id={topicId} rows={2} maxLength={2000} value={topic} onChange={event => setTopic(event.target.value)} placeholder="Optional with source material" /></div>
             <div className="notes-panel-options"><label>Style<ChoiceMenu aria-label="Note style" value={style} onChange={event => setStyle(event.target.value)}><option>Detailed</option><option>Exam review</option><option>Concise summary</option><option>Simple explanations</option></ChoiceMenu></label>
               <label>Language<ChoiceMenu aria-label="Note language" value={language} onChange={event => setLanguage(event.target.value)}><option>Same as source</option><option>English</option><option>Arabic</option><option>Chinese</option><option>French</option><option>Spanish</option></ChoiceMenu></label></div>
             <label>Custom notes instructions<textarea aria-label="Custom notes instructions" value={instructions} onChange={event=>setInstructions(event.target.value)} maxLength={3000} rows={3} placeholder="Describe how you want your notes to look or how you want the topic explained..." /></label>
             <div className="studio-controls"><button type="button" className="text-button" onClick={()=>{setPanel(null);setStyleOpen(true);}}>Choose visual style</button>{instructions&&<button type="button" className="text-button" onClick={()=>setInstructions("")}>Clear instructions</button>}</div>
             <details className="note-generation-options"><summary>Explanation, layout & length</summary><div className="notes-panel-options"><label>Explanation level<ChoiceMenu aria-label="Explanation level" value={level} onChange={event=>setLevel(event.target.value)}>{["Simple","Standard","Detailed"].map(value=><option key={value}>{value}</option>)}</ChoiceMenu></label><label>Notes layout<ChoiceMenu aria-label="Notes layout" value={noteLayout} onChange={event=>setNoteLayout(event.target.value)}>{["Structured","Notebook","Revision Sheet","Cornell","Q&A","Custom"].map(value=><option key={value}>{value}</option>)}</ChoiceMenu></label><label>Length<ChoiceMenu aria-label="Notes length" value={noteLength} onChange={event=>setNoteLength(event.target.value)}>{["Short","Medium","Detailed"].map(value=><option key={value}>{value}</option>)}</ChoiceMenu></label></div></details>
-            <label className="studio-check"><input type="checkbox" checked={webImages} onChange={event => setWebImages(event.target.checked)} /> Include relevant images</label>
+            <button type="button" className="note-image-toggle" aria-pressed={webImages} onClick={()=>setWebImages(value=>!value)}><UiIcon name="image"/><span>Include relevant images<small>{webImages?'On · only relevant source figures or diagrams':'Off · text only'}</small></span><UiIcon name={webImages?'check':'close'}/></button>
             <button className="quiet-button is-primary" type="button" disabled={busy} onClick={() => generate("generate")}>{busy ? "Generating…" : "Generate notes"}</button>
             <details><summary>Use my writing</summary><div className="studio-controls">
               <button type="button" disabled={busy} onClick={() => generate("organize")}>Organize notes</button>
-              <button type="button" disabled={busy} onClick={() => generate("table")}>Make a table</button></div></details>
+              </div></details>
             {error && <p className="studio-error" role="alert">{error}</p>}
 
           </div>}
           {panel === "images" && <div className="notes-panel-body">
+            {tableImages.length>0&&<section className="note-image-review" aria-label="Review note images"><h3>Images already in these notes</h3><p>Review older suggestions here. Removing an image keeps your writing; Undo restores it.</p>{tableImages.map(image=><article key={image.index}><img src={image.src} alt={image.title}/><div><strong>{image.title||`Image ${image.index+1}`}</strong><p>{image.reason}</p><button type="button" className="quiet-button" onClick={()=>{editor.chain().command(({tr})=>{closeHistory(tr);return true;}).selectAll().insertContent(removeNoteImage(editor.getHTML(),image.index)).run();setStatus('Image removed. Your writing is kept; Undo restores it.');}}>Remove image {image.index+1}</button></div></article>)}</section>}
             {/\[\[(?:IMAGE|PDF):/i.test(editor.getText()) && <><p>Your notes include suggested illustrations. Place real images next to their related explanations while keeping your writing and formatting.</p><button type="button" className="quiet-button is-primary" disabled={searching || busy} onClick={placeSuggestedImages}>{searching ? "Placing images…" : "Place suggested images"}</button></>}
             <button type="button" className="quiet-button" onClick={() => upload.current?.click()}><UiIcon name="image" />Upload image</button>
             <input ref={upload} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={event => { const image = event.target.files[0]; event.target.value = ""; if (image) uploadImage(image); }} />

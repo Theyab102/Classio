@@ -29,8 +29,13 @@ test('restarting guided lessons resets checks and keeps lesson text and written 
  expect(changed.mock.calls.at(-1)[0]).toMatchObject({notes:'Keep notes',course:{active:0,answers:{},completed:[],units:[unit,unit]}});
 });
 test('Arabic lessons send the original text and an explicit Arabic instruction',async()=>{
- const changed=jest.fn();sendStudyRequest.mockResolvedValue(JSON.stringify([unit,unit,unit]));render(<Harness Component={LearnMode} initial={{id:'ar',name:'Old English title',notes:'An unrelated old summary'}} source='يتناول هذا الفصل الخلية النباتية ومكوناتها ووظيفة كل جزء منها.' changed={changed}/>);
+ const changed=jest.fn();sendStudyRequest.mockResolvedValueOnce(JSON.stringify([1,2,3].map(i=>({title:'الدرس '+i,focus:'الخلية النباتية'})))).mockResolvedValue(JSON.stringify([unit]));render(<Harness Component={LearnMode} initial={{id:'ar',name:'Old English title',notes:'An unrelated old summary'}} source='يتناول هذا الفصل الخلية النباتية ومكوناتها ووظيفة كل جزء منها.' changed={changed}/>);
  fireEvent.click(screen.getByRole('button',{name:'Generate lessons',exact:true}));await waitFor(()=>expect(changed).toHaveBeenCalled());expect(sendStudyRequest.mock.calls[0][0].messages[0].content).toContain('in Arabic');expect(sendStudyRequest.mock.calls[0][0].messages[1].content).toContain('الخلية النباتية');
+});
+test('a filename without readable material never becomes an invented course',async()=>{
+ const changed=jest.fn();render(<LearnMode file={{id:'scan',name:'Arabic biology.pdf'}} getFileText={async()=>''} onUpdate={changed}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Generate lessons',exact:true}));await screen.findByText(/No readable study text was found/);
+ expect(sendStudyRequest).not.toHaveBeenCalled();expect(changed).not.toHaveBeenCalled();
 });
 
 test('cancelling flashcard generation prevents a late response from changing the saved set',async()=>{let resolve;const changed=jest.fn();sendStudyRequest.mockImplementationOnce(()=>new Promise(done=>{resolve=done;}));render(<Harness Component={FlashcardStudio} initial={{id:'cancel',name:'Material',studyCards:[{id:'old',question:'Keep?',answer:'Keep.'}]}} changed={changed}/>);fireEvent.click(screen.getByRole('button',{name:'Generate cards',exact:true}));fireEvent.change(screen.getByRole('spinbutton',{name:'Number of cards'}),{target:{value:'1'}});fireEvent.submit(screen.getByRole('dialog').querySelector('form'));await waitFor(()=>expect(sendStudyRequest).toHaveBeenCalled());fireEvent.click(screen.getByRole('button',{name:'Cancel',exact:true}));await act(async()=>{resolve(JSON.stringify([{question:'Late',answer:'No replacement'}]));});expect(changed).not.toHaveBeenCalled();expect(document.querySelector('.flashcard-face.is-front')).toHaveTextContent('Keep?');});

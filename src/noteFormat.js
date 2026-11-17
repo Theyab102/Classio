@@ -20,7 +20,7 @@ export function sanitizeNoteHtml(html) {
     RETURN_DOM_FRAGMENT: true, USE_PROFILES: { html: true },
     FORBID_TAGS: ["style", "form", "video", "audio", "input", "button", "iframe", "source"],
     FORBID_ATTR: ["srcset", "id", "class"],
-    ALLOW_DATA_ATTR: false, ADD_ATTR: ["data-classio-equation", "data-latex", "data-display"],
+    ALLOW_DATA_ATTR: false, ADD_ATTR: ["data-classio-equation", "data-latex", "data-display", "colwidth", "data-classio-image-origin", "data-classio-image-query", "data-classio-image-credit"],
   });
   for (const node of fragment.querySelectorAll("[style]")) {
     const alignment = node.style.textAlign;
@@ -38,6 +38,12 @@ export function sanitizeNoteHtml(html) {
   for (const image of fragment.querySelectorAll("img")) {
     if (!safeImageSource(image.getAttribute("src"))) image.replaceWith(image.getAttribute("alt") || "");
     else image.setAttribute("referrerpolicy", "no-referrer");
+    if(!['manual','automatic','source'].includes(image.getAttribute('data-classio-image-origin')))image.removeAttribute('data-classio-image-origin');
+    if(image.hasAttribute('data-classio-image-query'))image.setAttribute('data-classio-image-query',image.getAttribute('data-classio-image-query').slice(0,200));
+    if(image.hasAttribute('data-classio-image-credit'))image.setAttribute('data-classio-image-credit',image.getAttribute('data-classio-image-credit').slice(0,600));
+  }
+  for(const cell of fragment.querySelectorAll('[colwidth]')) {
+    if(!['TD','TH'].includes(cell.tagName)||!/^\d{1,5}(,\d{1,5})*$/.test(cell.getAttribute('colwidth')))cell.removeAttribute('colwidth');
   }
   const container = document.createElement("div");
   container.append(fragment);

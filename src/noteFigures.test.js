@@ -1,4 +1,4 @@
-import { enrichNoteImages } from "./noteFigures";
+import { enrichNoteImages,reviewNoteImages,removeNoteImage,contextualStudyImage } from "./noteFigures";
 import { notesWithSourceImages } from "./linkSource";
 import { markdownToNoteHtml } from "./noteFormat";
 import { likelyStudyImage, searchStudyImages } from "./documentMedia";
@@ -13,6 +13,16 @@ test("grouped image markers become real figures beside their related explanation
   const headings = [...root.querySelectorAll("h2")];
   expect(headings[0].nextElementSibling.nextElementSibling.getAttribute("src")).toBe("https://example.com/projectile.png");
   expect(headings[1].nextElementSibling.nextElementSibling.getAttribute("src")).toBe("https://example.com/terminal.png");
+});
+test('older unrelated images are reviewable without automatically deleting manual images or the written explanation',()=>{
+  const original='<h2>Projectile motion</h2><p style="text-align:center"><strong>Time of flight and horizontal distance traveled.</strong></p><img src="https://example.com/forest.jpg" alt="Bomb Crater in King’s Wood – geograph.org.uk"><p><a href="https://commons.wikimedia.org/forest">David Anstiss · CC BY-SA 2.0</a></p><img src="https://example.com/manual.png" alt="My sketch" data-classio-image-origin="manual">';
+  const review=reviewNoteImages(original);expect(review[0].suspicious).toBe(true);expect(review[1].suspicious).toBe(false);
+  const html=removeNoteImage(original,0);expect(html).not.toContain('forest.jpg');expect(html).not.toContain('David Anstiss');expect(html).toContain('manual.png');expect(html).toContain('<strong>Time of flight');expect(html).toContain('text-align: center');
+});
+test('automatic matching also requires evidence from the surrounding section; images off suppresses even PDF markers',async()=>{
+  expect(contextualStudyImage('bomb crater','Projectile motion: time of flight and horizontal distance.',[{src:'https://example.com/crater.png',source:'https://example.com',kind:'diagram',title:'Bomb crater diagram'}])).toBeNull();
+  const result=await enrichNoteImages('## Physics\n\nTime of flight.\n\n[[PDF:1]]\n[[IMAGE:trajectory]]',{useWeb:false,pdfFile:{},search:jest.fn()});
+  expect(result.added).toBe(0);expect(result.html).not.toContain('<img');expect(result.html).not.toContain('[[PDF');
 });
 test("failed image searches leave readable notes without raw placeholders", async () => {
   const { html, missing } = await enrichNoteImages(notes, { useWeb: true, search: async () => { throw new Error("unavailable"); } });

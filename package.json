@@ -46,7 +46,8 @@
     "test:browser": "node scripts/test-browser.cjs",
     "build:icons": "node scripts/build-icons.cjs",
     "test:presentation": "node scripts/presentation-browser.cjs",
-    "test:workflows": "node scripts/workflow-browser.cjs"
+    "test:workflows": "node scripts/workflow-browser.cjs",
+    "test:notes": "node scripts/notes-browser.cjs"
   },
   "eslintConfig": {
     "extends": [
@@ -81,6 +82,10 @@
     "bfj": "^9.1.3"
   },
   "jest": {
+    "moduleNameMapper": {
+      "^@tiptap/core/jsx-runtime$": "<rootDir>/node_modules/@tiptap/core/dist/jsx-runtime/jsx-runtime.cjs",
+      "^@tiptap/pm/(.*)$": "<rootDir>/node_modules/@tiptap/pm/dist/$1/index.cjs"
+    },
     "transformIgnorePatterns": [
       "node_modules/(?!marked/).+\\.(js|jsx|mjs|cjs|ts|tsx)$",
       "^.+\\.module\\.(css|sass|scss)$"

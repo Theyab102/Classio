@@ -1,5 +1,6 @@
+import CloudSyncNotice from './CloudSyncNotice';
 import {timeoutSignal} from './abortSignal';
-import {loadCloudRecord,saveCloudRecord,syncErrorMessage,mergeRestoredWorkspace} from './workspaceSync';
+import {loadCloudRecord,saveCloudRecord,syncErrorMessage,mergeRestoredWorkspace,withCloudContext,readCloudProfile,cloudSyncDiagnostic} from './workspaceSync';
 import {newChat,normalizeChats,updateChat,persistentChats} from './chatModel';
 import {hasBlankContent,studyStyles,languageInstruction} from './studyContext';
 import ThemeSwitch from './ThemeSwitch';
@@ -42,6 +43,7 @@ import "./workspace.css";
 import "./premium.css";
 import "./refinements.css";
 import "./mobileFixes.css";
+import "./noteEditing.css";
 import AssistantPanel from "./AssistantPanel";
 import WorkspaceArt from "./WorkspaceArt";
 import FlashcardStudio from "./FlashcardStudio";
@@ -2474,6 +2476,10 @@ function ClassioApp() {
   });
 
   const [workspaceWarning, setWorkspaceWarning] = useState("");
+  const [syncDiagnostic,setSyncDiagnostic]=useState(null),[assistantCloudFailure,setAssistantCloudFailure]=useState(null);
+  const tokenProvider=useRef(null);
+  function reportAssistantSyncFailure(error){setAssistantCloudFailure({message:syncErrorMessage(error),diagnostic:cloudSyncDiagnostic(error,auth.currentUser,firebaseConfig.projectId,tokenProvider.current)});}
+  function describeSyncFailure(error){setSyncDiagnostic(cloudSyncDiagnostic(error,auth.currentUser,firebaseConfig.projectId,tokenProvider.current));return syncErrorMessage(error);}
   const saveTimer = useRef(null), chatSaveTimer=useRef(null), syncingRef=useRef(false), retrySyncRef=useRef(null);
   retrySyncRef.current=retryWorkspaceSync;
   useEffect(()=>{const retry=()=>{if(accountUid.current)retrySyncRef.current?.();};window.addEventListener("online",retry);return()=>{window.removeEventListener("online",retry);clearTimeout(chatSaveTimer.current);};},[]);
@@ -2496,10 +2502,12 @@ function ClassioApp() {
       if (!account) {
         if (auth.currentUser === null && accountUid.current) resetWorkspace();
         accountUid.current = null;
+        tokenProvider.current=null;setSyncDiagnostic(null);setAssistantCloudFailure(null);
         setUser(null);
         return;
       }
       accountUid.current = account.uid;
+      tokenProvider.current=null;setSyncDiagnostic(null);setAssistantCloudFailure(null);
       deferAccountSync.current = false;
       const guestFolders = saveGuestOnSignIn.current ? foldersRef.current : [];
       const guestAudio = guestFolders.length ? [...FILE_STORE].filter(([key]) => key.startsWith("podcast:")) : [];
@@ -2516,7 +2524,7 @@ function ClassioApp() {
       let warning = "";
       let remoteUnavailable = false;
       try {
-        const snap = await withRestoreTimeout(getDoc(doc(db, "users", account.uid)));
+        const snap = await readCloudProfile(db,account.uid);
         if (snap.metadata.fromCache) throw new Error("Account could only be read from cache.");
         let profile = snap.data()?.character;
         if(snap.data()?.characterAssetProfile) {
@@ -2532,7 +2540,7 @@ function ClassioApp() {
         }
       } catch (error) {
         remoteUnavailable = true;
-        warning = syncErrorMessage(error);
+        warning = active && current === revision ? describeSyncFailure(error) : syncErrorMessage(error);
       }
 
       let restored;
@@ -2562,7 +2570,7 @@ function ClassioApp() {
           const restored=normalizeChats(remoteChat); chatsRef.current=restored; setChatRecord(restored); setConversationNotice("Chats restored from your account");
           try {localStorage.setItem("classio_chat:"+account.uid,JSON.stringify({...restored,pending:false}));}catch{}
         }
-      }).catch(()=>{});
+      }).catch(error=>{if(active&&current===revision&&auth.currentUser?.uid===account.uid)reportAssistantSyncFailure(error);});
       setSignInPending(false);
       if (guestFolders.length || cached?.pending || removedEmpty) saveAccountWorkspace(workspace, account.uid);
       for (const folder of guestFolders) {
@@ -2590,8 +2598,8 @@ function ClassioApp() {
     let localSaved = false;
     try { localStorage.setItem(key, pending); localSaved = true; } catch {}
     if (mergeOnRestore) {
-      setWorkspaceWarning(localSaved
-        ? "Changes are saved on this device. Reload when online to merge them with your account."
+      setWorkspaceWarning(previous=>localSaved
+        ? /Cloud access was denied|Cloud sign-in/.test(previous) ? previous : "Changes are saved on this device. Use Retry sync when connected to merge them with your account."
         : "Browser storage and cloud sync are unavailable. Keep this tab open and export important work.");
       return;
     }
@@ -2604,17 +2612,17 @@ function ClassioApp() {
         await saveCloudRecord(db, uid, "workspace-v2", {folders}, () => auth.currentUser?.uid === uid);
         if(auth.currentUser?.uid!==uid)return;
         // The new manifest is readable before the obsolete single-document copy is removed.
-        await withRestoreTimeout(setDoc(doc(db,"users",uid),{folders:deleteField()},{merge:true}));
+        await withCloudContext(db,null,"remove migrated profile folders",setDoc(doc(db,"users",uid),{folders:deleteField()},{merge:true}));
         if(auth.currentUser?.uid!==uid)return;
         if (localSaved && localStorage.getItem(key) === pending) {
           localStorage.setItem(key, JSON.stringify({ folders, pending: false }));
           removedRef.current={folders:new Set(),files:new Set()};
         }
-        if (auth.currentUser?.uid === uid) setWorkspaceWarning("");
+        if (auth.currentUser?.uid === uid) {setWorkspaceWarning("");setSyncDiagnostic(null);}
       } catch (error) {
         if (auth.currentUser?.uid === uid) {
           setWorkspaceWarning(localSaved
-            ? syncErrorMessage(error)
+            ? describeSyncFailure(error)
             : "Changes could not be saved. Keep this tab open and try again.");
         }
       }
@@ -2729,8 +2737,9 @@ function ClassioApp() {
     chatSaveTimer.current=setTimeout(()=>saveCloudRecord(db,uid,"assistant",record,()=>auth.currentUser?.uid===uid).then(()=>{
       if(auth.currentUser?.uid!==uid)return;
       try{if(localStorage.getItem(key)===pending)localStorage.setItem(key,JSON.stringify({...record,pending:false}));}catch{}
+      setAssistantCloudFailure(null);
       if(chatsRef.current.updatedAt===next.updatedAt)setConversationNotice("Chats synced with your account");
-    }).catch(()=>{if(auth.currentUser?.uid===uid)setConversationNotice(local?"Chats saved here; cloud sync will retry when connected":"Chat storage is unavailable. Keep this tab open.");}),600);
+    }).catch(error=>{if(auth.currentUser?.uid===uid){setConversationNotice(local?"Chats saved here; cloud sync needs attention":"Chat storage is unavailable. Keep this tab open.");reportAssistantSyncFailure(error);}}),600);
   }
   function saveConversation(messages) {
     const record=chatsRef.current,id=record.activeId,chat=record.chats.find(item=>item.id===id);
@@ -2750,10 +2759,15 @@ function ClassioApp() {
   function resizeAssistant(width) {setAssistantWidth(width);try{localStorage.setItem("classio_assistant_width",String(width));}catch{}}
   async function retryWorkspaceSync() {
     if(!user || auth.currentUser?.uid!==user.uid || syncingRef.current)return;
-    const uid=user.uid;syncingRef.current=true;setWorkspaceWarning("Retrying cloud sync…");
+    const uid=user.uid;syncingRef.current=true;setWorkspaceWarning("Retrying cloud sync…");setSyncDiagnostic(null);
     try{
+      let token;
+      try{token=await auth.currentUser.getIdTokenResult?.(true);}
+      catch(error){error.syncContext={project:firebaseConfig.projectId,operation:"refresh sign-in",path:"Firebase Authentication"};throw error;}
+      if(auth.currentUser?.uid!==uid)return;
+      tokenProvider.current=token?.signInProvider||null;
       if(deferAccountSync.current){
-        const root=await withRestoreTimeout(getDoc(doc(db,"users",uid)));
+        const root=await readCloudProfile(db,uid);
         const remote=await loadCloudRecord(db,uid,"workspace-v2",{folders:decodeWorkspace(root.data()?.folders)||[]});
         if(auth.currentUser?.uid!==uid)return;
         const removed={folders:[...removedRef.current.folders],files:[...removedRef.current.files]};
@@ -2761,7 +2775,7 @@ function ClassioApp() {
       }
       saveAccountWorkspace(foldersRef.current,uid);
       persistChats(chatsRef.current);
-    }catch(error){if(auth.currentUser?.uid===uid)setWorkspaceWarning(syncErrorMessage(error));}
+    }catch(error){if(auth.currentUser?.uid===uid)setWorkspaceWarning(describeSyncFailure(error));}
     finally{syncingRef.current=false;}
   }
   function cleanupEmptyNotes() {
@@ -2864,7 +2878,7 @@ function ClassioApp() {
         maxWidth: isMobile ? "100vw" : `calc(100vw - ${isMobile ? 0 : (sidebarExpanded ? 220 : 60)}px)`,
         boxSizing: "border-box",
       }}>
-        {workspaceWarning && <div className="workspace-warning"><p role="status">{workspaceWarning}</p>{user&&<button className="quiet-button" onClick={retryWorkspaceSync}>Retry sync</button>}</div>}
+        {(workspaceWarning||assistantCloudFailure) && <CloudSyncNotice message={workspaceWarning||assistantCloudFailure.message} diagnostic={workspaceWarning?syncDiagnostic:assistantCloudFailure.diagnostic} onRetry={user?retryWorkspaceSync:null}/>}
         {children}
       </div>
     </div>
@@ -2974,7 +2988,7 @@ function ClassioApp() {
       <div className="workspace-content" style={{ flex:1, minWidth:0, marginLeft:isMobile?0:(sidebarExpanded?220:60), marginTop:60, marginBottom:0, minHeight:"100vh", display:"flex", flexDirection:"column", background:T.bg }}>
       <div className="library-container" style={{ maxWidth:960, margin:"0 auto", padding:isMobile?"12px 14px":isTablet?"16px 20px":"32px 36px", width:"100%", boxSizing:"border-box" }}>
 
-        {workspaceWarning && <div className="workspace-warning"><p role="status">{workspaceWarning}</p>{user&&<button className="quiet-button" onClick={retryWorkspaceSync}>Retry sync</button>}</div>}
+        {(workspaceWarning||assistantCloudFailure) && <CloudSyncNotice message={workspaceWarning||assistantCloudFailure.message} diagnostic={workspaceWarning?syncDiagnostic:assistantCloudFailure.diagnostic} onRetry={user?retryWorkspaceSync:null}/>}
         {homeTab === "folders" && <LibraryHome getFileBlob={file=>file._fileObj||FILE_STORE.get(file.id)} updateMaterial={updateMaterialMetadata} classifyMaterial={classifyMaterial} folders={folders} guest={isGuest} signIn={signInToSave}
           signInPending={signInPending} signInError={signInError} createNote={createNote} onAsk={askAssistant}
           upload={() => setShowUploadModal(true)} record={() => setShowRecordModal(true)} addLink={() => setShowWebLinkModal(true)}
@@ -4246,12 +4260,12 @@ STRICT RULES — follow every single one:
       </div>}
 
       {/* Sub-tabs */}
-      <div style={{ display:"flex", gap:8, marginBottom:22, borderBottom:`1.5px solid ${C.border}`, paddingBottom:12 }}>
+      <div className="podcast-mode-tabs" role="group" aria-label="Audio workspace" style={{ display:"flex", gap:8, marginBottom:22, borderBottom:`1.5px solid ${C.border}`, paddingBottom:12 }}>
         {[
           {id:"record",  label:"Recordings"},
           {id:"podcast", label:"Podcasts"},
         ].map(t => (
-          <button key={t.id} onClick={() => { setSubTab(t.id); onUpdate({ ...file, voiceMode: t.id }); }} style={{
+          <button key={t.id} aria-pressed={subTab===t.id} onClick={() => { setSubTab(t.id); onUpdate({ ...file, voiceMode: t.id }); }} style={{
             padding:"8px 20px", borderRadius:8, border:"none", cursor:"pointer",
             fontWeight:700, fontSize:13,
             background: subTab===t.id ? C.accent : C.surface,

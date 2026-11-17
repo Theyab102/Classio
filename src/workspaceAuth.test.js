@@ -121,3 +121,15 @@ test('a pending legacy workspace publishes bounded records before removing the o
  try{localStorage.setItem('classio_workspace:sync-owner',JSON.stringify({folders:[{id:'notes',name:'Saved notes',files:[{id:'one',name:'Original',notes:'Keep this note'}]}],pending:true}));getDoc.mockResolvedValue({metadata:{fromCache:false},data:()=>({folders:[]})});setDoc.mockResolvedValue();render(<App/>);mockAuth.currentUser={uid:'sync-owner',displayName:'Owner'};await act(async()=>{await mockAuthListener(mockAuth.currentUser);});await act(async()=>{jest.advanceTimersByTime(500);});await waitFor(()=>expect(setDoc.mock.calls.some(([,value])=>value.folders==='__delete_field__')).toBe(true));const manifest=setDoc.mock.calls.findIndex(([,value])=>value.format==='classio-parts-v1'),cleanup=setDoc.mock.calls.findIndex(([,value])=>value.folders==='__delete_field__');expect(manifest).toBeGreaterThanOrEqual(0);expect(cleanup).toBeGreaterThan(manifest);expect(JSON.parse(localStorage.getItem('classio_workspace:sync-owner')).folders[0].files[0].notes).toBe('Keep this note');}
  finally{global.TextEncoder=previousEncoder;jest.useRealTimers();}
 });
+test('permission-denied keeps cached work and reports the denied profile operation and refreshed sign-in provider',async()=>{
+ const account={uid:'private-retry-owner',displayName:'Owner',providerData:[{providerId:'google.com'}],getIdTokenResult:jest.fn(async()=>({signInProvider:'google.com'}))};
+ localStorage.setItem('classio_workspace:'+account.uid,JSON.stringify({folders:[{id:'saved',name:'My saved chapter',files:[{id:'one',name:'Original note',notes:'Keep this writing'}]}],pending:true}));
+ getDoc.mockRejectedValue(Object.assign(new Error('Denied'),{code:'permission-denied'}));
+ render(<App/>);mockAuth.currentUser=account;await act(async()=>{await mockAuthListener(account);});
+ expect(screen.getAllByText('My saved chapter').length).toBeGreaterThan(0);expect(setDoc).not.toHaveBeenCalled();
+ expect(screen.getByText(/^Cloud access was denied/)).toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button',{name:'Retry sync',exact:true}));await waitFor(()=>expect(account.getIdTokenResult).toHaveBeenCalledWith(true));
+ await waitFor(()=>expect(screen.getByText('refreshed ID token')).toBeInTheDocument());
+ expect(screen.getByText('read profile',{exact:true})).toBeInTheDocument();expect(screen.getByText('users/{uid}',{exact:true})).toBeInTheDocument();expect(screen.getByText('classio-4378f',{exact:true})).toBeInTheDocument();
+ expect(document.querySelector('.cloud-sync-details').textContent).not.toContain(account.uid);expect(localStorage.getItem('classio_workspace:'+account.uid)).toContain('Keep this writing');
+});

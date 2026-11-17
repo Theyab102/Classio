@@ -16,9 +16,17 @@ export function recordParts(value, maxBytes = 580000) {
   return parts;
 }
 const ref = (db, uid, key) => doc(db, 'users', uid, 'preferences', key);
+export async function withCloudContext(db,key,operation,promise) {
+  try{return await withRestoreTimeout(promise);}
+  catch(error){error.syncContext={project:db?.app?.options?.projectId||'unknown',operation,path:key?`users/{uid}/preferences/${key.replace(/-part-.+$/,'-part-*')}`:'users/{uid}'};throw error;}
+}
+export function readCloudProfile(db,uid) {return withCloudContext(db,null,'read profile',getDoc(doc(db,'users',uid)));}
+export function cloudSyncDiagnostic(error,account,project,tokenProvider) {
+  return {...error.syncContext,project:error.syncContext?.project&&error.syncContext.project!=='unknown'?error.syncContext.project:project,code:error.code||'unknown',signedIn:!!account,provider:tokenProvider||(account?.providerData||[]).map(item=>item.providerId).join(', ')||'unknown',providerEvidence:tokenProvider?'refreshed ID token':'linked account (ID token provider not yet checked)'};
+}
 export async function loadCloudRecord(db, uid, key, fallback = null) {
   for (let attempt = 0; attempt < 2; attempt++) {
-    const snapshot = await withRestoreTimeout(getDoc(ref(db, uid, key)));
+    const snapshot = await withCloudContext(db,key,'read manifest',getDoc(ref(db, uid, key)));
     if (snapshot.metadata?.fromCache) throw Object.assign(new Error('Only an offline copy was available.'), {code:'unavailable'});
     const manifest = snapshot.data();
     if (manifest?.format !== 'classio-parts-v1') return manifest ?? fallback;
@@ -27,13 +35,13 @@ export async function loadCloudRecord(db, uid, key, fallback = null) {
       const parts = [];
       for (let start = 0; start < manifest.parts.length; start += 4) {
         parts.push(...await Promise.all(manifest.parts.slice(start,start+4).map(async id=>{
-          const part = await withRestoreTimeout(getDoc(ref(db,uid,id)));
+          const part = await withCloudContext(db,id,'read part',getDoc(ref(db,uid,id)));
           if (part.metadata?.fromCache || part.data()?.revision !== manifest.revision || typeof part.data()?.data !== 'string') throw new Error('A saved workspace part was unavailable.');
           return part.data().data;
         })));
       }
       return JSON.parse(parts.join(''));
-    } catch (error) { if (attempt) throw error; }
+    } catch (error) { if (attempt||/permission-denied|unauthenticated/.test(error.code||'')) throw error; }
   }
 }
 const queues = new Map();
@@ -44,13 +52,14 @@ export function saveCloudRecord(db, uid, key, value, isCurrent = () => true) {
     if (!isCurrent()) return;
     const parts = recordParts(value), revision = makeStudyId(), ids = parts.map((_,i)=>`${key}-part-${revision}-${i}`);
     let old;
-    try { old = (await withRestoreTimeout(getDoc(ref(db,uid,key)))).data(); } catch {}
+    try { old = (await withCloudContext(db,key,'read manifest before save',getDoc(ref(db,uid,key)))).data(); }
+    catch(error) {if(/permission-denied|unauthenticated/.test(error.code||''))throw error;}
     for (let start = 0; start < parts.length; start += 4) {
       if (!isCurrent()) return;
-      await Promise.all(parts.slice(start,start+4).map((data,i)=>withRestoreTimeout(setDoc(ref(db,uid,ids[start+i]),{data,revision}))));
+      await Promise.all(parts.slice(start,start+4).map((data,i)=>withCloudContext(db,ids[start+i],'write part',setDoc(ref(db,uid,ids[start+i]),{data,revision}))));
     }
     if (!isCurrent()) { await Promise.allSettled(ids.map(id=>deleteDoc(ref(db,uid,id)))); return; }
-    await withRestoreTimeout(setDoc(ref(db,uid,key),{format:'classio-parts-v1',revision,parts:ids,updatedAt:Date.now()}));
+    await withCloudContext(db,key,'publish manifest',setDoc(ref(db,uid,key),{format:'classio-parts-v1',revision,parts:ids,updatedAt:Date.now()}));
     if (old?.format==='classio-parts-v1' && Array.isArray(old.parts)) await Promise.allSettled(old.parts.filter(id=>typeof id==='string'&&id.startsWith(key+'-part-')&&!id.includes('/')).map(id=>deleteDoc(ref(db,uid,id))));
   });
   queues.set(queueKey,job);
@@ -58,6 +67,7 @@ export function saveCloudRecord(db, uid, key, value, isCurrent = () => true) {
   return job;
 }
 export function syncErrorMessage(error) {
+  if (/^auth\//.test(error?.code || '')) return 'Cloud sign-in could not be refreshed. Your work stays on this device. Sign in again to retry sync.';
   if (/permission-denied|unauthenticated/.test(error?.code || '')) return 'Cloud access was denied. Sign in again; if it continues, the site owner must check the deployed Firebase rules.';
   if (/resource-exhausted/.test(error?.code || '')) return 'Cloud storage is temporarily at its quota. Your changes remain on this device.';
   return error?.code === 'workspace/too-large' ? error.message : 'Cloud sync is unavailable. Your changes remain on this device; retry when connected.';

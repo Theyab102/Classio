@@ -36,14 +36,52 @@ export function imagePlacement(root, query, anchor) {
   return null;
 }
 
-export function insertNoteFigure(root, image, query, anchor) {
+export function insertNoteFigure(root, image, query, anchor, origin='automatic') {
   if (!safeImageSource(image?.src)) return false;
   const target = imagePlacement(root, query || image.title, anchor); if (!target) return false;
   const photo = document.createElement("img"); photo.src = image.src; photo.alt = image.title || query || "Study figure"; photo.setAttribute("referrerpolicy", "no-referrer");
+  photo.setAttribute('data-classio-image-origin',origin);photo.setAttribute('data-classio-image-query',String(query||'').slice(0,200));
+  photo.setAttribute('data-classio-image-credit',String(image.credit||image.title||'Source figure').slice(0,600));
   const caption = document.createElement("p");
   if (/^https:\/\//i.test(image.source || "")) { const link = document.createElement("a"); link.href = image.source; link.textContent = image.credit || "Figure from the source page"; caption.append(link); }
   else caption.textContent = image.credit || image.title || "Source figure";
   target.after(photo, caption); return true;
+}
+
+function surroundingSection(root,node) {
+  const block=topBlock(root,node);let heading=block;
+  while(heading&&!/^H[1-4]$/.test(heading.tagName))heading=heading.previousElementSibling;
+  if(!heading)return [...root.children].filter(item=>item.tagName==='P'&&!item.querySelector('img,a')).slice(0,2).map(item=>item.textContent).join(' ');
+  const parts=[heading.textContent];let next=heading.nextElementSibling;
+  while(next&&!/^H[1-4]$/.test(next.tagName)){if(!next.querySelector('img,a')&&next.tagName!=='IMG')parts.push(next.textContent);next=next.nextElementSibling;}
+  return parts.join(' ').slice(0,1800);
+}
+export function contextualStudyImage(query,context,results) {
+  const candidate=likelyStudyImage(query,results);if(!candidate)return null;
+  const words=subjectWords(context).filter(word=>!['this','that','are','can','into','which','under','because','motionless','note'].includes(word));
+  if(!words.length)return candidate;
+  const description=subjectWords(candidate.title+' '+(candidate.context||''));
+  return words.some(word=>description.includes(word))?candidate:null;
+}
+export function reviewNoteImages(html) {
+  const root=document.createElement('div');root.innerHTML=sanitizeNoteHtml(html);
+  return [...root.querySelectorAll('img')].map((image,index)=>{
+    const caption=image.nextElementSibling,credit=caption?.tagName==='P'&&caption.querySelector('a')?caption.textContent:'';
+    const title=image.alt,origin=image.getAttribute('data-classio-image-origin');
+    const suspicious=origin!=='manual'&&!contextualStudyImage(image.getAttribute('data-classio-image-query')||title,surroundingSection(root,image),[{src:image.src,title,context:credit,source:caption?.querySelector('a')?.href||image.src}]);
+    return {index,src:image.getAttribute('src'),title,origin,suspicious,reason:origin==='manual'?'Manually selected image. Keep it unless you choose to remove it.':suspicious?'This saved image may not explain the surrounding section. Review it before keeping it.':origin==='source'?'Figure from your source.':origin==='automatic'?'Automatically suggested image.':'Older image with no selection history. Review it before removing it.'};
+  });
+}
+export function removeNoteImage(html,index) {
+  const root=document.createElement('div');root.innerHTML=sanitizeNoteHtml(html);
+  const image=root.querySelectorAll('img')[index];if(!image)return root.innerHTML;
+  const caption=image.nextElementSibling,link=caption?.querySelector('a');
+  // Only remove a clearly associated, standalone credit, never a paragraph
+  // containing the learner's own writing or another manually inserted image.
+  const knownCredit=image.getAttribute('data-classio-image-credit');
+  const legacyCredit=!image.hasAttribute('data-classio-image-origin')&&link&&caption.textContent===link.textContent&&/wikimedia\.org|geograph\.org\.uk/i.test(link.href)&&/CC BY|CC0|public domain/i.test(caption.textContent);
+  if(caption?.tagName==='P'&&((knownCredit&&caption.textContent===knownCredit)||legacyCredit))caption.remove();
+  image.remove();return root.innerHTML;
 }
 
 export function removeEmptyImageSections(root) {
@@ -75,6 +113,7 @@ export async function enrichNoteImages(markdown, { pdfFile, fileObj, useWeb, sig
   const requests = markers.slice(0, 3).map(async marker => {
     try {
       if (signal?.aborted) return {};
+      if (!useWeb) return {};
       if (marker.kind === "PDF" && pdfFile) return { marker, image: (await getPdfFigures(pdfFile, Number(marker.query)))[0] };
       if(marker.kind==="SOURCE_FIGURE"||marker.kind==="SOURCE_IMAGE"){const source=sourceFigures[Number(marker.query)-(marker.kind==="SOURCE_IMAGE"?1:0)];return{marker,image:source?await resolveSourceFigure(source,fileObj):null};}
       const source=likelyStudyImage(marker.query,sourceFigures);if(source)return{marker,image:await resolveSourceFigure(source,fileObj)};
@@ -84,7 +123,7 @@ export async function enrichNoteImages(markdown, { pdfFile, fileObj, useWeb, sig
       const timer = setTimeout(cancel, 8000); let results;
       try { results = await search(marker.query, controller.signal); }
       finally { clearTimeout(timer); signal?.removeEventListener("abort", cancel); }
-      return { marker, image: likelyStudyImage(marker.query, results) };
+      return { marker, image: contextualStudyImage(marker.query,surroundingSection(root,imagePlacement(root,marker.query,marker.anchor)||marker.anchor),results) };
     } catch { return { marker }; }
   });
   for (let { marker, image } of await Promise.all(requests)) {
@@ -92,7 +131,7 @@ export async function enrichNoteImages(markdown, { pdfFile, fileObj, useWeb, sig
     if (image && seen.has(image.src)) continue;
     if(image)try{await acknowledgeStudyImage(image,signal);}catch{image=null;}
     const query = marker.kind.startsWith("SOURCE_") ? image?.title : marker.query;
-    if (!image || !insertNoteFigure(root, image, query, marker.anchor)) missing++;
+    if (!image || !insertNoteFigure(root, image, query, marker.anchor,marker.kind==='IMAGE'&&!sourceOnly?'automatic':'source')) missing++;
     else { seen.add(image.src); added++; }
   }
   // Place real source figures even when a model omitted image markers.
@@ -108,7 +147,10 @@ export async function enrichNoteImages(markdown, { pdfFile, fileObj, useWeb, sig
     const original = document.createElement("div"); original.innerHTML = originalHtml;
     original.querySelectorAll("img").forEach(image => {
       if (!seen.has(image.getAttribute("src"))) {
-        if (!insertNoteFigure(root, { src: image.getAttribute("src"), title: image.alt }, image.alt)) root.append(image.cloneNode(true));
+        const target=imagePlacement(root,image.alt),copy=image.cloneNode(true);
+        if(target)target.after(copy);else root.append(copy);
+        const caption=image.nextElementSibling;
+        if(caption?.tagName==='P'&&caption.querySelector('a')&&caption.textContent===caption.querySelector('a').textContent)copy.after(caption.cloneNode(true));
       }
     });
   }

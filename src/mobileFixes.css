@@ -71,3 +71,8 @@
 .avatar-option-visual{position:relative}.avatar-option-visual:has(img[data-renderer=preparing]){background:var(--panel-soft)}.avatar-option-visual img[data-renderer=preparing]{opacity:0}.avatar-option-visual:has(img[data-renderer=preparing])::after{content:"";position:absolute;inset:calc(50% - 9px);width:18px;height:18px;border:2px solid var(--app-border);border-top-color:var(--app-link);border-radius:50%}
 @media(prefers-reduced-motion:no-preference){.avatar-option-visual:has(img[data-renderer=preparing])::after{animation:avatar-thumbnail-wait .8s linear infinite}}
 @keyframes avatar-thumbnail-wait{to{transform:rotate(360deg)}}
+
+.material-source-thumbnail>.ppt-page{width:min(100%,calc(130px * var(--source-aspect,1.7778)));height:auto;max-height:none}
+.is-list .material-source-thumbnail>.ppt-page{width:min(100%,calc(68px * var(--source-aspect,1.7778)))}
+.podcast-mode-tabs>button{min-height:44px;flex:1;max-width:240px;font:inherit!important}.podcast-mode-tabs>button:focus-visible{outline:2px solid var(--app-link);outline-offset:2px}
+.cloud-sync-details{flex-basis:100%;font-size:.8rem}.cloud-sync-details summary{cursor:pointer;padding:10px 0}.cloud-sync-details dl{display:grid;gap:8px;margin:8px 0}.cloud-sync-details dl>div{display:flex;flex-wrap:wrap;gap:6px 12px}.cloud-sync-details dt{font-weight:650;min-width:100px}.cloud-sync-details dd{margin:0;overflow-wrap:anywhere}.cloud-sync-details p{font-size:.76rem}
