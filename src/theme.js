@@ -1,5 +1,6 @@
 import ChoiceMenu from "./ChoiceMenu";
 import { useEffect, useSyncExternalStore } from "react";
+import {flushSync} from 'react-dom';
 
 const key = "classio_theme";
 const modes = new Set(["system", "light", "dark"]);
@@ -12,6 +13,7 @@ function readPreference() {
 }
 
 let preference = readPreference();
+let requestedPreference=preference,transition;
 const deviceIsDark = () => Boolean(window.matchMedia?.("(prefers-color-scheme: dark)").matches);
 export const activeTheme = () => preference === "system" ? (deviceIsDark() ? "dark" : "light") : preference;
 const snapshot = () => `${preference}:${activeTheme()}`;
@@ -21,13 +23,13 @@ function notify() {
 }
 
 function storageChanged(event) {
-  if (event.key === key || event.key === null) { preference = readPreference(); notify(); }
+  if (event.key === key || event.key === null) { transition?.skipTransition();requestedPreference=preference=readPreference();notify(); }
 }
 
 function subscribe(listener) {
   listeners.add(listener);
   if (listeners.size === 1) {
-    preference = readPreference();
+    requestedPreference=preference=readPreference();
     media = window.matchMedia?.("(prefers-color-scheme: dark)");
     media?.addEventListener?.("change", notify);
     window.addEventListener("storage", storageChanged);
@@ -43,9 +45,25 @@ function subscribe(listener) {
 
 export function setThemePreference(value) {
   if (!modes.has(value)) return;
-  preference = value;
-  try { localStorage.setItem(key, value); } catch {}
-  notify();
+  requestedPreference=value;
+  transition?.skipTransition();
+  const commit=()=>{preference=requestedPreference;try{localStorage.setItem(key,preference);}catch{}flushSync(notify);};
+  const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  if(document.startViewTransition&&!reduced){
+    try{
+      const next=document.startViewTransition(commit);transition=next;
+      next.ready?.catch(()=>{});
+      next.finished?.finally(()=>{if(transition===next)transition=null;}).catch(()=>{});
+      return;
+    }catch{}
+  }
+  document.body.classList.remove('theme-changing');commit();
+  if(!reduced){void document.body.offsetWidth;document.body.classList.add('theme-changing');}
+}
+
+export function toggleThemePreference(){
+  const resolved=requestedPreference==='system'?(deviceIsDark()?'dark':'light'):requestedPreference;
+  setThemePreference(resolved==='dark'?'light':'dark');
 }
 
 export function useThemeMode() {

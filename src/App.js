@@ -1,4 +1,4 @@
-import CloudSyncNotice from './CloudSyncNotice';
+import CloudSyncNotice, {CloudSyncSettings} from './CloudSyncNotice';
 import {timeoutSignal} from './abortSignal';
 import {loadCloudRecord,saveCloudRecord,syncErrorMessage,mergeRestoredWorkspace,withCloudContext,readCloudProfile,cloudSyncDiagnostic} from './workspaceSync';
 import {newChat,normalizeChats,updateChat,persistentChats} from './chatModel';
@@ -44,6 +44,7 @@ import "./premium.css";
 import "./refinements.css";
 import "./mobileFixes.css";
 import "./noteEditing.css";
+import "./interactionPolish.css";
 import AssistantPanel from "./AssistantPanel";
 import WorkspaceArt from "./WorkspaceArt";
 import FlashcardStudio from "./FlashcardStudio";
@@ -67,7 +68,7 @@ import { likelyStudyImage, prepareSourceFigure, safeImageSource, searchStudyImag
 import { escapeHtml, sanitizeDocumentHtml } from "./safeContent";
 import { signInErrorMessage, withRestoreTimeout } from "./authErrors";
 import ResponsiveSidebar from "./ResponsiveSidebar";
-import { activeTheme, setThemePreference, useThemeMode } from "./theme";
+import { activeTheme, toggleThemePreference, useThemeMode } from "./theme";
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { getFirestore, doc, setDoc, getDoc, deleteField, collection, addDoc, onSnapshot, updateDoc, deleteDoc, serverTimestamp, query, orderBy, limit, getDocs, arrayUnion } from "firebase/firestore";
@@ -839,7 +840,7 @@ const THEMES = {
   },
 };
 function _getTheme() { return THEMES[activeTheme()]; }
-function _toggleTheme() { setThemePreference(activeTheme() === "dark" ? "light" : "dark"); }
+function _toggleTheme() { toggleThemePreference(); }
 function useTheme() {
   const { resolved } = useThemeMode();
   return THEMES[resolved];
@@ -1324,7 +1325,7 @@ function SettingsRow({label,sub,children}) { const T=useTheme(); return (
   );
 }
 
-function SettingsTab({ onToggleTheme, onClearCache, files, streak, character, onEditCharacter, onStyle }) {
+function SettingsTab({ onToggleTheme, onClearCache, files, streak, character, onEditCharacter, onStyle, syncState }) {
   const T = useTheme();
   C = T;
   const [lang, setLang] = useState(() => { try { return localStorage.getItem("classio_lang") || "auto"; } catch { return "auto"; } });
@@ -1351,6 +1352,8 @@ function SettingsTab({ onToggleTheme, onClearCache, files, streak, character, on
           <ThemeSwitch dark={T.isDark} onChange={onToggleTheme}/>
         </SettingsRow>
       </SettingsSection>
+
+      {syncState&&<SettingsSection title="Account sync"><CloudSyncSettings {...syncState}/></SettingsSection>}
 
       {/* Language */}
       <SettingsSection title="AI Response Language">
@@ -2305,7 +2308,7 @@ function CommandSearch({ folders, onOpenFile, onClose }) {
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
           <input ref={inputRef} value={q} onChange={e=>setQ(e.target.value)} placeholder="Search folders and notes..."
             style={{ flex:1, border:"none", outline:"none", background:"transparent", fontSize:16, color:T.text, fontFamily:"'DM Sans Variable',sans-serif" }}/>
-          <button type="button" className="quiet-button" aria-label="Close file search" onClick={onClose}><UiIcon name="close"/></button>
+          <button type="button" className="quiet-button icon-dismiss" aria-label="Close file search" onClick={onClose}><UiIcon name="close"/></button>
           <div style={{ display:"flex", gap:4 }}>
             <kbd style={{ fontSize:10, color:T.muted, background:T.bg, border:`1px solid ${T.border}`, borderRadius:5, padding:"2px 6px", fontWeight:700 }}>⌘K</kbd>
             <kbd style={{ fontSize:10, color:T.muted, background:T.bg, border:`1px solid ${T.border}`, borderRadius:5, padding:"2px 6px", fontWeight:700 }}>ESC</kbd>
@@ -2478,8 +2481,8 @@ function ClassioApp() {
   const [workspaceWarning, setWorkspaceWarning] = useState("");
   const [syncDiagnostic,setSyncDiagnostic]=useState(null),[assistantCloudFailure,setAssistantCloudFailure]=useState(null);
   const tokenProvider=useRef(null);
-  function reportAssistantSyncFailure(error){setAssistantCloudFailure({message:syncErrorMessage(error),diagnostic:cloudSyncDiagnostic(error,auth.currentUser,firebaseConfig.projectId,tokenProvider.current)});}
-  function describeSyncFailure(error){setSyncDiagnostic(cloudSyncDiagnostic(error,auth.currentUser,firebaseConfig.projectId,tokenProvider.current));return syncErrorMessage(error);}
+  function reportAssistantSyncFailure(error){setAssistantCloudFailure({message:syncErrorMessage(error,tokenProvider.current),diagnostic:cloudSyncDiagnostic(error,auth.currentUser,firebaseConfig.projectId,tokenProvider.current)});}
+  function describeSyncFailure(error){setSyncDiagnostic(cloudSyncDiagnostic(error,auth.currentUser,firebaseConfig.projectId,tokenProvider.current));return syncErrorMessage(error,tokenProvider.current);}
   const saveTimer = useRef(null), chatSaveTimer=useRef(null), syncingRef=useRef(false), retrySyncRef=useRef(null);
   retrySyncRef.current=retryWorkspaceSync;
   useEffect(()=>{const retry=()=>{if(accountUid.current)retrySyncRef.current?.();};window.addEventListener("online",retry);return()=>{window.removeEventListener("online",retry);clearTimeout(chatSaveTimer.current);};},[]);
@@ -3000,7 +3003,7 @@ function ClassioApp() {
             : folder.id === to ? { ...folder, files: [...folder.files, file] } : folder))} />}
         {homeTab === "about" && <AboutTab />}
         {homeTab === "settings" && <SettingsTab onStyle={()=>setAppStyleOpen(true)} character={character} onEditCharacter={() => setShowCharacter(true)} onToggleTheme={_toggleTheme} onClearCache={user ? clearFolderCache : undefined}
-          files={folders.flatMap(folder => folder.files)} streak={studyStreak} />}
+          files={folders.flatMap(folder => folder.files)} streak={studyStreak} syncState={user?{message:workspaceWarning||assistantCloudFailure?.message,diagnostic:workspaceWarning?syncDiagnostic:assistantCloudFailure?.diagnostic}:null}/>}
 
       {renderAssistant()}
 
@@ -9110,7 +9113,7 @@ function Modal({ children, onClose }) {
   return (
     <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.35)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
       <div onClick={e=>e.stopPropagation()} style={{ background:C.surface, borderRadius:20, padding:"28px 32px", width:"100%", maxWidth:460, maxHeight:"calc(100dvh - 32px)", overflowY:"auto", boxShadow:"0 24px 64px rgba(0,0,0,.18)", border:`1px solid ${C.border}`, position:"relative" }}>
-        <button onClick={onClose} style={{ position:"absolute", top:16, right:16, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:20, lineHeight:1, padding:"2px 6px", borderRadius:6 }}>×</button>
+        <button type="button" className="icon-dismiss" aria-label="Close dialog" onClick={onClose} style={{ position:"absolute", top:16, right:16, background:"none", border:"none", cursor:"pointer", color:C.muted, fontSize:20, lineHeight:1, padding:"2px 6px", borderRadius:6 }}>×</button>
         {children}
       </div>
     </div>

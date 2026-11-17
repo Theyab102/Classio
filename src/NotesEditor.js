@@ -11,7 +11,7 @@ import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
 import { TableKit } from "@tiptap/extension-table";
 import {TableMap} from '@tiptap/pm/tables';
-import {NoteTable,insertNoteTable,adjacentNoteCells,mergeNextNoteCell} from './noteTables';
+import {NoteTable,insertNoteTable,adjacentNoteCells,mergeNextNoteCell,selectNoteTable} from './noteTables';
 import TextAlign from "@tiptap/extension-text-align";
 import { closeHistory } from "@tiptap/pm/history";
 import { TextStyleKit } from "@tiptap/extension-text-style";
@@ -291,6 +291,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
       <div className="notes-primary-actions">
         <button className="quiet-button is-primary" type="button" hidden={view === "lessons"} aria-expanded={panel === "generate"} onClick={() => openPanel("generate")}><UiIcon name="generate" /><span>Generate</span></button>
         <ActionMenu label="Note options" items={[
+          {label:'Custom table',icon:'table',run:()=>openPanel('table')},
           {label:"Customize style",run:()=>setStyleOpen(true)},
           { label: "Download notes", icon: "download", run: exportNotes },
           ...(file.transcript ? [{ label: "Download transcript", run: () => downloadStudyFile(new Blob([file.transcript], { type: "text/plain" }), "classio-transcript.txt") }] : []),
@@ -319,7 +320,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
           <button type="button" disabled={preview} aria-label="Insert equation" title="Insert equation" onMouseDown={event=>event.preventDefault()} onClick={() => openPanel("equation")}><UiIcon name="equation" /></button>
           {action("Bullets", "list", chain => chain.toggleBulletList(), tools?.bullet)}
           <span className="toolbar-divider" />
-          <button type="button" disabled={preview} aria-label="Insert table" title="Insert table" onMouseDown={event => event.preventDefault()} onClick={() => {setTableCols(value=>String(Math.min(Number(value)||3,columnLimit)));openPanel('table');}}><UiIcon name="table" /><span>Table</span></button>
+          <button type="button" disabled={preview} aria-label="Insert table" title="Insert table" onMouseDown={event => event.preventDefault()} onClick={() => {insertNoteTable(editor,{rows:3,cols:Math.min(3,columnLimit)});setStatus('Table inserted. Select table to remove it with Backspace or Delete.');}}><UiIcon name="table" /><span>Table</span></button>
           <button type="button" disabled={preview||busy} aria-label="Make a table with AI" onMouseDown={event=>event.preventDefault()} onClick={()=>generate('table')}><UiIcon name="generate" /><span>Make a table</span></button>
           <button type="button" disabled={preview} aria-label="Insert image" title="Insert image" aria-expanded={panel === "images"} onClick={() => openPanel("images")}><UiIcon name="image" /></button>
           <button type="button" aria-label="More formatting" title="More formatting" aria-expanded={moreTools} onClick={() => setMoreTools(value => !value)}><UiIcon name="more" /></button>
@@ -337,6 +338,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
           {action("Undo", "undo", chain => chain.undo())}{action("Redo", "redo", chain => chain.redo())}
         </div>}
         {tools?.table && !preview && <div className="studio-controls note-table-tools" aria-label="Table actions" onMouseDown={event=>{if(event.target.closest('button'))event.preventDefault();}}>
+          <button type="button" onClick={()=>selectNoteTable(editor)}>Select table</button>
           <button onClick={() => run(chain => chain.addRowAfter())}>Add row</button><button disabled={!currentTable||TableMap.get(currentTable).width>=columnLimit} title="Columns need room to stay readable" onClick={() => run(chain => chain.addColumnAfter())}>Add column</button>
           <ActionMenu label="Table options" icon="table" items={[
             {label:'Delete row',run:()=>run(chain=>chain.deleteRow())},{label:'Delete column',run:()=>run(chain=>chain.deleteColumn())},

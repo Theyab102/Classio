@@ -43,10 +43,10 @@ module.exports = async function study(req, res) {
 
   try {
     const quota = await requestQuota(req, audio ? "audio" : "study");
-    if (quota.unavailable) return res.status(503).json({ error: "AI study tools are temporarily unavailable." });
+    if (quota.unavailable) return res.status(503).json({ error: "AI study tools are temporarily unavailable.",code:'QUOTA_UNAVAILABLE' });
     if (quota.retryAfter) {
       res.setHeader("Retry-After", String(quota.retryAfter));
-      return res.status(429).json({ error: "The free AI request limit was reached. Try again later." });
+      return res.status(429).json({ error: `The free AI request limit was reached. Try again in ${quota.retryAfter} seconds.`,code:'CLIENT_RATE_LIMIT' });
     }
     const result = await generateStudy(input, { report: details => console.warn("study_provider", details) });
     return res.status(200).json(result);
@@ -59,7 +59,7 @@ module.exports = async function study(req, res) {
       MODEL_UNAVAILABLE: "No supported text model is available for this provider. Check its model access or select an available model on the server.",
       VISION_MODEL_UNAVAILABLE: "Image analysis is unavailable for the configured provider. You can still ask a text question.",
       MODEL_CATALOG_UNAVAILABLE: "The AI provider could not list available models. Try again shortly.",
-      OUTPUT_LIMIT: "The answer was too long to finish. Ask for a shorter response or a smaller course.",
+      OUTPUT_LIMIT: "The AI response ended before it was complete. Your current work is kept. Try generating this section again.",
       REQUEST_TOO_LARGE: "This request exceeds the provider’s token allowance. Use a shorter section or ask for fewer notes or slides. Small questions are still available.",
       NETWORK: "The AI provider did not respond in time. Your work is saved; try this question again.",
       EMPTY_RESPONSE: "The AI provider returned an empty answer. Try this question again.",

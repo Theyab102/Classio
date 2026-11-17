@@ -138,3 +138,22 @@ test('identical in-flight style requests share one provider call and validated t
   let calls=0;const options={env:{GROQ_API_KEY:'dedupe',GROQ_TEXT_MODEL:'test'},fetcher:async()=>{calls++;await new Promise(resolve=>setTimeout(resolve,10));return{ok:true,json:async()=>({choices:[{message:{content:'{"font":"sans"}'}}]})};}};
   const request={...input,task:'style'};await Promise.all([generateStudy(request,options),generateStudy(request,options)]);await generateStudy(request,options);assert.equal(calls,1);
 });
+test('truncated Groq output uses one alternate listed model and never returns the partial answer',async()=>{
+ const seen=[];
+ const result=await generateStudy(input,{env:{GROQ_API_KEY:'truncated-fixture'},fetcher:async(url,options)=>{
+  if(url.endsWith('/models'))return{ok:true,json:async()=>({data:['llama-3.1-8b-instant','openai/gpt-oss-20b'].map(id=>({id}))})};
+  seen.push(JSON.parse(options.body).model);
+  return{ok:true,json:async()=>({choices:[{finish_reason:seen.length===1?'length':'stop',message:{content:seen.length===1?'[{"unfinished":':'A complete answer.'}}]})};
+ }});
+ assert.equal(result.text,'A complete answer.');assert.deepEqual(seen,['llama-3.1-8b-instant','openai/gpt-oss-20b']);
+});
+test('an exhausted model list retains OUTPUT_LIMIT so the client can make a shorter bounded retry',async()=>{
+ let generations=0;
+ await assert.rejects(generateStudy(input,{env:{GROQ_API_KEY:'single-model-fixture'},fetcher:async url=>url.endsWith('/models')?{ok:true,json:async()=>({data:[{id:'llama-3.1-8b-instant'}]})}:{ok:true,json:async()=>{generations++;return{choices:[{finish_reason:'length',message:{content:'Incomplete'}}]};}}}),error=>error.code==='OUTPUT_LIMIT');
+ assert.equal(generations,1);
+});
+test('Groq content-filter finish reasons stop without fallback to another provider',async()=>{
+ let calls=0;
+ await assert.rejects(generateStudy(input,{env,fetcher:async()=>{calls++;return{ok:true,json:async()=>({choices:[{finish_reason:'content_filter',message:{content:''}}]})};}}),error=>error.code==='CONTENT_BLOCKED');
+ assert.equal(calls,1);
+});

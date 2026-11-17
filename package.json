@@ -47,7 +47,8 @@
     "build:icons": "node scripts/build-icons.cjs",
     "test:presentation": "node scripts/presentation-browser.cjs",
     "test:workflows": "node scripts/workflow-browser.cjs",
-    "test:notes": "node scripts/notes-browser.cjs"
+    "test:notes": "node scripts/notes-browser.cjs",
+    "test:polish": "node scripts/polish-browser.cjs"
   },
   "eslintConfig": {
     "extends": [

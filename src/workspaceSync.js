@@ -66,8 +66,9 @@ export function saveCloudRecord(db, uid, key, value, isCurrent = () => true) {
   job.finally(()=>{if(queues.get(queueKey)===job)queues.delete(queueKey);}).catch(()=>{});
   return job;
 }
-export function syncErrorMessage(error) {
+export function syncErrorMessage(error,refreshedProvider) {
   if (/^auth\//.test(error?.code || '')) return 'Cloud sign-in could not be refreshed. Your work stays on this device. Sign in again to retry sync.';
+  if (/permission-denied/.test(error?.code||'')&&refreshedProvider==='google.com') return 'Cloud access was denied for your signed-in account. The site owner must allow the private workspace paths in the deployed Firebase rules. Your changes stay on this device.';
   if (/permission-denied|unauthenticated/.test(error?.code || '')) return 'Cloud access was denied. Sign in again; if it continues, the site owner must check the deployed Firebase rules.';
   if (/resource-exhausted/.test(error?.code || '')) return 'Cloud storage is temporarily at its quota. Your changes remain on this device.';
   return error?.code === 'workspace/too-large' ? error.message : 'Cloud sync is unavailable. Your changes remain on this device; retry when connected.';

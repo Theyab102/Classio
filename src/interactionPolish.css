@@ -1,0 +1,40 @@
+.sync-status.workspace-warning{width:fit-content;max-width:100%;margin:0 0 8px auto;padding:3px 0;gap:8px;border:0;background:transparent;color:var(--app-muted);min-height:38px;font-size:.78rem;flex-wrap:nowrap}
+.sync-status.workspace-warning p{min-width:0;flex:0 1 auto;margin:0;line-height:1.45}.sync-status>svg{flex-shrink:0}
+.sync-status .quiet-button{min-height:36px;padding:5px 10px;font-size:.75rem;background:var(--app-surface)}
+.cloud-sync-settings>p{color:var(--app-muted);font-size:.85rem;line-height:1.6;margin:0 0 12px}.cloud-sync-settings .quiet-button{min-height:44px}
+.cloud-sync-details dl{display:grid;gap:10px}.cloud-sync-details dl>div{display:grid;grid-template-columns:120px minmax(0,1fr);gap:12px}.cloud-sync-details dd{margin:0;overflow-wrap:anywhere}
+.classio-shell .library-folder-grid{grid-template-columns:repeat(auto-fill,minmax(min(270px,100%),1fr));gap:16px}
+.classio-shell .folder-card{min-height:116px;padding:12px;border-radius:14px}
+.classio-shell .folder-open{padding:12px;grid-template-columns:42px minmax(0,1fr);gap:7px 14px;min-height:88px}
+.classio-shell .folder-open>span>svg{width:34px;height:34px}.classio-shell .folder-open strong{font-size:1rem}.classio-shell .folder-open small{font-size:.8rem}
+.classio-shell .material-source-thumbnail{width:auto;margin:14px 14px 0;padding:12px;height:174px;border:1px solid var(--app-border);border-radius:12px;background:var(--panel-soft)}
+.classio-shell .material-source-thumbnail>img,.classio-shell .material-source-thumbnail>.ppt-page{border-radius:8px;max-width:100%}
+.classio-shell .material-source-thumbnail>.ppt-page{width:min(100%,calc(148px * var(--source-aspect,1.7778)));height:auto;max-height:none}
+.classio-shell .is-list .material-source-thumbnail{width:140px;height:100px;flex:0 0 140px;margin:12px;padding:10px;border:1px solid var(--app-border);border-radius:12px}
+.classio-shell .is-list .material-source-thumbnail>.ppt-page{width:min(100%,calc(78px * var(--source-aspect,1.7778)))}
+.material-resume{display:flex;align-items:center;gap:6px;color:var(--app-link);font-size:.72rem;font-weight:650;margin:0 0 8px}
+.deck-studio details.deck-options{padding:0!important;overflow:hidden}
+.deck-studio details.deck-options>summary{margin:0!important;min-height:76px;padding:16px 20px;display:flex;align-items:center;gap:14px}
+.deck-studio details.deck-options>summary>svg{flex-shrink:0}.deck-customize-label{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px}
+.classio-shell .podcast-mode-tabs{justify-content:center;align-items:center}
+.classio-shell .podcast-mode-tabs>button{flex:1 1 0;max-width:300px;min-width:0;min-height:48px;display:flex;align-items:center;justify-content:center;margin:0}
+.classio-shell .note-table-tools{justify-content:center}
+.classio-shell .note-table-tools>button{min-height:44px;justify-content:center}
+.classio-shell button:not(:focus-visible),.studio-dialog button:not(:focus-visible){outline:none}
+.classio-shell .search-clear,:is(.studio-dialog,.classio-shell,.command-search-dialog) .icon-dismiss{border:0;background:transparent;box-shadow:none;display:inline-grid;place-items:center;min-width:44px;min-height:44px;border-radius:8px}
+.classio-shell .search-clear:hover,:is(.studio-dialog,.classio-shell,.command-search-dialog) .icon-dismiss:hover{background:var(--app-accent)}
+.classio-shell .library-search:focus-within{outline:none;box-shadow:none;border-color:var(--app-border)}
+.classio-shell .library-search:has(input:focus-visible){outline:2px solid var(--app-link);outline-offset:2px}
+:is(.classio-shell,.studio-dialog,.choice-popover,.action-popover) button:not(.theme-motion-switch):not([data-dragging=true]){transition:transform 150ms ease-out,border-color 150ms ease-out,box-shadow 150ms ease-out}
+:is(.classio-shell,.studio-dialog,.choice-popover,.action-popover) button:active:not(:disabled):not(.theme-motion-switch):not([data-dragging=true]){transform:scale(.97)}
+::view-transition-old(root){animation:theme-out 180ms ease-in both;mix-blend-mode:normal}
+::view-transition-new(root){animation:theme-in 220ms ease-out both;mix-blend-mode:normal}
+::view-transition{pointer-events:none}
+.theme-changing{animation:theme-in 220ms ease-out}
+@keyframes theme-in{from{opacity:0}to{opacity:1}}@keyframes theme-out{from{opacity:1}to{opacity:0}}
+@media(max-width:600px){.classio-shell .folder-card{min-height:108px}.classio-shell .library-folder-grid{grid-template-columns:minmax(0,1fr)}.classio-shell .folder-open{min-height:80px}.classio-shell .is-list .material-source-thumbnail{width:104px;flex-basis:104px;height:82px;margin:10px;padding:8px}.classio-shell .is-list .material-source-thumbnail>.ppt-page{width:min(100%,calc(64px * var(--source-aspect,1.7778)))}.cloud-sync-details dl>div{grid-template-columns:minmax(0,1fr);gap:4px}.deck-studio details.deck-options>summary{padding:12px;gap:9px}.deck-customize-label{font-size:.75rem}}
+@media(prefers-reduced-motion:reduce){:is(.classio-shell,.studio-dialog,.choice-popover,.action-popover) button{transition:none!important}.theme-changing{animation:none}::view-transition-old(root),::view-transition-new(root){animation:none!important}:is(.classio-shell,.studio-dialog) button:active{transform:none!important}}
+
+:is(.classio-shell,.studio-dialog,.command-search-dialog) .icon-dismiss:focus-visible,.classio-shell .podcast-mode-tabs>button:focus-visible{outline:2px solid var(--app-link);outline-offset:-3px}
+.sync-status[aria-busy=true]>svg{animation:sync-turn .9s linear infinite}@keyframes sync-turn{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.sync-status[aria-busy=true]>svg{animation:none}}

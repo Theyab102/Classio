@@ -135,10 +135,11 @@ async function runProvider(provider, input, env, fetcher, model, deadline) {
     if (data.promptFeedback?.blockReason || ["SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "RECITATION", "SPII"].includes(candidate?.finishReason)) {
       throw new ProviderError(422, "CONTENT_BLOCKED");
     }
-    if (candidate?.finishReason === "MAX_TOKENS") throw new ProviderError(502, "OUTPUT_LIMIT");
+    if (candidate?.finishReason === "MAX_TOKENS") throw new ProviderError(502, "OUTPUT_LIMIT",true);
     text = candidate?.content?.parts?.filter(part => !part.thought && typeof part.text === "string").map(part => part.text).join("");
   } else {
-    if (data.choices?.[0]?.finish_reason === "length") throw new ProviderError(502, "OUTPUT_LIMIT");
+    if (data.choices?.[0]?.finish_reason === 'content_filter') throw new ProviderError(422,'CONTENT_BLOCKED');
+    if (data.choices?.[0]?.finish_reason === "length") throw new ProviderError(502, "OUTPUT_LIMIT",true);
     text = input.audio ? data.text : data.choices?.[0]?.message?.content;
   }
   if (typeof text !== "string" || !text.trim()) throw new ProviderError(502, "EMPTY_RESPONSE", true);
@@ -158,15 +159,17 @@ async function routeStudy(input, { env = process.env, fetcher = global.fetch, re
         if(cooldown?.until>Date.now())throw new ProviderError(cooldown.code === "PROVIDER_RATE_LIMIT"?429:502,cooldown.code,true,Math.ceil((cooldown.until-Date.now())/1000));
         if(Date.now()>=deadline)throw last||new ProviderError(503,"NETWORK",true);
         const explicit=input.vision?activeEnv.GROQ_VISION_MODEL:activeEnv.GROQ_TEXT_MODEL;
-        const attempts=provider === "groq"&&!input.audio&&!explicit?2:1,tried=[];
+        const attempts=provider === "groq"&&!input.audio&&!explicit?2:1,tried=[];let attemptError;
         for(let attempt=0;attempt<attempts;attempt++){
-          const model=provider === "groq"&&input.audio?undefined:await chooseModel(provider,input,activeEnv,fetcher,tried);
+          let model;
+          try{model=provider === "groq"&&input.audio?undefined:await chooseModel(provider,input,activeEnv,fetcher,tried);}
+          catch(error){if(attemptError&&['MODEL_UNAVAILABLE','VISION_MODEL_UNAVAILABLE'].includes(error.code))throw attemptError;throw error;}
           const blockedModel=failures.get(credentialId(provider,activeEnv)+":"+(model||"audio"));
           if(blockedModel?.until>Date.now())throw new ProviderError(blockedModel.code === "PROVIDER_RATE_LIMIT"?429:503,blockedModel.code,true,Math.ceil((blockedModel.until-Date.now())/1000));
           if(model)tried.push(model);
           report({provider,model:model||"whisper-large-v3-turbo",task:input.audio?"transcription":input.vision?"vision":input.task||"text",...(credential?{keySlot:credential.slot}:{}),code:"ROUTE_SELECTED"});
           try{return{text:await runProvider(provider,input,activeEnv,fetcher,model,deadline),provider};}
-          catch(error){if(!(error instanceof ProviderError)||!error.retryable||error.code === "CREDENTIALS_REJECTED"||attempt === attempts-1||Date.now()>=deadline)throw error;report({provider,code:error.code});if(error.code!=="PROVIDER_RATE_LIMIT")await new Promise(resolve=>setTimeout(resolve,200*(attempt+1)));}
+          catch(error){if(!(error instanceof ProviderError)||!error.retryable||error.code === "CREDENTIALS_REJECTED"||attempt === attempts-1||Date.now()>=deadline)throw error;attemptError=error;report({provider,code:error.code});if(error.code!=="PROVIDER_RATE_LIMIT")await new Promise(resolve=>setTimeout(resolve,200*(attempt+1)));}
         }
       }catch(error){if(!(error instanceof ProviderError))throw error;last=error;report({provider,...(credential?{keySlot:credential.slot}:{}),code:error.code});if(!error.retryable)throw error;}
     }

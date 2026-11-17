@@ -127,9 +127,9 @@ test('permission-denied keeps cached work and reports the denied profile operati
  getDoc.mockRejectedValue(Object.assign(new Error('Denied'),{code:'permission-denied'}));
  render(<App/>);mockAuth.currentUser=account;await act(async()=>{await mockAuthListener(account);});
  expect(screen.getAllByText('My saved chapter').length).toBeGreaterThan(0);expect(setDoc).not.toHaveBeenCalled();
- expect(screen.getByText(/^Cloud access was denied/)).toBeInTheDocument();
+ expect(screen.getByRole('status')).toHaveTextContent('Cloud sync needs attention');
  fireEvent.click(screen.getByRole('button',{name:'Retry sync',exact:true}));await waitFor(()=>expect(account.getIdTokenResult).toHaveBeenCalledWith(true));
- await waitFor(()=>expect(screen.getByText('refreshed ID token')).toBeInTheDocument());
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Retry sync'})).not.toBeDisabled());fireEvent.click(screen.getByRole('button',{name:'Settings',exact:true}));fireEvent.click(screen.getByRole('button',{name:'Sync troubleshooting',exact:true}));await waitFor(()=>expect(screen.getByText('refreshed ID token')).toBeInTheDocument());
  expect(screen.getByText('read profile',{exact:true})).toBeInTheDocument();expect(screen.getByText('users/{uid}',{exact:true})).toBeInTheDocument();expect(screen.getByText('classio-4378f',{exact:true})).toBeInTheDocument();
  expect(document.querySelector('.cloud-sync-details').textContent).not.toContain(account.uid);expect(localStorage.getItem('classio_workspace:'+account.uid)).toContain('Keep this writing');
 });

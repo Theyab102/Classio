@@ -1,5 +1,5 @@
 import {Table,TableView,createTable} from '@tiptap/extension-table';
-import {Plugin} from '@tiptap/pm/state';
+import {Plugin,NodeSelection} from '@tiptap/pm/state';
 import {TableMap,cellAround,selectionCell} from '@tiptap/pm/tables';
 import {closeHistory} from '@tiptap/pm/history';
 
@@ -87,7 +87,19 @@ function resizePlugin() {
 }
 export const NoteTable=Table.extend({
   addProseMirrorPlugins(){return [...this.parent(),resizePlugin()];},
-}).configure({resizable:false,renderWrapper:true,HTMLAttributes:{role:"table"},View:FittedTableView});
+  addKeyboardShortcuts(){
+    const remove=()=>this.editor.state.selection instanceof NodeSelection&&this.editor.state.selection.node.type.name==='table'?this.editor.chain().command(({tr})=>{closeHistory(tr);return true;}).deleteSelection().run():false;
+    const parent=this.parent();
+    return {...parent,Backspace:()=>remove()||parent.Backspace?.({editor:this.editor}),'Delete':()=>remove()||parent.Delete?.({editor:this.editor})};
+  },
+}).configure({resizable:false,allowTableNodeSelection:true,renderWrapper:true,HTMLAttributes:{role:"table"},View:FittedTableView});
+
+export function selectNoteTable(editor) {
+  const selection=editor.state.selection;
+  if(selection instanceof NodeSelection&&selection.node.type.name==='table')return true;
+  for(let depth=selection.$from.depth;depth>0;depth--)if(selection.$from.node(depth).type.name==='table')return editor.chain().focus().setNodeSelection(selection.$from.before(depth)).run();
+  return false;
+}
 
 export function insertNoteTable(editor,{rows=3,cols=3,header=false,html}={}) {
   const {$to}=editor.state.selection;

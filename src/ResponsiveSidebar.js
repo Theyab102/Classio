@@ -78,7 +78,7 @@ export default function ResponsiveSidebar({ mobile, expanded, onExpand, main, ma
         <button type="button" className="navigation-item navigation-settings" aria-label="Settings" title="Settings" aria-current={mainActive === "settings" ? "page" : undefined} onClick={() => choose(() => onNavigate("settings"))}><UiIcon name="settings" />{full && <span>Settings</span>}</button>
         {full ? <ThemeSelector /> : <button type="button" className="navigation-item" onClick={onToggleTheme}
           aria-label={dark ? "Switch to light mode" : "Switch to dark mode"} title="Change appearance">
-          <UiIcon className="theme-mode-icon" name={dark?"moon":"sun"}/>
+          <UiIcon key={dark?'moon':'sun'} className="theme-mode-icon" name={dark?"moon":"sun"}/>
         </button>}
         {full && <p className="navigation-session">{guest ? "Guest work clears when this session ends." : "Signed in. Progress syncs with your account."}</p>}
         {full && <button type="button" className="navigation-item" onClick={() => choose(onSignOut)}>{guest ? "End guest session" : "Sign out"}</button>}
