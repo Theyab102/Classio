@@ -33,6 +33,7 @@ export function studyStyleInstruction() {
 export function hasBlankContent(file) {
   if (!(file._isBlank || file.isBlankDoc || String(file.id).startsWith('blank_'))) return true;
   if (file._fileObj || file.originalName || file.youtubeUrl || file.transcript?.trim()) return true;
+  if(file.voiceNotes?.length||file.recordings?.length||file.podcastAudioKey)return true;
   if (String(file.notes || '').replace(/\s|\u200b/g, '') || String(file.notesHtml || '').replace(/<[^>]*>|&nbsp;|\s|\u200b/g, '') || /<(?:img|table|math)\b|data-classio-equation/i.test(file.notesHtml || '')) return true;
   return !!(file.cards?.length || file.questions?.length || file.quizzes?.length || file.podcastScript?.trim() || file.savedNotes?.length || file.voiceRecordings?.length || Object.keys(file.pdfInk||{}).length || Object.keys(file.noteInk||{}).length || file.course?.units?.length || file.studyCards?.length || file.quiz?.questions?.length || file.presentation?.length || file.podcastEpisodes?.length || file.namedNotes?.length || file.notesInk?.length || Object.values(file.powerPointInk || {}).some(strokes => strokes?.length));
 }

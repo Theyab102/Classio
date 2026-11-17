@@ -54,7 +54,7 @@ export default function Entry() {
             <li>Make notes from your own materials</li>
             <li>Review with flashcards and quizzes</li>
           </ul>
-          <p className="entry-session-note">Every study tool is free to use as a guest. Sign in with Google inside the workspace to save and sync progress. Guest work clears when you reload or close the session.</p>
+          <p className="entry-session-note">Every study tool is free to use as a guest. Guest work stays through refresh in this tab and ends when you close it. Sign in with Google to save and sync across sessions.</p>
         </div>
         <section className="entry-card" aria-labelledby="entry-step">
           {access === "blocked" ? (

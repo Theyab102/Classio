@@ -28,6 +28,12 @@ test("retrying a failed image question keeps its attachment in a valid server re
   expect(request.messages[0].content).toContain("Force is measured in newtons.");
 });
 
+test('an attached image can still be answered when the original file cannot be extracted',async()=>{
+ sendStudyRequest.mockClear();sendStudyRequest.mockResolvedValue('I can explain the attached image.');window.matchMedia=jest.fn(()=>({matches:false,addEventListener:jest.fn(),removeEventListener:jest.fn()}));HTMLElement.prototype.scrollIntoView=jest.fn();
+ function Harness(){const[messages,setMessages]=useState([{role:'user',content:'Explain this image',image:'data:image/png;base64,aGVsbG8=',failed:true}]),[draft,setDraft]=useState(''),[pending,setPending]=useState(false);return <AssistantPanel context={{id:'unreadable',name:'Unavailable original.pdf'}} readSource={()=>Promise.reject(new Error('Original file unavailable'))} messages={messages} onMessagesChange={setMessages} draft={draft} onDraftChange={setDraft} pending={pending} onPendingChange={setPending} onClose={()=>{}}/>;}
+ render(<Harness/>);fireEvent.click(screen.getByRole('button',{name:'Retry response',exact:true}));await screen.findByText('I can explain the attached image.');const request=sendStudyRequest.mock.calls[0][0];expect(parseStudyRequest(request).vision).toBe(true);expect(request.messages[0].content).toContain('original file is not included');
+});
+
 test("a greeting uses a real short request without extracting the current file", async () => {
   window.matchMedia = jest.fn(() => ({ matches: false, addEventListener: jest.fn(), removeEventListener: jest.fn() }));
   HTMLElement.prototype.scrollIntoView = jest.fn(); sendStudyRequest.mockClear();

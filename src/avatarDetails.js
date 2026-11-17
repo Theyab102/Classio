@@ -40,6 +40,8 @@ export function addAvatarDetails({ch,root,mesh,oval,tube,ring,material,white,ink
 
   if(ch.customAccessory)return;
   const accessory=Number(ch.accessoryStyle)||0;
+  if(accessory===9){oval(trim,-.35,1.70,.39,.055,.055,.025);tube(trim,[[-.35,1.70,.39],[-.35,1.57,.40]],.008);}
+  if(accessory===10){star(trim,.25,1.46,.43,.09);oval(accent,.25,1.46,.45,.035,.035,.02);}
   if(accessory===1){oval(accent,0,1.13,-.32,.29,.34,.14);oval(accent,0,1.02,-.45,.20,.15,.065);for(const sign of [-1,1])tube(accent,[[sign*.23,1.44,-.16],[sign*.30,1.26,.20],[sign*.25,.91,-.13]],.023);}
   if([2,8].includes(accessory)){const x=accessory===2?.39:.25;oval(accent,x,.93,.15,.20,.19,.10);tube(accent,[[-.23,1.48,.11],[.04,1.19,.27],[x,1.0,.25]],.025);oval(trim,x,.95,.26,.025,.023,.012);}
   if(accessory===3)for(const sign of [-1,1]){const wing=oval(trim,sign*.45,1.30,-.28,.30,.34,.07);wing.rotation.z=sign*-.4;for(let i=0;i<3;i++){const feather=oval(trim,sign*(.36+i*.09),1.11+i*.08,-.25,.08,.17,.04);feather.rotation.z=sign*-.5;}}

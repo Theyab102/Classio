@@ -42,6 +42,17 @@ export async function prepareNoteImage(file) {
   }
 }
 
+export async function prepareAssistantImage(file) {
+  if(!file||!/^image\/(?:png|jpe?g|webp|gif|avif)$/i.test(file.type)||file.size>20*1024*1024)throw new Error('Choose a PNG, JPEG, WebP, GIF or AVIF image under 20 MB. Export HEIC images as JPEG first.');
+  const url=URL.createObjectURL(file);
+  try{
+    const image=new Image();image.src=url;try{await image.decode();}catch{throw new Error('This image could not be opened. Export it as PNG or JPEG and try again.');}
+    const canvas=document.createElement('canvas'),scale=Math.min(1,1800/Math.max(image.naturalWidth,image.naturalHeight));canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));const context=canvas.getContext('2d');context.fillStyle='white';context.fillRect(0,0,canvas.width,canvas.height);context.drawImage(image,0,0,canvas.width,canvas.height);
+    for(const quality of [.9,.78,.6,.4]){const data=canvas.toDataURL('image/jpeg',quality);if(data.length<2800000)return data;}
+    throw new Error('This image is too detailed to attach. Crop to the area you want help with.');
+  }finally{URL.revokeObjectURL(url);}
+}
+
 export async function prepareSourceFigure(figure) {
   if (!figure?.src?.startsWith("data:") || figure.src.length < 180000) return figure;
   const image = new Image(); image.src = figure.src; await image.decode();

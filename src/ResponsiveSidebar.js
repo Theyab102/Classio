@@ -80,7 +80,7 @@ export default function ResponsiveSidebar({ mobile, expanded, onExpand, main, ma
           aria-label={dark ? "Switch to light mode" : "Switch to dark mode"} title="Change appearance">
           <UiIcon key={dark?'moon':'sun'} className="theme-mode-icon" name={dark?"moon":"sun"}/>
         </button>}
-        {full && <p className="navigation-session">{guest ? "Guest work clears when this session ends." : "Signed in. Progress syncs with your account."}</p>}
+        {full && <p className="navigation-session">{guest ? "Guest work stays through refresh; it ends when this tab closes." : "Signed in. Progress syncs with your account."}</p>}
         {full && <button type="button" className="navigation-item" onClick={() => choose(onSignOut)}>{guest ? "End guest session" : "Sign out"}</button>}
       </div>
   </aside>;

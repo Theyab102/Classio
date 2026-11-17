@@ -68,3 +68,5 @@
   .entry-feature-list { display:none; }
   .entry-main { padding-top:1.5rem; }
 }
+[data-theme=dark] img[src="/ClassioLogo-transparent.png"]{filter:brightness(1.85) saturate(.65);transition:filter 220ms ease}
+@media(prefers-reduced-motion:reduce){[data-theme=dark] img[src="/ClassioLogo-transparent.png"]{transition:none}}

@@ -14,3 +14,6 @@ test('existing option indices remain compatible and the randomizer reaches expan
  expect(AVATAR_OPTIONS.hairStyle[13]).toBe('Two buns');expect(AVATAR_OPTIONS.hairStyle[16]).toBe('Swept back');expect(AVATAR_OPTIONS.topStyle[15]).toBe('Denim');
  const look=randomCharacter({...DEFAULT_CHARACTER,name:'Saved',designs:[{id:'keep'}]},()=>.9999);expect(look.topStyle).toBe(35);expect(look.hat).toBe(17);expect(look.shoeStyle).toBe(9);expect(look.name).toBe('Saved');expect(look.designs).toEqual([{id:'keep'}]);
 });
+test('hijabs have four distinct cloth shapes, an open face and no visible hair geometry',()=>{
+ const seen=new Set();for(let hijabStyle=1;hijabStyle<AVATAR_OPTIONS.hijabStyle.length;hijabStyle++)inspect({hijabStyle,hat:0,hairStyle:4},model=>{const cloth=model.children.find(node=>node.userData.avatarPart==='hijab');expect(cloth).toBeDefined();expect(cloth.geometry.attributes.position.count).toBeGreaterThan(200);const current=signature(model);expect(seen.has(current)).toBe(false);seen.add(current);});expect(randomCharacter({...DEFAULT_CHARACTER,hijabStyle:2},()=>.99).hat).toBe(0);
+});

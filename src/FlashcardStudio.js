@@ -1,3 +1,4 @@
+import {playStudySound} from "./studySounds";
 import useStudyFullscreen from './useStudyFullscreen';
 import {studySource,languageInstruction} from './studyContext';
 import {parseAiJson} from './aiJson';
@@ -47,6 +48,7 @@ export default function FlashcardStudio({ file, onUpdate, getFileText }) {
   }
   function grade(remembered) {
     if (!card) return;
+    playStudySound(remembered?"correct":"wrong");
     const review = scheduleCardReview(reviews[card.id], remembered);
     update({ cardProgress: { ...progress, known: { ...known, [card.id]: remembered && (review.level >= 3 || !!known[card.id]) }, starred,
       review: { ...reviews, [card.id]: review }, activeCardId: visible[Math.min(index + 1, visible.length - 1)]?.id } });

@@ -44,7 +44,7 @@ export default function LibraryHome({ folders, guest, signIn, signInPending, sig
     {details&&<MaterialDetails {...details} onClose={()=>setDetails(null)} onDetect={classifyMaterial} onApply={patch=>updateMaterial?.(details.file,patch)}/>}
     <header className="library-heading"><div><p className="eyebrow">YOUR STUDY SPACE</p><h1>Library</h1><p>Bring your material. Choose how to study it.</p></div>
       <ActionMenu label="Create new" primary icon="plus" items={actions}>Create new</ActionMenu></header>
-    {guest && <div className="library-guest"><p><strong>You’re studying as a guest.</strong> Every tool is free. Sign in to save and sync; guest work clears when the session ends.</p>
+    {guest && <div className="library-guest"><p><strong>You’re studying as a guest.</strong> Every tool is free. Sign in to save and sync; guest work stays through refresh and ends when this tab closes.</p>
       <button className="text-button" disabled={signInPending} onClick={signIn}>{signInPending ? "Connecting…" : "Sign in to save"}</button>{signInError && <p role="alert">{signInError}</p>}</div>}
     <section className="library-quick-actions" aria-label="Start studying">
       {[

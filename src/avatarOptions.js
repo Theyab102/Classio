@@ -1,12 +1,13 @@
-export const DEFAULT_CHARACTER = { skin: "#edc5a1", hair: "#493326", hairStyle: 1, eyes: "#487b9b", top: "#528ca6", bg: "#e6f2fb", mouth: 0, eyebrow: 0, eyeShape: 0, topStyle: 1, blush: true, lips: false, freckles: false, lipColor: "#b96565", hat: 0, hatColor: "#739db8", glasses: 0, glassesColor: "#394957", facialHair: 0, necklace: 0, necklaceColor: "#c99d48", earring: 0, earringColor: "#c99d48", name: "", pantsStyle:0, shoeStyle:0, accessoryStyle:0, bottom:"#3b4b60", shoes:"#e3d4b7", outfitAccent:"#fffaf1", accessoryColor:"#b66957" };
+export const DEFAULT_CHARACTER = { skin: "#edc5a1", hair: "#493326", hairStyle: 1, eyes: "#487b9b", top: "#528ca6", bg: "#e6f2fb", mouth: 0, eyebrow: 0, eyeShape: 0, topStyle: 1, blush: true, lips: false, freckles: false, lipColor: "#b96565", hijabStyle:0,hijabColor:"#a46378", hat: 0, hatColor: "#739db8", glasses: 0, glassesColor: "#394957", facialHair: 0, necklace: 0, necklaceColor: "#c99d48", earring: 0, earringColor: "#c99d48", name: "", pantsStyle:0, shoeStyle:0, accessoryStyle:0, bottom:"#3b4b60", shoes:"#e3d4b7", outfitAccent:"#fffaf1", accessoryColor:"#b66957" };
 export const AVATAR_OPTIONS = {
+  hijabStyle:["None","Classic hijab","Wrapped hijab","Sport hijab","Draped hijab"],
   hairStyle: ["Close crop", "Side part", "Fringe", "Textured", "Long", "Wavy", "Ponytail", "Bun", "Afro", "Braids", "Curly", "Locs", "Faux hawk", "Two buns", "Mohawk", "Dreadlocks", "Swept back", "Chin-length bob", "Pixie cut", "Curtain bangs", "Shag", "Long bob", "Low ponytail", "Pigtails", "High puff", "Cornrows", "Side braid", "Half-up bun", "Wolf cut", "Buzz fade", "Braided buns", "Round bob", "Bald"],
   eyeShape: ["Round", "Soft", "Lashes", "Relaxed", "Joyful", "Bright", "Almond", "Sleepy"], mouth: ["Smile", "Thoughtful", "Surprised", "Smirk", "Neutral", "Beaming", "Delighted", "Toothy grin", "Small smile", "Pout"],
   eyebrow: ["Arched", "Straight", "Full", "Soft angle", "Curious", "Gentle", "Rounded", "Bold arch", "Tapered"],
   topStyle: ["T-shirt", "Hoodie", "Jacket", "Tank top", "Suit", "Knot top", "Polo", "Jersey", "Striped top", "Dress", "Blazer", "Graphic tee", "Varsity", "Wrap top", "Turtleneck", "Denim", "Cable-knit sweater", "Oxford shirt", "Camp shirt", "Cardigan", "Dungarees", "Raglan tee", "Raincoat", "Kimono cardigan", "Sailor shirt", "Puff-sleeve blouse", "Peplum top", "Fleece vest", "Patterned sweater", "Chore jacket", "Pinafore", "Sweater vest", "Track jacket", "Bowling shirt", "Ruffle blouse", "Longline coat"],
   pantsStyle: ["Match outfit", "Shorts", "Jeans", "Joggers", "Pleated skirt", "Cargo pants", "Overalls", "Wide-leg trousers", "Chinos"],
   shoeStyle: ["Sneakers", "Ankle boots", "Ballet flats", "Sandals", "High-tops", "Loafers", "Rain boots", "Slippers", "Moccasins", "Lace-up shoes"],
-  accessoryStyle: ["None", "Backpack", "Satchel", "Little wings", "Curled tail", "Watch", "Wristbands", "Star badge", "Crossbody bag"],
+  accessoryStyle: ["None", "Backpack", "Satchel", "Little wings", "Curled tail", "Watch", "Wristbands", "Star badge", "Crossbody bag", "Hijab pin", "Scarf brooch"],
   hat: ["None", "Beanie", "Cap", "Cowboy", "Graduation", "Crown", "Party hat", "Headband", "Bucket hat", "Beret", "Newsboy cap", "Sun hat", "Knit cap", "Ribbon bow", "Visor", "Earflap hat", "Flower crown", "Top hat"],
   glasses: ["None", "Round", "Rectangle", "Cat-eye", "Sunglasses", "Hearts", "Aviator", "Monocle", "Browline", "Oversized square", "Sport frames", "Slim oval", "Star frames"],
   facialHair: ["None", "Stubble", "Moustache", "Short beard", "Full beard", "Goatee", "Sideburns", "Chin patch"], necklace: ["None", "Chain", "Pendant", "Beads", "Choker", "Pearl", "Scarf", "Bow tie", "Ribbon", "Crescent"],
@@ -31,6 +32,7 @@ export function randomCharacter(current, random = Math.random, preset = "any") {
   if(presets[preset]) for(const key of ["hairStyle","topStyle"]) next[key] = choose(presets[preset][key]);
   for(const key of ["customClothing","customHair","customBottom","customShoes","customHat","customGlasses","customNecklace","customEarring","customAccessory"]) next[key] = null;
   next.hat = random() < .75 ? 0 : 1 + Math.floor(random() * (AVATAR_OPTIONS.hat.length-1));
+  if(next.hijabStyle>0)next.hat=0;
   next.glasses = random() < .6 ? 0 : 1 + Math.floor(random() * (AVATAR_OPTIONS.glasses.length-1));
   next.accessoryStyle = random()<.6?0:choose(AVATAR_OPTIONS.accessoryStyle.map((_,i)=>i).slice(1));
   next.necklace = random()<.65?0:choose(AVATAR_OPTIONS.necklace.map((_,i)=>i).slice(1));

@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import {addAvatarDetails} from "./avatarDetails";
 import {addWardrobe} from "./avatarWardrobe";
+import {addHijab} from './avatarHijab';
 import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
 
 // Original, procedural Classio characters. No third-party character assets.
@@ -58,7 +59,7 @@ export function createCharacter(character = {}, textures = {}) {
   const long = [4,5,9,11,15,17,20,21,26,27,28,31].includes(style);
   if (long) oval(hair, 0, 2.00, -.18, .655, ch.customHair ? .64 + Math.min(1,Math.max(0,ch.customHair.length || 0)) * .35 : [17,31].includes(style) ? .61 : .84, .43);
   oval(skin, 0, 2.16, 0, .64, .60, .55);
-  for (const sign of [-1, 1]) {
+  if(!ch.hijabStyle)for (const sign of [-1, 1]) {
     oval(skin, sign * .635, 2.12, -.015, .14, .17, .12);
     const inner = material(new THREE.Color(skinColor).multiplyScalar(.79)); oval(inner, sign * .67, 2.12, .069, .065, .085, .025);
   }
@@ -197,7 +198,7 @@ export function createCharacter(character = {}, textures = {}) {
     else if(shape===3)tube(accessory,[[0,.66,-.12],[.12,.55,-.45],[.4,.75,-.55],[.45,.9,-.48]],.065);
     else oval(accessory,.12,1.2,.247,.085,.095,.02);
   }
-  if (ch.hat > 0) {
+  if (ch.hat > 0 && !ch.hijabStyle) {
     const hat = fitted(material(validColor(ch.hatColor, "#739db8")),'customHat'), number = Number(ch.hat);
     if ([1, 2, 8].includes(number)) { mesh(hairCap, hat, [0, 2.36, -.02], [.70, .56, .61]); if (number === 1) oval(hat, 0, 2.94, -.02, .10, .10, .10); if (number === 2) oval(hat, 0, 2.59, .54, .53, .035, .29); if (number === 8) mesh(new THREE.CylinderGeometry(.69, .78, .08, 48), hat, [0, 2.59, -.01], [1, 1, .91], root, true); }
     else if (number === 3) { mesh(new THREE.CylinderGeometry(.52, .56, .31, 40), hat, [0, 2.85, -.04], [1, 1, .8], root, true); oval(hat, 0, 2.69, -.01, .88, .045, .70); }
@@ -206,7 +207,8 @@ export function createCharacter(character = {}, textures = {}) {
     else if (number === 6) { mesh(new THREE.ConeGeometry(.36, .77, 40), hat, [0, 3.01, -.03], [1, 1, .9], root, true); oval(white, 0, 3.4, -.03, .07, .07, .07); }
     else if (number === 7) tube(hat, [[-.65, 2.18, .02], [-.55, 2.65, -.02], [0, 2.81, -.04], [.55, 2.65, -.02], [.65, 2.18, .02]], .055);
   }
-  addAvatarDetails({ch,root,mesh,oval,limb,tube,ring,material,white,ink,hair,jewelry});
+  if(ch.hijabStyle>0){const hidden=[];root.traverse(node=>{if(node.material===hair)hidden.push(node);});hidden.forEach(node=>node.removeFromParent());addHijab({ch,root,mesh,tube,oval,material});}
+  addAvatarDetails({ch:{...ch,hat:ch.hijabStyle>0?0:ch.hat},root,mesh,oval,limb,tube,ring,material,white,ink,hair,jewelry});
   root.userData.dispose = () => { owned.forEach(geometry => geometry.dispose()); const materials = new Set(createdMaterials); root.traverse(item => { if (item.material) materials.add(item.material); }); materials.forEach(value => value.dispose()); };
   return root;
 }

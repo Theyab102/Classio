@@ -1,3 +1,4 @@
+import {playStudySound} from "./studySounds";
 import ChoiceMenu from './ChoiceMenu';
 import StudioDialog from './StudioDialog';
 import {studySource,responseLanguage} from './studyContext';
@@ -44,7 +45,7 @@ export default function LearnMode({ file, getFileText, onUpdate, onUseAsNotes })
     window.speechSynthesis?.cancel(); setSpeaking(false); setActive(index); setChoice(file.course?.answers?.[index] ?? null); updateCourse({ active: index });
   }
   function answer(index) {
-    setChoice(index); updateCourse({ answers: { ...file.course?.answers, [active]: index }, completed: index === unit.correct && !completed.includes(active) ? [...completed, active] : completed });
+    playStudySound(index===unit.correct?"correct":"wrong");setChoice(index); updateCourse({ answers: { ...file.course?.answers, [active]: index }, completed: index === unit.correct && !completed.includes(active) ? [...completed, active] : completed });
   }
   function listen() {
     if (speaking) { window.speechSynthesis.cancel(); setSpeaking(false); return; }

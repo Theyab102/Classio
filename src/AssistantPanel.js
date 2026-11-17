@@ -4,7 +4,8 @@ import useVisualViewport from "./useVisualViewport";
 import { MATH_OUTPUT_GUIDE } from "./mathMarkdown";
 import { lockBodyScroll } from "./bodyScrollLock";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { prepareNoteImage } from "./documentMedia";
+import { prepareAssistantImage } from "./documentMedia";
+import useVoiceCapture from './useVoiceCapture';
 import { sendStudyRequest } from "./studyTools";
 import UiIcon from "./UiIcon";
 import StudyMarkdown from "./StudyMarkdown";
@@ -12,7 +13,8 @@ import WorkspaceArt from "./WorkspaceArt";
 import { assistantHistory, isSimpleGreeting, materialExcerpt } from "./assistantRequest";
 
 export default function AssistantPanel({ onClose, context, activity, library = [], readSource, messages, onMessagesChange, pending, onPendingChange, draft = "", onDraftChange, controllerRef, storageNotice, chats=[], activeChatId, onNewChat, onSelectChat, onDeleteChat, onRenameChat, width=400, maxWidth, onResize, suspended=false }) {
-  const [error, setError] = useState(""), [attachment, setAttachment] = useState(null), [listening, setListening] = useState(false);
+  const [error, setError] = useState(""), [attachment, setAttachment] = useState(null), [attaching,setAttaching]=useState(false);
+  const capture=useVoiceCapture(text=>onDraftChange(`${draft}${draft?' ':''}${text}`)),attachmentVersion=useRef({value:0});
   const [compact, setCompact] = useState(() => window.innerWidth < 900);
   const [retryIn, setRetryIn] = useState(0);
   const [chatList,setChatList]=useState(false),[rename,setRename]=useState(null),[remove,setRemove]=useState(null);
@@ -21,10 +23,9 @@ export default function AssistantPanel({ onClose, context, activity, library = [
   const resize=value=>onResize?.(Math.max(320,Math.min(maximum(),Math.round(value))));
   useEffect(()=>{const fit=()=>{if(width>maximum())resize(maximum());};window.addEventListener("resize",fit);return()=>window.removeEventListener("resize",fit);});
   useEffect(() => { if (!retryIn) return; const timer = setTimeout(() => setRetryIn(value => Math.max(0, value - 1)), 1000); return () => clearTimeout(timer); }, [retryIn]);
-  const panel = useRef(null), input = useRef(null), upload = useRef(null), end = useRef(null), recognition = useRef(null), localRequest = useRef(null), sending = useRef(false);
+  const panel = useRef(null), input = useRef(null), upload = useRef(null), end = useRef(null), localRequest = useRef(null), sending = useRef(false);
   const request = controllerRef || localRequest;
   const closeRef = useRef(onClose); closeRef.current = onClose;
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   useEffect(() => {
     const media = window.matchMedia("(max-width: 899px)");
     const update = event => setCompact(event.matches);
@@ -33,8 +34,9 @@ export default function AssistantPanel({ onClose, context, activity, library = [
   }, []);
   useEffect(() => {
     const previous = document.activeElement;
+    const uploads=attachmentVersion.current;
     input.current?.focus({ preventScroll: true });
-    return () => { recognition.current?.abort(); if (previous?.isConnected) previous.focus({ preventScroll: true }); };
+    return () => { uploads.value++; if (previous?.isConnected) previous.focus({ preventScroll: true }); };
   }, []);
   useVisualViewport(panel);
   useLayoutEffect(()=>{const node=input.current;if(!node)return;node.style.height="auto";node.style.height=Math.min(node.scrollHeight,compact?144:180)+"px";},[draft,compact]);
@@ -55,22 +57,13 @@ export default function AssistantPanel({ onClose, context, activity, library = [
 
   async function attach(file) {
     if (!file) return;
-    setError("");
-    try { setAttachment({ src: await prepareNoteImage(file), name: file.name }); }
-    catch (failure) { setError(failure.message); }
-  }
-  function dictate() {
-    if (listening) { recognition.current?.stop(); return; }
-    if (!SpeechRecognition) return;
-    const instance = new SpeechRecognition(); recognition.current = instance;
-    instance.lang = navigator.language || "en-US"; instance.interimResults = false;
-    instance.onresult = event => onDraftChange(`${draft}${draft ? " " : ""}${event.results[0][0].transcript}`);
-    instance.onend = () => setListening(false);
-    instance.onerror = () => { setListening(false); setError("Microphone input was unavailable. You can type your question instead."); };
-    try { instance.start(); setListening(true); } catch { setError("Could not start microphone input."); }
+    setError("");setAttachment(null);setAttaching(true);const version=++attachmentVersion.current.value;
+    try { const src=await prepareAssistantImage(file);if(version===attachmentVersion.current.value)setAttachment({src,name:file.name}); }
+    catch (failure) {if(version===attachmentVersion.current.value)setError(failure.message);}
+    finally{if(version===attachmentVersion.current.value)setAttaching(false);}
   }
   async function send(retry = false) {
-    if (pending || sending.current || retryIn) return;
+    if (pending || sending.current || retryIn||attaching||capture.busy||capture.recording) return;
     const last = messages.at(-1), text = retry && last?.failed ? last.content : draft.trim();
     const attachedImage = retry && last?.failed ? last.image : attachment?.src;
     if (!text && !attachedImage) return;
@@ -81,7 +74,11 @@ export default function AssistantPanel({ onClose, context, activity, library = [
     sending.current = true; onPendingChange(true); onMessagesChange(next); onDraftChange(""); setAttachment(null); setError("");
     try {
       const greeting = !attachedImage && isSimpleGreeting(text);
-      const material = context && !greeting ? await studySource(context,readSource?()=>readSource(context):undefined) : "";
+      let material='';
+      if(context&&!greeting){
+        if(attachedImage)material='The original file is not included in this image question. Use the attached image and these saved notes, if relevant:\n'+String(context.notes||context.transcript||'').slice(0,6500);
+        else material=await studySource(context,readSource?()=>readSource(context):undefined);
+      }
       const focus = !greeting && activity && context && activity.fileId === context.id ? `\nCurrent activity: ${activity.type}\n${activity.title || ""}\n${/^notes/i.test(activity.type) ? "" : materialExcerpt(activity.text || "", text, 1600)}` : "";
       const scope = context ? `Current material: ${context.name}\nSelected excerpts (other sections may be omitted):\n${materialExcerpt(material, text)}${focus}`
         : `Library titles and folders only:\n${library.slice(0, 80).map(item => `${item.folder}: ${item.name}`).join("\n")}`;
@@ -111,14 +108,17 @@ export default function AssistantPanel({ onClose, context, activity, library = [
           {message.image && <img className="assistant-attachment" src={message.image} alt="Your attached study material" />}<StudyMarkdown text={message.content} />{message.failed && <div className="message-failed"><p>Response unavailable</p><button type="button" className="text-button" disabled={pending || retryIn > 0} onClick={() => send(true)}>{retryIn ? `Retry in ${retryIn}s` : "Retry response"}</button></div>}</article>)}
         {pending && <div className="assistant-thinking" role="status"><span /><span /><span /><span className="sr-only">Classio is responding</span></div>}<div ref={end} />
       </div>
-      <div className="assistant-composer-wrap">{storageNotice && <p className="conversation-storage" role="status">{storageNotice}</p>}{error && <div className="assistant-error" role="alert"><p>{error}</p></div>}
+      <div className="assistant-composer-wrap">{storageNotice && <p className="conversation-storage" role="status">{storageNotice}</p>}{(error||capture.error) && <div className="assistant-error" role="alert"><p>{error||capture.error}</p></div>}
+        {attaching&&<p role="status">Preparing image…</p>}
+        {capture.audioUrl&&<div className="assistant-voice-review"><audio controls src={capture.audioUrl} aria-label="Review voice message"/><small>Review or edit the text below, then choose Send.</small></div>}
+        {(capture.recording||capture.busy)&&<div className="studio-controls"><span role="status">{capture.recording?`Recording · ${capture.seconds}s`:capture.phase==='permission'?'Waiting for microphone permission…':'Transcribing…'}</span><button className="quiet-button" type="button" onClick={capture.cancel}>Cancel voice message</button></div>}
         {attachment && <div className="attachment-preview"><img src={attachment.src} alt="Attachment preview" /><span>{attachment.name}</span><button aria-label="Remove attachment" onClick={() => setAttachment(null)}><UiIcon name="close" size={16} /></button></div>}
         <form className="assistant-composer" aria-label="Message Classio" onSubmit={event => { event.preventDefault(); send(); }}><textarea ref={input} aria-label="Message" value={draft} maxLength={8000} rows={2} wrap="soft" placeholder="Ask Classio anything..."
-          onChange={event => onDraftChange(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); send(); } }} />
-          <div className="composer-actions"><button type="button" className="quiet-button" aria-label="Attach image" title="Attach a study image" onClick={() => upload.current.click()}><UiIcon name="image" /></button><input ref={upload} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={event => { attach(event.target.files?.[0]); event.target.value = ""; }} />
-            {SpeechRecognition && <button type="button" className="quiet-button" aria-label={listening ? "Stop microphone" : "Dictate question"} aria-pressed={listening} onClick={dictate}><UiIcon name="mic" /></button>}
+          onPaste={event=>{const image=[...event.clipboardData.items].find(item=>item.type.startsWith('image/'));if(image){event.preventDefault();attach(image.getAsFile());}}} onChange={event => onDraftChange(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); send(); } }} />
+          <div className="composer-actions"><button type="button" className="quiet-button" aria-label="Attach image" title="Attach a study image" onClick={() => upload.current.click()}><UiIcon name="image" /></button><input ref={upload} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" hidden onChange={event => { attach(event.target.files?.[0]); event.target.value = ""; }} />
+            <button type="button" className="quiet-button" disabled={pending||capture.busy} aria-label={capture.recording ? "Stop microphone" : "Dictate question"} aria-pressed={capture.recording} onClick={capture.recording?capture.stop:capture.start}><UiIcon name={capture.recording?'stop':'mic'} /></button>
             <small>Enter to send · Shift + Enter for a new line</small>
-            {pending ? <button className="quiet-button" type="button" onClick={() => request.current?.abort()}>Stop</button> : <button className="quiet-button is-primary" type="submit" disabled={retryIn > 0 || (!draft.trim() && !attachment)}><UiIcon name="send" /><span>Send</span></button>}</div>
+            {pending ? <button className="quiet-button" type="button" onClick={() => request.current?.abort()}>Stop</button> : <button className="quiet-button is-primary" type="submit" disabled={attaching||capture.busy||capture.recording||retryIn > 0 || (!draft.trim() && !attachment)}><UiIcon name="send" /><span>Send</span></button>}</div>
         </form><p className="assistant-privacy">{context ? "Only this material, your conversation and attachments are sent." : "Only Library titles, your conversation and attachments are sent."} AI can make mistakes; check important details.</p>
       </div>
     </aside>
