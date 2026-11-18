@@ -50,7 +50,8 @@
     "test:notes": "node scripts/notes-browser.cjs",
     "test:polish": "node scripts/polish-browser.cjs",
     "test:sessions": "node scripts/session-browser.cjs",
-    "test:podcast": "node scripts/podcast-inline-browser.cjs"
+    "test:podcast": "node scripts/podcast-inline-browser.cjs",
+    "test:tablet": "node scripts/tablet-input-browser.cjs"
   },
   "eslintConfig": {
     "extends": [

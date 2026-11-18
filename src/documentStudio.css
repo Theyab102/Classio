@@ -61,7 +61,13 @@
 .pdf-page-frame { position:relative; margin-inline:auto; background:#fff; box-shadow:0 4px 18px #0005; }
 .pdf-original-canvas { display:block; width:100%; height:100%; }
 .pdf-render-status { padding:.45rem .7rem; color:var(--studio-muted); font-size:.86rem; }
-.studio-ink { position:absolute; inset:0; width:100%; height:100%; touch-action:none; cursor:crosshair; z-index:2; }
+.studio-ink { position:absolute; inset:0; width:100%; height:100%; touch-action:pinch-zoom; cursor:crosshair; z-index:2; }
+.ink-history {display:flex;align-items:center;gap:4px;padding-right:8px;border-right:1px solid var(--studio-rule)}
+.studio-controls .ink-history button {display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:44px;min-height:44px;border:0;background:transparent;border-radius:8px}
+.ink-history button:disabled {opacity:.35}
+.ink-finger-option {display:inline-flex;gap:6px;align-items:center}
+.ink-finger-option input {width:16px;height:16px}
+.pdf-scroll,.presentation-source-scroll {touch-action:pinch-zoom}
 .studio-ink[data-tool=pan] { pointer-events:none; touch-action:auto; }
 .ppt-document { width:100%; max-width:1000px; margin-inline:auto; min-height:0; }
 .ppt-page { container-type:inline-size; position:relative; width:100%; color:#182420; line-height:1.3; overflow:auto; padding:2.8%; }

@@ -157,3 +157,69 @@ test('Groq content-filter finish reasons stop without fallback to another provid
  await assert.rejects(generateStudy(input,{env,fetcher:async()=>{calls++;return{ok:true,json:async()=>({choices:[{finish_reason:'content_filter',message:{content:''}}]})};}}),error=>error.code==='CONTENT_BLOCKED');
  assert.equal(calls,1);
 });
+
+test('a stalled primary is aborted and a free provider answers; later requests skip its cooldown',async()=>{
+ const seen=[],settings={...env,AI_PRIMARY_TIMEOUT_MS:'1000'};let primarySignal;
+ const options={env:settings,fetcher:async(url,request)=>{
+  seen.push(url.includes('groq.com')?'groq':'gemini');
+  if(url.includes('groq.com')){primarySignal=request.signal;return new Promise(()=>{});}
+  return{ok:true,json:async()=>({candidates:[{content:{parts:[{text:'Fallback answer'}]}}]})};
+ }};
+ const at=Date.now();assert.equal((await generateStudy(input,options)).text,'Fallback answer');
+ assert(primarySignal.aborted);assert(Date.now()-at<2500);
+ assert.equal((await generateStudy({...input,messages:[{role:'user',content:'Another question'}]},options)).provider,'gemini');
+ assert.deepEqual(seen,['groq','gemini','gemini']);
+});
+test('a response whose body stalls also leaves time for fallback',async()=>{
+ let paidSignal;
+ const result=await generateStudy(input,{env:{...env,AI_PRIMARY_TIMEOUT_MS:'1000'},fetcher:async(url,request)=>{
+  if(url.includes('groq.com')){paidSignal=request.signal;return{ok:true,json:()=>new Promise(()=>{})};}
+  return{ok:true,json:async()=>({candidates:[{content:{parts:[{text:'Free response'}]}}]})};
+ }});
+ assert.equal(result.text,'Free response');assert(paidSignal.aborted);
+});
+test('ordinary successful primary work never consumes either Gemini key',async()=>{
+ const calls=[];await generateStudy({...input,task:'notes'},{env:{...env,GEMINI_API_KEY_2:'second'},fetcher:async(url,request)=>{
+  calls.push(request.headers);return{ok:true,json:async()=>({choices:[{message:{content:'Notes'}}]})};
+ }});assert.equal(calls.length,1);assert.equal(calls[0]['x-goog-api-key'],undefined);
+});
+test('free fallback work is divided between slots by task and recent reserved work',async()=>{
+ const seen=[],settings={GEMINI_ENABLED:'true',GEMINI_MODEL:'test',GEMINI_API_KEY:'first',GEMINI_API_KEY_2:'second'};
+ const options={env:settings,fetcher:async(url,request)=>{seen.push(request.headers['x-goog-api-key']);return{ok:true,json:async()=>({candidates:[{content:{parts:[{text:'Answer'}]}}]})};}};
+ await generateStudy({...input,task:'notes'},options);
+ await generateStudy({...input,task:'conversation'},options);
+ await generateStudy({...input,task:'flashcards'},options);
+ await generateStudy({...input,task:'questions'},options);
+ assert.deepEqual(seen,['first','second','first','second']);
+});
+test('simultaneous different requests reserve separate free slots before either completes',async()=>{
+ const seen=[],releases=[],settings={GEMINI_ENABLED:'true',GEMINI_MODEL:'test',GEMINI_API_KEY:'first',GEMINI_API_KEY_2:'second'};
+ const fetcher=async(url,request)=>{seen.push(request.headers['x-goog-api-key']);await new Promise(resolve=>releases.push(resolve));return{ok:true,json:async()=>({candidates:[{content:{parts:[{text:'Answer'}]}}]})};};
+ const work=[generateStudy({...input,task:'notes'},{env:settings,fetcher}),generateStudy({...input,task:'flashcards'},{env:settings,fetcher})];
+ await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(seen,['first','second']);for(const release of releases)release();await Promise.all(work);
+});
+
+test('the primary model catalog body cannot hold the request past the fallback deadline',async()=>{
+ const seen=[];
+ const result=await generateStudy(input,{env:{...env,GROQ_TEXT_MODEL:'',AI_PRIMARY_TIMEOUT_MS:'1000'},fetcher:async(url)=>{
+  seen.push(url);if(url.includes('groq.com'))return{ok:true,json:()=>new Promise(()=>{})};
+  return{ok:true,json:async()=>({candidates:[{content:{parts:[{text:'Catalog fallback'}]}}]})};
+ }});
+ assert.equal(result.text,'Catalog fallback');assert.equal(seen.length,2);assert(seen[0].endsWith('/models'));
+});
+test('conversation fallback prefers the second free slot when both have no recent load',async()=>{
+ let key;await generateStudy({...input,task:'conversation'},{env:{GEMINI_ENABLED:'true',GEMINI_MODEL:'test',GEMINI_API_KEY:'first',GEMINI_API_KEY_2:'second'},fetcher:async(url,request)=>{key=request.headers['x-goog-api-key'];return{ok:true,json:async()=>({candidates:[{content:{parts:[{text:'Answer'}]}}]})};}});assert.equal(key,'second');
+});
+
+test('requests during network cooldown do not keep extending it indefinitely',async()=>{
+ const realNow=Date.now,base=realNow();let offset=0,primaryCalls=0;Date.now=()=>base+offset;
+ try{
+  const options={env,fetcher:async url=>{
+   if(url.includes('groq.com')){if(++primaryCalls===1)throw Error('offline');return{ok:true,json:async()=>({choices:[{message:{content:'Recovered'}}]})};}
+   return{ok:true,json:async()=>({candidates:[{content:{parts:[{text:'Fallback'}]}}]})};
+  }};
+  assert.equal((await generateStudy(input,options)).provider,'gemini');offset=20000;
+  assert.equal((await generateStudy(input,options)).provider,'gemini');offset=31000;
+  assert.equal((await generateStudy(input,options)).provider,'groq');assert.equal(primaryCalls,2);
+ }finally{Date.now=realNow;}
+});

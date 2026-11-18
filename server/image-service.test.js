@@ -23,3 +23,10 @@ test('optional licensed image sources retain attribution, reject unlicensed Goog
  assert.equal(result.images.length,3);assert(result.images.every(image=>image.source&&image.credit));assert(!result.images.some(image=>image.src.includes('unlicensed')));
  assert.equal(await trackImageDownload('../bad',{env,fetcher:()=>{throw new Error('must not fetch');}}),false);
 });
+
+test('image generation shares task/load balancing across the two free Gemini slots',async()=>{
+ const {clearGeminiPool}=require('./gemini-pool');clearGeminiPool();const seen=[];
+ const env={GEMINI_ENABLED:'true',GEMINI_API_KEY:'image-first',GEMINI_API_KEY_2:'image-second',GEMINI_IMAGE_MODEL:'fixture-image-model'};
+ const fetcher=async(url,request)=>{seen.push(request.headers['x-goog-api-key']);return{ok:true,json:async()=>({candidates:[{content:{parts:[{inlineData:{mimeType:'image/png',data:png.split(',')[1]}}]}}]})};};
+ try{await imageOperation({action:'generate',prompt:'A labelled cell'},{env,fetcher});await imageOperation({action:'generate',prompt:'A labelled cell'},{env,fetcher});assert.deepEqual(seen,['image-second','image-first']);}finally{clearGeminiPool();}
+});

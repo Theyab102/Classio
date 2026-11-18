@@ -147,10 +147,10 @@ export function SourceSlidePreview({slide,width=16,height=9}) {
  return <div className={`ppt-page ${positioned?"ppt-positioned-page":""}`} style={{aspectRatio:`${width} / ${height}`,background:slide.background}} aria-hidden="true">{slide.items.map((item,index)=><SlideItem key={index} item={positioned?item:{...item,position:null}}/>)}</div>;
 }
 
-export default function PowerPointViewer({ file = {}, fileObj, page, onTotalPages, onSlidesLoaded, onDimensions, onUpdate }) {
+export default function PowerPointViewer({ file = {}, fileObj, page, onTotalPages, onSlidesLoaded, onDimensions, onUpdate, annotationInk }) {
   const [deck, setDeck] = useState(null);
   const [error, setError] = useState("");
-  const ink = useInkTool(file.id+":"+page);
+  const localInk = useInkTool(file.id+":"+page),ink=annotationInk||localInk;
   const strokes = file.powerPointInk?.[page] || noStrokes;
   const { slides, width, height } = deck || {};
   const slide = slides?.[page - 1];
@@ -178,7 +178,7 @@ export default function PowerPointViewer({ file = {}, fileObj, page, onTotalPage
   if (!slide) return <p role="status" className="studio-status">Opening the PowerPoint file on your device…</p>;
 
   return <section className="document-viewer ppt-document" aria-label="PowerPoint slide viewer">
-    {onUpdate && <div className="document-toolbar"><InkToolbar ink={ink} strokes={strokes} onChange={updateInk} /></div>}
+    {onUpdate && !annotationInk && <div className="document-toolbar"><InkToolbar ink={ink} strokes={strokes} onChange={updateInk} /></div>}
     <div className={`ppt-page ${positioned ? "ppt-positioned-page" : ""}`}
       style={{ aspectRatio: `${width} / ${height}`, background: slide.background }} aria-label={`PowerPoint slide ${page}`}>
       {slide.items.map((item, index) => <SlideItem key={index} item={positioned ? item : { ...item, position: null }} />)}

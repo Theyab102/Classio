@@ -1,4 +1,4 @@
-const {geminiBlocked,noteGeminiFailure}=require("./gemini-pool");
+const {geminiBlocked,noteGeminiFailure,planGemini,reserveGemini}=require("./gemini-pool");
 const { providerKey,geminiCredentials,credentialEnvironment } = require("./ai-settings");
 const {inspectImage}=require('../src/shared/image-format');
 class ImageServiceError extends Error { constructor(status,message){super(message);this.status=status;} }
@@ -27,10 +27,12 @@ async function imageOperation(input,{env=process.env,fetcher=global.fetch}={}) {
   const parts=[{text:instructions+input.prompt}];
   if(input.image){const match=/^data:(image\/\w+);base64,(.+)$/.exec(input.image);parts.push({inlineData:{mimeType:match[1],data:match[2]}});}
   let last;const deadline=Date.now()+45000;
-  for(const credential of geminiCredentials(env)){
+  const workload={vision:true,messages:[{role:'user',content:instructions+input.prompt}],maxTokens:1500};
+  for(const credential of planGemini(geminiCredentials(env),workload)){
     const active=credentialEnvironment(env,credential),blocked=geminiBlocked(active);
     if(blocked){last=new ImageServiceError(blocked.code==='PROVIDER_RATE_LIMIT'?429:503,'The image model is cooling down. Your original design is kept.');continue;}
     try{
+      reserveGemini(credential,workload);
       const response=await fetcher(`https://generativelanguage.googleapis.com/v1beta/models/${env.GEMINI_IMAGE_MODEL}:generateContent`,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':credential.key},body:JSON.stringify({contents:[{role:'user',parts}],generationConfig:{responseModalities:['TEXT','IMAGE']}}),signal:AbortSignal.timeout(Math.max(1,deadline-Date.now()))});
       if(!response.ok){const seconds=Number(response.headers?.get?.('retry-after'))||60;noteGeminiFailure(active,response.status,seconds);const error=new ImageServiceError(response.status===429?429:502,'The image model could not complete the design. Your sketch is preserved; try again later.');if(![401,403,429].includes(response.status)&&response.status<500)throw error;last=error;continue;}
       const data=await response.json();if(data.promptFeedback?.blockReason||['SAFETY','PROHIBITED_CONTENT','BLOCKLIST'].includes(data.candidates?.[0]?.finishReason))throw new ImageServiceError(422,'This image could not be generated. Adjust the design or description.');

@@ -5,6 +5,7 @@ import { useStudyActivity } from "./LearningSession";
 import UiIcon from "./UiIcon";
 import { InkLayer, InkToolbar, useInkTool } from "./DocumentInk";
 import "./documentStudio.css";
+import useDocumentGestures from './useDocumentGestures';
 
 const noStrokes = [];
 
@@ -56,7 +57,7 @@ export default function LocalPdfViewer({ file, fileObj, onUpdate, explain }) {
   useEffect(() => {
     const view = scroll.current;
     if (!view) return;
-    const resize = () => setWidth(Math.max(1, view.clientWidth - 32));
+    const resize = () => {const style=getComputedStyle(view);setWidth(Math.max(1,view.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight)));};
     resize();
     const observer = new ResizeObserver(resize);
     observer.observe(view);
@@ -126,6 +127,7 @@ export default function LocalPdfViewer({ file, fileObj, onUpdate, explain }) {
     setPage(value); onUpdate({ ...file, pdfPage: value });
     if (scroll.current) scroll.current.scrollTop = 0;
   }
+  useDocumentGestures(scroll,delta=>goTo(page+delta),page);
 
   function changeZoom(value) {
     setZoom(value);

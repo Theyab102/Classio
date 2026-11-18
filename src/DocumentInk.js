@@ -8,21 +8,25 @@ export function useInkTool(scopeKey) {
   const [tool, setTool] = useState("pan");
   const [color, setColor] = useState("#b52332");
   const [size, setSize] = useState(3);
+  const [fingerDrawing,setFingerDrawing]=useState(false);
   const [future,setFuture]=useState([]),expected=useRef(null);
   const [past,setPast]=useState([]),scope=useRef(scopeKey);
   useLayoutEffect(()=>{if(scope.current!==scopeKey){scope.current=scopeKey;setPast([]);setFuture([]);expected.current=null;}},[scopeKey]);
-  return { tool, setTool, color, setColor, size, setSize,future,setFuture,expected,past,setPast };
+  return { tool, setTool, color, setColor, size, setSize,fingerDrawing,setFingerDrawing,future,setFuture,expected,past,setPast };
 }
 
 export function InkToolbar({ ink, strokes, onChange }) {
   const [options,setOptions]=useState(()=>!!strokes.length);
   return <div className="studio-controls" role="toolbar" aria-label="Annotation tools">
+    <div className="ink-history" role="group" aria-label="Drawing history">
+      <button type="button" aria-label="Undo ink" title="Undo ink (Ctrl/⌘ Z)" disabled={!strokes.length&&!ink.past.length} onClick={()=>undoInk(ink,strokes,onChange)}><UiIcon name="undo" size={21}/><span>Undo</span></button>
+      <button type="button" aria-label="Redo ink" title="Redo ink (Ctrl/⌘ Shift Z)" disabled={!ink.future.length} onClick={()=>redoInk(ink,strokes,onChange)}><UiIcon name="redo" size={21}/><span>Redo</span></button>
+    </div>
     <div className="ink-tool-choices">{inkTools.map(([id, label]) => <button type="button" key={id} aria-pressed={ink.tool === id} onClick={() => ink.setTool(id)}><UiIcon name={id === "pen" ? "edit" : id === "highlight" ? "highlight" : id === "erase" ? "eraser" : "hand"} size={16} />{label}</button>)}</div>
     <button type="button" aria-expanded={options||ink.tool!=="pan"} className="ink-options-toggle" onClick={()=>{if(ink.tool!=="pan"){ink.setTool("pan");setOptions(false);}else setOptions(open=>!open);}}>Drawing options</button>
     <div className="ink-tool-details studio-controls" hidden={!options&&ink.tool==="pan"}><div className="ink-colors" role="group" aria-label="Ink colors">{[["#b52332", "Red"], ["#286a9b", "Blue"], ["#2f7b59", "Green"], ["#d19a16", "Gold"], ["#7b54a0", "Purple"]].map(([color, name]) => <button type="button" key={color} className="ink-color-swatch" aria-label={name + " ink"} aria-pressed={ink.color === color} style={{ "--swatch": color }} onClick={() => ink.setColor(color)}>{ink.color === color && <UiIcon name="check" size={13} />}</button>)}<label className="ink-custom-color" title="Custom ink color"><span style={{ background: ink.color }} /><ColorField aria-label="Ink color" value={ink.color} onChange={event => ink.setColor(event.target.value)} /></label></div>
     <div className="ink-size-choices" role="group" aria-label="Ink size">{[[2, "Fine"], [5, "Medium"], [10, "Broad"]].map(([size, name]) => <button type="button" key={size} aria-label={name + " stroke"} aria-pressed={size === (ink.size <= 3 ? 2 : ink.size <= 7 ? 5 : 10)} onClick={() => ink.setSize(size)}><span style={{ width: size + 3, height: size + 3 }} /><small>{name}</small></button>)}</div>
-    <button type="button" disabled={!strokes.length&&!ink.past.length} onClick={()=>undoInk(ink,strokes,onChange)}>Undo ink</button>
-    <button type="button" disabled={!ink.future.length} onClick={()=>redoInk(ink,strokes,onChange)}>Redo ink</button>
+    <label className="ink-finger-option"><input type="checkbox" checked={ink.fingerDrawing} onChange={event=>ink.setFingerDrawing(event.target.checked)}/>Draw with finger</label>
     <button type="button" disabled={!strokes.length} onClick={()=>commitInk(ink,strokes,[],onChange)}>Clear ink</button></div>
   </div>;
 }
@@ -63,11 +67,16 @@ export function InkLayer({ ink, strokes, onChange }) {
   const canvas = useRef(null);
   const active = useRef(null);
   const frame = useRef(null);
+  const touches=useRef(new Set());
+  const latestStrokes=useRef(strokes);
   useLayoutEffect(()=>{if(ink.expected && ink.expected.current!==strokes){ink.setFuture([]);ink.setPast([]);}if(ink.expected)ink.expected.current=strokes;},[strokes,ink]);
 
   const redraw = useCallback(() => {
     const surface = canvas.current;
     if (!surface) return;
+    const context = surface.getContext("2d");
+    // Clear the old preview even during a layout transition with zero bounds.
+    context.clearRect(0, 0, surface.width, surface.height);
     const { width, height } = surface.getBoundingClientRect();
     if (!width || !height) return;
     const ratio = Math.min(window.devicePixelRatio || 1, 2, 2400 / Math.max(width, height));
@@ -75,11 +84,13 @@ export function InkLayer({ ink, strokes, onChange }) {
     const h = Math.max(1, Math.round(height * ratio));
     if (surface.width !== w) surface.width = w;
     if (surface.height !== h) surface.height = h;
-    const context = surface.getContext("2d");
-    context.clearRect(0, 0, w, h);
-    for (const stroke of strokes) paintStroke(context, stroke, w, h);
+    for (const stroke of latestStrokes.current) paintStroke(context, stroke, w, h);
     if (active.current) paintStroke(context, active.current.stroke, w, h);
-  }, [strokes]);
+  }, []);
+
+  // ResizeObserver/animation callbacks can already be queued when Undo changes
+  // the workspace. Always paint the current history, never a captured old page.
+  useLayoutEffect(()=>{latestStrokes.current=strokes;redraw();},[strokes,redraw,ink]);
 
   useLayoutEffect(() => {
     redraw();
@@ -95,6 +106,11 @@ export function InkLayer({ ink, strokes, onChange }) {
   }
 
   function start(event) {
+    if(event.pointerType==="touch"){
+      touches.current.add(event.pointerId);
+      if(touches.current.size>1){active.current=null;redraw();return;}
+      if(!ink.fingerDrawing)return;
+    }
     if (ink.tool === "pan" || active.current || event.button !== 0) return;
     event.preventDefault();
     event.currentTarget.focus({preventScroll:true});
@@ -115,12 +131,15 @@ export function InkLayer({ ink, strokes, onChange }) {
   }
 
   function end(event) {
+    touches.current.delete(event.pointerId);
     const session = active.current;
     if (!session || session.pointer !== event.pointerId) return;
     active.current = null;
     commitInk(ink,strokes,[...strokes,session.stroke],onChange);
   }
 
+  function cancel(event){touches.current.delete(event.pointerId);if(active.current?.pointer===event.pointerId){active.current=null;redraw();}}
+
   return <canvas tabIndex={0} onKeyDown={event=>{if(!(event.ctrlKey||event.metaKey)||event.altKey||!["z","y"].includes(event.key.toLowerCase()))return;event.preventDefault();event.stopPropagation();const redo=event.key.toLowerCase()==="y"||event.shiftKey;if(redo)redoInk(ink,strokes,onChange);else undoInk(ink,strokes,onChange);}} ref={canvas} aria-label="Ink layer" className="studio-ink" data-tool={ink.tool}
-    onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end} />;
+    data-finger-drawing={ink.fingerDrawing} onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={cancel} onLostPointerCapture={cancel} />;
 }

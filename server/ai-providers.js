@@ -1,5 +1,5 @@
 const { providerKey, credentialId, geminiCredentials, credentialEnvironment } = require("./ai-settings");
-const {geminiBlocked,noteGeminiFailure,clearGeminiPool}=require("./gemini-pool");
+const {geminiBlocked,noteGeminiFailure,planGemini,reserveGemini,clearGeminiPool}=require("./gemini-pool");
 class ProviderError extends Error {
   constructor(status, code, retryable = false, retryAfter = 0) {
     super(code);
@@ -22,7 +22,13 @@ function availableProviders(env = process.env) {
 
 const {createHash}=require("node:crypto");
 const models = new Map(), failures = new Map(), inFlight = new Map(), cache = new Map();
-async function chooseModel(provider, input, env, fetcher, tried = []) {
+function checkSignal(signal){if(signal.aborted)throw new ProviderError(503,'NETWORK',true);}
+async function withBudget(milliseconds,work){
+  const controller=new AbortController();let timer;
+  const expired=new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new ProviderError(503,'NETWORK',true));},milliseconds);});
+  try{return await Promise.race([work(controller.signal),expired]);}finally{clearTimeout(timer);}
+}
+async function chooseModel(provider, input, env, fetcher, tried = [], signal) {
   const explicit = provider === "gemini" ? env.GEMINI_MODEL : input.vision ? env.GROQ_VISION_MODEL : env.GROQ_TEXT_MODEL;
   if (explicit && /^[\w./-]+$/.test(explicit)) return explicit.replace(/^models\//, "");
   const key = credentialId(provider, env);
@@ -30,14 +36,16 @@ async function chooseModel(provider, input, env, fetcher, tried = []) {
   if (!catalog || catalog.until <= Date.now()) {
     const url = provider === "gemini" ? "https://generativelanguage.googleapis.com/v1beta/models" : "https://api.groq.com/openai/v1/models";
     const headers = provider === "gemini" ? { "x-goog-api-key": providerKey(provider, env) } : { Authorization: `Bearer ${providerKey(provider, env)}` };
-    let response;try { response = await fetcher(url, { headers, signal: AbortSignal.timeout(5000) }); } catch { throw new ProviderError(503,"NETWORK",true); }
+    let response;try { response = await fetcher(url, { headers, signal: AbortSignal.any([signal,AbortSignal.timeout(5000)]) }); } catch { throw new ProviderError(503,"NETWORK",true); }
+    checkSignal(signal);
     if (!response.ok) {
       if(provider === "gemini") noteGeminiFailure(env,response.status,60);
       const code = [401, 403].includes(response.status) ? "CREDENTIALS_REJECTED" : response.status === 429 ? "PROVIDER_RATE_LIMIT" : "MODEL_CATALOG_UNAVAILABLE";
       if ([401, 403, 429].includes(response.status)) failures.set(key, { until: Date.now() + (response.status === 429 ? 60000 : 300000), code });
       throw new ProviderError(response.status === 429 ? 429 : 502, code, true);
     }
-    const data = await response.json();
+    let data;try{data=await response.json();}catch{throw new ProviderError(502,'INVALID_RESPONSE',true);}
+    checkSignal(signal);
     const ids = provider === "gemini" ? (data.models || []).filter(model => model.supportedGenerationMethods?.includes("generateContent")).map(model => model.name.replace(/^models\//, ""))
       : (data.data || []).filter(model => model.active !== false).map(model => model.id);
     catalog = { ids, until: Date.now() + 600000 };
@@ -84,8 +92,9 @@ function audioMime(filename) {
     wav: "audio/wav", webm: "audio/webm", ogg: "audio/ogg", flac: "audio/flac" }[extension];
 }
 
-async function providerResponse(provider, input, env, fetcher, model, deadline) {
-  const timeout = () => AbortSignal.timeout(Math.max(1, Math.min(provider === "groq" ? 14000 : 18000, deadline - Date.now())));
+async function providerResponse(provider, input, env, fetcher, model, deadline, signal) {
+  checkSignal(signal);
+  const timeout = () => AbortSignal.any([signal,AbortSignal.timeout(Math.max(1, Math.min(provider === "groq" ? 14000 : 18000, deadline - Date.now())))]);
   if (provider === "gemini") return fetcher(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": providerKey("gemini", env) },
     body: JSON.stringify(geminiPayload(input)), signal: timeout(),
@@ -105,13 +114,15 @@ async function providerResponse(provider, input, env, fetcher, model, deadline) 
   });
 }
 
-async function runProvider(provider, input, env, fetcher, model, deadline) {
+async function runProvider(provider, input, env, fetcher, model, deadline, signal) {
   let response;
-  try { response = await providerResponse(provider, input, env, fetcher, model, deadline); }
+  try { response = await providerResponse(provider, input, env, fetcher, model, deadline, signal); }
   catch (error) { if (error instanceof ProviderError) throw error; throw new ProviderError(503, "NETWORK", true); }
+  checkSignal(signal);
   if (!response.ok) {
     let details;
     try { details = await response.json(); } catch {}
+    checkSignal(signal);
     if (["content_policy_violation", "moderation_blocked"].includes(details?.error?.code)) throw new ProviderError(422, "CONTENT_BLOCKED");
     const unavailable = ["model_decommissioned", "model_not_found"].includes(details?.error?.code);
     const tooLarge = response.status === 413 || (response.status === 429 && /request too large/i.test(details?.error?.message || ""));
@@ -129,6 +140,7 @@ async function runProvider(provider, input, env, fetcher, model, deadline) {
   }
   let data;
   try { data = await response.json(); } catch { throw new ProviderError(502, "INVALID_RESPONSE", true); }
+  checkSignal(signal);
   let text;
   if (provider === "gemini") {
     const candidate = data.candidates?.[0];
@@ -150,28 +162,39 @@ async function routeStudy(input, { env = process.env, fetcher = global.fetch, re
   const providers=availableProviders(env);if(!providers.length)throw new ProviderError(503,"NOT_CONFIGURED");
   let last;const deadline=Date.now()+40000;
   for(const provider of providers){
-    const credentials=provider === "gemini" ? geminiCredentials(env) : [null];
+    const credentials=provider === "gemini" ? planGemini(geminiCredentials(env),input) : [null];
     for(const credential of credentials){
       const activeEnv=credential ? credentialEnvironment(env,credential) : env;
+      let attempted=false;
       try {
         const shared=credential && geminiBlocked(activeEnv),blocked=failures.get(credentialId(provider,activeEnv));
         const cooldown=shared?.until>Date.now()?shared:blocked;
         if(cooldown?.until>Date.now())throw new ProviderError(cooldown.code === "PROVIDER_RATE_LIMIT"?429:502,cooldown.code,true,Math.ceil((cooldown.until-Date.now())/1000));
         if(Date.now()>=deadline)throw last||new ProviderError(503,"NETWORK",true);
+        attempted=true;if(credential)reserveGemini(credential,input);
+        // Bound the entire provider stage (catalog, generation AND body read).
+        // A stalled primary must leave a usable budget for the free fallback.
+        const hasFallback=providers.indexOf(provider)<providers.length-1||credentials.indexOf(credential)<credentials.length-1;
+        const requested=Number(env.AI_PRIMARY_TIMEOUT_MS),primaryBudget=Number.isFinite(requested)&&requested>=1000?Math.min(18000,requested):12000;
+        const budget=Math.max(1,Math.min(hasFallback?primaryBudget:18000,deadline-Date.now()));
+        const result=await withBudget(budget,async signal=>{
         const explicit=input.vision?activeEnv.GROQ_VISION_MODEL:activeEnv.GROQ_TEXT_MODEL;
         const attempts=provider === "groq"&&!input.audio&&!explicit?2:1,tried=[];let attemptError;
         for(let attempt=0;attempt<attempts;attempt++){
           let model;
-          try{model=provider === "groq"&&input.audio?undefined:await chooseModel(provider,input,activeEnv,fetcher,tried);}
+          try{model=provider === "groq"&&input.audio?undefined:await chooseModel(provider,input,activeEnv,fetcher,tried,signal);}
           catch(error){if(attemptError&&['MODEL_UNAVAILABLE','VISION_MODEL_UNAVAILABLE'].includes(error.code))throw attemptError;throw error;}
+          checkSignal(signal);
           const blockedModel=failures.get(credentialId(provider,activeEnv)+":"+(model||"audio"));
           if(blockedModel?.until>Date.now())throw new ProviderError(blockedModel.code === "PROVIDER_RATE_LIMIT"?429:503,blockedModel.code,true,Math.ceil((blockedModel.until-Date.now())/1000));
           if(model)tried.push(model);
           report({provider,model:model||"whisper-large-v3-turbo",task:input.audio?"transcription":input.vision?"vision":input.task||"text",...(credential?{keySlot:credential.slot}:{}),code:"ROUTE_SELECTED"});
-          try{return{text:await runProvider(provider,input,activeEnv,fetcher,model,deadline),provider};}
+          try{return{text:await runProvider(provider,input,activeEnv,fetcher,model,deadline,signal),provider};}
           catch(error){if(!(error instanceof ProviderError)||!error.retryable||error.code === "CREDENTIALS_REJECTED"||attempt === attempts-1||Date.now()>=deadline)throw error;attemptError=error;report({provider,code:error.code});if(error.code!=="PROVIDER_RATE_LIMIT")await new Promise(resolve=>setTimeout(resolve,200*(attempt+1)));}
         }
-      }catch(error){if(!(error instanceof ProviderError))throw error;last=error;report({provider,...(credential?{keySlot:credential.slot}:{}),code:error.code});if(!error.retryable)throw error;}
+        });
+        return result;
+      }catch(error){if(!(error instanceof ProviderError))throw error;last=error;if(attempted&&error.code==='NETWORK')failures.set(credentialId(provider,activeEnv),{until:Date.now()+30000,code:error.code});report({provider,...(credential?{keySlot:credential.slot}:{}),code:error.code});if(!error.retryable)throw error;}
     }
   }
   throw last || new ProviderError(503,"MODEL_UNAVAILABLE",true);
@@ -179,7 +202,8 @@ async function routeStudy(input, { env = process.env, fetcher = global.fetch, re
 async function generateStudy(input,options={}){
   const env=options.env||process.env;
   const credentials=availableProviders(env).map(provider=>credentialId(provider,env)).join(":")+geminiCredentials(env).map(key=>key.id).join(":");
-  const key=createHash("sha256").update(credentials+JSON.stringify(input)).digest("hex"),cached=cache.get(key);
+  const routing=JSON.stringify([env.AI_PROVIDER_ORDER,env.GROQ_TEXT_MODEL,env.GROQ_VISION_MODEL,env.GEMINI_MODEL,env.GEMINI_QUOTA_GROUP_1,env.GEMINI_QUOTA_GROUP_2]);
+  const key=createHash("sha256").update(credentials+routing+JSON.stringify(input)).digest("hex"),cached=cache.get(key);
   if(cached?.until>Date.now())return cached.value;
   if(inFlight.has(key))return inFlight.get(key);
   const work=routeStudy(input,options).then(value=>{if(["classification","style"].includes(input.task)){if(cache.size>=100)cache.delete(cache.keys().next().value);cache.set(key,{value,until:Date.now()+300000});}return value;});
