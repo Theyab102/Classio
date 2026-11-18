@@ -17,6 +17,7 @@ Use Node.js 22 or 24. Run `npm ci`, then `npm start` for the browser app. The gu
 - `npm run test:notes` checks table editing, resizing and restoration, wide tables on phones, image review, and incremental course generation with truncation, failure and cancellation fixtures. See [the notes/course/sync follow-up](docs/CLASSIO-NOTES-COURSE-SYNC-FOLLOWUP.md) for the remaining production Firebase check.
 - `npm run test:polish` checks folder/card spacing, proportional thumbnails, merged recent materials, equal audio tabs, presentation alignment, pointer/keyboard focus, actual theme transitions, reduced motion and same-origin font downloads on four device sizes. Its classification and voice-catalog responses are fixtures.
 - `npm run test:sessions` checks guest refresh/tab isolation, encrypted uploads, automatic games, sound/muting, real browser recording with transcription fixtures, vision payloads and podcast voice interruption/resume across four device sizes. It also checks hijab selection and restoration.
+- `npm run test:podcast` checks the always-visible transport, prepare-and-play, inline listening orb, manual/silence send, cancellation, spoken interruption, volume/mute, reduced motion and four responsive sizes. Recording, Web Audio analysis and playback are real Chromium operations; provider responses are fixtures.
 - `npm run test:presentation` checks the staged editor, full preview, cutouts, crop/positioning, stale responses and actual PPTX exports on desktop, touch tablet and phone. Provider transports are explicit fixtures.
 - `CLASSIO_BROWSER_SUITE=avatar npm run test:browser` runs the focused desktop/phone wearable workflow against the current build (the responsive matrix also runs).
 - `npm run check:ai` checks the local server configuration and prints missing setting names, never their values.
@@ -95,7 +96,7 @@ Phone slide actions wrap below the title and preview. File cards fill the availa
 
 Natural-language style controls preview validated colors, typography, spacing, paper patterns and corners before applying them. Notes support explanation level, layout, length and custom instructions. File styles carry into the related study tools; Settings provides an app-wide style scope. Reset, cancel and previous-style restoration are available. Model outputs cannot inject CSS, URLs or scripts.
 
-The podcast question flow starts the microphone after the user's intentional Ask click, detects sustained speech followed by a configurable pause, transcribes the recording, and prepares a real spoken answer. Capture ends on finish, cancellation or closing. It supports follow-up questions, a typed fallback and exact-position resume. Energy-based silence detection is a local heuristic, not a guarantee in every acoustic environment.
+The podcast Ask button stays inline below the hosts and morphs into a listening orb. Click it again to send, or pause for three seconds after speaking to send automatically. Cancel stops capture and pending work. The answer plays aloud; the episode resumes from its saved position if it was playing before the question. Volume and mute apply to both the episode and the answer. Playback controls stay visible before audio is prepared, and Play can prepare the existing transcript and start it. Open text tutor provides the text alternative. Silence detection uses a local energy heuristic and cannot guarantee perfect detection in every acoustic environment.
 
 Both Gemini credentials are supported, but keys from one project share a cooldown group by default. Only genuinely independent projects should use independent `GEMINI_QUOTA_GROUP_*` settings. Groq remains first by default; small tasks have bounded budgets, duplicate in-flight requests share work, and style/classification responses have a short cache. This does not create extra provider quota.
 
@@ -106,3 +107,5 @@ See [equation coverage, expanded avatars and the keyboard gap](docs/CLASSIO-EQUA
 See [the interface and sync follow-up](docs/CLASSIO-INTERFACE-SYNC-FOLLOWUP.md) for the latest layout/table changes, AI error handling and the confirmed production Firestore denial that requires the project owner's rules update.
 
 See [guest sessions, recording and podcast conversations](docs/CLASSIO-GUEST-VOICE-FOLLOWUP.md) for the latest session lifetime, automatic games, hijab selection, sound feedback and voice/image fixes.
+
+See [the inline podcast player follow-up](docs/CLASSIO-PODCAST-ORB-FOLLOWUP.md) for the controls, orb interaction and verification.

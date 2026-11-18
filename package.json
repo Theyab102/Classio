@@ -49,7 +49,8 @@
     "test:workflows": "node scripts/workflow-browser.cjs",
     "test:notes": "node scripts/notes-browser.cjs",
     "test:polish": "node scripts/polish-browser.cjs",
-    "test:sessions": "node scripts/session-browser.cjs"
+    "test:sessions": "node scripts/session-browser.cjs",
+    "test:podcast": "node scripts/podcast-inline-browser.cjs"
   },
   "eslintConfig": {
     "extends": [
