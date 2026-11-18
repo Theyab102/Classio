@@ -6,6 +6,8 @@ import UiIcon from "./UiIcon";
 import { InkLayer, InkToolbar, useInkTool } from "./DocumentInk";
 import "./documentStudio.css";
 import useDocumentGestures from './useDocumentGestures';
+import usePageTurn from './usePageTurn';
+import {pdfPagePreview} from './pageTurnPreviews';
 
 const noStrokes = [];
 
@@ -28,6 +30,7 @@ export default function LocalPdfViewer({ file, fileObj, onUpdate, explain }) {
   useStudyActivity(file.id, "PDF page", pageText, `PDF page ${page}`);
   const scroll = useRef(null);
   const canvas = useRef(null);
+  const surface=useRef(null),previews=useRef(new Map());
   const ink = useInkTool(file.id+":"+page);
   const strokes = file.pdfInk?.[page] || noStrokes;
 
@@ -122,12 +125,24 @@ export default function LocalPdfViewer({ file, fileObj, onUpdate, explain }) {
     return () => { active = false; clearTimeout(timer); };
   }, [document, query]);
 
-  function goTo(next) {
-    const value = Math.max(1, Math.min(document?.pdf.numPages || 1, Math.trunc(next)));
-    setPage(value); onUpdate({ ...file, pdfPage: value });
-    if (scroll.current) scroll.current.scrollTop = 0;
+  function preview(next){
+    const strokes=file.pdfInk?.[next]||noStrokes,old=previews.current.get(next);
+    if(old?.strokes===strokes)return old.work.promise;
+    old?.work.cancel();const work=pdfPagePreview(document.pdf,next,scale,strokes);previews.current.set(next,{strokes,work});return work.promise;
   }
-  useDocumentGestures(scroll,delta=>goTo(page+delta),page);
+  useEffect(()=>{const cache=previews.current;return()=>{for(const item of cache.values())item.work.cancel();cache.clear();};},[document,scale]);
+  const ready=rendered?.page===page&&rendered?.scale===scale;
+  useEffect(()=>{
+    if(!ready||!document||window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)return;
+    for(const [number,item]of previews.current)if(Math.abs(number-page)>1){item.work.cancel();previews.current.delete(number);}
+    for(const next of [page-1,page+1])if(next>=1&&next<=document.pdf.numPages)preview(next).catch(()=>{});
+  // Previews are bounded to adjacent pages and rebuilt for their saved ink.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[ready,page,document,scale,file.pdfInk]);
+  const turn=usePageTurn({viewport:scroll,surface,page,total:document?.pdf.numPages||1,ready,failed:!!error,preview,previewAtTop:true,resetKey:file.id+':'+scale,
+    onChange:value=>{setPage(value);onUpdate({...file,pdfPage:value});if(scroll.current)scroll.current.scrollTop=0;}});
+  const goTo=turn.goTo;
+  useDocumentGestures(scroll,delta=>goTo(page+delta),page,turn.gesture);
 
   function changeZoom(value) {
     setZoom(value);
@@ -144,7 +159,6 @@ export default function LocalPdfViewer({ file, fileObj, onUpdate, explain }) {
     onUpdate({ ...file, pdfInk: { ...file.pdfInk, [page]: value } });
   }
 
-  const ready = rendered?.page === page && rendered?.scale === scale;
   const size = rendered ? { width: rendered.width, height: rendered.height } : { width: 1, height: 1 };
 
   return <section className="document-viewer" aria-label="Original PDF viewer">
@@ -166,7 +180,7 @@ export default function LocalPdfViewer({ file, fileObj, onUpdate, explain }) {
     {error && <p className="studio-error" role="alert">{error}</p>}
     {!error && !ready && <p className="pdf-render-status" role="status">{document ? `Rendering page ${page}…` : "Opening the PDF on your device…"}</p>}
     <div ref={scroll} className="pdf-scroll">
-      <div className="pdf-page-frame" style={{ ...size, visibility: ready ? "visible" : "hidden" }}>
+      <div ref={surface} data-page-turn-current className="pdf-page-frame" style={{ ...size, visibility: ready ? "visible" : "hidden" }}>
         <canvas ref={canvas} className="pdf-original-canvas" aria-label={`Original PDF page ${page}`} />
         {ready && query.trim().length >= 2 && pageViewport && <div className="pdf-search-highlights" aria-hidden="true">{textItems.filter(item => item.str?.toLocaleLowerCase().includes(query.toLocaleLowerCase()) && item.transform).map((item, index) => {
           const rect = pageViewport.convertToViewportRectangle([item.transform[4], item.transform[5], item.transform[4] + item.width, item.transform[5] + (item.height || 10)]);

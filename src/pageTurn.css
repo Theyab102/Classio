@@ -1,0 +1,6 @@
+.pdf-scroll,.presentation-source-scroll{position:relative;isolation:isolate}
+.page-turn-overlay{position:absolute;overflow:hidden;contain:layout paint;pointer-events:none;z-index:8;box-sizing:border-box}
+.page-turn-plane{position:absolute;inset:0;will-change:transform;pointer-events:none}
+.page-turn-ink-copy{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.page-turn-overlay :is(button,input,select,textarea){pointer-events:none}
+.document-viewer:has(>.pdf-scroll[data-page-turn])>.pdf-render-status{position:absolute;width:1px;height:1px;padding:0;margin:0;overflow:hidden;clip-path:inset(50%)}

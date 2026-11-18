@@ -142,8 +142,8 @@ function SlideItem({ item }) {
   </div>;
 }
 
-export function SourceSlidePreview({slide,width=16,height=9}) {
- if(!slide)return null;const positioned=slide.items.some(item=>item.position);
+export function SourceSlidePreview({slide,width=16,height=9,positioned=slide?.items.some(item=>item.position)}) {
+ if(!slide)return null;
  return <div className={`ppt-page ${positioned?"ppt-positioned-page":""}`} style={{aspectRatio:`${width} / ${height}`,background:slide.background}} aria-hidden="true">{slide.items.map((item,index)=><SlideItem key={index} item={positioned?item:{...item,position:null}}/>)}</div>;
 }
 

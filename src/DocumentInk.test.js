@@ -52,4 +52,9 @@ describe('stylus and finger input ownership',()=>{
   HTMLCanvasElement.prototype.getBoundingClientRect.mockReturnValue({width:0,height:0});fireEvent.click(screen.getByRole('button',{name:'Undo ink'}));
   expect(context.clearRect).toHaveBeenCalledWith(0,0,canvas.width,canvas.height);expect(paint).not.toHaveBeenCalled();
  });
+ test('pen input waits until the moving page has settled',()=>{
+  render(<Fixture/>);fireEvent.click(screen.getByRole('button',{name:'Pen',exact:true}));const view=screen.getByLabelText('Ink layer').parentElement;view.dataset.pageTurn='turning';
+  pointer('pointerdown',1);pointer('pointermove',1,'pen',70);pointer('pointerup',1);expect(screen.getByLabelText('Saved strokes')).toHaveTextContent('[]');
+  delete view.dataset.pageTurn;pointer('pointerdown',2);pointer('pointermove',2,'pen',70);pointer('pointerup',2);expect(JSON.parse(screen.getByLabelText('Saved strokes').textContent)).toHaveLength(1);
+ });
 });

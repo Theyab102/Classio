@@ -54,6 +54,8 @@ function paintStroke(context, stroke, width, height) {
   context.restore();
 }
 
+export function drawInkPreview(context,strokes,width,height){for(const stroke of strokes||[])paintStroke(context,stroke,width,height);}
+
 export function renderInkImage(strokes) {
   const canvas = document.createElement("canvas");
   canvas.width = 1280;
@@ -106,6 +108,7 @@ export function InkLayer({ ink, strokes, onChange }) {
   }
 
   function start(event) {
+    if(event.currentTarget.closest('[data-page-turn]'))return;
     if(event.pointerType==="touch"){
       touches.current.add(event.pointerId);
       if(touches.current.size>1){active.current=null;redraw();return;}
