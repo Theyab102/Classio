@@ -1,3 +1,4 @@
+import {authorizedFetch} from './aiAccess';
 import { loadPdfLibrary, openPdf } from "./pdf";
 
 export const isPdfFile = file => Boolean(file && (file.type === "application/pdf" || /\.pdf$/i.test(file.name || "")));
@@ -182,7 +183,7 @@ let capabilities;
 async function extraImageSearch(query,signal){
   if(!capabilities)capabilities=fetch('/api/images').then(r=>r.ok?r.json():{}).catch(()=>{capabilities=null;return {};});
   if(!(await capabilities).searchProviders?.length)return[];
-  const response=await fetch('/api/images',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'search',query}),signal});
+  const response=await authorizedFetch('/api/images',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'search',query}),signal});
   if(!response.ok)throw new Error('Additional image sources are unavailable.');
   const data=await response.json();return Array.isArray(data.images)?data.images:[];
 }
@@ -195,7 +196,7 @@ export async function searchStudyImages(query,signal){
 }
 export async function acknowledgeStudyImage(image,signal){
   if(image.provider!=='unsplash')return;
-  const response=await fetch('/api/images',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'track-download',id:image.providerId}),signal});
+  const response=await authorizedFetch('/api/images',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'track-download',id:image.providerId}),signal});
   if(!response.ok||!(await response.json()).tracked)throw new Error('This image source could not confirm the selection. Choose another image or try again.');
 }
 

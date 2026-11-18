@@ -101,12 +101,13 @@ test("only accepts the supported message formats and refuses remote image URLs",
 test("guest AI requests send no account token", async () => {
   const { sendStudyRequest } = require("./studyTools");
   const originalFetch = global.fetch;
-  global.fetch = jest.fn(async () => ({ ok: true, json: async () => ({ text: "Momentum is mass times velocity." }) }));
+  const {setAiIdentityProvider}=require("./aiAccess");setAiIdentityProvider(()=>null);
+  global.fetch = jest.fn(async url => ({ ok: true, json: async () => url==="/api/session"?{csrf:"fixture-csrf",expiresAt:Date.now()+3600000}:{ text: "Momentum is mass times velocity." } }));
   try {
     const payload = { messages: [{ role: "user", content: "Explain momentum." }], maxTokens: 500 };
     expect(await sendStudyRequest(payload)).toMatch(/momentum/i);
     expect(global.fetch).toHaveBeenCalledWith("/api/study", expect.objectContaining({
-      headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+      headers: { "Content-Type": "application/json", "X-Classio-CSRF":"fixture-csrf" }, body: JSON.stringify({...payload,provider:"auto"}),
     }));
   } finally { global.fetch = originalFetch; }
 });

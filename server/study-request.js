@@ -31,7 +31,9 @@ function parseStudyRequest(body) {
   }
   if (textLength > MAX_TEXT_LENGTH || !messages.some(message => message.role === "user")) return null;
   const tasks=new Set(["classification","style","notes","questions","flashcards","conversation","presentation","avatar-fit"]);
-  return { messages, maxTokens: body.maxTokens, vision: imageCount === 1, ...(tasks.has(body.task)?{task:body.task}:{}) };
+  const modes=new Set(['auto','groq','gemini','cloudflare','openrouter','ollama']);
+  if(body.provider&&!modes.has(body.provider))return null;
+  return { ...(body.provider?{provider:body.provider}:{}),messages, maxTokens: body.maxTokens, vision: imageCount === 1, ...(tasks.has(body.task)?{task:body.task}:{}) };
 }
 
 function parseAudioRequest(body) {

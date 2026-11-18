@@ -1,3 +1,6 @@
+import 'fake-indexeddb/auto';
+import {setAiIdentityProvider} from './aiAccess';
+beforeEach(()=>setAiIdentityProvider(()=>({uid:'fixture-'+expect.getState().currentTestName})));
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import QuizStudio, { parseQuiz } from "./QuizStudio";
@@ -54,7 +57,7 @@ test("flashcard generation appends real returned cards without clearing progress
   fireEvent.click(screen.getByRole("button", { name: "Generate cards", exact: true }));
   fireEvent.change(screen.getByRole("spinbutton",{name:"Number of cards"}),{target:{value:"1"}});
   fireEvent.submit(screen.getByRole("dialog").querySelector("form"));
-  await waitFor(() => expect(changed).toHaveBeenCalled());
+  await waitFor(() => expect(changed.mock.calls.at(-1)?.[0].studyCards).toHaveLength(2));
   const next = changed.mock.calls.at(-1)[0]; expect(next.studyCards).toHaveLength(2); expect(next.cardProgress.starred.old).toBe(true);
   expect(sendStudyRequest.mock.calls[0][0].messages[1].content).toContain("Acceleration is a change in velocity");
 });

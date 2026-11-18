@@ -1,3 +1,5 @@
+import {checkpointPatch,appliedGenerationPatch,useGenerationJob} from './generationJobs';
+import GenerationRecovery from './GenerationRecovery';
 import {playStudySound} from "./studySounds";
 import ChoiceMenu from './ChoiceMenu';
 import StudioDialog from './StudioDialog';
@@ -17,6 +19,7 @@ export default function LearnMode({ file, getFileText, onUpdate, onUseAsNotes })
   const [active, setActive] = useState(() => Math.max(0, Math.min(file.course?.active || 0, (file.course?.units?.length || 1) - 1)));
   const [choice, setChoice] = useState(() => file.course?.answers?.[file.course?.active || 0] ?? null), [loading, setLoading] = useState(false), [error, setError] = useState(""), [speaking, setSpeaking] = useState(false);
   const request = useRef(null), latest = useRef({ file, onUpdate }); latest.current = { file, onUpdate };
+  const courseJob=useGenerationJob(file,"course");
   const units = file.course?.units || [], completed = file.course?.completed || [], unit = units[active];
   useStudyActivity(file.id, "Lesson tutor", unit ? `${unit.title}\n${unit.lesson}\nKnowledge check: ${unit.question}` : "The learner is preparing a course.", unit?.title);
   useEffect(() => () => { request.current?.abort(); window.speechSynthesis?.cancel(); }, []);
@@ -26,18 +29,20 @@ export default function LearnMode({ file, getFileText, onUpdate, onUseAsNotes })
     if (units.length) {setConfirmation("replace");return;}
     await generateCourse();
   }
-  async function generateCourse() {
+  async function generateCourse(resume) {
+    if(resume?.nativeEvent)resume=null;
     if(request.current)return;
     setConfirmation(null);
     const controller = new AbortController(); request.current = controller; setLoading(true); setError("");
     try {
-      const source = await studySource(file,getFileText,120000);
+      const source = resume?.input.source ?? await studySource(file,getFileText,120000);
       const count=lessonCount==="auto"?Math.min(12,Math.max(3,Math.ceil(source.length/1800))):Number(lessonCount);
       if (!source.trim() && !topic.trim()) throw new Error("No readable study text was found. Paste source text into Notes, or enter a topic for a general course.");
-      const next = await generateCourseLessons({source,topic:topic.trim() || file.name,count,signal:controller.signal,onProgress:message=>{if(!controller.signal.aborted)setProgress(message);}});
+      let checkpoint;
+      const next = await generateCourseLessons({fileId:file.id,resume,onCheckpoint:job=>{checkpoint=job;const data=latest.current;data.file=checkpointPatch(data.file,"course",job);data.onUpdate(data.file);},source,topic:topic.trim() || file.name,count,signal:controller.signal,onProgress:message=>{if(!controller.signal.aborted)setProgress(message);}});
       if (controller.signal.aborted) return;
       window.speechSynthesis?.cancel();setSpeaking(false);
-      updateCourse({ units: next, completed: [], active: 0, answers: {} }); setActive(0); setChoice(null);
+      const data=latest.current;data.onUpdate({...data.file,...appliedGenerationPatch(data.file,"course",checkpoint),course:{units:next,completed:[],active:0,answers:{}}}); setActive(0); setChoice(null);
     } catch (failure) { if (!controller.signal.aborted) setError(failure.message); }
     finally { if(request.current===controller){setLoading(false);request.current=null;} }
   }
@@ -57,6 +62,7 @@ export default function LearnMode({ file, getFileText, onUpdate, onUseAsNotes })
   return <section className="lesson-studio" aria-labelledby="learn-title"><header className="tool-heading"><div><p className="eyebrow">STEP BY STEP</p><h2 id="learn-title">Guided lessons</h2><p>AI explanations with worked examples and helpful questions after each lesson, saved inside Notes.</p></div>
     {unit && <span className="tool-count">{completed.length} / {units.length} complete</span>}</header>
     <form onSubmit={generate} className={`course-generator ${unit ? "is-compact" : ""}`}><label htmlFor="course-topic">Topic<textarea id="course-topic" aria-label="Topic" rows={1} maxLength={2000} placeholder="Optional with source material" value={topic} onInput={event=>{event.currentTarget.style.height="auto";event.currentTarget.style.height=Math.min(240,event.currentTarget.scrollHeight)+"px";}} onChange={event => setTopic(event.target.value)} /></label><label>Lessons<ChoiceMenu aria-label="Number of lessons" value={lessonCount} onChange={event=>setLessonCount(event.target.value)}><option value="auto">Match the material</option>{[3,4,5,6,8,10,12].map(count=><option key={count} value={count}>{count}</option>)}</ChoiceMenu></label><button className="quiet-button is-primary" disabled={loading}><UiIcon name="generate" />{loading ? "Generating lessons…" : unit ? "New course" : "Generate lessons"}</button>{loading&&<button type="button" className="quiet-button" onClick={()=>{request.current?.abort();request.current=null;setLoading(false);}}>Cancel generation</button>}{unit&&<button type="button" className="quiet-button" onClick={()=>setConfirmation("restart")}>Restart lessons & questions</button>}</form>
+    <GenerationRecovery job={courseJob} busy={loading} onResume={generateCourse}/>
     {error && <p role="alert" className="tool-error">{error}</p>}
     {!unit && !loading && <div className="tool-empty"><WorkspaceArt /><h3>Turn a chapter into a clear learning path</h3><p>Use the notes or source in this file, or enter a topic above. Your generated lessons and progress stay with this material.</p></div>}
     {loading && <div className="generation-feedback" role="status"><span className="mini-spinner" />{progress || "Reading study material…"} Your current course stays available.</div>}

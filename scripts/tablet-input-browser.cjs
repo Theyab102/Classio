@@ -24,6 +24,7 @@ function pdf(){
    const Native=window.AudioContext;window.__soundMonitors=[];
    window.AudioContext=class extends Native{constructor(...args){super(...args);const analyser=super.createAnalyser(),silent=super.createGain();analyser.fftSize=256;silent.gain.value=0;analyser.connect(silent);silent.connect(this.destination);window.__soundMonitors.push(analyser);const create=this.createGain.bind(this);this.createGain=()=>{const gain=create();gain.connect(analyser);return gain;};}};
   });
+  await page.route('**/api/session',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({csrf:'fixture-browser-csrf',expiresAt:Date.now()+3600000})}));
   await page.route('**/api/study',route=>route.fulfill({contentType:'application/json',body:'{"text":"Physics"}'}));
   await page.route('**/api/images',route=>route.fulfill({contentType:'application/json',body:'{"searchProviders":[]}'}));
   await page.goto(origin);await page.getByRole('heading',{name:'Library',exact:true}).waitFor();

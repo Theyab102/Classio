@@ -24,3 +24,14 @@ yarn-error.log*
 
 .env
 node_modules/
+# Private environment/deployment files. Safe templates remain tracked.
+.env.*
+!.env.example
+!.env.*.example
+.vercel/
+credentials*.json
+*service-account*.json
+*.private-key
+*.pem
+*.key
+security-reports/

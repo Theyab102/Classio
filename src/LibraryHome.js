@@ -1,3 +1,4 @@
+import {useLocalAi,semanticSearch} from './localAi';
 import StudyMarkdown from "./StudyMarkdown";
 import {studyExcerpt} from "./studyExcerpt";
 import FileThumbnail from "./FileThumbnail";
@@ -17,11 +18,13 @@ export default function LibraryHome({ folders, guest, signIn, signInPending, sig
   const [query, setQuery] = useState(""), [filter, setFilter] = useState("all"), [sort, setSort] = useState("recent");
   const [layout, setLayout] = useState("grid"), [details,setDetails] = useState(null);
   const attempted = useRef(new Set());
+  const localAI=useLocalAi(),[semantic,setSemantic]=useState(null),[semanticBusy,setSemanticBusy]=useState(false);
   const all = useMemo(() => folders.flatMap(folder => (folder.files || []).map(file => ({ file, folder }))), [folders]);
+  useEffect(()=>{const controller=new AbortController();if(!localAI.embeddings||query.trim().length<3){setSemantic(null);setSemanticBusy(false);return()=>controller.abort();}setSemanticBusy(true);const timer=setTimeout(()=>{semanticSearch(query,all.map(({file})=>({id:file.id,text:[file.name,file.notes,...(file.course?.units||[]).map(unit=>unit.lesson)].filter(Boolean).join('\n')})),controller.signal).then(hits=>{if(!controller.signal.aborted)setSemantic(new Map((hits||[]).filter(hit=>hit.score>.2).map(hit=>[hit.id,hit.score])));}).catch(()=>{if(!controller.signal.aborted)setSemantic(null);}).finally(()=>{if(!controller.signal.aborted)setSemanticBusy(false);});},250);return()=>{clearTimeout(timer);controller.abort();};},[all,query,localAI.embeddings]);
   const subjects = folders.filter(folder => folder.id !== "inbox");
   const matchedFolders = subjects.filter(folder => folder.name.toLowerCase().includes(query.toLowerCase()));
-  const items = all.filter(({ file, folder }) => materialMatches(file,folder,query) && (filter === "all" || materialKind(file).key === filter))
-    .sort((a, b) => Number(!!b.file.pinned)-Number(!!a.file.pinned) || (sort === "name" ? a.file.name.localeCompare(b.file.name) : sort === "type" ? materialKind(a.file).label.localeCompare(materialKind(b.file).label) || a.file.name.localeCompare(b.file.name)
+  const items = all.filter(({ file, folder }) => (materialMatches(file,folder,query)||semantic?.has(file.id)) && (filter === "all" || materialKind(file).key === filter))
+    .sort((a, b) => (semantic?.get(b.file.id)||0)-(semantic?.get(a.file.id)||0)||Number(!!b.file.pinned)-Number(!!a.file.pinned) || (sort === "name" ? a.file.name.localeCompare(b.file.name) : sort === "type" ? materialKind(a.file).label.localeCompare(materialKind(b.file).label) || a.file.name.localeCompare(b.file.name)
       : (b.file.lastOpenedAt || b.file.createdAt || 0) - (a.file.lastOpenedAt || a.file.createdAt || 0)));
   const lastOpenedId = [...all].filter(item=>item.file.lastOpenedAt).sort((a,b)=>b.file.lastOpenedAt-a.file.lastOpenedAt)[0]?.file.id;
   useEffect(() => { if(!classifyMaterial) return; const pending=all.filter(({file})=>!file.subjectAssessed && !inferSubject(file).confident && !attempted.current.has(file.id)).slice(0,2); for(const {file} of pending){attempted.current.add(file.id); classifyMaterial(file).catch(()=>{});} },[all,classifyMaterial]);
@@ -56,6 +59,7 @@ export default function LibraryHome({ folders, guest, signIn, signInPending, sig
         <strong>{item.label}</strong><span>{item.description}</span><UiIcon name="arrow" size={17} /></button>)}
     </section>
     <section className="library-materials" aria-label="Learning materials"><div className="section-heading"><h2>Your materials</h2><button className="text-button" onClick={newFolder}><UiIcon name="plus" size={15} />New folder</button></div>
+      {semanticBusy&&<p className="semantic-search-status" role="status">Searching your materials on this device…</p>}
       <div className="library-filters"><label className="library-search"><UiIcon name="search" /><input type="search" aria-label="Search library" placeholder="Search by title, subject, type or content…" value={query} onChange={event => setQuery(event.target.value)} />{query&&<button type="button" className="search-clear" aria-label="Clear library search" onClick={()=>setQuery("")}><UiIcon name="close"/></button>}</label>
         <ChoiceMenu aria-label="Filter materials" value={filter} onChange={event => setFilter(event.target.value)}><option value="all">All materials</option><option value="notes">Notes & courses</option><option value="documents">Documents</option><option value="audio">Audio</option><option value="images">Images</option><option value="links">Links</option></ChoiceMenu>
         <ChoiceMenu aria-label="Sort materials" value={sort} onChange={event => setSort(event.target.value)}><option value="recent">Recently opened</option><option value="name">Name A–Z</option><option value="type">File type</option></ChoiceMenu>

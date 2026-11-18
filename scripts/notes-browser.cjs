@@ -17,6 +17,7 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
   const errors=[],calls=[];let mode='success',truncated=false,releaseLate,lateRequested;
   page.on('pageerror',error=>errors.push(error.message));
   await page.addInitScript(()=>localStorage.setItem('classio_access_v2',JSON.stringify({decision:'accepted',at:Date.now()})));
+  await page.route('**/api/session',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({csrf:'fixture-browser-csrf',expiresAt:Date.now()+3600000})}));
   await page.route('**/api/study',async route=>{
    const data=route.request().postDataJSON(),prompt=data.messages[0].content;calls.push(data);
    if(prompt.includes('compact course outline')){

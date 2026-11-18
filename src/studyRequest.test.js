@@ -1,3 +1,5 @@
+import {setAiIdentityProvider} from './aiAccess';
+beforeEach(()=>setAiIdentityProvider(()=>({uid:'fixture-user',getIdToken:()=>Promise.resolve('fixture-account-token')})));
 import { sendStudyRequest } from "./studyTools";
 
 test("a stalled study request times out and clears its timer", async () => {
@@ -9,7 +11,8 @@ test("a stalled study request times out and clears its timer", async () => {
   try {
     const pending = sendStudyRequest({ messages: [{ role: "user", content: "Explain gravity" }], maxTokens: 100 });
     const result = expect(pending).rejects.toThrow("took too long");
-    jest.advanceTimersByTime(55000);
+    await Promise.resolve();await Promise.resolve();await Promise.resolve();
+    jest.advanceTimersByTime(75000);
     await result;
     expect(jest.getTimerCount()).toBe(0);
   } finally { global.fetch = previousFetch; jest.useRealTimers(); }

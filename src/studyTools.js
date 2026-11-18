@@ -1,15 +1,18 @@
+import {aiMode} from './aiPreferences';
+import {authorizedFetch} from './aiAccess';
 import {studyStyleInstruction} from './studyContext';
 export async function sendStudyRequest(payload, signal) {
+  const mode=aiMode();if(mode==="browser-local"){const{generateLocal}=await import("./localAi");return generateLocal(payload,signal);}
   const controller = new AbortController();
   const cancel = () => controller.abort();
   if (signal?.aborted) cancel();
   signal?.addEventListener("abort", cancel, { once: true });
   let timedOut = false;
-  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, 55000);
+  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, 75000);
   try {
-    const response = await fetch("/api/study", {
+    const response = await authorizedFetch("/api/study", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({...payload,messages:(payload.messages || []).map((message,index)=>index===0&&message.role==="system"&&!(["style","classification"].includes(payload.task))?{...message,content:message.content+"\n"+studyStyleInstruction()}:message)}), signal: controller.signal,
+      body: JSON.stringify({...payload,provider:payload.provider||mode,messages:(payload.messages || []).map((message,index)=>index===0&&message.role==="system"&&!(["style","classification"].includes(payload.task))?{...message,content:message.content+"\n"+studyStyleInstruction()}:message)}), signal: controller.signal,
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || typeof data.text !== "string" || !data.text.trim()) {

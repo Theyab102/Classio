@@ -1,0 +1,27 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Reviewed Transformers tokenizer JavaScript constructor expression, not a credential"
+regexTarget = "secret"
+regexes = ['''^this\.vocab=new$''']
+
+[[rules]]
+id = "classio-private-provider-setting"
+description = "Classio private provider or session credential assignment"
+regex = '''(?i)(?:Gemini_Key(?:_packup)?|Groq_Key(?:_packup)?|OPENROUTER_API_KEY(?:_packup)?|CLOUDFLARE_API_TOKEN(?:_packup)?|OLLAMA_API_TOKEN(?:_packup)?|CLASSIO_SESSION_SECRET)["']?[ \t]*[:=]\s*["']([A-Za-z0-9_./+\-=]{24,})["']'''
+secretGroup = 1
+entropy = 3.0
+[[rules.allowlists]]
+regexTarget = "secret"
+regexes = ['''^(?:test|fixture|mock|example|placeholder)[-_]''']
+
+[[rules]]
+id = "classio-private-dotenv-setting"
+description = "Classio private provider or session dotenv value"
+regex = '''(?mi)^[ \t]*(?:Gemini_Key(?:_packup)?|Groq_Key(?:_packup)?|OPENROUTER_API_KEY(?:_packup)?|CLOUDFLARE_API_TOKEN(?:_packup)?|OLLAMA_API_TOKEN(?:_packup)?|CLASSIO_SESSION_SECRET)[ \t]*=[ \t]*([A-Za-z0-9_./+\-=]{24,})[ \t]*$'''
+secretGroup = 1
+entropy = 3.0
+[[rules.allowlists]]
+regexTarget = "secret"
+regexes = ['''^(?:test|fixture|mock|example|placeholder)[-_]''']

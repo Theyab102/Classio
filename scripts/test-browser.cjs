@@ -76,7 +76,8 @@ const server = http.createServer((req, res) => {
       await page.addInitScript(()=>{if(!navigator.mediaDevices?.getUserMedia)return;const real=navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);window.__micTracks=[];window.__workingMicrophone=async options=>{const stream=await real(options);window.__micTracks.push(...stream.getTracks());return stream;};navigator.mediaDevices.getUserMedia=window.__workingMicrophone;});
       await page.route('**/api/images',async route=>{if(route.request().method()==='GET')return route.fulfill({contentType:'application/json',body:JSON.stringify({imageEditing:true,backgroundRemoval:true,searchProviders:[]})});const body=route.request().postDataJSON();imageCalls.push(body);return route.fulfill({contentType:'application/json',body:JSON.stringify({image:body.action==='remove-background'?fixtureImages.cutout:fixtureImages.original})});});
       await page.route('**/api/avatar-designs',route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'Moderation service is not configured in this test.'})}));
-      await page.route('**/api/study', async route => {
+      await page.route('**/api/session',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({csrf:'fixture-browser-csrf',expiresAt:Date.now()+3600000})}));
+  await page.route('**/api/study', async route => {
         const data = route.request().postDataJSON();
         assert(data.kind === 'audio' ? parseAudioRequest(data) : parseStudyRequest(data), 'Browser sent an invalid AI request');
         calls.push(data); if (data.kind === 'audio') return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ text: 'Why is horizontal velocity constant?' }) }); const prompt = data.messages[0].content;

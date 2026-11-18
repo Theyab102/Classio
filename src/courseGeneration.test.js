@@ -30,9 +30,9 @@ test('retries a provider-truncated lesson with a shorter prompt without regenera
 test('malformed/truncated JSON gets one bounded repair, and retries never exceed 15 for 12 lessons',async()=>{
   const send=jest.fn().mockResolvedValueOnce(outline(12));
   send.mockResolvedValueOnce('[{"title":"broken","lesson":"'+('realistic incomplete output '.repeat(160)))
-    .mockResolvedValueOnce(JSON.stringify([lesson()]))
-    .mockRejectedValueOnce(Object.assign(new Error('Too long'),{code:'OUTPUT_LIMIT'})).mockResolvedValueOnce(JSON.stringify([lesson()]));
-  for(let i=2;i<11;i++)send.mockResolvedValueOnce(JSON.stringify([lesson()]));
+    .mockResolvedValueOnce(JSON.stringify([lesson("Lesson first")]))
+    .mockRejectedValueOnce(Object.assign(new Error('Too long'),{code:'OUTPUT_LIMIT'})).mockResolvedValueOnce(JSON.stringify([lesson("Lesson second")]));
+  for(let i=2;i<11;i++)send.mockResolvedValueOnce(JSON.stringify([lesson("Lesson "+i)]));
   send.mockRejectedValueOnce(Object.assign(new Error('Too long'),{code:'OUTPUT_LIMIT'}));
   await expect(generateCourseLessons({source:'Evidence '.repeat(200),topic:'Test',count:12,send})).rejects.toThrow('Too long');
   expect(send).toHaveBeenCalledTimes(15);
@@ -51,7 +51,7 @@ test('does not silently clip a lesson or manufacture missing knowledge checks',(
 });
 test('short sources stay intact in each focused lesson instead of becoming empty fragments',async()=>{
  const source='تشرح هذه الفقرة الحركة والقوة وعلاقتهما بالتسارع.';
- const send=jest.fn().mockResolvedValueOnce(outline(3)).mockResolvedValue(JSON.stringify([lesson()]));
+ const send=jest.fn().mockResolvedValueOnce(outline(3));for(let i=0;i<3;i++)send.mockResolvedValueOnce(JSON.stringify([lesson('Lesson '+i)]));
  await generateCourseLessons({source,topic:'A filename is not evidence',count:3,send});
  for(const [request] of send.mock.calls)expect(request.messages[1].content).toContain(source);
 });

@@ -1,38 +1,25 @@
-const { test } = require("node:test");
-const assert = require("node:assert/strict");
-const { configurationStatus } = require("./ai-configuration");
-const { reserveInstance, configured } = require("./ai-quota");
-
-test("accepts the confirmed server aliases without requiring a Firebase administrator", () => {
-  const report = configurationStatus({ Groq_Key: "test-provider-secret", Gemini_Key: "test-google-secret" });
-  assert.equal(report.configured, true); assert.deepEqual(report.providers, ["groq"]);
-  assert.deepEqual(report.settingNames, ["Groq_Key", "Gemini_Key"]); assert.equal(report.quotaMode, "instance");
-  assert.equal(report.geminiOptInRequired, true);
-  assert(!JSON.stringify(report).includes("test-provider-secret")); assert(!JSON.stringify(report).includes("test-google-secret"));
+const {test}=require('node:test'),assert=require('node:assert/strict');
+const {configurationStatus,publicStatus}=require('./ai-configuration');
+const {reserveInstance,configured,quotaMode}=require('./ai-quota');
+const env={Groq_Key:'fixture-provider',AI_GROQ_STUDENT_USE_APPROVED:'true',AI_GROQ_FREE_TIER_CONFIRMED:'true',CLASSIO_SESSION_SECRET:'fixture-session-secret-at-least-32-characters'};
+test('local configuration uses exact aliases, signed sessions and free/student eligibility; public status omits credential internals',()=>{
+ const report=configurationStatus({...env,Gemini_Key:'fixture-google',Gemini_Key_packup:'fixture-google-backup'});assert(report.configured);assert.deepEqual(report.providers,['groq']);assert.equal(report.providerConfiguration.gemini.reason,'AUDIENCE_RESTRICTED');assert(!JSON.stringify(report).includes('fixture-'));
+ const visible=JSON.stringify(publicStatus(env));for(const name of ['Groq_Key','primary','backup','slot','CLASSIO_SESSION_SECRET','missing','settingNames'])assert(!visible.includes(name));
 });
-test("never accepts public build variables, placeholder values, or a disabled Gemini key alone", () => {
-  assert(!configurationStatus({ REACT_APP_GROQ_KEY: "test-key" }).configured);
-  assert(!configurationStatus({ Groq_Key: "Your_new_Groq_API_key" }).configured);
-  assert(!configurationStatus({ Groq_Key: "gsk_example..." }).configured);
-  assert(!configurationStatus({ Gemini_Key: "test-google-secret" }).configured);
-  assert(configurationStatus({ Gemini_Key: "test-google-secret", GEMINI_ENABLED: "true" }).configured);
+test('missing backups are optional; public variables, placeholders, unapproved providers and Gemini alone cannot activate inference',()=>{
+ for(const settings of [{REACT_APP_GROQ_KEY:'fixture'},{Groq_Key:'Your_new_Groq_API_key'},{Groq_Key:'gsk_example...'},{Gemini_Key:'fixture',GEMINI_ENABLED:'true'},{...env,CLASSIO_SESSION_SECRET:''},{...env,AI_GROQ_STUDENT_USE_APPROVED:''}])assert(!configurationStatus(settings).configured);
+ assert(configurationStatus(env).configured);
 });
-test("shared quota storage fails closed when explicitly selected but misconfigured", () => {
-  assert(!configured({ AI_QUOTA_MODE: "firestore" }));
-  assert(!configured({ AI_QUOTA_MODE: "invalid" }));
-  assert(configured({ FIREBASE_SERVICE_ACCOUNT_JSON: JSON.stringify({ project_id: "test", client_email: "test@example.com", private_key: "fixture" }), AI_RATE_LIMIT_SECRET: "test-only-secret-at-least-32-characters" }));
+test('production quota requires shared persistent storage and fails closed for instance mode or invalid admin credentials',()=>{
+ assert.equal(quotaMode({VERCEL:'1'}),'firestore');assert(!configured({VERCEL:'1',AI_QUOTA_MODE:'instance'}));assert(!configured({AI_QUOTA_MODE:'firestore'}));assert(!configured({AI_QUOTA_MODE:'bad'}));
+ assert(configured({VERCEL:'1',FIREBASE_SERVICE_ACCOUNT_JSON:JSON.stringify({project_id:'fixture',client_email:'fixture@example.com',private_key:'fixture-private-key'}),CLASSIO_SESSION_SECRET:env.CLASSIO_SESSION_SECRET}));
 });
-test("instance limiter enforces client and instance limits and expires counters", () => {
-  const store = new Map(), now = 1;
-  for (let i = 0; i < 18; i++) assert.deepEqual(reserveInstance("study", "client-a", now, store), {});
-  assert(reserveInstance("study", "client-a", now, store).retryAfter > 0);
-  assert.deepEqual(reserveInstance("study", "client-a", 600001, store), {});
-  for (let i = 0; i < 231; i++) assert.deepEqual(reserveInstance("study", `other-${i}`, 600001, store), {});
-  assert(reserveInstance("study", "final", 600001, store).retryAfter > 0);
-  assert.deepEqual(reserveInstance("study", "final", 86400001, store), {});
+test('instance limiter enforces per-IP and per-account limits plus shared daily cap, expiring old counters',()=>{
+ const store=new Map();for(let i=0;i<40;i++)assert.deepEqual(reserveInstance('study',{ip:'a',user:'account'},1,store),{});
+ assert(reserveInstance('study',{ip:'b',user:'account'},1,store).retryAfter);assert.deepEqual(reserveInstance('study','a',600001,store),{});
+ for(let i=0;i<209;i++)assert.deepEqual(reserveInstance('study','other-'+i,600001,store),{});assert(reserveInstance('study','final',600001,store).retryAfter);assert.deepEqual(reserveInstance('study','final',86400001,store),{});
 });
-test("audio limits are separate and malformed quota mode is diagnosed by name", () => {
-  const store = new Map(); for (let i = 0; i < 3; i++) assert.deepEqual(reserveInstance("audio", "client", 1, store), {});
-  assert(reserveInstance("audio", "client", 1, store).retryAfter > 0); assert.deepEqual(reserveInstance("study", "client", 1, store), {});
-  assert.deepEqual(configurationStatus({ Groq_Key: "fixture", AI_QUOTA_MODE: "bad" }).missing, ["AI_QUOTA_MODE must be instance or firestore"]);
+test('audio/session quotas are separate and cannot be bypassed by guest identity churn on one IP',()=>{
+ const store=new Map();for(let i=0;i<3;i++)assert.deepEqual(reserveInstance('audio',{ip:'same',user:'guest-'+i},1,store),{});assert(reserveInstance('audio',{ip:'same',user:'different'},1,store).retryAfter);assert.deepEqual(reserveInstance('study','same',1,store),{});
+ for(let i=0;i<8;i++)assert.deepEqual(reserveInstance('session','same',1,store),{});assert(reserveInstance('session','same',1,store).retryAfter);
 });

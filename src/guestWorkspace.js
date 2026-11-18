@@ -52,3 +52,6 @@ export async function pruneGuestFiles(){
     await navigator.locks.request('classio-guest:'+owner,{ifAvailable:true},async lock=>{if(!lock)return;await transact('readwrite',store=>{const cursor=store.openCursor();cursor.onsuccess=()=>{const item=cursor.result;if(item){if((String(item.key).startsWith(owner+':')&&item.value.at<Date.now()-86400000)||item.key==='lease:'+owner)item.delete();item.continue();}};});});
   }
 }
+
+// Public scope identifier only; the encryption key never leaves this module.
+export function guestScope(){return session().id;}

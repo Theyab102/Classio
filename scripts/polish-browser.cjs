@@ -14,6 +14,7 @@ const server=http.createServer((request,response)=>{try{const name=decodeURIComp
   const context=await browser.newContext({viewport:size,hasTouch:size.name!=='desktop'}),page=await context.newPage();active=page;page.setDefaultTimeout(20000);const errors=[],fonts=[];
   page.on('pageerror',error=>errors.push(error.message));page.on('request',request=>{if(request.resourceType()==='font')fonts.push(request.url());});
   await page.addInitScript(()=>{localStorage.setItem('classio_access_v2',JSON.stringify({decision:'accepted',at:Date.now()}));window.__themeChanges=0;if(document.startViewTransition){const real=document.startViewTransition.bind(document);document.startViewTransition=callback=>{window.__themeChanges++;return window.__lastThemeChange=real(callback);};}});
+  await page.route('**/api/session',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({csrf:'fixture-browser-csrf',expiresAt:Date.now()+3600000})}));
   await page.route('**/api/study',route=>route.fulfill({contentType:'application/json',body:'{"text":"Physics"}'}));
   await page.route('**/*.hf.space/voices',route=>route.fulfill({contentType:'application/json',body:'{"aria":{"label":"Aria"},"echo":{"label":"Echo"}}'}));
   await page.route('**/api/images',route=>route.fulfill({contentType:'application/json',body:'{"searchProviders":[],"imageEditing":false}'}));

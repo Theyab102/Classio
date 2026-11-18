@@ -1,3 +1,4 @@
+import {runCheckpointJob,distinct} from './generationJobs';
 import {parseAiJson} from './aiJson';
 import {languageInstruction} from './studyContext';
 import {MATH_OUTPUT_GUIDE} from './mathMarkdown';
@@ -36,7 +37,8 @@ export function courseSections(source, count) {
   return sections;
 }
 
-export async function generateCourseLessons({source,topic,count,signal,onProgress=()=>{},send=sendStudyRequest}) {
+export async function generateCourseLessons({source,topic,count,signal,onProgress=()=>{},send=sendStudyRequest,fileId,resume,onCheckpoint,store}) {
+  if(resume)({source,topic,count}=resume.input);
   if(!Number.isInteger(count)||count<1||count>12)throw new Error('Choose between 1 and 12 lessons.');
   const check=()=>{if(signal?.aborted)throw new DOMException('Course generation cancelled.','AbortError');};
   let retries=2; // At most 1 outline + 12 lessons + 2 retries. Normal quotas still apply.
@@ -59,7 +61,7 @@ export async function generateCourseLessons({source,topic,count,signal,onProgres
   };
   const language=languageInstruction(source),sections=courseSections(source,count),shortSource=source.length<count*300;
   onProgress('Planning the course…');
-  const outline=await request(compact=>({messages:[
+  const plan=()=>request(compact=>({messages:[
     {role:'system',content:`Create a compact course outline for a self-paced course. Return only a JSON array of ${count} objects with title and focus (strings). No lessons or questions yet. ${source?shortSource?'Use the entire short source to plan distinct small lessons. Do not pretend it contains independent chapters.':'Each object must cover its correspondingly numbered source section in order. Do not skip the later sections.':'Progress from foundations to applications of the requested topic.'} ${language} Keep titles under 80 characters and focus under ${compact?100:240} characters.`},
     {role:'user',content:`Topic: ${topic}\n\n${source?shortSource?'SHORT SOURCE:\n'+source:sections.map((part,i)=>`SOURCE SECTION ${i+1}:\n${materialExcerpt(part,'',1200)}`).join('\n\n'):'No source supplied: teach the requested topic, without claiming to quote a file.'}`},
   ],maxTokens:1600}),raw=>{
@@ -67,8 +69,8 @@ export async function generateCourseLessons({source,topic,count,signal,onProgres
     if(!Array.isArray(plan)||plan.length!==count||plan.some(item=>!item||typeof item.title!=='string'||!item.title.trim()||item.title.length>100||typeof item.focus!=='string'||!item.focus.trim()||item.focus.length>500))throw new Error('The course outline was incomplete. Your current course is kept.');
     return plan;
   });
-  const units=[];
-  for(let index=0;index<count;index++) {
+  const step=async(index,job)=>{
+    const outline=job.outline;
     check();onProgress(`Writing lesson ${index+1} of ${count}…`);
     const lesson=await request(compact=>({messages:[
       {role:'system',content:`Write one complete lesson for this self-paced course. Return only a JSON array containing exactly ONE object: title, lesson (Markdown), question, options (exactly three strings), correct (zero-based integer), explanation. ${language} ${MATH_OUTPUT_GUIDE} Explain the assigned focus with short sections, a worked example and a takeaway. ${compact?'Keep the lesson under 900 characters and the check concise.':'Keep the lesson under 2400 characters and the check concise.'} ${source?'Use the assigned source section as evidence. Label supplemental explanations and do not invent source facts.':'Teach the requested topic without claiming source evidence.'} Do not repeat prior lessons or return the whole course.`},
@@ -78,7 +80,10 @@ export async function generateCourseLessons({source,topic,count,signal,onProgres
       if(parsed.length!==1)throw new Error('The AI returned more than the requested lesson. Your current course is kept.');
       return parsed[0];
     });
-    units.push(lesson);
-  }
-  check();return units;
+    distinct([...job.sections,lesson],unit=>unit.title);return lesson;
+  };
+  if(fileId)return runCheckpointJob({fileId,kind:"course",input:{source,topic,count},resume,plan,step,total:count,assemble:job=>job.sections,signal,onProgress,onCheckpoint,store});
+  const job={outline:await plan(),sections:[]};
+  for(let index=0;index<count;index++)job.sections.push(await step(index,job));
+  check();return job.sections;
 }

@@ -1,225 +1,104 @@
-const { test, beforeEach } = require("node:test");
-const assert = require("node:assert/strict");
-const { availableProviders, geminiPayload, generateStudy, clearProviderCaches } = require("./ai-providers");
+const {test,beforeEach}=require('node:test');
+const assert=require('node:assert/strict');
+const {generateStudy,availableProviders,clearProviderCaches,geminiPayload,providerHealth}=require('./ai-providers');
+const {providerCredentials}=require('./ai-settings');
+const {freeOpenRouter}=require('./ai-adapters');
+const {providerPolicy}=require('./ai-policy');
+beforeEach(clearProviderCaches);
+const env={Groq_Key:'fixture-groq-primary',Groq_Key_packup:'fixture-groq-backup',AI_GROQ_STUDENT_USE_APPROVED:'true',AI_GROQ_FREE_TIER_CONFIRMED:'true',CLOUDFLARE_API_TOKEN:'fixture-cf-primary',CLOUDFLARE_ACCOUNT_ID:'a'.repeat(32),AI_CLOUDFLARE_STUDENT_USE_APPROVED:'true',AI_CLOUDFLARE_FREE_TIER_CONFIRMED:'true'};
+const input={messages:[{role:'system',content:'Use the learner’s language.'},{role:'user',content:'Explain gravity.'}],maxTokens:500};
+const response=(data,status=200,headers={})=>({ok:status>=200&&status<300,status,headers:{get:name=>headers[name]},json:async()=>data});
+const catalog=response({data:[{id:'llama-3.1-8b-instant',context_window:131072},{id:'llama-3.3-70b-versatile',context_window:131072},{id:'whisper-large-v3-turbo'}]});
+const cfCatalog=response({result:[{name:'@cf/meta/llama-3.1-8b-instruct-fp8',task:{name:'Text Generation'},properties:{context_window:8192}}]});
+function upstream(run){return async(url,options)=>{if(url.endsWith('/models'))return catalog;if(url.endsWith('/models/search'))return cfCatalog;return run(url,options);};}
+const answered=text=>response({choices:[{message:{content:text},finish_reason:'stop'}]});
 
-beforeEach(() => clearProviderCaches());
-
-const env = { GROQ_TEXT_MODEL: "test-groq-model", GROQ_API_KEY: "test-groq", GEMINI_API_KEY: "test-google", GEMINI_ENABLED: "true", GEMINI_MODEL: "test-model" };
-const input = { messages: [{ role: "system", content: "Use the learner's language." }, { role: "user", content: "Explain gravity." }], maxTokens: 500 };
-
-test("Gemini requires explicit enablement, a key; discovers a model when no override is set", () => {
-  assert.deepEqual(availableProviders({ ...env, GEMINI_ENABLED: "false" }), ["groq"]);
-  assert.deepEqual(availableProviders({ ...env, GEMINI_MODEL: "" }), ["groq", "gemini"]);
-  assert.deepEqual(availableProviders({ ...env, GEMINI_MODEL: "../other/key" }), ["groq"]);
-  assert.deepEqual(availableProviders({ ...env, AI_PROVIDER_ORDER: "gemini,gemini,unknown,groq" }), ["gemini", "groq"]);
+test('exact packup names win over legacy aliases and empty optional backups are valid',()=>{
+ for(const [provider,primary,backup]of[['groq','Groq_Key','Groq_Key_packup'],['gemini','Gemini_Key','Gemini_Key_packup'],['openrouter','OPENROUTER_API_KEY','OPENROUTER_API_KEY_packup'],['cloudflare','CLOUDFLARE_API_TOKEN','CLOUDFLARE_API_TOKEN_packup'],['ollama','OLLAMA_API_TOKEN','OLLAMA_API_TOKEN_packup']]){
+  assert.deepEqual(providerCredentials(provider,{[primary]:'fixture-primary',[backup]:'fixture-backup'}).map(key=>[key.name,key.role]),[[primary,'primary'],[backup,'backup']]);assert.equal(providerCredentials(provider,{[primary]:'fixture-primary'}).length,1);
+ }
+ assert.equal(providerCredentials('gemini',{Gemini_Key:'fixture-exact',GEMINI_API_KEY:'fixture-alias',Gemini_Key_packup:'fixture-backup',GEMINI_API_KEY_2:'fixture-alias-backup'})[1].name,'Gemini_Key_packup');
+ assert.equal(providerCredentials('groq',{Groq_Key:'fixture-same',Groq_Key_packup:'fixture-same'}).length,1);
 });
-
-test("Gemini conversion preserves system instructions, conversation roles and image bytes", () => {
-  const payload = geminiPayload({ ...input, messages: [...input.messages,
-    { role: "assistant", content: "Gravity attracts masses." },
-    { role: "user", content: [{ type: "image_url", image_url: { url: "data:image/png;base64,aGVsbG8=" } }, { type: "text", text: "Explain this diagram." }] },
-  ] });
-  assert.equal(payload.systemInstruction.parts[0].text, input.messages[0].content);
-  assert.deepEqual(payload.contents.map(item => item.role), ["user", "model", "user"]);
-  assert.deepEqual(payload.contents[2].parts[0], { inlineData: { mimeType: "image/png", data: "aGVsbG8=" } });
-  assert.equal(payload.generationConfig.maxOutputTokens, 500);
+test('Cloudflare backup tokens are paired with the correct account and default to the primary account',()=>{
+ const settings={...env,CLOUDFLARE_API_TOKEN_packup:'fixture-cf-backup'};assert.equal(providerCredentials('cloudflare',settings)[1].accountId,settings.CLOUDFLARE_ACCOUNT_ID);
+ settings.CLOUDFLARE_ACCOUNT_ID_packup='b'.repeat(32);assert.equal(providerCredentials('cloudflare',settings)[1].accountId,'b'.repeat(32));
 });
-
-test("Groq rate limiting falls back to Gemini without sending keys in URLs or returning thought text", async () => {
-  const calls = [], reports = [];
-  const result = await generateStudy(input, { env, report: item => reports.push(item), fetcher: async (url, options) => {
-    calls.push({ url, options });
-    if (calls.length === 1) return { ok: false, status: 429, json: async () => ({}) };
-    return { ok: true, json: async () => ({ candidates: [{ finishReason: "STOP", content: { parts: [
-      { thought: true, text: "Private reasoning" }, { text: "Gravity attracts masses." },
-    ] } }] }) };
-  } });
-  assert.deepEqual(result, { provider: "gemini", text: "Gravity attracts masses." });
-  assert.equal(calls.length, 2);
-  assert.equal(calls[1].options.headers["x-goog-api-key"], env.GEMINI_API_KEY);
-  assert(!calls[1].url.includes(env.GEMINI_API_KEY));
-  assert.deepEqual(reports.filter(item=>item.code!=="ROUTE_SELECTED"), [{ provider: "groq", code: "PROVIDER_RATE_LIMIT" }]);
+test('Gemini is blocked for minors regardless of old enablement flags and all other providers require eligibility/free confirmations',()=>{
+ assert.equal(providerPolicy('gemini',{Gemini_Key:'fixture',GEMINI_ENABLED:'true',AI_ALLOW_PAID:'true'}).enabled,false);
+ assert.deepEqual(availableProviders({Groq_Key:'fixture'}),[]);assert.deepEqual(availableProviders(env),['groq','cloudflare']);
+ assert.equal(providerPolicy('groq',{Groq_Key:'fixture',AI_GROQ_STUDENT_USE_APPROVED:'true'}).enabled,false);
 });
-
-test("safety-blocked responses do not bypass the block through another provider", async () => {
-  let calls = 0;
-  await assert.rejects(generateStudy(input, { env: { ...env, AI_PROVIDER_ORDER: "gemini,groq" }, fetcher: async () => {
-    calls++;
-    return { ok: true, json: async () => ({ promptFeedback: { blockReason: "SAFETY" } }) };
-  } }), error => error.code === "CONTENT_BLOCKED" && error.status === 422);
-  assert.equal(calls, 1);
+test('successful primary text generation never touches a backup and diagnostics contain no values or prompts',async()=>{
+ const calls=[],reports=[];const result=await generateStudy(input,{env,report:event=>reports.push(event),fetcher:upstream(async(url,options)=>{calls.push(options.headers.Authorization);assert.deepEqual(JSON.parse(options.body).messages,input.messages);return answered('Gravity attracts masses.');})});
+ assert.equal(result.provider,'groq');assert.deepEqual(calls,['Bearer fixture-groq-primary']);assert(!JSON.stringify(reports).includes('fixture-'));assert(!JSON.stringify(reports).includes('gravity'));
 });
-
-test("network failures fail over, while invalid requests stop without repeating the request", async () => {
-  let calls = 0;
-  const result = await generateStudy(input, { env, fetcher: async () => {
-    if (++calls === 1) throw new Error("network details that must stay private");
-    return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: "A real provider response" }] } }] }) };
-  } });
-  assert.equal(result.provider, "gemini");
-  calls = 0;
-  await assert.rejects(generateStudy(input, { env, fetcher: async () => {
-    calls++; return { ok: false, status: 400, json: async () => ({}) };
-  } }), error => error.code === "HTTP_400");
-  assert.equal(calls, 1);
+for(const status of [401,403])test('only credential rejection '+status+' uses a backup; invalid primary stays in cooldown',async()=>{
+ const calls=[],options={env,fetcher:upstream(async(url,request)=>{calls.push(request.headers.Authorization);return request.headers.Authorization.endsWith('primary')?response({},status):answered('Backup answer');})};
+ assert.equal((await generateStudy(input,options)).text,'Backup answer');await generateStudy({...input,maxTokens:501},options);assert.deepEqual(calls,['Bearer fixture-groq-primary','Bearer fixture-groq-backup','Bearer fixture-groq-backup']);
 });
-
-test("Gemini accepts inline recordings and requests verbatim transcription", async () => {
-  const audio = { audio: "dGVzdA==", filename: "lecture.webm" };
-  const payload = geminiPayload(audio);
-  assert.deepEqual(payload.contents[0].parts[1], { inlineData: { mimeType: "audio/webm", data: audio.audio } });
-  assert.match(payload.contents[0].parts[0].text, /verbatim/);
+test('a rejected Cloudflare primary uses the backup account ID as well as its token',async()=>{
+ const settings={...env,Groq_Key:'',Groq_Key_packup:'',CLOUDFLARE_API_TOKEN_packup:'fixture-cf-backup',CLOUDFLARE_ACCOUNT_ID_packup:'b'.repeat(32)},seen=[];
+ const result=await generateStudy(input,{env:settings,fetcher:async(url,options)=>{seen.push([url,options.headers.Authorization]);if(url.includes('/accounts/'+ 'a'.repeat(32)))return response({},403);return url.endsWith('/search')?cfCatalog:response({result:{response:'Paired backup'}});}});
+ assert.equal(result.text,'Paired backup');assert(seen.at(-1)[0].includes('b'.repeat(32)));assert.equal(seen.at(-1)[1],'Bearer fixture-cf-backup');
 });
-
-test("unconfigured providers never make a network request or invent an answer", async () => {
-  await assert.rejects(generateStudy(input, { env: {}, fetcher: () => { throw new Error("Unexpected request"); } }),
-    error => error.code === "NOT_CONFIGURED" && error.status === 503);
+test('shared 429 respects Retry-After, skips same-provider backup, and falls back to a different eligible provider',async()=>{
+ const seen=[];const options={env,fetcher:upstream(async(url,request)=>{seen.push(request.headers.Authorization);return url.includes('groq')?response({},429,{'retry-after':'90'}):response({result:{response:'Free fallback'}});})};
+ assert.equal((await generateStudy(input,options)).provider,'cloudflare');await generateStudy({...input,maxTokens:501},options);assert.deepEqual(seen,['Bearer fixture-groq-primary','Bearer fixture-cf-primary','Bearer fixture-cf-primary']);assert.equal(providerHealth().groq.status,'temporarily-limited');
 });
-
-test("truncated course/JSON output is reported instead of presented as a complete answer", async () => {
-  await assert.rejects(generateStudy(input, { env: { GEMINI_ENABLED: "true", GEMINI_API_KEY: "test", GEMINI_MODEL: "test-model" },
-    fetcher: async () => ({ ok: true, json: async () => ({ candidates: [{ finishReason: "MAX_TOKENS" }] }) }) }),
-  error => error.code === "OUTPUT_LIMIT");
+for(const failure of ['network',500,503])test('temporary failure '+failure+' falls back without credential cycling',async()=>{
+ const seen=[];const result=await generateStudy(input,{env,fetcher:upstream(async(url,request)=>{seen.push(request.headers.Authorization);if(url.includes('groq')){if(failure==='network')throw Error('sensitive upstream body');return response({},failure);}return response({result:{response:'Recovered'}});})});assert.equal(result.text,'Recovered');assert(!seen.includes('Bearer fixture-groq-backup'));
 });
-
-test("uses the server alias and discovers an actually listed text model", async () => {
-  const urls = [];
-  const result = await generateStudy(input, { env: { Groq_Key: "fixture-alias" }, fetcher: async (url, options) => {
-    urls.push(url); assert.equal(options.headers.Authorization, "Bearer fixture-alias");
-    if (url.endsWith("/models")) return { ok: true, json: async () => ({ data: [{ id: "llama-3.3-70b-versatile", active: true }] }) };
-    assert.equal(JSON.parse(options.body).model, "llama-3.3-70b-versatile");
-    return { ok: true, json: async () => ({ choices: [{ message: { content: "A provider response." } }] }) };
-  } });
-  assert.equal(result.provider, "groq"); assert.equal(urls.length, 2); assert(urls.every(url => !url.includes("fixture-alias")));
+test('permanent invalid requests and content policy blocks do not bypass the error through another provider',async()=>{
+ for(const status of [400,422]){clearProviderCaches();let calls=0;await assert.rejects(generateStudy(input,{env,fetcher:upstream(async()=>{calls++;return response({},status);})}));assert.equal(calls,1);}
+ let calls=0;await assert.rejects(generateStudy(input,{env,fetcher:upstream(async()=>{calls++;return response({choices:[{finish_reason:'content_filter'}]});})}),error=>error.code==='CONTENT_BLOCKED');assert.equal(calls,1);
 });
-test("a rejected credential is not repeatedly sent by the same warm server", async () => {
-  let calls = 0;
-  const options = { env: { Groq_Key: "fixture-rejected", GROQ_TEXT_MODEL: "fixture" }, fetcher: async () => { calls++; return { ok: false, status: 401, json: async () => ({}) }; } };
-  await assert.rejects(generateStudy(input, options), error => error.code === "CREDENTIALS_REJECTED");
-  await assert.rejects(generateStudy(input, options), error => error.code === "CREDENTIALS_REJECTED");
-  assert.equal(calls, 1);
+test('truncated output gets one alternate listed model; partial text is never returned',async()=>{
+ const models=[];const result=await generateStudy(input,{env,fetcher:upstream(async(url,request)=>{models.push(JSON.parse(request.body).model);return models.length===1?response({choices:[{message:{content:'truncated'},finish_reason:'length'}]}):answered('Complete answer');})});assert.equal(result.text,'Complete answer');assert.deepEqual(models,['llama-3.1-8b-instant','llama-3.3-70b-versatile']);
+});
+test('an exhausted model list retains OUTPUT_LIMIT for the resumable client',async()=>{
+ await assert.rejects(generateStudy(input,{env:{...env,CLOUDFLARE_API_TOKEN:'',AI_GROQ_MODEL:'llama-3.1-8b-instant'},fetcher:upstream(async()=>response({choices:[{finish_reason:'length'}]}))}),error=>error.code==='OUTPUT_LIMIT');
+});
+for(const stalled of ['catalog','body','request'])test('bounded primary timeout includes '+stalled+' and leaves time for fallback',async()=>{
+ let primarySignal;
+ const result=await generateStudy(input,{env:{...env,AI_PRIMARY_TIMEOUT_MS:'1000'},fetcher:async(url,options)=>{
+  if(url.includes('groq')){primarySignal=options.signal;if(stalled==='catalog'||stalled==='request'&&!url.endsWith('/models'))return new Promise(()=>{});if(url.endsWith('/models'))return catalog;return{ok:true,json:()=>new Promise(()=>{})};}
+  return url.endsWith('/search')?cfCatalog:response({result:{response:'Deadline fallback'}});
+ }});assert.equal(result.text,'Deadline fallback');assert(primarySignal.aborted);
+});
+test('circuit cooldown expires without being extended by skipped requests',async()=>{
+ const now=Date.now,base=now();let offset=0,primary=0;Date.now=()=>base+offset;
+ try{const options={env,fetcher:upstream(async url=>{if(url.includes('groq')){if(++primary===1)throw Error('offline');return answered('Restored');}return response({result:{response:'Fallback'}});})};assert.equal((await generateStudy(input,options)).provider,'cloudflare');offset=5000;assert.equal((await generateStudy({...input,maxTokens:501},options)).provider,'cloudflare');offset=11000;assert.equal((await generateStudy({...input,maxTokens:502},options)).provider,'groq');assert.equal(primary,2);}finally{Date.now=now;}
+});
+test('style request deduplication/cache is private to the authorized account',async()=>{
+ let calls=0;const options={env,identity:'user:a',fetcher:upstream(async()=>{calls++;return answered('style');})};
+ await Promise.all([generateStudy({...input,task:'style'},options),generateStudy({...input,task:'style'},options)]);await generateStudy({...input,task:'style'},options);assert.equal(calls,1);await generateStudy({...input,task:'style'},{...options,identity:'user:b'});assert.equal(calls,2);
+});
+test('audio only chooses a listed transcription model and never falls back to text-only providers',async()=>{
+ const result=await generateStudy({audio:'dGVzdA==',filename:'lecture.webm'},{env,fetcher:upstream(async(url,request)=>{assert(url.endsWith('/audio/transcriptions'));assert.equal(request.body.get('model'),'whisper-large-v3-turbo');return response({text:'Transcript'});})});assert.equal(result.text,'Transcript');
+ await assert.rejects(generateStudy({audio:'dGVzdA==',filename:'lecture.webm'},{env:{...env,Groq_Key:'',Groq_Key_packup:''},fetcher:()=>assert.fail('text-only provider must not receive audio')}),error=>error.code==='NOT_CONFIGURED');
+});
+test('vision chooses only explicitly capable models and supports OpenRouter vision payloads',async()=>{
+ const settings={OPENROUTER_API_KEY:'fixture-router',AI_OPENROUTER_STUDENT_USE_APPROVED:'true'};
+ const vision={...input,vision:true,messages:[{role:'user',content:[{type:'text',text:'Explain this diagram.'},{type:'image_url',image_url:{url:'data:image/png;base64,dGVzdA=='}}]}]};
+ const result=await generateStudy(vision,{env:settings,fetcher:async(url,request)=>url.endsWith('/models')?response({data:[{id:'fixture/vision:free',context_length:8192,architecture:{input_modalities:['text','image']},pricing:{prompt:'0',completion:'0',image:'0'}}]}):(assert.deepEqual(JSON.parse(request.body).messages,vision.messages),answered('Diagram explanation'))});assert.equal(result.provider,'openrouter');
+});
+test('free-only OpenRouter verifies every catalog price and constrains routing; a free-looking paid ID cannot run',async()=>{
+ assert(!freeOpenRouter({id:'bad:free',pricing:{prompt:'0',completion:'0',request:'0.01'}}));assert(!freeOpenRouter({id:'paid',pricing:{prompt:'0',completion:'0'}}));
+ const settings={OPENROUTER_API_KEY:'fixture-router',AI_OPENROUTER_STUDENT_USE_APPROVED:'true'},models=[{id:'paid:free',context_length:8192,pricing:{prompt:'1',completion:'0'}},{id:'openrouter/free',context_length:8192,pricing:{prompt:'0',completion:'0',request:'0'}}];let body;
+ await generateStudy(input,{env:settings,fetcher:async(url,request)=>url.endsWith('/models')?response({data:models}):(body=JSON.parse(request.body),answered('Free'))});assert.equal(body.model,'openrouter/free');assert.deepEqual(body.provider.max_price,{prompt:0,completion:0});assert.equal(body.provider.allow_fallbacks,false);
+ await assert.rejects(generateStudy(input,{env:{...settings,AI_OPENROUTER_MODEL:'paid:free'},fetcher:async()=>assert.fail('cached catalog must reject paid model')}),error=>error.code==='MODEL_UNAVAILABLE');
+});
+test('Ollama is optional, requires a protected remote endpoint/license approval and uses its actual capability catalog',async()=>{
+ assert(!providerPolicy('ollama',{AI_ENABLE_OLLAMA:'true',AI_OLLAMA_STUDENT_USE_APPROVED:'true',OLLAMA_BASE_URL:'http://localhost:11434',VERCEL:'1'}).enabled);
+ const settings={AI_ENABLE_OLLAMA:'true',AI_OLLAMA_STUDENT_USE_APPROVED:'true',AI_OLLAMA_LICENSE_APPROVED:'true',AI_OLLAMA_FREE_TIER_CONFIRMED:'true',OLLAMA_BASE_URL:'https://private.example.com',OLLAMA_MODEL:'qwen2.5:1.5b',OLLAMA_API_TOKEN:'fixture-private-token'};
+ const seen=[];const result=await generateStudy(input,{env:settings,fetcher:async(url,request)=>{seen.push(url);assert.equal(request.headers.Authorization,'Bearer fixture-private-token');return response(url.endsWith('/tags')?{models:[{name:settings.OLLAMA_MODEL}]}:url.endsWith('/show')?{capabilities:['completion'],model_info:{'qwen2.context_length':32768}}:{message:{content:'Private answer'},done_reason:'stop'});}});assert.equal(result.text,'Private answer');assert.equal(seen.length,3);
+});
+test('Gemini payload conversion retains mathematics, separate system instructions and inline images while activation is blocked',()=>{
+ const payload=geminiPayload({...input,messages:[{role:'system',content:'Use $x^2$.'},{role:'user',content:[{type:'text',text:'Diagram?'},{type:'image_url',image_url:{url:'data:image/png;base64,dGVzdA=='}}]}]});assert.equal(payload.systemInstruction.parts[0].text,'Use $x^2$.');assert.equal(payload.contents[0].parts[1].inlineData.data,'dGVzdA==');
 });
 
-test("a busy Groq model falls back to a listed model without disabling transcription", async () => {
-  const seen = [], options = { env: { Groq_Key: "fixture-model-fallback" }, fetcher: async (url, request) => {
-    if (url.endsWith("/models")) return { ok: true, json: async () => ({ data: ["llama-3.1-8b-instant", "openai/gpt-oss-20b"].map(id => ({ id })) }) };
-    if (url.endsWith("/transcriptions")) return { ok: true, json: async () => ({ text: "A recorded question." }) };
-    const body = JSON.parse(request.body); seen.push(body.model);
-    return body.model === "llama-3.1-8b-instant" ? { ok: false, status: 429, headers: { get: () => "12" }, json: async () => ({}) }
-      : { ok: true, json: async () => ({ choices: [{ message: { content: "A real response from the available model." } }] }) };
-  } };
-  assert.equal((await generateStudy(input, options)).provider, "groq");
-  assert.deepEqual(seen, ["llama-3.1-8b-instant", "openai/gpt-oss-20b"]);
-  assert.equal((await generateStudy({ audio: "dGVzdA==", filename: "question.webm" }, options)).text, "A recorded question.");
-  await generateStudy(input, options); assert.equal(seen.at(-1), "openai/gpt-oss-20b");
-});
-
-test("an oversized generation does not put a later small greeting into cooldown", async () => {
-  const options = { env: { Groq_Key: "fixture-size" }, fetcher: async (url, request) => {
-    if (url.endsWith("/models")) return { ok: true, json: async () => ({ data: ["llama-3.1-8b-instant", "llama-3.3-70b-versatile", "openai/gpt-oss-20b"].map(id => ({ id })) }) };
-    return JSON.parse(request.body).max_completion_tokens > 500 ? { ok: false, status: 429, json: async () => ({ error: { message: "Request too large for the model token allowance." } }) }
-      : { ok: true, json: async () => ({ choices: [{ message: { content: "Hello!" } }] }) };
-  } };
-  await assert.rejects(generateStudy({ ...input, maxTokens: 5500 }, options), error => error.code === "REQUEST_TOO_LARGE");
-  assert.equal((await generateStudy({ ...input, maxTokens: 200 }, options)).text, "Hello!");
-});
-
-test('two independently configured Gemini quota groups fail over sequentially without duplicate requests',async()=>{
-  const keys=[],settings={GEMINI_ENABLED:'true',GEMINI_MODEL:'test',GEMINI_API_KEY:'first',GEMINI_API_KEY_2:'second',GEMINI_QUOTA_GROUP_1:'project-a',GEMINI_QUOTA_GROUP_2:'project-b'};
-  const result=await generateStudy(input,{env:settings,fetcher:async(url,request)=>{keys.push(request.headers['x-goog-api-key']);return keys.length===1?{ok:false,status:429,headers:{get:()=> '12'},json:async()=>({})}:{ok:true,json:async()=>({candidates:[{content:{parts:[{text:'Second project answered.'}]}}]})};}});
-  assert.equal(result.text,'Second project answered.');assert.deepEqual(keys,['first','second']);
-});
-test('Gemini keys with unknown/shared quota do not rotate around a rate limit',async()=>{
-  const keys=[],settings={GEMINI_ENABLED:'true',GEMINI_MODEL:'test',GEMINI_API_KEY:'first',Gemini_Key_2:'second'};
-  await assert.rejects(generateStudy(input,{env:settings,fetcher:async(url,request)=>{keys.push(request.headers['x-goog-api-key']);return{ok:false,status:429,headers:{get:()=> '20'},json:async()=>({})};}}),error=>error.status===429);
-  assert.deepEqual(keys,['first']);
-});
-test('identical in-flight style requests share one provider call and validated tasks can be cached',async()=>{
-  let calls=0;const options={env:{GROQ_API_KEY:'dedupe',GROQ_TEXT_MODEL:'test'},fetcher:async()=>{calls++;await new Promise(resolve=>setTimeout(resolve,10));return{ok:true,json:async()=>({choices:[{message:{content:'{"font":"sans"}'}}]})};}};
-  const request={...input,task:'style'};await Promise.all([generateStudy(request,options),generateStudy(request,options)]);await generateStudy(request,options);assert.equal(calls,1);
-});
-test('truncated Groq output uses one alternate listed model and never returns the partial answer',async()=>{
- const seen=[];
- const result=await generateStudy(input,{env:{GROQ_API_KEY:'truncated-fixture'},fetcher:async(url,options)=>{
-  if(url.endsWith('/models'))return{ok:true,json:async()=>({data:['llama-3.1-8b-instant','openai/gpt-oss-20b'].map(id=>({id}))})};
-  seen.push(JSON.parse(options.body).model);
-  return{ok:true,json:async()=>({choices:[{finish_reason:seen.length===1?'length':'stop',message:{content:seen.length===1?'[{"unfinished":':'A complete answer.'}}]})};
- }});
- assert.equal(result.text,'A complete answer.');assert.deepEqual(seen,['llama-3.1-8b-instant','openai/gpt-oss-20b']);
-});
-test('an exhausted model list retains OUTPUT_LIMIT so the client can make a shorter bounded retry',async()=>{
- let generations=0;
- await assert.rejects(generateStudy(input,{env:{GROQ_API_KEY:'single-model-fixture'},fetcher:async url=>url.endsWith('/models')?{ok:true,json:async()=>({data:[{id:'llama-3.1-8b-instant'}]})}:{ok:true,json:async()=>{generations++;return{choices:[{finish_reason:'length',message:{content:'Incomplete'}}]};}}}),error=>error.code==='OUTPUT_LIMIT');
- assert.equal(generations,1);
-});
-test('Groq content-filter finish reasons stop without fallback to another provider',async()=>{
- let calls=0;
- await assert.rejects(generateStudy(input,{env,fetcher:async()=>{calls++;return{ok:true,json:async()=>({choices:[{finish_reason:'content_filter',message:{content:''}}]})};}}),error=>error.code==='CONTENT_BLOCKED');
- assert.equal(calls,1);
-});
-
-test('a stalled primary is aborted and a free provider answers; later requests skip its cooldown',async()=>{
- const seen=[],settings={...env,AI_PRIMARY_TIMEOUT_MS:'1000'};let primarySignal;
- const options={env:settings,fetcher:async(url,request)=>{
-  seen.push(url.includes('groq.com')?'groq':'gemini');
-  if(url.includes('groq.com')){primarySignal=request.signal;return new Promise(()=>{});}
-  return{ok:true,json:async()=>({candidates:[{content:{parts:[{text:'Fallback answer'}]}}]})};
- }};
- const at=Date.now();assert.equal((await generateStudy(input,options)).text,'Fallback answer');
- assert(primarySignal.aborted);assert(Date.now()-at<2500);
- assert.equal((await generateStudy({...input,messages:[{role:'user',content:'Another question'}]},options)).provider,'gemini');
- assert.deepEqual(seen,['groq','gemini','gemini']);
-});
-test('a response whose body stalls also leaves time for fallback',async()=>{
- let paidSignal;
- const result=await generateStudy(input,{env:{...env,AI_PRIMARY_TIMEOUT_MS:'1000'},fetcher:async(url,request)=>{
-  if(url.includes('groq.com')){paidSignal=request.signal;return{ok:true,json:()=>new Promise(()=>{})};}
-  return{ok:true,json:async()=>({candidates:[{content:{parts:[{text:'Free response'}]}}]})};
- }});
- assert.equal(result.text,'Free response');assert(paidSignal.aborted);
-});
-test('ordinary successful primary work never consumes either Gemini key',async()=>{
- const calls=[];await generateStudy({...input,task:'notes'},{env:{...env,GEMINI_API_KEY_2:'second'},fetcher:async(url,request)=>{
-  calls.push(request.headers);return{ok:true,json:async()=>({choices:[{message:{content:'Notes'}}]})};
- }});assert.equal(calls.length,1);assert.equal(calls[0]['x-goog-api-key'],undefined);
-});
-test('free fallback work is divided between slots by task and recent reserved work',async()=>{
- const seen=[],settings={GEMINI_ENABLED:'true',GEMINI_MODEL:'test',GEMINI_API_KEY:'first',GEMINI_API_KEY_2:'second'};
- const options={env:settings,fetcher:async(url,request)=>{seen.push(request.headers['x-goog-api-key']);return{ok:true,json:async()=>({candidates:[{content:{parts:[{text:'Answer'}]}}]})};}};
- await generateStudy({...input,task:'notes'},options);
- await generateStudy({...input,task:'conversation'},options);
- await generateStudy({...input,task:'flashcards'},options);
- await generateStudy({...input,task:'questions'},options);
- assert.deepEqual(seen,['first','second','first','second']);
-});
-test('simultaneous different requests reserve separate free slots before either completes',async()=>{
- const seen=[],releases=[],settings={GEMINI_ENABLED:'true',GEMINI_MODEL:'test',GEMINI_API_KEY:'first',GEMINI_API_KEY_2:'second'};
- const fetcher=async(url,request)=>{seen.push(request.headers['x-goog-api-key']);await new Promise(resolve=>releases.push(resolve));return{ok:true,json:async()=>({candidates:[{content:{parts:[{text:'Answer'}]}}]})};};
- const work=[generateStudy({...input,task:'notes'},{env:settings,fetcher}),generateStudy({...input,task:'flashcards'},{env:settings,fetcher})];
- await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(seen,['first','second']);for(const release of releases)release();await Promise.all(work);
-});
-
-test('the primary model catalog body cannot hold the request past the fallback deadline',async()=>{
- const seen=[];
- const result=await generateStudy(input,{env:{...env,GROQ_TEXT_MODEL:'',AI_PRIMARY_TIMEOUT_MS:'1000'},fetcher:async(url)=>{
-  seen.push(url);if(url.includes('groq.com'))return{ok:true,json:()=>new Promise(()=>{})};
-  return{ok:true,json:async()=>({candidates:[{content:{parts:[{text:'Catalog fallback'}]}}]})};
- }});
- assert.equal(result.text,'Catalog fallback');assert.equal(seen.length,2);assert(seen[0].endsWith('/models'));
-});
-test('conversation fallback prefers the second free slot when both have no recent load',async()=>{
- let key;await generateStudy({...input,task:'conversation'},{env:{GEMINI_ENABLED:'true',GEMINI_MODEL:'test',GEMINI_API_KEY:'first',GEMINI_API_KEY_2:'second'},fetcher:async(url,request)=>{key=request.headers['x-goog-api-key'];return{ok:true,json:async()=>({candidates:[{content:{parts:[{text:'Answer'}]}}]})};}});assert.equal(key,'second');
-});
-
-test('requests during network cooldown do not keep extending it indefinitely',async()=>{
- const realNow=Date.now,base=realNow();let offset=0,primaryCalls=0;Date.now=()=>base+offset;
- try{
-  const options={env,fetcher:async url=>{
-   if(url.includes('groq.com')){if(++primaryCalls===1)throw Error('offline');return{ok:true,json:async()=>({choices:[{message:{content:'Recovered'}}]})};}
-   return{ok:true,json:async()=>({candidates:[{content:{parts:[{text:'Fallback'}]}}]})};
-  }};
-  assert.equal((await generateStudy(input,options)).provider,'gemini');offset=20000;
-  assert.equal((await generateStudy(input,options)).provider,'gemini');offset=31000;
-  assert.equal((await generateStudy(input,options)).provider,'groq');assert.equal(primaryCalls,2);
- }finally{Date.now=realNow;}
+test('normal image bytes use a visual token budget rather than being counted as base64 text tokens',async()=>{
+ const vision={...input,vision:true,messages:[{role:'user',content:[{type:'image_url',image_url:{url:'data:image/jpeg;base64,'+Buffer.alloc(600000,23).toString('base64')}},{type:'text',text:'Explain this diagram.'}]}]};
+ const result=await generateStudy(vision,{env,fetcher:async(url,request)=>url.endsWith('/models')?response({data:[{id:'meta-llama/llama-4-scout-17b-16e-instruct',context_window:131072}]}):(assert.equal(JSON.parse(request.body).messages[0].content[0].image_url.url,vision.messages[0].content[0].image_url.url),answered('The diagram shows motion.'))});assert.equal(result.provider,'groq');
 });
