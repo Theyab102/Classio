@@ -97,7 +97,7 @@ const firebaseConfig = {
 };
 const firebaseApp = initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
-setAiIdentityProvider(()=>auth.currentUser);
+setAiIdentityProvider(()=>auth.currentUser,()=>auth.authStateReady?.());
 const db = getFirestore(firebaseApp);
 const googleProvider = new GoogleAuthProvider();
 

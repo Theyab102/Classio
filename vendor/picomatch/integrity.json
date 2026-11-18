@@ -1,0 +1,17 @@
+{
+  "upstream": "picomatch@4.0.7",
+  "upstreamIntegrity": "sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==",
+  "archive": "vendor/picomatch-4.0.8.tgz",
+  "archiveSha256": "dee9c489fa8fb9fa818313eac841eef185232ad399cd21b221676b7394b1e6cb",
+  "files": {
+    "index.js": "02ae26406508e28f9ba0865be16cf77f0b33de6c4d4d49c212c4176df1d5625a",
+    "posix.js": "5695ff5dfcd5a338a40630bd506056f2950bcb08fe1cc068519cbbfe60add480",
+    "lib/constants.js": "c28f952d2758261fe5428a121add485cc25b03e0193633f649de903dc0e5e222",
+    "lib/parse.js": "73c3dfdd9bbe9c562f639f82226ab8212ca43332badd8a0572150037ff39020c",
+    "lib/picomatch.js": "fdd249d7ffff853f3bb1c77eafc8baa1a437bea85a94c35877b83c6a40d9ca94",
+    "lib/scan.js": "6457a1764e5c2e543cc3a0c00ce12ebb3764097628868198370b64d4e642aaae",
+    "lib/utils.js": "f04604f70cd1a3f6ace80b84766468674ff38b4bb83818d2ef1d81fc6355f935",
+    "LICENSE": "d0cd141b0c322fded5dfad1d4645bb2fedfc05b7321fe1009469638190d59ef9",
+    "package.json": "3e59a4f4a2ad08614465241e1049f1deedb78aaf5cd5cdbc1074392c8b20dc9b"
+  }
+}

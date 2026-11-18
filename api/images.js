@@ -1,4 +1,5 @@
 const { authorize } = require("../server/ai-auth");
+const { accessFailure } = require("../server/access-errors");
 const { reserveRequest } = require("../server/ai-quota");
 const {
   imageCapabilities,
@@ -40,11 +41,9 @@ module.exports = async function images(req, res) {
       return res.status(503).json({ error: "Image requests are unavailable." });
     if (quota.retryAfter) {
       res.setHeader("Retry-After", String(quota.retryAfter));
-      return res
-        .status(429)
-        .json({
-          error: "The image request limit was reached. Try again later.",
-        });
+      return res.status(429).json({
+        error: "The image request limit was reached. Try again later.",
+      });
     }
     release = quota.release;
     if (req.body?.action === "search")
@@ -55,15 +54,17 @@ module.exports = async function images(req, res) {
         .json({ tracked: await trackImageDownload(req.body.id) });
     return res.status(200).json(await imageOperation(req.body || {}));
   } catch (error) {
-    return res
-      .status(error.status || 503)
-      .json({
-        error: error.code
-          ? "Start a secure Classio session or sign in again."
-          : error.status
-            ? error.message
-            : "The image service is unavailable. Your original image is kept.",
-      });
+    if (error.code) {
+      const failure = accessFailure(error);
+      return res.status(failure.status).json(failure.body);
+    }
+    return res.status(error.status || 503).json({
+      error: error.code
+        ? "Start a secure Classio session or sign in again."
+        : error.status
+          ? error.message
+          : "The image service is unavailable. Your original image is kept.",
+    });
   } finally {
     await release?.();
   }

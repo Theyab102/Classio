@@ -199,8 +199,12 @@ export async function runCheckpointJob({
     }
     const saved = resume ? await store.get(owner, fileId, kind) : null;
     if (resume) {
-      const candidate = saved && saved.updatedAt >= resume.updatedAt ? saved : resume;
-      if(candidate.id!==resume.id)throw new Error('A newer generation job is saved for this file. Reopen the material to resume its current draft.');
+      const candidate =
+        saved && saved.updatedAt >= resume.updatedAt ? saved : resume;
+      if (candidate.id !== resume.id)
+        throw new Error(
+          "A newer generation job is saved for this file. Reopen the material to resume its current draft.",
+        );
       if (
         candidate.owner !== owner ||
         candidate.file !== fileId ||
@@ -229,6 +233,7 @@ export async function runCheckpointJob({
       };
     job.status = "running";
     job.error = "";
+    delete job.failure;
     await save();
     if (plan && !job.outline) {
       onProgress("Planning and saving the outline…");
@@ -259,12 +264,20 @@ export async function runCheckpointJob({
             attempt === 1 ||
             error.status === 429 ||
             error.status === 401 ||
+            error.status === 403 ||
+            [
+              "AUTH_UNAVAILABLE",
+              "AUTH_REQUIRED",
+              "AUTH_EXPIRED",
+              "AUTH_REVOKED",
+              "GUEST_SESSION_REQUIRED",
+            ].includes(error.code) ||
             error.code === "CONTENT_BLOCKED" ||
             error.code === "AI_NOT_CONFIGURED"
           )
             throw error;
           onProgress("Retrying this unfinished section…");
-          await new Promise(resolve=>setTimeout(resolve,200));
+          await new Promise((resolve) => setTimeout(resolve, 200));
           check();
         }
       }
@@ -281,10 +294,19 @@ export async function runCheckpointJob({
       job.status =
         signal?.aborted || error.name === "AbortError" ? "paused" : "failed";
       job.error =
-        job.status === "paused"
-          ? "Generation paused. Completed sections are saved."
-          : "This section could not finish. Completed sections are saved.";
+        !job.sections.length && !job.outline
+          ? "Generation has not started. Your existing work is kept."
+          : job.status === "paused"
+            ? "Generation paused. Completed sections are saved."
+            : "This section could not finish. Completed sections are saved.";
       job.updatedAt = Date.now();
+      job.failure = {
+        code:
+          typeof error.code === "string"
+            ? error.code.slice(0, 60)
+            : "GENERATION_FAILED",
+        status: Number(error.status) || 0,
+      };
       try {
         await store.put(JSON.parse(JSON.stringify(job)));
         onCheckpoint(JSON.parse(JSON.stringify(job)));

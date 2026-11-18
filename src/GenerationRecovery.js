@@ -8,6 +8,20 @@ export default function GenerationRecovery({
 }) {
   if (!resumable(job)) return null;
   const saved = job.sections?.length || 0;
+  if (busy && !saved) return null;
+  if (!saved && !job.outline)
+    return (
+      <div className="generation-retry" role="status">
+        <span>Generation hasn’t started yet.</span>
+        <button
+          type="button"
+          className="text-button"
+          onClick={() => onResume(job)}
+        >
+          Try again
+        </button>
+      </div>
+    );
   return (
     <aside
       className="generation-recovery"
@@ -15,7 +29,9 @@ export default function GenerationRecovery({
     >
       <strong>Generation progress saved</strong>
       <p>
-        {saved} of {job.total || "planned"} sections saved.{" "}
+        {saved
+          ? `${saved} of ${job.total || "planned"} sections saved.`
+          : "Outline saved. No content sections have been completed yet."}{" "}
         {busy
           ? "New sections save automatically."
           : job.status === "paused"

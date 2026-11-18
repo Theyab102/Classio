@@ -1,4 +1,5 @@
 const { authorize } = require("../server/ai-auth");
+const { accessFailure } = require("../server/access-errors");
 const { configured, reserveRequest } = require("../server/ai-quota");
 const {
   parseAudioRequest,
@@ -49,13 +50,12 @@ module.exports = async function study(req, res) {
   try {
     req.aiIdentity = await authorize(req);
   } catch (error) {
-    return res
-      .status(error.status || 401)
-      .json({
-        code: error.code || "AUTH_REQUIRED",
-        error:
-          "Start a secure Classio session or sign in again. Your writing is kept.",
-      });
+    const failure = accessFailure(error);
+    console.warn("study_access", {
+      code: failure.body.code,
+      ...(error.reason ? { reason: error.reason } : {}),
+    });
+    return res.status(failure.status).json(failure.body);
   }
 
   const audio = req.body?.kind === "audio";
@@ -63,12 +63,10 @@ module.exports = async function study(req, res) {
     ? parseAudioRequest(req.body)
     : parseStudyRequest(req.body);
   if (!input)
-    return res
-      .status(400)
-      .json({
-        error:
-          "This request is invalid or too large. Check the file or shorten the input.",
-      });
+    return res.status(400).json({
+      error:
+        "This request is invalid or too large. Check the file or shorten the input.",
+    });
   const supportive = safetyResponse(input);
   if (supportive) return res.status(200).json({ text: supportive });
   if (input.messages)
@@ -78,34 +76,33 @@ module.exports = async function study(req, res) {
     ];
   const report = configurationStatus();
   if (!configured() || !report.configured) {
-    console.error("study_configuration", { code: "AI_NOT_CONFIGURED" });
-    return res
-      .status(503)
-      .json({
-        error:
-          "AI study tools are currently unavailable. Your writing is kept.",
-        code: "AI_NOT_CONFIGURED",
-      });
+    console.error("study_configuration", {
+      code: "AI_NOT_CONFIGURED",
+      missing: report.missing,
+      disabledProviders: Object.entries(report.providerConfiguration)
+        .filter(([, value]) => !value.enabled)
+        .map(([provider, value]) => ({ provider, reason: value.reason })),
+    });
+    return res.status(503).json({
+      error: "AI study tools are currently unavailable. Your writing is kept.",
+      code: "AI_NOT_CONFIGURED",
+    });
   }
 
   let lease;
   try {
     const quota = await requestQuota(req, audio ? "audio" : "study");
     if (quota.unavailable)
-      return res
-        .status(503)
-        .json({
-          error: "AI study tools are temporarily unavailable.",
-          code: "QUOTA_UNAVAILABLE",
-        });
+      return res.status(503).json({
+        error: "AI study tools are temporarily unavailable.",
+        code: "QUOTA_UNAVAILABLE",
+      });
     if (quota.retryAfter) {
       res.setHeader("Retry-After", String(quota.retryAfter));
-      return res
-        .status(429)
-        .json({
-          error: `The free AI request limit was reached. Try again in ${quota.retryAfter} seconds.`,
-          code: "CLIENT_RATE_LIMIT",
-        });
+      return res.status(429).json({
+        error: `The free AI request limit was reached. Try again in ${quota.retryAfter} seconds.`,
+        code: "CLIENT_RATE_LIMIT",
+      });
     }
     lease = quota.release;
     const result = await generateStudy(input, {
@@ -141,16 +138,14 @@ module.exports = async function study(req, res) {
     const status = error.status || 503;
     if (status === 429)
       res.setHeader("Retry-After", String(error.retryAfter || 30));
-    return res
-      .status(status)
-      .json({
-        error:
-          messages[code] ||
-          (status === 429
-            ? "The free AI services are busy. Try again shortly."
-            : "The AI service could not complete this request. Your work is still open; try again shortly."),
-        code,
-      });
+    return res.status(status).json({
+      error:
+        messages[code] ||
+        (status === 429
+          ? "The free AI services are busy. Try again shortly."
+          : "The AI service could not complete this request. Your work is still open; try again shortly."),
+      code,
+    });
   } finally {
     await lease?.();
   }

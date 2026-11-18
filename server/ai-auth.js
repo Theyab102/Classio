@@ -1,10 +1,11 @@
 const { createHmac, randomBytes, timingSafeEqual } = require("node:crypto");
 const COOKIE = "__Host-classio_ai";
 class AccessError extends Error {
-  constructor(status, code) {
+  constructor(status, code, reason) {
     super(code);
     this.status = status;
     this.code = code;
+    this.reason = reason;
   }
 }
 function secret(env) {
@@ -83,15 +84,28 @@ function createGuestSession(req, res, env = process.env) {
   return { csrf: signature("csrf:" + value.nonce, env), expiresAt: value.exp };
 }
 async function verifyFirebase(token, env) {
+  if (
+    (env.VERCEL || env.NODE_ENV === "production") &&
+    env.FIREBASE_AUTH_EMULATOR_HOST
+  )
+    throw new AccessError(503, "AI_NOT_CONFIGURED");
   const { getApps, initializeApp, cert } = require("firebase-admin/app"),
     { getAuth } = require("firebase-admin/auth");
   let credential;
   try {
-    credential = env.FIREBASE_SERVICE_ACCOUNT_JSON
-      ? cert(JSON.parse(env.FIREBASE_SERVICE_ACCOUNT_JSON))
-      : undefined;
-  } catch {
-    throw new AccessError(503, "AI_NOT_CONFIGURED");
+    const account = env.FIREBASE_SERVICE_ACCOUNT_JSON
+      ? JSON.parse(env.FIREBASE_SERVICE_ACCOUNT_JSON)
+      : null;
+    if (
+      account &&
+      (account.project_id || account.projectId) !==
+        (env.FIREBASE_PROJECT_ID || "classio-4378f")
+    )
+      throw new AccessError(503, "AI_NOT_CONFIGURED", "ADMIN_PROJECT_MISMATCH");
+    credential = account ? cert(account) : undefined;
+  } catch (error) {
+    if (error instanceof AccessError) throw error;
+    throw new AccessError(503, "AI_NOT_CONFIGURED", "ADMIN_CREDENTIAL_INVALID");
   }
   const projectId = env.FIREBASE_PROJECT_ID || "classio-4378f",
     name = "classio-auth:" + projectId;
@@ -99,6 +113,49 @@ async function verifyFirebase(token, env) {
     getApps().find((app) => app.name === name) ||
     initializeApp({ projectId, ...(credential ? { credential } : {}) }, name);
   return getAuth(app).verifyIdToken(token, !!credential);
+}
+function verificationError(error) {
+  if (error instanceof AccessError) return error;
+  if (
+    /^(?:Error fetching public keys|Error while making request)/.test(
+      error?.message || "",
+    )
+  )
+    return new AccessError(
+      503,
+      "AUTH_UNAVAILABLE",
+      "FIREBASE_CERTIFICATE_LOOKUP_FAILED",
+    );
+  if (error?.code === "auth/id-token-expired")
+    return new AccessError(401, "AUTH_EXPIRED");
+  if (
+    [
+      "auth/id-token-revoked",
+      "auth/user-disabled",
+      "auth/user-not-found",
+    ].includes(error?.code)
+  )
+    return new AccessError(401, "AUTH_REVOKED");
+  if (
+    [
+      "auth/argument-error",
+      "auth/invalid-argument",
+      "auth/invalid-id-token",
+    ].includes(error?.code)
+  )
+    return new AccessError(401, "AUTH_REQUIRED");
+  if (
+    [
+      "app/invalid-credential",
+      "auth/invalid-credential",
+      "auth/insufficient-permission",
+      "app/invalid-app-options",
+    ].includes(error?.code)
+  )
+    return new AccessError(503, "AI_NOT_CONFIGURED");
+  // Certificate lookup, administrator permission/network errors and outages
+  // cannot be fixed by signing the student out. Never mislabel them as 401.
+  return new AccessError(503, "AUTH_UNAVAILABLE");
 }
 async function authorize(
   req,
@@ -108,6 +165,8 @@ async function authorize(
   const bearer = /^Bearer ([^\s]{20,10000})$/.exec(
     req.headers.authorization || "",
   );
+  if (req.headers.authorization && !bearer)
+    throw new AccessError(401, "AUTH_REQUIRED");
   if (bearer) {
     let user, timer;
     try {
@@ -121,13 +180,12 @@ async function authorize(
         }),
       ]);
     } catch (error) {
-      if (error instanceof AccessError) throw error;
-      throw new AccessError(401, "AUTH_REQUIRED");
+      throw verificationError(error);
     } finally {
       clearTimeout(timer);
     }
     if (!user.uid || user.firebase?.sign_in_provider !== "google.com")
-      throw new AccessError(403, "AUTH_REQUIRED");
+      throw new AccessError(403, "AUTH_PROVIDER_REQUIRED");
     return { sub: "user:" + user.uid, kind: "account" };
   }
   const session = readSession(req, env);
@@ -138,7 +196,7 @@ async function authorize(
       signature("csrf:" + session.nonce, env),
     )
   )
-    throw new AccessError(401, "AUTH_REQUIRED");
+    throw new AccessError(401, "GUEST_SESSION_REQUIRED");
   return { sub: session.sub, kind: "guest" };
 }
 module.exports = {
@@ -147,4 +205,5 @@ module.exports = {
   createGuestSession,
   readSession,
   sameOrigin,
+  verificationError,
 };

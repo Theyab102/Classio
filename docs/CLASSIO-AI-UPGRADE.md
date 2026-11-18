@@ -1,12 +1,14 @@
 # Classio AI upgrade — implementation report
 
+**Follow-up:** [Session recovery and dependency fixes](CLASSIO-SESSION-AUDIT-FIX.md) supersede this report's original audit and test totals. The current dependency audit reports zero findings; the historical 79 findings below describe the initial upgrade verification.
+
 18 November 2026. Existing repository: `Theyab102/Classio`, branch `work`. The actual app is React 19/CRA with CommonJS Vercel API routes; no Next.js migration was made. Existing accounts, files, chats, editor, math, exports, themes, games and podcast service are retained. `classio-tts-server` is unchanged.
 
 ## Outcome and verification limits
 
 Implemented authenticated multi-provider routing, exact primary/`packup` credentials, safe fallback/free-only gates, durable generation recovery, short-answer quizzes, optional browser AI/semantic search, responsive settings, credential protection and CI.
 
-Build, application/authorization tests and credential scans pass. **The dependency audit remains failing:** 79 advisories (66 high, 10 moderate, 3 low), identical to an audit of the original `3fea159` lockfile against the same registry. These primarily affect inherited CRA/Jest/build dependencies, with additional existing transitive dependencies. Current `picomatch` 4.0.7 remains in its advisory range; npm proposes removing CRA (`react-scripts@0.0.0`) for some findings. No forced downgrade, advisory suppression or unrelated framework migration was applied. The initially selected Transformers version was replaced with 4.3.2 and patched `sharp` 0.35.5 to avoid adding advisories. Clearing the inherited audit requires further dependency/toolchain work.
+At the initial upgrade verification, build, application/authorization tests and credential scans passed, while the dependency audit reported 79 advisories (66 high, 10 moderate, 3 low), identical to an audit of the original `3fea159` lockfile against the same registry. These primarily affected inherited CRA/Jest/build dependencies. The subsequent [session and audit follow-up](CLASSIO-SESSION-AUDIT-FIX.md) resolves these findings through dependency updates and a documented local picomatch security patch, retaining CRA.
 
 No live hosted provider, production Firebase access, Vercel variables, deployment, successful model download or GPU inference was verified. Official provider terms/pricing requests were blocked by this environment's network policy. Unverified eligibility/free operation therefore blocks activation; this report does not claim inaccessible current terms or prices were verified.
 
@@ -78,7 +80,7 @@ Gitleaks 8.28.0 is installed from its official release with a pinned verified ch
 
 No private provider credential finding was found in current source or the 238 original commits. One existing alert is Firebase's public web configuration, reviewed by exact hash, file/context and Firebase initialization. Other Google values remain blocking. A narrow exception covers the JavaScript expression `this.vocab=new`, not real tokens or vendor files. Keep the public Firebase key restricted to intended APIs. No newly discovered private credential requires rotation from these scans; earlier owner-acknowledged screenshot exposure remains a separate event and should already have been rotated. No automatic rotation or shared-history rewrite occurred.
 
-`.gitignore` protects private `.env.*`, `.vercel/`, exports and private key files while allowing templates. No tracked private environment file was found. Pre-commit/pre-push hooks and pinned-action CI enforce checks. Branch-protection settings remain an external GitHub configuration. Credential scans passing do not make the inherited dependency audit clean.
+`.gitignore` protects private `.env.*`, `.vercel/`, exports and private key files while allowing templates. No tracked private environment file was found. Pre-commit/pre-push hooks and pinned-action CI enforce checks. Branch-protection settings remain an external GitHub configuration. Credential scans and dependency audits are separate checks; both pass after the follow-up fixes.
 
 ## Vercel variables and remaining configuration
 

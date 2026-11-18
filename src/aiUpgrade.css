@@ -85,3 +85,5 @@
   outline: 2px solid var(--app-link);
   outline-offset: 2px;
 }
+.generation-retry{display:flex;align-items:center;flex-wrap:wrap;gap:8px 16px;margin:10px 0;color:var(--app-muted);font-size:.875rem}.generation-retry .text-button{min-height:40px;padding:6px 10px}.generation-retry + .studio-error,.generation-retry + .tool-error{margin-top:8px}
+.deck-studio{min-width:0;max-width:100%}.deck-studio:focus{outline:none}

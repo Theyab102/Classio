@@ -39,7 +39,7 @@ Large presentations/notes, courses, quiz batches and flashcards checkpoint befor
 
 Optional `AI_ENABLE_BROWSER_LOCAL=true` exposes on-device WebLLM and Transformers semantic search with explicit download opt-in, size/progress information, compatibility checks and cache removal. Model weights are never downloaded automatically or bundled. PDF text extraction remains local.
 
-Validation: `npm run test:ai-upgrade`, `npm run test:server`, `CI=true npm test -- --watchAll=false --runInBand`, `npm run build`, and `PATH=/workspace/.onboarding/bin:$PATH npm run check:security`. Install the checksum-verified scanner with `sh scripts/install-security-tools.sh /workspace/.onboarding/bin`; activate hooks with `git config core.hooksPath .githooks`. CI runs the build, tests and full secret scan. The dependency audit still reports the original CRA toolchain advisories; see the report rather than treating credential scans as a clean dependency audit.
+Validation: `npm run test:ai-upgrade`, `npm run test:auth-browser`, `npm run test:server`, `CI=true npm test -- --watchAll=false --runInBand`, `npm run build`, `npm run check:audit`, and `PATH=/workspace/.onboarding/bin:$PATH npm run check:security`. Install the checksum-verified scanner with `sh scripts/install-security-tools.sh /workspace/.onboarding/bin`; activate hooks with `git config core.hooksPath .githooks`. CI runs the build, tests, dependency audit and full secret scan. The audit reports zero findings as of 18 November 2026. One fix uses a reviewed, integrity-checked local picomatch fork because upstream has no published fix; see [the session and audit follow-up](docs/CLASSIO-SESSION-AUDIT-FIX.md) for provenance and validation limits.
 
 ## Appearance and devices
 

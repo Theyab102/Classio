@@ -1,8 +1,11 @@
 import { guestScope } from "./guestWorkspace";
 let identity = () => null,
-  guest = null;
-export function setAiIdentityProvider(read) {
+  guest = null,
+  ready = () => undefined;
+const refreshing = new Map();
+export function setAiIdentityProvider(read, wait = () => undefined) {
   identity = read;
+  ready = wait;
   guest = null;
 }
 export function aiOwner() {
@@ -31,9 +34,14 @@ function cancellable(promise, signal) {
   });
 }
 export async function aiHeaders(signal) {
+  await cancellable(Promise.resolve(ready()), signal);
   const user = identity();
-  if (user?.getIdToken)
-    return { Authorization: "Bearer " + (await user.getIdToken()) };
+  if (user?.getIdToken) {
+    const token = await cancellable(user.getIdToken(), signal);
+    if (identity()?.uid !== user.uid)
+      throw new DOMException("Account changed", "AbortError");
+    return { Authorization: "Bearer " + token };
+  }
   if (!guest) {
     const controller = new AbortController(),
       timer = setTimeout(() => controller.abort(), 10000);
@@ -66,6 +74,7 @@ export async function aiHeaders(signal) {
       .finally(() => clearTimeout(timer));
   }
   const session = await guest;
+  if (identity()?.uid) throw new DOMException("Account changed", "AbortError");
   if (session.expiresAt && session.expiresAt < Date.now()) {
     guest = null;
     return aiHeaders(signal);
@@ -74,13 +83,65 @@ export async function aiHeaders(signal) {
 }
 export async function authorizedFetch(url, options = {}) {
   const headers = await cancellable(aiHeaders(options.signal), options.signal);
+  const owner = aiOwner(),
+    sessionUsed = guest;
   if (options.signal?.aborted)
     throw new DOMException("Cancelled", "AbortError");
-  const response = await fetch(url, {
-    ...options,
-    credentials: "same-origin",
-    headers: { ...options.headers, ...headers },
-  });
-  if (response.status === 401) guest = null;
-  return response;
+  const send = (access) =>
+    fetch(url, {
+      ...options,
+      credentials: "same-origin",
+      headers: { ...options.headers, ...access },
+    });
+  const response = await send(headers);
+  if (response.status !== 401) return response;
+  const failure = await response
+    .clone()
+    .json()
+    .catch(() => ({}));
+  if (
+    !["AUTH_REQUIRED", "AUTH_EXPIRED", "GUEST_SESSION_REQUIRED"].includes(
+      failure.code,
+    )
+  )
+    return response;
+  if (options.signal?.aborted || aiOwner() !== owner)
+    throw new DOMException(
+      "Request cancelled or account changed",
+      "AbortError",
+    );
+  let refreshed;
+  if (headers.Authorization) {
+    const user = identity();
+    if (!user?.getIdToken || user.uid !== owner)
+      throw new DOMException("Account changed", "AbortError");
+    let pending = refreshing.get(owner);
+    if (!pending) {
+      pending = Promise.resolve()
+        .then(() => user.getIdToken(true))
+        .finally(() => {
+          if (refreshing.get(owner) === pending) refreshing.delete(owner);
+        });
+      refreshing.set(owner, pending);
+    }
+    try {
+      refreshed = {
+        Authorization: "Bearer " + (await cancellable(pending, options.signal)),
+      };
+    } catch (error) {
+      if (error.name === "AbortError") throw error;
+      return response;
+    }
+  } else {
+    if (guest === sessionUsed) guest = null;
+    refreshed = await cancellable(aiHeaders(options.signal), options.signal);
+  }
+  if (options.signal?.aborted || aiOwner() !== owner)
+    throw new DOMException(
+      "Request cancelled or account changed",
+      "AbortError",
+    );
+  // A rejected request has not reached inference. Replay JSON once with renewed
+  // authorization; never retry an outage, revoked account or a second rejection.
+  return send(refreshed);
 }

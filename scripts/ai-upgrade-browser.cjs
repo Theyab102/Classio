@@ -70,7 +70,7 @@ const server = http.createServer((req, res) => {
         slides = [],
         models = [],
         calls = [];
-      let broken = true;
+      let broken = true,waitingSetup=false;
       page.on("pageerror", (error) => errors.push(error.message));
       page.on("request", (req) => {
         if (/huggingface|hf\.co|mlc\.ai/.test(req.url()))
@@ -114,6 +114,7 @@ const server = http.createServer((req, res) => {
       );
       await context.route("**/api/study", (route) => {
         const data = route.request().postDataJSON();
+        if(waitingSetup&&data.task==="presentation")return route.fulfill({status:503,contentType:"application/json",body:JSON.stringify({code:"AI_NOT_CONFIGURED",error:"AI tools are waiting for the site’s server setup. Your work is kept."})});
         calls.push(data);
         assert.equal(
           route.request().headers()["x-classio-csrf"],
@@ -308,6 +309,14 @@ const server = http.createServer((req, res) => {
       await page.getByText("Correct.", { exact: true }).waitFor();
       assert.equal(calls.at(-1).provider, "groq");
       await shot("short-answer");
+      await nav("Presentations");waitingSetup=true;
+      await page.getByRole("button",{name:"Generate",exact:true}).click();
+      await page.getByText("AI tools are waiting for the site’s server setup. Your work is kept.",{exact:true}).waitFor();
+      await page.getByText("Generation hasn’t started yet.",{exact:true}).waitFor();
+      assert.equal(await page.getByText("Generation progress saved",{exact:true}).count(),0,"Empty attempt claimed progress was generated");
+      assert.equal(await page.getByText(/0 of 1 sections saved/).count(),0);
+      await shot("empty-attempt-fixed");waitingSetup=false;
+
       if (size.name === "desktop") {
         await nav("Presentations");
         await page.getByLabel("Number of slides").fill("20");

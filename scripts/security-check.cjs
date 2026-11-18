@@ -1,3 +1,4 @@
+require('./check-security-vendor.cjs');
 const fs = require("node:fs"),
   path = require("node:path"),
   os = require("node:os"),
