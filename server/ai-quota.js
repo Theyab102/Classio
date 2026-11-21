@@ -27,9 +27,12 @@ function configured(env = process.env) {
     return false;
   try {
     const account = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT_JSON || "");
-    return ["project_id", "client_email", "private_key"].every(
+    if (account.project_id !== (env.FIREBASE_PROJECT_ID || "classio-4378f")) return false;
+    if (!["project_id", "client_email", "private_key"].every(
       (name) => typeof account[name] === "string" && account[name].trim(),
-    );
+    )) return false;
+    cert(account); // Validate the actual credential format without a network call.
+    return true;
   } catch {
     return false;
   }

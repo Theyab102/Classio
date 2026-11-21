@@ -1,6 +1,7 @@
 const { ProviderError } = require("./ai-errors");
 const { ollamaFetch } = require("./ai-endpoints");
 const { providerPolicy } = require("./ai-policy");
+const { workload, configuredModel } = require("./ai-routing");
 const catalogs = new Map();
 const knownGroq = [
   "llama-3.1-8b-instant",
@@ -13,10 +14,24 @@ const knownVision = [
   "meta-llama/llama-4-maverick-17b-128e-instruct",
 ];
 const cloudflareFree = [
+  "@cf/meta/llama-3.1-8b-instruct-fp8-fast",
+  "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
   "@cf/meta/llama-3.1-8b-instruct-fp8",
   "@cf/meta/llama-3.1-8b-instruct",
   "@cf/qwen/qwen2.5-coder-32b-instruct",
 ];
+function property(model, name) {
+  return Array.isArray(model.properties)
+    ? model.properties.find((item) => item.property_id === name)?.value
+    : model.properties?.[name];
+}
+function activeModel(model) {
+  const retirement = Date.parse(property(model, "planned_deprecation_date"));
+  return (
+    !model.deprecated &&
+    !(Number.isFinite(retirement) && retirement <= Date.now())
+  );
+}
 function check(signal) {
   if (signal.aborted) throw new ProviderError(503, "NETWORK", true);
 }
@@ -36,7 +51,7 @@ function retrySeconds(response, data) {
     ),
   );
 }
-async function json(response, signal) {
+async function json(response, signal, provider) {
   let data;
   try {
     data = await response.json();
@@ -45,9 +60,25 @@ async function json(response, signal) {
     throw new ProviderError(502, "INVALID_RESPONSE", true);
   }
   check(signal);
+  if (!data || typeof data !== "object")
+    throw new ProviderError(502, "INVALID_RESPONSE", true);
   if (!response.ok || data.success === false) {
     const status = response.ok ? 502 : response.status,
       code = data?.error?.code;
+    const cloudflareCode =
+      provider === "cloudflare" ? Number(data.errors?.[0]?.code) : 0;
+    // Model billing/terms permissions are not rejected credentials. A backup
+    // token must not retry the same account restriction or enable paid access.
+    if ([5016, 5018, 3023, 3041, 5035].includes(cloudflareCode))
+      throw new ProviderError(
+        503,
+        cloudflareCode === 5035
+          ? "MODEL_REQUIRES_PAID"
+          : "MODEL_ACCESS_REQUIRED",
+        true,
+      );
+    if ([5007, 3042, 5028].includes(cloudflareCode))
+      throw new ProviderError(503, "MODEL_UNAVAILABLE", true);
     if (["content_policy_violation", "moderation_blocked"].includes(code))
       throw new ProviderError(422, "CONTENT_BLOCKED");
     const reason = [401, 403].includes(status)
@@ -94,39 +125,42 @@ async function call(provider, url, options, context) {
     if (error instanceof ProviderError) throw error;
     throw new ProviderError(503, "NETWORK", true);
   }
-  return json(response, context.signal);
+  return json(response, context.signal, provider);
 }
 function freeOpenRouter(model) {
   const price = model.pricing;
+  const zero = (value) => value != null && value !== "" && Number(value) === 0;
   return (
     !!price &&
-    Number(price.prompt) === 0 &&
-    Number(price.completion) === 0 &&
-    Object.values(price).every(
-      (value) => value == null || Number(value) === 0,
-    ) &&
+    zero(price.prompt) &&
+    zero(price.completion) &&
+    Object.values(price).every(zero) &&
     (model.id === "openrouter/free" || model.id?.endsWith(":free"))
   );
 }
 function modelChoice(provider, input, env, entries, tried = []) {
+  const lane = workload(input),
+    configured = configuredModel(provider, input, env);
   let preferred,
     tooLarge = false;
   if (provider === "groq")
     preferred = input.audio
       ? ["whisper-large-v3-turbo", "whisper-large-v3"]
       : input.vision
-        ? [env.GROQ_VISION_MODEL, ...knownVision]
+        ? [...knownVision]
         : [
-            env.AI_GROQ_MODEL || env.GROQ_TEXT_MODEL,
-            ...(input.maxTokens > 1600
+            ...(lane === "study"
               ? [knownGroq[2], knownGroq[1], knownGroq[3], knownGroq[0]]
               : knownGroq),
           ];
   if (provider === "cloudflare")
-    preferred = [env.AI_CLOUDFLARE_MODEL || cloudflareFree[0]];
+    preferred =
+      lane === "study"
+        ? [cloudflareFree[1], ...cloudflareFree]
+        : cloudflareFree;
   if (provider === "openrouter")
     preferred = [
-      env.AI_OPENROUTER_MODEL || "openrouter/free",
+      "openrouter/free",
       ...entries
         .filter((model) => freeOpenRouter(model))
         .map((model) => model.id),
@@ -142,18 +176,7 @@ function modelChoice(provider, input, env, entries, tried = []) {
         .sort()
         .reverse(),
     ];
-  const explicit =
-    provider === "groq"
-      ? input.vision
-        ? env.GROQ_VISION_MODEL
-        : input.audio
-          ? ""
-          : env.AI_GROQ_MODEL || env.GROQ_TEXT_MODEL
-      : provider === "cloudflare"
-        ? env.AI_CLOUDFLARE_MODEL
-        : provider === "openrouter"
-          ? env.AI_OPENROUTER_MODEL
-          : env.OLLAMA_MODEL;
+  const explicit = provider === "ollama" ? env.OLLAMA_MODEL : configured;
   if (explicit) preferred = [explicit];
   for (const name of preferred.filter(Boolean)) {
     const model = entries.find((item) => item.id === name);
@@ -174,10 +197,22 @@ function modelChoice(provider, input, env, entries, tried = []) {
       continue;
     // Encoded image bytes are not text tokens. Budget visual input separately
     // so an ordinary compressed photo does not appear to consume 250K tokens.
-    let chars=0,images=0;
-    for(const message of input.messages||[]){if(typeof message.content==='string')chars+=message.content.length;else for(const part of message.content||[]){if(part.type==='text')chars+=part.text.length;else if(part.type==='image_url')images++;}}
-    const estimate = Math.ceil(chars / 3) + images*4096 + (input.maxTokens || 1000) + 500;
-    if (!input.audio && estimate > model.context) {
+    let chars = 0,
+      images = 0;
+    for (const message of input.messages || []) {
+      if (typeof message.content === "string") chars += message.content.length;
+      else
+        for (const part of message.content || []) {
+          if (part.type === "text") chars += part.text.length;
+          else if (part.type === "image_url") images++;
+        }
+    }
+    const estimate =
+      Math.ceil(chars / 3) + images * 4096 + (input.maxTokens || 1000) + 500;
+    if (
+      !input.audio &&
+      (estimate > model.context || input.maxTokens > model.output)
+    ) {
       tooLarge = true;
       continue;
     }
@@ -225,6 +260,7 @@ async function choose(provider, input, credential, context, tried = []) {
         .map((model) => ({
           id: model.id,
           context: Number(model.context_window) || 16384,
+          output: Number(model.max_completion_tokens) || Infinity,
           vision: knownVision.includes(model.id),
           audio: /^whisper-/.test(model.id),
         }));
@@ -236,10 +272,16 @@ async function choose(provider, input, credential, context, tried = []) {
         context,
       );
       entries = (data.data || [])
-        .filter((model) => typeof model.id === "string")
+        .filter(
+          (model) =>
+            typeof model.id === "string" &&
+            (!model.architecture?.output_modalities ||
+              model.architecture.output_modalities.includes("text")),
+        )
         .map((model) => ({
           ...model,
           context: Number(model.context_length) || 4096,
+          output: Number(model.top_provider?.max_completion_tokens) || Infinity,
           vision:
             model.architecture?.input_modalities?.includes("image") || false,
           audio: false,
@@ -251,15 +293,29 @@ async function choose(provider, input, credential, context, tried = []) {
         { headers: auth, signal },
         context,
       );
-      entries = (data.result || [])
+      const results = [...(data.result || [])];
+      // Search is paginated. The first page need not contain a selected model.
+      const pages = Math.min(4, Number(data.result_info?.total_pages) || 1);
+      for (let page = 2; page <= pages; page++) {
+        const more = await call(
+          provider,
+          `https://api.cloudflare.com/client/v4/accounts/${credential.accountId}/ai/models/search?page=${page}&per_page=${Math.min(100, Math.max(1, Number(data.result_info?.per_page) || 20))}`,
+          { headers: auth, signal },
+          context,
+        );
+        results.push(...(more.result || []));
+      }
+      entries = results
         .filter(
           (model) =>
             typeof model.name === "string" &&
+            activeModel(model) &&
             (!model.task?.name || /text generation/i.test(model.task.name)),
         )
         .map((model) => ({
           id: model.name,
-          context: Number(model.properties?.context_window) || 8192,
+          context: Number(property(model, "context_window")) || 8192,
+          output: Number(property(model, "max_output_tokens")) || Infinity,
           vision: false,
           audio: false,
         }));

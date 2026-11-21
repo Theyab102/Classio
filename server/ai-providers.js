@@ -3,6 +3,7 @@ const { providerCredentials } = require("./ai-settings");
 const { eligibleProviders } = require("./ai-policy");
 const adapters = require("./ai-adapters");
 const { ProviderError } = require("./ai-errors");
+const { workload, modality } = require("./ai-routing");
 const health = new Map(),
   invalid = new Map(),
   inFlight = new Map(),
@@ -21,7 +22,10 @@ function providerOrder(input, env) {
     suggested = input.vision
       ? ["groq", "openrouter", "ollama"]
       : ["groq", "cloudflare", "openrouter", "ollama"];
-  const preferred = input.provider || env.AI_ROUTING_MODE || "auto";
+  const preferred =
+    input.provider && input.provider !== "auto"
+      ? input.provider
+      : env.AI_ROUTING_MODE || "auto";
   return [
     ...new Set([
       preferred,
@@ -56,6 +60,7 @@ function safeReport(report, value) {
     provider: value.provider,
     code: value.code,
     ...(value.role ? { credential: value.role } : {}),
+    ...(value.workload ? { workload: value.workload } : {}),
   });
 }
 async function route(
@@ -67,7 +72,13 @@ async function route(
   const deadline = Date.now() + 40000;
   let last;
   for (const provider of providers) {
-    const circuit = health.get(provider);
+    const credentials = providerCredentials(provider, env);
+    const circuitKey = [
+      provider,
+      modality(input),
+      ...credentials.map((key) => key.id + ":" + (key.accountId || "")),
+    ].join(":");
+    const circuit = health.get(circuitKey);
     if (circuit?.until > Date.now()) {
       last = new ProviderError(
         circuit.code === "PROVIDER_RATE_LIMIT" ? 429 : 503,
@@ -77,7 +88,6 @@ async function route(
       );
       continue;
     }
-    const credentials = providerCredentials(provider, env);
     if (provider === "ollama" && !credentials.length)
       credentials.push({
         provider,
@@ -135,6 +145,7 @@ async function route(
               role: credential.role,
               model: model.id,
               code: "ROUTE_SELECTED",
+              workload: workload(input),
             });
             try {
               return {
@@ -160,7 +171,7 @@ async function route(
             }
           }
         });
-        health.delete(provider);
+        health.delete(circuitKey);
         return result;
       } catch (error) {
         if (!(error instanceof ProviderError))
@@ -170,6 +181,7 @@ async function route(
           provider,
           role: credential.role,
           code: error.code,
+          workload: workload(input),
         });
         if (!error.retryable) throw error;
         if (error.code === "CREDENTIALS_REJECTED") {
@@ -181,13 +193,15 @@ async function route(
           error.code === "NETWORK" ||
           /^HTTP_5|PROVIDER_UNAVAILABLE/.test(error.code)
         ) {
-          const previous = health.get(provider),
+          const previous = health.get(circuitKey),
             failures = Math.min(5, (previous?.failures || 0) + 1),
             seconds =
               error.code === "PROVIDER_RATE_LIMIT"
                 ? error.retryAfter || 60
                 : Math.min(120, 5 * 2 ** failures);
-          health.set(provider, {
+          health.set(circuitKey, {
+            provider,
+            modality: modality(input),
             code: error.code,
             until: Date.now() + seconds * 1000,
             failures,
@@ -215,10 +229,21 @@ async function generateStudy(input, options = {}) {
       ),
       env.AI_ALLOW_PAID,
       env.AI_GROQ_MODEL,
+      env.GROQ_TEXT_MODEL,
+      env.GROQ_VISION_MODEL,
       env.AI_OPENROUTER_MODEL,
       env.AI_CLOUDFLARE_MODEL,
       env.OLLAMA_BASE_URL,
       env.OLLAMA_MODEL,
+      env.AI_ROUTING_MODE,
+      ...Object.keys(env)
+        .filter((name) =>
+          /^AI_(?:GROQ|CLOUDFLARE|OPENROUTER)_(?:FAST|STUDY|VISION|AUDIO)_MODEL$/.test(
+            name,
+          ),
+        )
+        .sort()
+        .map((name) => [name, env[name]]),
     ]);
   const key = createHash("sha256").update(fingerprint).digest("hex"),
     saved = cache.get(key);
@@ -267,16 +292,19 @@ module.exports = {
         ],
       ),
     ),
-  providerHealth: () =>
-    Object.fromEntries(
-      [...health].map(([provider, value]) => [
-        provider,
-        {
-          status:
-            value.until > Date.now() ? "temporarily-limited" : "available",
-        },
-      ]),
-    ),
+  providerHealth: () => {
+    const result = {};
+    for (const value of health.values()) {
+      if (value.until <= Date.now()) continue;
+      const row = (result[value.provider] ||= {
+        status: "available",
+        capabilities: {},
+      });
+      row.capabilities[value.modality] = "temporarily-limited";
+      if (value.modality === "text") row.status = "temporarily-limited";
+    }
+    return result;
+  },
   clearProviderCaches: () => {
     health.clear();
     invalid.clear();

@@ -3,6 +3,9 @@ import {deckGeometry} from './deckGeometry';
 import {createSlide, updateSlideById, imageCrop} from './presentationModel';
 import {fireEvent,render,screen,waitFor} from '@testing-library/react';
 import SlideEditor from './SlideEditor';
+import {requestImage} from './imageService';
+jest.mock('./imageService',()=>({requestImage:jest.fn()}));
+beforeEach(()=>{global.fetch=jest.fn(async()=>({ok:true,json:async()=>({imageGeneration:false})}));jest.clearAllMocks();});
 jest.mock('./pdf',()=>({openPdf:jest.fn(),loadPdfLibrary:jest.fn()}));
 jest.mock('./SlideCanvasEditor',()=>()=>null);
 
@@ -32,14 +35,24 @@ test('custom image geometry stays in the slide and crop uses a shared bounded re
   expect(imageCrop(null)).toEqual({x:0,y:0,w:1,h:1});
   expect(deckGeometry({type:'quote',quote:'A thought'}).body).toMatchObject({y:2.2,h:2.7});
 });
-test('the existing image integration remains available when Gemini images are disabled',async()=>{
- const previous=global.fetch;global.fetch=jest.fn(async()=>({ok:true,json:async()=>({imageEditing:false})}));
- const generate=jest.fn(async()=>({url:'https://images.example/figure.png'})),apply=jest.fn();
- try{
-  render(<SlideEditor slide={createSlide('content')} index={0} total={1} theme={{}} layout="lecture" onGenerateImage={generate} onApply={apply} onClose={jest.fn()}/>);
-  fireEvent.click(screen.getByRole('button',{name:'AI tools',exact:true}));fireEvent.click(screen.getByRole('button',{name:'Generate illustration',exact:true}));
-  await waitFor(()=>expect(generate).toHaveBeenCalled());
-  await waitFor(()=>expect(screen.getByRole('button',{name:'Apply changes'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Apply changes'}));
-  await waitFor(()=>expect(apply).toHaveBeenCalledWith(expect.objectContaining({image:'https://images.example/figure.png'})));
- }finally{global.fetch=previous;}
+test('illustrations use the secure dedicated image route without enabling sketch editing',async()=>{
+ global.fetch=jest.fn(async()=>({ok:true,json:async()=>({imageGeneration:true,imageEditing:false})}));
+ requestImage.mockResolvedValue('data:image/png;base64,YWJj');const apply=jest.fn();
+ render(<SlideEditor slide={createSlide('content')} index={0} total={1} theme={{}} layout="lecture" onApply={apply} onClose={jest.fn()}/>);
+ fireEvent.click(screen.getByRole('button',{name:'AI tools',exact:true}));
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Generate illustration'})).toBeEnabled());
+ fireEvent.click(screen.getByRole('button',{name:'Generate illustration',exact:true}));
+ await waitFor(()=>expect(requestImage).toHaveBeenCalledWith(expect.objectContaining({action:'generate',prompt:expect.any(String)}),expect.any(AbortSignal)));
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Apply changes'})).toBeEnabled());fireEvent.click(screen.getByRole('button',{name:'Apply changes'}));
+ await waitFor(()=>expect(apply).toHaveBeenCalledWith(expect.objectContaining({image:'data:image/png;base64,YWJj'})));
+});
+test('unconfigured image generation is disabled while image uploads and search stay available',async()=>{
+ render(<SlideEditor slide={createSlide('content')} index={0} total={1} theme={{}} layout="lecture" onApply={jest.fn()} onClose={jest.fn()}/>);
+ fireEvent.click(screen.getByRole('button',{name:'AI tools',exact:true}));
+ await screen.findByText(/Image generation is currently unavailable/);
+ expect(screen.getByRole('button',{name:'Generate illustration'})).toBeDisabled();
+ fireEvent.click(screen.getByRole('button',{name:'Images & media'}));
+ expect(screen.getByRole('button',{name:'Upload image'})).toBeEnabled();
+ expect(screen.getByRole('button',{name:'Search images'})).toBeEnabled();
+ expect(requestImage).not.toHaveBeenCalled();
 });

@@ -1,5 +1,6 @@
 const { authorize } = require("../server/ai-auth");
 const { accessFailure } = require("../server/access-errors");
+const { accessDiagnostic } = require("../server/access-diagnostic");
 const { configured, reserveRequest } = require("../server/ai-quota");
 const {
   parseAudioRequest,
@@ -51,10 +52,7 @@ module.exports = async function study(req, res) {
     req.aiIdentity = await authorize(req);
   } catch (error) {
     const failure = accessFailure(error);
-    console.warn("study_access", {
-      code: failure.body.code,
-      ...(error.reason ? { reason: error.reason } : {}),
-    });
+    console.warn("study_access", accessDiagnostic(error, failure.body.code));
     return res.status(failure.status).json(failure.body);
   }
 
@@ -122,6 +120,12 @@ module.exports = async function study(req, res) {
         "This AI model is unavailable. Try Auto or another available provider.",
       VISION_MODEL_UNAVAILABLE:
         "Image analysis is unavailable for the configured provider. You can still ask a text question.",
+      AUDIO_MODEL_UNAVAILABLE:
+        "Speech transcription is unavailable for the configured provider. Your recording is kept; you can type your question instead.",
+      MODEL_REQUIRES_PAID:
+        "This model is unavailable with the site’s free AI setup. Your work is kept.",
+      MODEL_ACCESS_REQUIRED:
+        "The AI service needs its model access checked. Your work is kept.",
       MODEL_CATALOG_UNAVAILABLE:
         "The AI provider could not list available models. Try again shortly.",
       OUTPUT_LIMIT:

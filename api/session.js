@@ -1,6 +1,11 @@
-const { createGuestSession, readSession } = require("../server/ai-auth");
+const {
+  createGuestSession,
+  readSession,
+  AccessError,
+} = require("../server/ai-auth");
 const { reserveRequest } = require("../server/ai-quota");
 const { accessFailure } = require("../server/access-errors");
+const { accessDiagnostic } = require("../server/access-diagnostic");
 module.exports = async function session(req, res) {
   res.setHeader("Cache-Control", "no-store");
   if (req.method !== "POST") {
@@ -30,12 +35,16 @@ module.exports = async function session(req, res) {
     }
     return res.status(200).json(createGuestSession(req, res));
   } catch (error) {
-    if (error.code) {
+    if (error instanceof AccessError) {
       const failure = accessFailure(error);
+      console.warn(
+        "session_access",
+        accessDiagnostic(error, failure.body.code),
+      );
       return res.status(failure.status).json(failure.body);
     }
-    return res.status(error.status || 503).json({
-      code: error.code || "SESSION_UNAVAILABLE",
+    return res.status(503).json({
+      code: "SESSION_UNAVAILABLE",
       error:
         "A secure study session could not be started. Your writing is kept.",
     });

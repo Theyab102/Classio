@@ -4,7 +4,7 @@ const db={collection:()=>({doc:key=>({key})}),runTransaction:work=>{const run=qu
 require.cache[require.resolve('firebase-admin/app')]={exports:{cert:value=>value,getApps:()=>[{name:'classio-api'}],initializeApp:()=>({name:'classio-api'})}};
 require.cache[require.resolve('firebase-admin/firestore')]={exports:{getFirestore:()=>db,Timestamp:{fromMillis:value=>value}}};
 const {reserveRequest}=require('./ai-quota');
-const fixture={VERCEL:'1',VERCEL_ENV:'production',AI_QUOTA_MODE:'firestore',CLASSIO_SESSION_SECRET:'fixture-shared-quota-secret-at-least-32-chars',FIREBASE_SERVICE_ACCOUNT_JSON:JSON.stringify({project_id:'fixture',client_email:'fixture@example.com',private_key:'fixture-private-key'})};
+const fixture={VERCEL:'1',VERCEL_ENV:'production',AI_QUOTA_MODE:'firestore',CLASSIO_SESSION_SECRET:'fixture-shared-quota-secret-at-least-32-chars',FIREBASE_SERVICE_ACCOUNT_JSON:JSON.stringify({project_id:'classio-4378f',client_email:'fixture@example.com',private_key:'fixture-private-key'})};
 const old=Object.fromEntries(Object.keys(fixture).map(key=>[key,process.env[key]]));Object.assign(process.env,fixture);
 after(()=>{for(const[key,value]of Object.entries(old))if(value===undefined)delete process.env[key];else process.env[key]=value;});
 beforeEach(()=>records.clear());

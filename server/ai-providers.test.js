@@ -102,3 +102,14 @@ test('normal image bytes use a visual token budget rather than being counted as 
  const vision={...input,vision:true,messages:[{role:'user',content:[{type:'image_url',image_url:{url:'data:image/jpeg;base64,'+Buffer.alloc(600000,23).toString('base64')}},{type:'text',text:'Explain this diagram.'}]}]};
  const result=await generateStudy(vision,{env,fetcher:async(url,request)=>url.endsWith('/models')?response({data:[{id:'meta-llama/llama-4-scout-17b-16e-instruct',context_window:131072}]}):(assert.equal(JSON.parse(request.body).messages[0].content[0].image_url.url,vision.messages[0].content[0].image_url.url),answered('The diagram shows motion.'))});assert.equal(result.provider,'groq');
 });
+
+test('client Auto respects the configured server routing preference',async()=>{
+ const result=await generateStudy({...input,provider:'auto'},{env:{...env,AI_ROUTING_MODE:'cloudflare'},fetcher:upstream(async url=>{
+  assert(url.includes('cloudflare'));return response({result:{response:'Server preference'}});
+ })});
+ assert.equal(result.provider,'cloudflare');
+});
+
+test('free-only routing rejects unknown or empty catalog prices instead of coercing them to zero',()=>{
+ for(const pricing of [{prompt:null,completion:'0'},{prompt:'0',completion:''},{prompt:'0',completion:'0',image:null}])assert.equal(freeOpenRouter({id:'fixture:free',pricing}),false);
+});

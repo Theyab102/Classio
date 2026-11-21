@@ -126,9 +126,8 @@ function callClaude(system, userMessage, maxTokens = 3000) {
   return requestStudyAI(messages, maxTokens);
 }
 
-// ─── AI IMAGE GENERATION (provider-agnostic) ─────────────────────────────────
-// To add a new provider, implement a function with signature (prompt, style) => Promise<imageUrl>
-// and add it to IMAGE_PROVIDERS. Set REACT_APP_IMAGE_PROVIDER to switch.
+// ─── AI IMAGE GENERATION ───────────────────────────────────────────────────
+// Model selection and provider credentials belong to the authorized server route.
 const IMAGE_STYLE_PROMPTS = {
   realistic:   "photorealistic, high detail, natural lighting",
   illustration:"digital illustration, clean lines, vibrant colors",
@@ -145,63 +144,11 @@ const IMAGE_STYLE_PROMPTS = {
   render3d:    "3D render, soft shadows, studio lighting, CGI",
 };
 
-// Default provider: Pollinations (free, no API key required)
-async function _pollinationsGenerate(prompt, style, signal) {
-  const styleHint = IMAGE_STYLE_PROMPTS[style] || "";
-  const fullPrompt = styleHint ? `${prompt}, ${styleHint}` : prompt;
-  const seed = Math.floor(Math.random() * 1e9);
-  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(fullPrompt)}?width=1280&height=720&seed=${seed}&nologo=true`;
-  // Verify the image actually loads before returning it
-  await new Promise((resolve,reject)=>{
-    const image=new Image();
-    const cleanup=()=>{clearTimeout(timer);signal?.removeEventListener('abort',cancel);image.onload=null;image.onerror=null;};
-    const cancel=()=>{cleanup();image.src='';reject(new DOMException('Cancelled','AbortError'));};
-    const timer=setTimeout(()=>{cleanup();image.src='';reject(new Error('The image service took too long. Your previous image is kept.'));},30000);
-    if(signal?.aborted){cancel();return;}
-    signal?.addEventListener('abort',cancel,{once:true});
-    image.onload=()=>{cleanup();resolve();};image.onerror=()=>{cleanup();reject(new Error('The image service could not generate this image. Upload or search for a figure instead.'));};image.src=url;
-  });
-  return url;
-}
-
-// Placeholder hooks for future providers — wire up when API keys are available
-async function _openaiImageGenerate(prompt, style) {
-  throw new Error("OpenAI image provider not configured");
-}
-async function _fluxGenerate(prompt, style) {
-  throw new Error("Flux image provider not configured");
-}
-async function _ideogramGenerate(prompt, style) {
-  throw new Error("Ideogram image provider not configured");
-}
-async function _recraftGenerate(prompt, style) {
-  throw new Error("Recraft image provider not configured");
-}
-
-const IMAGE_PROVIDERS = {
-  pollinations: _pollinationsGenerate,
-  openai: _openaiImageGenerate,
-  flux: _fluxGenerate,
-  ideogram: _ideogramGenerate,
-  recraft: _recraftGenerate,
-};
-
-// Generate an AI image. Returns { url } or throws.
-async function generateAIImage(prompt, style = "diagram",signal) {
-  const providerName = process.env.REACT_APP_IMAGE_PROVIDER || "pollinations";
-  const provider = IMAGE_PROVIDERS[providerName] || _pollinationsGenerate;
-  try {
-    const url = await provider(prompt, style,signal);
-    return { url, provider: providerName };
-  } catch (e) {
-    if (signal?.aborted) throw e;
-    if (providerName !== "pollinations") {
-      // Fall back to the free provider if a configured one fails
-      const url = await _pollinationsGenerate(prompt, style,signal);
-      return { url, provider: "pollinations" };
-    }
-    throw e;
-  }
+// Images use the authenticated, quota-limited image route and its dedicated model.
+async function generateAIImage(prompt, style = "diagram", signal) {
+  const hint = IMAGE_STYLE_PROMPTS[style] || "";
+  const url = await requestImage({ action: "generate", prompt: [hint, prompt].filter(Boolean).join(". ") }, signal);
+  return { url };
 }
 
 // Ask the AI what kind of visual (and prompt) would best explain a slide's content
@@ -3879,15 +3826,17 @@ function AIGeneratedImage({ prompt, style, onChangePrompt }) {
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [genStyle, setGenStyle] = useState(style || "diagram");
+  const imageRequest = useRef(null);
 
   const generate = (st) => {
+    imageRequest.current?.abort(); const controller = new AbortController(); imageRequest.current = controller;
     setLoading(true); setFailed(false);
-    generateAIImage(prompt, st || genStyle)
-      .then(({url})=>{ setImgUrl(url); setLoading(false); })
-      .catch(()=>{ setFailed(true); setLoading(false); });
+    generateAIImage(prompt, st || genStyle, controller.signal)
+      .then(({url})=>{ if(!controller.signal.aborted){setImgUrl(url); setLoading(false);} })
+      .catch(()=>{ if(!controller.signal.aborted){setFailed(true); setLoading(false);} });
   };
 
-  useEffect(() => { generate(genStyle); /* eslint-disable-next-line */ }, [prompt]);
+  useEffect(() => { generate(genStyle); return()=>imageRequest.current?.abort(); /* eslint-disable-next-line */ }, [prompt]);
 
   if (loading) return (
     <div style={{ margin:"10px 0", borderRadius:10, background:C.accentL, padding:"10px 14px", display:"flex", alignItems:"center", gap:8, border:`1px solid ${C.border}` }}>
@@ -5931,7 +5880,7 @@ function PresentationTab({ file, onUpdate }) {
           onEdit={()=>setEditIdx(index)} onPreview={()=>setPreviewIndex(index)} onMove={direction=>moveSlide(index,direction)} onDuplicate={()=>duplicateSlide(index)} onAnnotate={()=>setInkIndex(index)} onDelete={()=>{if(window.confirm('Delete this slide?'))deleteSlide(index);}}/>
       </article>)}</section>}
       {previewIndex!==null&&slides.length>0&&<PresentationPreview slides={slides} theme={currentTheme} layout={layout} design={deckDesign} initialIndex={previewIndex} onClose={()=>setPreviewIndex(null)} onEdit={setEditIdx} onMove={moveSlide} onDuplicate={duplicateSlide} onDelete={deleteSlide} onAdd={()=>addSlide('content')} onDesign={()=>{setPreviewIndex(null);if(designOptions.current){designOptions.current.open=true;designOptions.current.scrollIntoView({behavior:'smooth',block:'start'});}}}/>}
-      {editIdx!==null&&slides[editIdx]&&<SlideEditor key={slides[editIdx].id} slide={slides[editIdx]} index={editIdx} total={slides.length} theme={currentTheme} layout={layout} design={deckDesign} fileObj={file._fileObj||FILE_STORE.get(file.id)} onClose={()=>setEditIdx(null)} onGenerateImage={generateAIImage} onApply={next=>{setSlides(current=>updateSlideById(current,next.id,next));setDeckNotice("Slide changes applied to this workspace. You can undo them.");}} onMove={direction=>moveSlide(editIdx,direction)} onDuplicate={()=>{duplicateSlide(editIdx);setEditIdx(editIdx+1);}} onDelete={()=>deleteSlide(editIdx)}/>}
+      {editIdx!==null&&slides[editIdx]&&<SlideEditor key={slides[editIdx].id} slide={slides[editIdx]} index={editIdx} total={slides.length} theme={currentTheme} layout={layout} design={deckDesign} fileObj={file._fileObj||FILE_STORE.get(file.id)} onClose={()=>setEditIdx(null)} onApply={next=>{setSlides(current=>updateSlideById(current,next.id,next));setDeckNotice("Slide changes applied to this workspace. You can undo them.");}} onMove={direction=>moveSlide(editIdx,direction)} onDuplicate={()=>{duplicateSlide(editIdx);setEditIdx(editIdx+1);}} onDelete={()=>deleteSlide(editIdx)}/>}
 
     </div>
   );

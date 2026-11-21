@@ -12,7 +12,11 @@ test('missing backups are optional; public variables, placeholders, unapproved p
 });
 test('production quota requires shared persistent storage and fails closed for instance mode or invalid admin credentials',()=>{
  assert.equal(quotaMode({VERCEL:'1'}),'firestore');assert(!configured({VERCEL:'1',AI_QUOTA_MODE:'instance'}));assert(!configured({AI_QUOTA_MODE:'firestore'}));assert(!configured({AI_QUOTA_MODE:'bad'}));
- assert(configured({VERCEL:'1',FIREBASE_SERVICE_ACCOUNT_JSON:JSON.stringify({project_id:'fixture',client_email:'fixture@example.com',private_key:'fixture-private-key'}),CLASSIO_SESSION_SECRET:env.CLASSIO_SESSION_SECRET}));
+ assert(!configured({VERCEL:'1',FIREBASE_SERVICE_ACCOUNT_JSON:JSON.stringify({project_id:'fixture',client_email:'fixture@example.com',private_key:'fixture-private-key'}),CLASSIO_SESSION_SECRET:env.CLASSIO_SESSION_SECRET}));
+ const {privateKey}=require('node:crypto').generateKeyPairSync('rsa',{modulusLength:2048});
+ const account={project_id:'classio-4378f',client_email:'fixture@example.com',private_key:privateKey.export({format:'pem',type:'pkcs8'}).toString()};
+ assert(configured({VERCEL:'1',FIREBASE_SERVICE_ACCOUNT_JSON:JSON.stringify(account),CLASSIO_SESSION_SECRET:env.CLASSIO_SESSION_SECRET}));
+ assert(!configured({VERCEL:'1',FIREBASE_SERVICE_ACCOUNT_JSON:JSON.stringify({...account,private_key:'invalid'}),CLASSIO_SESSION_SECRET:env.CLASSIO_SESSION_SECRET}));
 });
 test('instance limiter enforces per-IP and per-account limits plus shared daily cap, expiring old counters',()=>{
  const store=new Map();for(let i=0;i<40;i++)assert.deepEqual(reserveInstance('study',{ip:'a',user:'account'},1,store),{});

@@ -92,7 +92,7 @@ export default function AISettings() {
         {status === null
           ? "Checking available AI…"
           : status.aiConfigured
-            ? "Auto chooses an available provider and recovers from temporary failures."
+            ? "Auto matches study tasks, images and recordings to suitable available models and recovers from temporary failures."
             : "Hosted AI is currently unavailable. Your writing and saved materials are kept."}
       </p>
       {status?.freeOnly && (

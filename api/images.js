@@ -1,9 +1,11 @@
-const { authorize } = require("../server/ai-auth");
+const { authorize, AccessError } = require("../server/ai-auth");
 const { accessFailure } = require("../server/access-errors");
-const { reserveRequest } = require("../server/ai-quota");
+const { accessDiagnostic } = require("../server/access-diagnostic");
+const { configured, reserveRequest } = require("../server/ai-quota");
 const {
   imageCapabilities,
   imageOperation,
+  ImageServiceError,
 } = require("../server/image-service");
 const {
   searchProviders,
@@ -12,10 +14,17 @@ const {
 } = require("../server/image-search");
 module.exports = async function images(req, res) {
   res.setHeader("Cache-Control", "no-store");
-  if (req.method === "GET")
-    return res
-      .status(200)
-      .json({ ...imageCapabilities(), searchProviders: searchProviders() });
+  if (req.method === "GET") {
+    const capabilities = imageCapabilities();
+    const ready =
+      configured() && (process.env.CLASSIO_SESSION_SECRET || "").length >= 32;
+    return res.status(200).json({
+      ...capabilities,
+      imageGeneration: ready && capabilities.imageGeneration,
+      backgroundRemoval: ready && capabilities.backgroundRemoval,
+      searchProviders: searchProviders(),
+    });
+  }
   if (req.method !== "POST") {
     res.setHeader("Allow", "GET, POST");
     return res.status(405).json({ error: "Use POST." });
@@ -54,16 +63,21 @@ module.exports = async function images(req, res) {
         .json({ tracked: await trackImageDownload(req.body.id) });
     return res.status(200).json(await imageOperation(req.body || {}));
   } catch (error) {
-    if (error.code) {
+    if (error instanceof AccessError) {
       const failure = accessFailure(error);
+      console.warn("images_access", accessDiagnostic(error, failure.body.code));
       return res.status(failure.status).json(failure.body);
     }
-    return res.status(error.status || 503).json({
-      error: error.code
-        ? "Start a secure Classio session or sign in again."
-        : error.status
-          ? error.message
-          : "The image service is unavailable. Your original image is kept.",
+    if (error instanceof ImageServiceError) {
+      if (error.retryAfter)
+        res.setHeader("Retry-After", String(error.retryAfter));
+      return res.status(error.status).json({
+        error: error.message,
+        ...(error.code ? { code: error.code } : {}),
+      });
+    }
+    return res.status(503).json({
+      error: "The image service is unavailable. Your original image is kept.",
     });
   } finally {
     await release?.();
