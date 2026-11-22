@@ -19,3 +19,5 @@ Project, issuer, signature, Google-provider, revocation, origin and emulator che
 After this commit is deployed, retry the failing request once. The error reference is sufficient to identify the initial failure category; the corresponding `study_access` entry supplies the phase. Do not include credentials, authorization headers or full tokens in screenshots or reports.
 
 Production provider configuration and live generation still require separate verification. The full routing/image changes remain on `fix/ai-routing-and-recovery` until their configuration can be validated.
+
+The full-history credential check also encountered an inherited false positive in `src/firebase.js` on an older remote branch: its Firebase web key has the same already reviewed fingerprint as the current browser config, but uses an environment-variable fallback. The review now permits only that exact fingerprint in the `apiKey` field at the two known browser config paths, with the existing Classio Firebase domain and SDK initialization present. Other values, files and fields remain blocking; no history is deleted, and scanner canaries still exercise private credentials.
