@@ -1,10 +1,11 @@
+const {frontendAsset}=require('./browser-assets.cjs');
 // Real Chromium pen, single/multi-touch, canvas pixels and Web Audio checks.
 // Classification responses are fixtures; no live AI credentials are used.
 const {chromium}=require('playwright'),PptxGenJS=require('pptxgenjs');
 const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),os=require('node:os'),assert=require('node:assert/strict');
 const root=path.resolve(__dirname,'../build'),output=process.env.CLASSIO_BROWSER_OUTPUT||fs.mkdtempSync(path.join(os.tmpdir(),'classio-tablet-'));
 fs.mkdirSync(output,{recursive:true});
-const server=http.createServer((req,res)=>{try{const name=decodeURIComponent(new URL(req.url,'http://local').pathname),file=path.join(root,name==='/'?'index.html':name);if(!file.startsWith(root+path.sep))throw Error();res.setHeader('Content-Type',({'.js':'application/javascript','.mjs':'application/javascript','.html':'text/html','.css':'text/css','.woff2':'font/woff2','.png':'image/png'})[path.extname(file)]||'application/octet-stream');res.end(fs.readFileSync(file));}catch{res.writeHead(404);res.end();}});
+const server=http.createServer((req,res)=>{try{const name=decodeURIComponent(new URL(req.url,'http://local').pathname),file=frontendAsset(root,name);if(!file.startsWith(root+path.sep))throw Error();res.setHeader('Content-Type',({'.js':'application/javascript','.mjs':'application/javascript','.html':'text/html','.css':'text/css','.woff2':'font/woff2','.png':'image/png'})[path.extname(file)]||'application/octet-stream');res.end(fs.readFileSync(file));}catch{res.writeHead(404);res.end();}});
 function pdf(){
  const objects=['<< /Type /Catalog /Pages 2 0 R >>','<< /Type /Pages /Kids [3 0 R 5 0 R 7 0 R] /Count 3 >>'];
  for(let page=1;page<=3;page++){const stream=`BT /F1 28 Tf 50 1000 Td (Physics page ${page}) Tj 0 -100 Td (Forces change motion.) Tj ET`;
@@ -29,7 +30,7 @@ function pdf(){
   await page.route('**/api/images',route=>route.fulfill({contentType:'application/json',body:'{"searchProviders":[]}'}));
   await page.goto(origin);await page.getByRole('heading',{name:'Library',exact:true}).waitFor();
   const cdp=await context.newCDPSession(page);
-  async function nav(name){const menu=page.getByRole('button',{name:'Open menu',exact:true});if(await menu.isVisible())await menu.click();await page.getByRole('navigation',{name:'Study tools'}).getByRole('button',{name,exact:true}).click();}
+  async function nav(name){const menu=page.getByRole('button',{name:'Open menu',exact:true});if(await menu.isVisible())await menu.click();await page.getByRole('navigation',{name:'Study tools'}).getByRole('link',{name,exact:true}).click();}
   async function upload(name,mimeType,buffer){await page.getByRole('button',{name:'Upload document',exact:true}).click();await page.locator('input[type=file]').last().setInputFiles({name,mimeType,buffer});await page.getByRole('button',{name:'Open '+name,exact:true}).click();if(await page.getByRole('button',{name:'Close AI Assistant',exact:true}).count())await page.getByRole('button',{name:'Close AI Assistant',exact:true}).click();await nav('Source');await page.locator('.studio-ink').waitFor();await page.locator('.pdf-render-status').waitFor({state:'hidden'});await page.waitForTimeout(250);}
   async function area(selector){const node=page.locator(selector);await node.scrollIntoViewIfNeeded();return node.evaluate(el=>{const a=el.getBoundingClientRect(),c=el.querySelector('.studio-ink').getBoundingClientRect(),left=Math.max(a.left,c.left,0),right=Math.min(a.right,c.right,innerWidth),top=Math.max(a.top,c.top,0),bottom=Math.min(a.bottom,c.bottom,innerHeight);return{x:(left+right)/2,y:(top+bottom)/2,w:right-left,h:bottom-top};});}
   async function swipe(box,dx,dy,count=1,expectAnimation=true){
@@ -81,7 +82,7 @@ function pdf(){
   await page.emulateMedia({reducedMotion:'reduce'});box=await area('.presentation-source-scroll');await swipe(box,-95,0,2,false);await page.waitForFunction(()=>document.querySelector('[aria-label="Slide number"]').value==='3');assert.equal(await page.locator('.page-turn-overlay').count(),0,'Reduced motion still moved page copies');await page.getByRole('button',{name:'Previous slide',exact:true}).click();await page.waitForFunction(()=>document.querySelector('[aria-label="Slide number"]').value==='2');await page.emulateMedia({reducedMotion:'no-preference'});
   await page.screenshot({path:path.join(output,size.name+'-slides.png'),fullPage:true});await page.evaluate(()=>{localStorage.setItem('classio_theme','dark');window.dispatchEvent(new StorageEvent('storage',{key:'classio_theme'}));});await page.waitForFunction(()=>document.documentElement.dataset.theme==='dark');assert(await undo.isVisible());assert(await redo.isVisible());await page.screenshot({path:path.join(output,size.name+'-dark-tools.png'),fullPage:true});
   // Exercise real synthesis and measure its output, including the off switch.
-  {const menu=page.getByRole('button',{name:'Open menu',exact:true});if(await menu.isVisible())await menu.click();await page.getByRole('button',{name:'Settings',exact:true}).click();}const toggle=page.getByRole('button',{name:'Study sound effects',exact:true});await toggle.click();await page.waitForFunction(()=>window.__soundMonitors.some(a=>a.context.state==='running'));
+  {const menu=page.getByRole('button',{name:'Open menu',exact:true});if(await menu.isVisible())await menu.click();await page.getByRole('link',{name:'Settings',exact:true}).click();}const toggle=page.getByRole('button',{name:'Study sound effects',exact:true});await toggle.click();await page.waitForFunction(()=>window.__soundMonitors.some(a=>a.context.state==='running'));
   // Meter on the actual audio rendering thread, so a busy UI frame cannot
   // miss a short envelope peak. The worklet emits silence and changes no sound.
   const peak=await page.evaluate(async()=>{

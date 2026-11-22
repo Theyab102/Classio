@@ -1,3 +1,4 @@
+const {frontendAsset}=require('./browser-assets.cjs');
 // Real browser UI, storage, refresh and worker loading; hosted responses are fixtures.
 const http = require("node:http"),
   fs = require("node:fs"),
@@ -13,7 +14,7 @@ const csp = require("../vercel.json").headers[0].headers.find(
 const server = http.createServer((req, res) => {
   try {
     const name = new URL(req.url, "http://local").pathname,
-      file = path.join(root, name === "/" ? "index.html" : name);
+      file = frontendAsset(root,name);
     if (!file.startsWith(root + path.sep)) throw Error();
     res.setHeader("Content-Security-Policy", csp);
     res.setHeader(
@@ -176,13 +177,13 @@ const server = http.createServer((req, res) => {
       };
       const main = async (name) => {
         await menu();
-        await page.getByRole("button", { name, exact: true }).click();
+        await page.getByRole("link", { name, exact: true }).click();
       };
       const nav = async (name) => {
         await menu();
         await page
           .getByRole("navigation", { name: "Study tools" })
-          .getByRole("button", { name, exact: true })
+          .getByRole("link", { name, exact: true })
           .click();
       };
       const choose = async (label, value) => {
@@ -364,10 +365,9 @@ const server = http.createServer((req, res) => {
         );
         broken = false;
         slides.length = 0;
+        const recoveryUrl = page.url();
         await page.reload();
-        await page
-          .getByRole("button", { name: "Open Untitled note", exact: true })
-          .click();
+        assert.equal(page.url(), recoveryUrl, "Refresh changed the presentation URL");
         await nav("Presentations");
         await page
           .getByRole("button", { name: "Resume generation", exact: true })
@@ -380,9 +380,7 @@ const server = http.createServer((req, res) => {
           .waitFor({ state: "detached" });
         await shot("recovered-20-slides");
         await page.reload();
-        await page
-          .getByRole("button", { name: "Open Untitled note", exact: true })
-          .click();
+        assert.equal(page.url(), recoveryUrl, "Completed deck URL was lost on refresh");
         await nav("Presentations");
         assert.equal(
           await page.locator(".deck-slide-card").count(),

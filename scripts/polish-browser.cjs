@@ -1,10 +1,11 @@
+const {frontendAsset}=require('./browser-assets.cjs');
 // Real UI/layout/font checks. The classification and voice-catalog transports
 // below are fixtures; no live provider/authentication success is inferred.
 const {chromium}=require('playwright'),PptxGenJS=require('pptxgenjs');
 const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),os=require('node:os'),assert=require('node:assert/strict');
 const root=path.resolve(__dirname,'../build'),output=process.env.CLASSIO_BROWSER_OUTPUT||fs.mkdtempSync(path.join(os.tmpdir(),'classio-polish-'));
 fs.mkdirSync(output,{recursive:true});
-const server=http.createServer((request,response)=>{try{const name=decodeURIComponent(new URL(request.url,'http://local').pathname),file=path.join(root,name==='/'?'index.html':name);if(!file.startsWith(root+path.sep))throw new Error();response.setHeader('Content-Type',({'.js':'application/javascript','.mjs':'application/javascript','.css':'text/css','.html':'text/html','.png':'image/png','.woff2':'font/woff2','.woff':'font/woff','.json':'application/json'})[path.extname(file)]||'application/octet-stream');response.end(fs.readFileSync(file));}catch{response.writeHead(404);response.end();}});
+const server=http.createServer((request,response)=>{try{const name=decodeURIComponent(new URL(request.url,'http://local').pathname),file=frontendAsset(root,name);if(!file.startsWith(root+path.sep))throw new Error();response.setHeader('Content-Type',({'.js':'application/javascript','.mjs':'application/javascript','.css':'text/css','.html':'text/html','.png':'image/png','.woff2':'font/woff2','.woff':'font/woff','.json':'application/json'})[path.extname(file)]||'application/octet-stream');response.end(fs.readFileSync(file));}catch{response.writeHead(404);response.end();}});
 (async()=>{
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin='http://127.0.0.1:'+server.address().port;
  const browser=await chromium.launch({executablePath:process.env.CLASSIO_CHROMIUM_PATH||'/usr/bin/chromium',headless:true,args:['--no-sandbox','--use-angle=swiftshader','--enable-unsafe-swiftshader']});let active;
@@ -21,8 +22,8 @@ const server=http.createServer((request,response)=>{try{const name=decodeURIComp
   await page.goto(origin);await page.getByRole('heading',{name:'Library',exact:true}).waitFor();
   const closeAssistant=async()=>{if(await page.getByRole('button',{name:'Close AI Assistant',exact:true}).count())await page.getByRole('button',{name:'Close AI Assistant',exact:true}).click();};await closeAssistant();
   const menu=async()=>{const button=page.getByRole('button',{name:'Open menu',exact:true});if(await button.isVisible())await button.click();};
-  const main=async name=>{await menu();await page.getByRole('button',{name,exact:true}).click();};
-  const nav=async name=>{await menu();await page.getByRole('navigation',{name:'Study tools'}).getByRole('button',{name,exact:true}).click();};
+  const main=async name=>{await menu();await page.getByRole('link',{name,exact:true}).click();};
+  const nav=async name=>{await menu();await page.getByRole('navigation',{name:'Study tools'}).getByRole('link',{name,exact:true}).click();};
   const choose=async(label,value)=>{await page.getByRole('combobox',{name:label,exact:true}).click();await page.getByRole('option',{name:value,exact:true}).click();};
   const theme=async value=>{await menu();if(!await page.getByRole('combobox',{name:'Appearance',exact:true}).count())await page.getByRole('button',{name:'Expand sidebar',exact:true}).click();await choose('Appearance',value);const close=page.getByRole('button',{name:'Close menu',exact:true});if(await close.isVisible())await close.click();await page.waitForFunction(mode=>document.documentElement.dataset.theme===mode,value.toLowerCase());await page.evaluate(()=>window.__lastThemeChange?.finished);};
   const shot=async name=>{await page.evaluate(()=>window.scrollTo({top:0,left:0,behavior:'instant'}));assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Page overflow at '+size.name+' '+name);await page.screenshot({path:path.join(output,size.name+'-'+name+'.png'),fullPage:true,animations:'disabled'});};
@@ -30,7 +31,7 @@ const server=http.createServer((request,response)=>{try{const name=decodeURIComp
   const folder=await page.locator('.folder-card').boundingBox();assert(folder.height>=108&&folder.width>=240,'Folder card remains cramped');
   const deck=new PptxGenJS();deck.layout='LAYOUT_WIDE';const slide=deck.addSlide();slide.background={color:'EDF4FA'};slide.addText('Projectile motion',{x:1,y:1.5,w:11,h:1,fontSize:34,color:'245F8C'});slide.addText('Evidence, trajectory and time of flight.',{x:1,y:3,w:11,h:1,fontSize:22});
   await page.getByRole('button',{name:'Upload document',exact:true}).click();await page.locator('input[type=file]').last().setInputFiles({name:'Projectile motion.pptx',mimeType:'application/vnd.openxmlformats-officedocument.presentationml.presentation',buffer:Buffer.from(await deck.write({outputType:'nodebuffer'}))});
-  const material=page.getByRole('button',{name:'Open Projectile motion.pptx',exact:true});await material.waitFor();await page.locator('.material-source-thumbnail .ppt-page').waitFor();
+  const material=page.getByRole('link',{name:'Open Projectile motion.pptx',exact:true});await material.waitFor();await page.locator('.material-source-thumbnail .ppt-page').waitFor();
   async function preview(){const frame=page.locator('.material-source-thumbnail').first();assert(await frame.evaluate(node=>{const style=getComputedStyle(node),card=node.closest('.material-card').getBoundingClientRect(),box=node.getBoundingClientRect();return parseFloat(style.borderRadius)>=10&&parseFloat(style.paddingLeft)>=8&&box.x-card.x>=9&&box.y-card.y>=9;}),'File preview lacks an inset or rounded edges');const box=await frame.locator('.ppt-page').boundingBox();assert(Math.abs(box.width/box.height-16/9)<.03,'Source preview lost its proportions');}
   await preview();await shot('materials-cards-light');await page.getByRole('button',{name:'Switch to list view',exact:true}).click();await preview();await shot('materials-list-light');
   await material.click();await closeAssistant();await page.getByRole('button',{name:'Back to library',exact:true}).click();assert.equal(await page.getByRole('heading',{name:'Pick up where you left off',exact:true}).count(),0,'Recent materials are still duplicated');assert.equal(await page.getByText('Continue studying',{exact:true}).count(),1);assert.equal(await material.count(),1);

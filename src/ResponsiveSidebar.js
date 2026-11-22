@@ -1,3 +1,4 @@
+import {WorkspaceLink} from './WorkspaceNavigation';
 import { lockBodyScroll } from "./bodyScrollLock";
 import { useEffect, useRef, useState } from "react";
 import { ThemeSelector } from "./theme";
@@ -10,12 +11,17 @@ function MenuIcon({ close = false }) {
   </svg>;
 }
 
+function NavigationItem({to,children,...props}) {
+  return to?<WorkspaceLink to={to} {...props}>{children}</WorkspaceLink>:<button type="button" {...props}>{children}</button>;
+}
+
 export default function ResponsiveSidebar({ mobile, expanded, onExpand, main, mainActive, tabs, active, onTab, onNavigate,
   onSearch, onCharacter, avatar, account, guest, onSignOut, onToggleTheme, dark, documentName, backLabel="Back to library" }) {
   const [open, setOpen] = useState(false);
   const drawer = useRef(null);
   const trigger = useRef(null);
   const full = mobile || expanded;
+  useEffect(()=>{const close=()=>setOpen(false);window.addEventListener("popstate",close);return()=>window.removeEventListener("popstate",close);},[]);
 
   useEffect(() => {
     if (!mobile || !open) return;
@@ -57,25 +63,25 @@ export default function ResponsiveSidebar({ mobile, expanded, onExpand, main, ma
         {full && <span>Search files</span>}
       </button>
       <nav aria-label="Main menu">
-        {main.map(item => <button type="button" key={item.id} className="navigation-item" aria-label={item.label} title={item.label}
+        {main.map(item => <NavigationItem to={item.toggleAssistant?route=>({...route,assistant:!route.assistant}):item.to} key={item.id} className="navigation-item" aria-label={item.label} title={item.label}
           aria-current={mainActive === item.id ? "page" : undefined}
           onClick={() => choose(() => onNavigate(item.id))}>
           {item.icon}{full && <span>{item.label}</span>}
-        </button>)}
+        </NavigationItem>)}
       </nav>
       {tabs.length > 0 && <nav className="navigation-tools" aria-label="Study tools">
         {full && <p className="navigation-context" title={documentName}>{documentName || "Study tools"}</p>}
-        {tabs.map(item => <button type="button" key={item.id} className="navigation-item" aria-label={item.label} title={item.label}
+        {tabs.map(item => <NavigationItem to={item.to} key={item.id} className="navigation-item" aria-label={item.label} title={item.label}
           aria-current={active === item.id ? "page" : undefined} onClick={() => choose(() => onTab?.(item.id))}>
           {item.icon}{full && <span>{item.label}</span>}
-        </button>)}
+        </NavigationItem>)}
       </nav>}
     </div>
       <div className="navigation-account">
         <button type="button" className="navigation-item navigation-profile" onClick={() => choose(onCharacter)} title="Edit character" aria-label="Edit character">
           {avatar}{full && <span><strong>{account || "Guest"}</strong><small>Your character</small></span>}
         </button>
-        <button type="button" className="navigation-item navigation-settings" aria-label="Settings" title="Settings" aria-current={mainActive === "settings" ? "page" : undefined} onClick={() => choose(() => onNavigate("settings"))}><UiIcon name="settings" />{full && <span>Settings</span>}</button>
+        <WorkspaceLink to={{screen:"home",homeTab:"settings"}} className="navigation-item navigation-settings" aria-label="Settings" title="Settings" aria-current={mainActive === "settings" ? "page" : undefined} onClick={() => choose(() => onNavigate("settings"))}><UiIcon name="settings" />{full && <span>Settings</span>}</WorkspaceLink>
         {full ? <ThemeSelector /> : <button type="button" className="navigation-item" onClick={onToggleTheme}
           aria-label={dark ? "Switch to light mode" : "Switch to dark mode"} title="Change appearance">
           <UiIcon key={dark?'moon':'sun'} className="theme-mode-icon" name={dark?"moon":"sun"}/>

@@ -26,6 +26,7 @@ jest.mock("./pptxExport", () => ({ loadPptxExporter: jest.fn() }));
 beforeEach(() => {
   window.matchMedia = jest.fn(() => ({ matches: false, addEventListener: jest.fn(), removeEventListener: jest.fn() }));
   HTMLElement.prototype.scrollIntoView = jest.fn();
+  window.history.replaceState(null,"","/library");
   localStorage.clear();
   localStorage.setItem("classio_onboarded", "1");
   mockAuth.currentUser = null;
@@ -46,7 +47,7 @@ test("opens a signed-in cached workspace when Firebase never answers", async () 
     expect(screen.getByRole("status")).toHaveTextContent("Preparing your study workspace");
     await act(async () => { jest.advanceTimersByTime(8000); await restore; });
     expect(screen.getByRole("heading", { name: "Library" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open folder Physics", exact: true })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open folder Physics", exact: true })).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Cloud sync is unavailable");
   } finally { jest.useRealTimers(); }
 });
@@ -67,12 +68,12 @@ test("switching accounts isolates saved characters and assistant conversations",
   render(<App />);
   mockAuth.currentUser = { uid: "account-a", displayName: "Account A" };
   await act(async () => { await mockAuthListener(mockAuth.currentUser); });
-  fireEvent.click(screen.getByRole("button", { name: "AI Assistant", exact: true }));
+  fireEvent.click(screen.getByRole("link", { name: "AI Assistant", exact: true }));
   expect(screen.getByText("Account A private conversation")).toBeInTheDocument();
   getDoc.mockResolvedValue({ metadata: { fromCache: false }, data: () => ({ folders: [] }) });
   mockAuth.currentUser = { uid: "account-b", displayName: "Account B" };
   await act(async () => { await mockAuthListener(mockAuth.currentUser); });
-  fireEvent.click(screen.getByRole("button", { name: "AI Assistant", exact: true }));
+  fireEvent.click(screen.getByRole("link", { name: "AI Assistant", exact: true }));
   expect(screen.queryByText("Account A private conversation")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Close AI Assistant", exact: true }));
   fireEvent.click(screen.getByRole("button", { name: "Edit character", exact: true }));
@@ -94,7 +95,7 @@ test("opens saved notes when the browser file database is blocked", async () => 
     await act(async () => { restore = mockAuthListener(mockAuth.currentUser); });
     await act(async () => { jest.advanceTimersByTime(8000); await restore; });
     expect(screen.getByRole("heading", { name: "Library" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open folder Physics", exact: true })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open folder Physics", exact: true })).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Original uploads could not be restored");
   } finally {
     if (originalDatabase) Object.defineProperty(global, "indexedDB", originalDatabase);
@@ -129,7 +130,7 @@ test('permission-denied keeps cached work and reports the denied profile operati
  expect(screen.getAllByText('My saved chapter').length).toBeGreaterThan(0);expect(setDoc).not.toHaveBeenCalled();
  expect(screen.getByRole('status')).toHaveTextContent('Cloud sync needs attention');
  fireEvent.click(screen.getByRole('button',{name:'Retry sync',exact:true}));await waitFor(()=>expect(account.getIdTokenResult).toHaveBeenCalledWith(true));
- await waitFor(()=>expect(screen.getByRole('button',{name:'Retry sync'})).not.toBeDisabled());fireEvent.click(screen.getByRole('button',{name:'Settings',exact:true}));fireEvent.click(screen.getByRole('button',{name:'Sync troubleshooting',exact:true}));await waitFor(()=>expect(screen.getByText('refreshed ID token')).toBeInTheDocument());
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Retry sync'})).not.toBeDisabled());fireEvent.click(screen.getByRole('link',{name:'Settings',exact:true}));fireEvent.click(screen.getByRole('button',{name:'Sync troubleshooting',exact:true}));await waitFor(()=>expect(screen.getByText('refreshed ID token')).toBeInTheDocument());
  expect(screen.getByText('read profile',{exact:true})).toBeInTheDocument();expect(screen.getByText('users/{uid}',{exact:true})).toBeInTheDocument();expect(screen.getByText('classio-4378f',{exact:true})).toBeInTheDocument();
  expect(document.querySelector('.cloud-sync-details').textContent).not.toContain(account.uid);expect(localStorage.getItem('classio_workspace:'+account.uid)).toContain('Keep this writing');
 });

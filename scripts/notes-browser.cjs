@@ -1,3 +1,4 @@
+const {frontendAsset}=require('./browser-assets.cjs');
 // Real editor interactions and responsive layouts. AI transports are fixtures,
 // including OUTPUT_LIMIT, rate limits and cancellation; no live AI claim.
 const {chromium}=require('playwright');
@@ -5,7 +6,7 @@ const assert=require('node:assert/strict'),http=require('node:http'),fs=require(
 const root=path.resolve(__dirname,'../build'),output=process.env.CLASSIO_NOTES_OUTPUT||fs.mkdtempSync(path.join(os.tmpdir(),'classio-notes-'));
 fs.mkdirSync(output,{recursive:true});
 const mime={'.html':'text/html','.js':'application/javascript','.css':'text/css','.png':'image/png','.woff2':'font/woff2','.json':'application/json'};
-const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://localhost').pathname,target=path.join(root,name==='/'?'index.html':name);if(!target.startsWith(root+path.sep)){res.writeHead(403);return res.end();}try{res.setHeader('Content-Type',mime[path.extname(target)]||'application/octet-stream');res.end(fs.readFileSync(target));}catch{res.writeHead(404);res.end();}});
+const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://localhost').pathname,target=frontendAsset(root,name);if(!target.startsWith(root+path.sep)){res.writeHead(403);return res.end();}try{res.setHeader('Content-Type',mime[path.extname(target)]||'application/octet-stream');res.end(fs.readFileSync(target));}catch{res.writeHead(404);res.end();}});
 (async()=>{
  if(!process.env.CLASSIO_NOTE_TEST_ORIGIN)await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  const origin=process.env.CLASSIO_NOTE_TEST_ORIGIN||'http://127.0.0.1:'+server.address().port;
@@ -68,7 +69,7 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
   assert(await table.locator('tr').first().locator('td').evaluateAll(nodes=>nodes.every(node=>node.getBoundingClientRect().width>=70)),'Resize created an unusably thin column');
   await shot('table-light');await appearance('Dark');await shot('table-dark');await appearance('Light');console.log(size.name+': table resize and wrapping passed');
   // Save/restore through actual guest navigation, preserving rich marks and widths.
-  await page.getByRole('button',{name:'Back to library',exact:true}).click();await page.getByRole('button',{name:'Open Untitled note',exact:true}).click();
+  await page.getByRole('button',{name:'Back to library',exact:true}).click();await page.getByRole('link',{name:'Open Untitled note',exact:true}).click();
   table=editor.locator('table').first();first=table.locator('td p').first();assert.equal(await first.innerText(),'Velocity');assert(await first.locator('span').evaluateAll(nodes=>nodes.some(node=>getComputedStyle(node).fontSize==='24px'&&getComputedStyle(node).fontFamily.includes('Fraunces'))),'Formatting was lost on restoration');assert(await table.locator('td[colwidth]').count()>0,'Widths were lost on restoration');
   for(const key of ['Backspace','Delete']){await first.click();await page.getByRole('button',{name:'Select table',exact:true}).click();await editor.locator('.tableWrapper.ProseMirror-selectednode').waitFor();await editor.press(key);assert.equal(await editor.locator('table').count(),0,key+' left the selected table behind');assert.equal(await editor.locator('h1').innerText(),'Projectile Motion');await editor.press('Control+z');assert.equal(await editor.locator('table').count(),1,'Undo did not restore the table');}
   await first.click();await page.keyboard.press('Home');await page.keyboard.press('Shift+End');await page.waitForFunction(()=>{const e=document.querySelector('.classio-note-content').editor;return e.state.doc.textBetween(e.state.selection.from,e.state.selection.to)==='Velocity';});await page.keyboard.press('Backspace');assert.equal((await first.innerText()).trim(),'');await editor.press('Control+z');assert.equal(await first.innerText(),'Velocity');

@@ -4,6 +4,8 @@ Classio is a React study workspace for organizing documents, taking notes, revie
 
 Current implementation: [assistant and study workflow fixes](docs/CLASSIO-WORKFLOW-FIXES.md), [presentation/product report](docs/CLASSIO-PRESENTATION-REDESIGN.md), [security/privacy review](docs/CLASSIO-SECURITY-PRIVACY-REVIEW.md), and [combined development brief](docs/CLASSIO-CONSOLIDATED-REQUEST.md).
 
+The [browser navigation update](docs/CLASSIO-BROWSER-NAVIGATION.md) adds free same-domain URLs, native Back/Forward, refreshable study views and real links. Two additional reviewed Vercel design/component skills are recorded under `.agents/skills`.
+
 The [podcast and study-control repair](docs/CLASSIO-PODCAST-BACKGROUND-AND-UI.md) keeps podcast creation running across workspace navigation, preserves failed voice questions for retry, and makes count fields visibly editable. Reviewed, pinned development skills are included under `.agents/skills`.
 
 ## Run locally

@@ -1,0 +1,15 @@
+.classio-shell :is(a.navigation-item,a.folder-open,a.material-open,a.library-open,.podcast-mode-tabs>a) {
+  text-decoration: none;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+.classio-shell :is(a.navigation-item,a.folder-open,a.material-open,a.library-open,.podcast-mode-tabs>a):focus-visible {
+  outline: 2px solid var(--app-link);
+  outline-offset: 3px;
+}
+.route-unavailable { padding: 32px 22px; max-width: 680px; margin: 20px auto; }
+.route-unavailable h1 { font-size: 1.6rem; line-height: 1.4; text-wrap: balance; }
+.route-unavailable p { color: var(--app-muted); line-height: 1.7; margin: 14px 0 24px; }
+.route-unavailable > a { text-decoration: none; }
+
+.classio-shell a.navigation-item { min-height: 44px; touch-action: manipulation; }

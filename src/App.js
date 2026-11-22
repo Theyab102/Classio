@@ -1,3 +1,5 @@
+import {WorkspaceNavigation,WorkspaceLink,useWorkspaceNavigation} from './WorkspaceNavigation';
+import {initialRoute,defaultFileTool,fileDestination} from './workspaceRoutes';
 import PodcastJobNotice from './PodcastJobNotice';
 import {cancelPodcastJobs,cancelOtherPodcastOwners,cancelAllPodcastJobs} from './podcastJobs';
 import {generatePresentation} from './checkpointGenerators';
@@ -60,6 +62,7 @@ import "./noteEditing.css";
 import "./interactionPolish.css";
 import "./sessionVoicePolish.css";
 import "./podcastStudyFixes.css";
+import "./workspaceNavigation.css";
 import AssistantPanel from "./AssistantPanel";
 import WorkspaceArt from "./WorkspaceArt";
 import FlashcardStudio from "./FlashcardStudio";
@@ -1730,7 +1733,7 @@ body { overflow-x:hidden; }
 function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacter, onToggleTheme, onOpenSearch, isMobile, user, isGuest, onSignOut, sidebarExpanded, onToggleSidebar, folderTab, onFolderTab, fileTab, onFileTab, folder, file }) {
   const T = useTheme();
   C = T; // keep C in sync
-  const context = screen === "file" ? "document" : screen === "folder" ? "folder" : "dashboard";
+  const context = screen === "file" && file ? "document" : screen === "folder" && folder ? "folder" : "dashboard";
   const activeTab = context === "document" ? fileTab : context === "folder" ? folderTab : null;
   const setActiveTab = context === "document" ? onFileTab : context === "folder" ? onFolderTab : null;
 
@@ -1757,8 +1760,8 @@ function ClassioSidebar({ screen, homeTab, onNavigate, character, onOpenCharacte
 
   return <ResponsiveSidebar mobile={isMobile} expanded={sidebarExpanded} onExpand={onToggleSidebar}
     mainActive={context === "dashboard" ? homeTab === "about" ? "guides" : homeTab === "settings" ? "settings" : "home" : undefined}
-    main={[NAV[0], { id: "assistant", label: "AI Assistant", icon: <UiIcon name="generate" /> }, ...(context === "document" ? [] : [NAV[1]])]}
-    tabs={context === "document" ? FILE_TABS : context === "folder" ? FOLDER_TABS : []}
+    main={[{...NAV[0],to:{screen:"home",homeTab:"folders"}}, { id: "assistant", label: "AI Assistant", icon: <UiIcon name="generate" />,toggleAssistant:true }, ...(context === "document" ? [] : [{...NAV[1],to:{screen:"home",homeTab:"about"}}])]}
+    tabs={context === "document" ? FILE_TABS.map(item=>({...item,to:{...fileDestination(file),fileTab:item.id,audioMode:'podcast'}})) : context === "folder" ? FOLDER_TABS.map(item=>({...item,to:{screen:"folder",folderId:folder.id}})) : []}
     active={["ai", "learn"].includes(documentTab) ? "notes" : documentTab} onTab={setActiveTab} onNavigate={onNavigate} onSearch={onOpenSearch}
     onCharacter={onOpenCharacter} avatar={<MiniAvatar character={character || {}} size={28} />}
     account={character?.name || user?.displayName?.split(" ")[0]} guest={isGuest} onSignOut={onSignOut}
@@ -2109,7 +2112,7 @@ function WebLinkModal({ folders, onClose, onSaveDirect }) {
 }
 
 
-export default function App() { return <LearningSession><ClassioApp /><PodcastJobNotice /></LearningSession>; }
+export default function App() { return <LearningSession><WorkspaceNavigation><ClassioApp /></WorkspaceNavigation><PodcastJobNotice /></LearningSession>; }
 
 function ClassioApp() {
   const { isMobile, isTablet } = useResponsive();
@@ -2121,12 +2124,16 @@ function ClassioApp() {
   const saveGuestOnSignIn = useRef(false);
   const [folders, setFolders] = useState([]);
   const foldersRef = useRef([]), removedRef=useRef({folders:new Set(),files:new Set()});
-  const [screen, setScreen] = useState("home");
-  const [activeFolder, setActiveFolder] = useState(null);
-  const [activeFile, setActiveFile] = useState(null);
+  const {route,navigate,set:setNavigation} = useWorkspaceNavigation();
+  const screen=route.screen, homeTab=route.homeTab, fileTab=route.fileTab, showHomeAI=route.assistant, activeStudyGroup=route.groupId;
+  const setScreen=value=>setNavigation('screen',value),setHomeTab=value=>setNavigation('homeTab',value),setFileTab=value=>value==='voice'?navigate({fileTab:'voice',audioMode:'podcast'}):setNavigation('fileTab',value),setShowHomeAI=value=>setNavigation('assistant',value),setActiveStudyGroup=value=>setNavigation('groupId',value);
+  const setActiveFolder=value=>setNavigation('folderId',value?.id||null),setActiveFile=value=>setNavigation('fileId',value?.id||null);
+  const containingFolder=screen==='file'?folders.find(folder=>folder.files.some(file=>file.id===route.fileId)):null;
+  const activeFolder=containingFolder || (screen==='folder'?folders.find(folder=>folder.id===route.folderId):null);
+  const activeFile=screen==='file'?containingFolder?.files.find(file=>file.id===route.fileId)||null:null;
+  const activeFileId=activeFile?.id,activeVoiceMode=activeFile?.voiceMode,effectiveDefault=activeFile?defaultFileTool(activeFile):'view';
+  useEffect(()=>{if(screen==='file'&&activeFileId&&fileTab==='view'&&effectiveDefault!=='view')navigate({fileTab:effectiveDefault,audioMode:activeVoiceMode==='record'?'record':'podcast'},{replace:true});},[screen,activeFileId,activeVoiceMode,fileTab,effectiveDefault,navigate]);
   const [showNewFolder, setShowNewFolder] = useState(false);
-  const [homeTab, setHomeTab] = useState("folders");
-  const [showHomeAI, setShowHomeAI] = useState(() => window.innerWidth >= 1200);
   const [chatRecord, setChatRecord] = useState(() => normalizeChats(null));
   const chatsRef = useRef(chatRecord);
   const activeChat = chatRecord.chats.find(chat=>chat.id===chatRecord.activeId) || chatRecord.chats[0];
@@ -2142,13 +2149,11 @@ function ClassioApp() {
   const [newName, setNewName] = useState("");
   const [newColor,       setNewColor]       = useState(FOLDER_COLORS[0]);
   const [showCharacter, setShowCharacter] = useState(false);
-  const [activeStudyGroup, setActiveStudyGroup] = useState(null); // group doc id
   const [showStudyGroupLobby, setShowStudyGroupLobby] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(() => window.innerWidth >= 1200);
   const assistantLimit=window.innerWidth<900?Math.max(320,window.innerWidth-48):Math.max(320,window.innerWidth-(isMobile?0:sidebarExpanded?220:60)-320),effectiveAssistantWidth=Math.min(assistantWidth,assistantLimit);
   const [folderTab, setFolderTab] = useState("files");
-  const [fileTab, setFileTab] = useState("view");
 
   const [studyStreak, setStudyStreak] = useState(0);
   useEffect(() => {
@@ -2185,6 +2190,15 @@ function ClassioApp() {
   }, []);
   const DEFAULT_CHAR = DEFAULT_CHARACTER;
   const [appStyleOpen,setAppStyleOpen]=useState(false);
+  useEffect(()=>{
+    const dismissTransientMenus=()=>{
+      setShowSearch(false);setShowCharacter(false);setAppStyleOpen(false);
+      setShowRecordModal(false);setShowUploadModal(false);setShowWebLinkModal(false);
+      setShowNewFolder(false);setConfirmDelete(null);setRenamingItem(null);setShowStudyGroupLobby(false);
+    };
+    window.addEventListener('popstate',dismissTransientMenus);
+    return()=>window.removeEventListener('popstate',dismissTransientMenus);
+  },[]);
   const [character, setCharacter] = useState(() => {
     try { return { ...DEFAULT_CHAR, ...(JSON.parse(localStorage.getItem("classio_char") || "null") || {}) }; }
     catch { return { skin:"#FDDBB4", hair:"#3D2B1F", hairStyle:0, eyes:"#3D5A80", top:"#3D5A80", name:"" }; }
@@ -2230,6 +2244,7 @@ function ClassioApp() {
         setUser(null);
         return;
       }
+      const previousAccount=accountUid.current;
       accountUid.current = account.uid;
       tokenProvider.current=null;setSyncDiagnostic(null);setAssistantCloudFailure(null);
       deferAccountSync.current = false;
@@ -2237,7 +2252,7 @@ function ClassioApp() {
       const guestAudio = guestFolders.length ? [...FILE_STORE].filter(([key]) => key.startsWith("podcast:")) : [];
       clearGuestWorkspace();
       saveGuestOnSignIn.current = false;
-      resetWorkspace();
+      resetWorkspace({resetNavigation:Boolean(previousAccount && previousAccount!==account.uid)});
       setUser(undefined);
 
       const key = workspaceCacheKey(account.uid);
@@ -2362,7 +2377,6 @@ function ClassioApp() {
 
   function updateFolder(updated) {
     setFoldersSave(foldersRef.current.map(folder => folder.id === updated.id ? updated : folder));
-    if (activeFolder?.id === updated.id) setActiveFolder(updated);
   }
 
   function updateFile(folderId, updated, fileId) {
@@ -2380,8 +2394,6 @@ function ClassioApp() {
       ? { ...folder, files: folder.files.map(item => item.id === file.id ? file : item) }
       : folder;
     setFoldersSave(foldersRef.current.map(replaceFile));
-    setActiveFile(previous => previous?.id === file.id ? file : previous);
-    setActiveFolder(previous => previous ? replaceFile(previous) : null);
   }
 
   function deleteFolder(folderId) {
@@ -2392,18 +2404,14 @@ function ClassioApp() {
     setFoldersSave(foldersRef.current.filter(item => item.id !== folderId));
   }
 
-  function resetWorkspace() {
+  function resetWorkspace({resetNavigation=true}={}) {
     cancelAllPodcastJobs();
     try { setCharacter({ ...DEFAULT_CHARACTER, ...(JSON.parse(localStorage.getItem("classio_char") || "null") || {}) }); } catch { setCharacter({ ...DEFAULT_CHARACTER }); }
     setWorkspaceWarning("");
     replaceFolders([]);
     removedRef.current={folders:new Set(),files:new Set()};
     FILE_STORE.clear();
-    setScreen("home");
-    setHomeTab("folders");
-    setActiveFolder(null);
-    setActiveFile(null);
-    setShowHomeAI(false);
+    if(resetNavigation) navigate({...initialRoute},{replace:true});
     const emptyChats=normalizeChats(null); chatsRef.current=emptyChats; setChatRecord(emptyChats); setConversationNotice(""); assistantRequest.current?.abort(); assistantRequest.current = null;
     setAssistantPending(false);
     assistantEpoch.current++;
@@ -2535,7 +2543,7 @@ function ClassioApp() {
       pending={assistantPending} onPendingChange={pending => { if (epoch === assistantEpoch.current) setAssistantPending(pending); }} /> : <button className="assistant-dock" aria-label="Expand AI Assistant" aria-expanded="false" onClick={() => setShowHomeAI(true)}><UiIcon name="generate" /><span>Ask Classio</span><UiIcon name="chevron" size={15} /></button>;
   }
 
-  function workspaceBack(){cleanupEmptyNotes();if(screen==="file"&&fileTab!=="view"&&!(activeFile?._isBlank||activeFile?.isBlankDoc||activeFile?.type==="text/youtube")){setFileTab("view");return;}if(screen==="file"&&activeFolder?.id!=="inbox"){setScreen("folder");setActiveFile(null);return;}setScreen("home");setHomeTab("folders");setActiveFile(null);setActiveFolder(null);}
+  function workspaceBack(){cleanupEmptyNotes();if(screen==="file"&&fileTab!=="view"&&!(activeFile?._isBlank||activeFile?.isBlankDoc||activeFile?.type==="text/youtube")){setFileTab("view");return;}if(screen==="file"&&activeFolder?.id!=="inbox"){setActiveFolder(activeFolder);setScreen("folder");setActiveFile(null);return;}setScreen("home");setHomeTab("folders");setActiveFile(null);setActiveFolder(null);}
   const handleNavigate2 = (id) => {
     if(id==="back"){workspaceBack();return;}
     if (id==="assistant") { setShowHomeAI(open=>!open); return; }
@@ -2547,6 +2555,7 @@ function ClassioApp() {
 
   const handleOpenFileFromSearch2 = (fi, folder) => {
     cleanupEmptyNotes();
+    if(fi._isFolder){setActiveFolder(folder);setScreen("folder");return;}
     const opened = markOpened(fi, folder);
     setActiveFolder(folder);
     setFileTab("view");
@@ -2607,7 +2616,7 @@ function ClassioApp() {
       {showSearch && <CommandSearch folders={folders} onOpenFile={handleOpenFileFromSearch2} onClose={()=>setShowSearch(false)} />}
       {appStyleOpen&&<AIStyleDialog value={character.appStyle} previous={character.previousAppStyle} onClose={()=>setAppStyleOpen(false)} onApply={style=>saveCharacter({...character,appStyle:style,previousAppStyle:character.appStyle||null})}/>}
       {showCharacter && <CharacterModal getToken={() => auth.currentUser?.getIdToken()} character={character} onChange={saveCharacter} onClose={() => setShowCharacter(false)} />}
-      <div className="workspace-content" style={{
+      <div className="workspace-content" role="main" tabIndex={-1} style={{
         flex: 1,
         marginLeft: isMobile ? 0 : (sidebarExpanded ? 220 : 60),
         marginTop: 60,
@@ -2623,12 +2632,16 @@ function ClassioApp() {
     </div>
   );
 
+  if (screen==='missing' || (screen==='file'&&!activeFile) || (screen==='folder'&&!activeFolder) || (screen==='studyGroup'&&!user)) {
+    return renderSubscreen(<section className="route-unavailable"><h1>{screen==='missing'?'Page unavailable':'This material is not available in this workspace'}</h1><p>{screen==='missing'?'Check the address or return to your library.':'Open the account or browser tab where this material is saved. Your other work is kept.'}</p><WorkspaceLink className="quiet-button is-primary" to={{screen:'home',homeTab:'folders'}}>Return to library</WorkspaceLink></section>);
+  }
+
   if (screen === "file" && activeFile && activeFolder) {
     return renderSubscreen(
         <FileView file={activeFile} folder={activeFolder} allFiles={activeFolder.files}
           user={user} isGuest={isGuest}
           activeTab={fileTab} onTabChange={setFileTab}
-          onBack={() => { cleanupEmptyNotes(); if (activeFolder?.id === "inbox") { setScreen("home"); setActiveFile(null); } else { setScreen("folder"); setActiveFile(null); setFileTab("view"); } }}
+          onBack={() => { cleanupEmptyNotes(); if (activeFolder?.id === "inbox") { setScreen("home"); setActiveFile(null); } else { setActiveFolder(activeFolder); setScreen("folder"); setActiveFile(null); setFileTab("view"); } }}
           onUpdate={(u) => updateFile(activeFolder.id, u, activeFile.id)} />
     );
   }
@@ -2684,6 +2697,7 @@ function ClassioApp() {
 
   const handleOpenFileFromSearch = (fi, folder) => {
     cleanupEmptyNotes();
+    if(fi._isFolder){setActiveFolder(folder);setScreen("folder");return;}
     const opened = markOpened(fi, folder);
     setActiveFolder(folder);
     setFileTab("view");
@@ -2724,7 +2738,7 @@ function ClassioApp() {
         onClose={() => setShowStudyGroupLobby(false)}
       />}
       {/* Main content area — offset by sidebar */}
-      <div className="workspace-content" style={{ flex:1, minWidth:0, marginLeft:isMobile?0:(sidebarExpanded?220:60), marginTop:60, marginBottom:0, minHeight:"100vh", display:"flex", flexDirection:"column", background:T.bg }}>
+      <div className="workspace-content" role="main" tabIndex={-1} style={{ flex:1, minWidth:0, marginLeft:isMobile?0:(sidebarExpanded?220:60), marginTop:60, marginBottom:0, minHeight:"100vh", display:"flex", flexDirection:"column", background:T.bg }}>
       <div className="library-container" style={{ maxWidth:960, margin:"0 auto", padding:isMobile?"12px 14px":isTablet?"16px 20px":"32px 36px", width:"100%", boxSizing:"border-box" }}>
 
         {(workspaceWarning||assistantCloudFailure) && <CloudSyncNotice message={workspaceWarning||assistantCloudFailure.message} diagnostic={workspaceWarning?syncDiagnostic:assistantCloudFailure.diagnostic} onRetry={user?retryWorkspaceSync:null}/>}
@@ -3082,8 +3096,8 @@ function FolderView({ folder, onOpenFile, onUpdate, allFolders = [], onMoveFile,
     </div>
     {!folder.files.length ? <div className="library-empty"><UiIcon name="folder" size={32} /><h2>No files in this folder</h2><p>Add documents or move notes here from your Library.</p></div>
       : <div className="library-rows">{folder.files.map(file => <div key={file.id}>
-        <article className="library-row"><button className="library-open" onClick={() => onOpenFile(file)}><span className="library-file-icon" style={{ color: getFileColor(file).accent }}><UiIcon name={file.type === "text/youtube" ? "link" : "notes"} /></span>
-          <span><strong>{file.name}</strong><small>{file._isBlank ? "Note" : file.type === "text/youtube" ? "Link" : "Document"}{file.uploadedAt ? ` · ${file.uploadedAt}` : ""}</small></span></button>
+        <article className="library-row"><WorkspaceLink className="library-open" to={fileDestination(file)} onClick={() => onOpenFile(file)}><span className="library-file-icon" style={{ color: getFileColor(file).accent }}><UiIcon name={file.type === "text/youtube" ? "link" : "notes"} /></span>
+          <span><strong>{file.name}</strong><small>{file._isBlank ? "Note" : file.type === "text/youtube" ? "Link" : "Document"}{file.uploadedAt ? ` · ${file.uploadedAt}` : ""}</small></span></WorkspaceLink>
           <ActionMenu label={`Actions for ${file.name}`} items={[
             { label: "Rename", run: () => setRename(file) },
             ...(allFolders.some(item => item.id !== folder.id) ? [{ label: "Move to", items: allFolders.filter(item => item.id !== folder.id).map(item => ({ label: item.name, run: () => onMoveFile?.(file, item.id) })) }] : []),
@@ -3107,7 +3121,7 @@ function FolderView({ folder, onOpenFile, onUpdate, allFolders = [], onMoveFile,
 function FileView({ file, user, onUpdate, activeTab, onTabChange }) {
   const tab = activeTab || "view", blank = file._isBlank || file.isBlankDoc || file.id.startsWith("blank_");
   const selected = tab === "view" && blank ? file.defaultTab || "notes" : tab === "view" && file.type === "text/youtube" ? "youtube" : tab;
-  const mode = selected === "learn" ? "lessons" : undefined;
+  const mode = selected === "learn" || (selected === "notes" && file.defaultTab === "learn" && !file.notesMode) ? "lessons" : undefined;
   const effective = ["learn", "ai"].includes(selected) ? "notes" : selected;
   const readSource = () => extractFileText(file._fileObj || FILE_STORE.get(file.id));
   useEffect(() => () => { try { window.speechSynthesis?.cancel(); } catch {} document.querySelectorAll("audio").forEach(audio => audio.pause()); }, [effective]);
@@ -3773,9 +3787,10 @@ function getLangInstruction(langCode) {
 // ─── VOICE & PODCAST TAB ─────────────────────────────────────────────────────
 // All audio features: Voice Notes recording + Podcast player
 function VoicePodcastTab({file,onUpdate,user}){
-  const [subTab,setSubTab]=useState(file.voiceMode||"podcast");
+  const {route,navigate}=useWorkspaceNavigation();
+  const subTab=route.audioMode||'podcast',setSubTab=mode=>navigate({audioMode:mode});
   const audioStore={get:async key=>FILE_STORE.get(key)||(user?await idbGet(key):await getGuestBlob(key)),save:async(key,blob)=>{FILE_STORE.set(key,blob);if(user)await idbSave(key,blob);else await saveGuestBlob(key,blob);},remove:key=>{FILE_STORE.delete(key);if(user)idbDelete(key);else removeGuestBlob(key).catch(()=>{});}};
-  return <div className="voice-podcast-workspace"><header className="studio-heading"><div><h2>Voice &amp; Podcast</h2><p>Record voice notes or generate a study podcast from your notes</p></div></header><div className="podcast-mode-tabs" role="group" aria-label="Audio mode">{[["record","Recordings"],["podcast","Podcasts"]].map(([id,label])=><button key={id} aria-pressed={subTab===id} onClick={()=>{setSubTab(id);onUpdate({...file,voiceMode:id});}}>{label}</button>)}</div>{subTab==="record"?<VoiceNotesStudio file={file} onUpdate={onUpdate} audioStore={audioStore}/>:<AIPodcastPanel file={file} onUpdate={onUpdate} user={user}/>}</div>;
+  return <div className="voice-podcast-workspace"><header className="studio-heading"><div><h2>Voice &amp; Podcast</h2><p>Record voice notes or generate a study podcast from your notes</p></div></header><div className="podcast-mode-tabs" role="group" aria-label="Audio mode">{[["record","Recordings"],["podcast","Podcasts"]].map(([id,label])=><WorkspaceLink key={id} to={{screen:"file",fileId:file.id,fileTab:"voice",audioMode:id}} aria-current={subTab===id?"page":undefined} onClick={()=>{setSubTab(id);onUpdate({...file,voiceMode:id});}}>{label}</WorkspaceLink>)}</div>{subTab==="record"?<VoiceNotesStudio file={file} onUpdate={onUpdate} audioStore={audioStore}/>:<AIPodcastPanel file={file} onUpdate={onUpdate} user={user}/>}</div>;
 }
 
 // Legacy wrapper retained for old note links.

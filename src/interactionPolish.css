@@ -17,7 +17,7 @@
 .deck-studio details.deck-options>summary{margin:0!important;min-height:76px;padding:16px 20px;display:flex;align-items:center;gap:14px}
 .deck-studio details.deck-options>summary>svg{flex-shrink:0}.deck-customize-label{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px}
 .classio-shell .podcast-mode-tabs{justify-content:center;align-items:center}
-.classio-shell .podcast-mode-tabs>button{flex:1 1 0;max-width:300px;min-width:0;min-height:48px;display:flex;align-items:center;justify-content:center;margin:0}
+.classio-shell .podcast-mode-tabs>:is(button,a){flex:1 1 0;max-width:300px;min-width:0;min-height:48px;display:flex;align-items:center;justify-content:center;margin:0}
 .classio-shell .note-table-tools{justify-content:center}
 .classio-shell .note-table-tools>button{min-height:44px;justify-content:center}
 .classio-shell button:not(:focus-visible),.studio-dialog button:not(:focus-visible){outline:none}
@@ -35,6 +35,6 @@
 @media(max-width:600px){.classio-shell .folder-card{min-height:108px}.classio-shell .library-folder-grid{grid-template-columns:minmax(0,1fr)}.classio-shell .folder-open{min-height:80px}.classio-shell .is-list .material-source-thumbnail{width:104px;flex-basis:104px;height:82px;margin:10px;padding:8px}.classio-shell .is-list .material-source-thumbnail>.ppt-page{width:min(100%,calc(64px * var(--source-aspect,1.7778)))}.cloud-sync-details dl>div{grid-template-columns:minmax(0,1fr);gap:4px}.deck-studio details.deck-options>summary{padding:12px;gap:9px}.deck-customize-label{font-size:.75rem}}
 @media(prefers-reduced-motion:reduce){:is(.classio-shell,.studio-dialog,.choice-popover,.action-popover) button{transition:none!important}.theme-changing{animation:none}::view-transition-old(root),::view-transition-new(root){animation:none!important}:is(.classio-shell,.studio-dialog) button:active{transform:none!important}}
 
-:is(.classio-shell,.studio-dialog,.command-search-dialog) .icon-dismiss:focus-visible,.classio-shell .podcast-mode-tabs>button:focus-visible{outline:2px solid var(--app-link);outline-offset:-3px}
+:is(.classio-shell,.studio-dialog,.command-search-dialog) .icon-dismiss:focus-visible,.classio-shell .podcast-mode-tabs>:is(button,a):focus-visible{outline:2px solid var(--app-link);outline-offset:-3px}
 .sync-status[aria-busy=true]>svg{animation:sync-turn .9s linear infinite}@keyframes sync-turn{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.sync-status[aria-busy=true]>svg{animation:none}}

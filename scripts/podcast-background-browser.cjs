@@ -1,9 +1,10 @@
+const {frontendAsset}=require('./browser-assets.cjs');
 // Browser UI, navigation, IndexedDB and PCM decoding are real; provider replies
 // and the slow/failing HTTP transports are explicit deterministic fixtures.
 const {chromium}=require('playwright'),http=require('node:http'),fs=require('node:fs'),path=require('node:path'),os=require('node:os'),assert=require('node:assert/strict');
 const root=path.resolve(__dirname,'../build'),output=process.env.CLASSIO_BROWSER_OUTPUT||fs.mkdtempSync(path.join(os.tmpdir(),'classio-podcast-background-'));
 fs.mkdirSync(output,{recursive:true});
-const server=http.createServer((req,res)=>{try{const file=path.join(root,new URL(req.url,'http://local').pathname==='/'?'index.html':decodeURIComponent(new URL(req.url,'http://local').pathname));if(!file.startsWith(root+path.sep))throw Error();res.setHeader('Content-Type',({'.js':'application/javascript','.css':'text/css','.html':'text/html','.png':'image/png','.woff2':'font/woff2'})[path.extname(file)]||'application/octet-stream');res.end(fs.readFileSync(file));}catch{res.writeHead(404);res.end();}});
+const server=http.createServer((req,res)=>{try{const file=frontendAsset(root,new URL(req.url,'http://local').pathname);if(!file.startsWith(root+path.sep))throw Error();res.setHeader('Content-Type',({'.js':'application/javascript','.css':'text/css','.html':'text/html','.png':'image/png','.woff2':'font/woff2'})[path.extname(file)]||'application/octet-stream');res.end(fs.readFileSync(file));}catch{res.writeHead(404);res.end();}});
 const gate=()=>{let resolve;const promise=new Promise(done=>resolve=done);return{promise,resolve};};
 function wav(){const n=22050,b=Buffer.alloc(44+n*2);b.write('RIFF',0);b.writeUInt32LE(36+n*2,4);b.write('WAVEfmt ',8);b.writeUInt32LE(16,16);b.writeUInt16LE(1,20);b.writeUInt16LE(1,22);b.writeUInt32LE(22050,24);b.writeUInt32LE(44100,28);b.writeUInt16LE(2,32);b.writeUInt16LE(16,34);b.write('data',36);b.writeUInt32LE(n*2,40);for(let i=0;i<n;i++)b.writeInt16LE(Math.sin(i/22050*880*Math.PI)*500,44+i*2);return b;}
 (async()=>{
@@ -30,10 +31,10 @@ function wav(){const n=22050,b=Buffer.alloc(44+n*2);b.write('RIFF',0);b.writeUIn
    return route.fulfill({json:{text:'Hello. What would you like to study?'}});
   });
   const menu=async()=>{const button=page.getByRole('button',{name:'Open menu',exact:true});if(await button.isVisible())await button.click();};
-  const tab=async label=>{await menu();await page.getByRole('navigation',{name:'Study tools',exact:true}).getByRole('button',{name:label,exact:true}).click();};
+  const tab=async label=>{await menu();await page.getByRole('navigation',{name:'Study tools',exact:true}).getByRole('link',{name:label,exact:true}).click();};
   const shot=async name=>{assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Page overflow: '+name);await page.screenshot({path:path.join(output,size.name+'-'+name+'.png'),fullPage:true,animations:'disabled'});};
   const saved=()=>page.evaluate(()=>JSON.parse(sessionStorage.getItem('classio_guest_workspace_v1')).folders[0].files[0]);
-  await page.goto(origin);await page.getByRole('button',{name:'Open Motion review',exact:true}).click();
+  await page.goto(origin);await page.getByRole('link',{name:'Open Motion review',exact:true}).click();
   const close=page.getByRole('button',{name:'Close AI Assistant',exact:true});if(await close.count())await close.click();
   await page.getByRole('button',{name:'Create podcast',exact:true}).click();await page.waitForFunction(()=>document.querySelector('.podcast-preparing'));
   await tab('Notes');assert.equal(await page.locator('.podcast-studio').count(),0,'Podcast panel did not unmount');
@@ -41,12 +42,12 @@ function wav(){const n=22050,b=Buffer.alloc(44+n*2);b.write('RIFF',0);b.writeUIn
   await page.waitForFunction(()=>JSON.parse(sessionStorage.getItem('classio_guest_workspace_v1')).folders[0].files[0].notes.includes('Edited while'));
   script.resolve();await page.waitForFunction(()=>JSON.parse(sessionStorage.getItem('classio_guest_workspace_v1')).folders[0].files[0].podcastEpisodes.length===2);
   await tab('Quizzes');const count=page.getByRole('spinbutton',{name:'Number of questions',exact:true});await count.fill('17');await page.getByRole('button',{name:'Increase number of questions'}).click();assert.equal(await count.inputValue(),'18');await page.getByRole('button',{name:'Decrease number of questions'}).click();assert.equal(await count.inputValue(),'17');await shot('editable-question-count');
-  await menu();await page.getByRole('navigation',{name:'Main menu',exact:true}).getByRole('button',{name:'Library',exact:true}).click();await page.getByRole('heading',{name:'Library',exact:true}).waitFor();
+  await menu();await page.getByRole('navigation',{name:'Main menu',exact:true}).getByRole('link',{name:'Library',exact:true}).click();await page.getByRole('heading',{name:'Library',exact:true}).waitFor();
   assert(await page.getByRole('complementary',{name:'Background podcast generation'}).isVisible(),'Background status missing outside the file');
   const other=await context.newPage();await other.goto('about:blank');await other.bringToFront();speech.resolve();
   await page.waitForFunction(()=>JSON.parse(sessionStorage.getItem('classio_guest_workspace_v1')).folders[0].files[0].podcastEpisodes[0].audioKey);
   await other.close();await page.bringToFront();assert.equal(scripts,1);assert.equal(audios,4);const file=await saved();assert(file.notes.includes('Edited while'));assert.equal(file.podcastEpisodes.length,2);assert.equal(file.podcastEpisodes[1].id,'old');
-  await page.getByRole('button',{name:'Open Motion review',exact:true}).click();await page.locator('.podcast-player>audio').waitFor({state:'attached'});
+  await page.getByRole('link',{name:'Open Motion review',exact:true}).click();await page.locator('.podcast-player>audio').waitFor({state:'attached'});
   const inset=await page.locator('.podcast-voice-options').evaluate(node=>{const p=node.getBoundingClientRect(),c=node.querySelector('h3').getBoundingClientRect();return{left:c.left-p.left,right:p.right-c.right,padding:parseFloat(getComputedStyle(node).paddingLeft)};});assert(inset.left>=16&&inset.padding>=16,'Voice settings touch the panel edge');await shot('padded-voice-settings');
   await tab('Flashcards');await page.getByRole('button',{name:'Generate cards',exact:true}).click();
   const dialog=page.getByRole('dialog',{name:'Generate flashcards'});const cardCount=dialog.getByRole('spinbutton',{name:'Number of cards'});await cardCount.fill('50');await dialog.evaluate(async node=>{await Promise.all(node.getAnimations().map(animation=>animation.finished.catch(()=>{})));});const row=await dialog.locator('.study-count-control').evaluate(node=>({display:getComputedStyle(node).display,buttons:[...node.querySelectorAll('button')].map(button=>({height:button.getBoundingClientRect().height,top:button.getBoundingClientRect().top}))}));assert.equal(row.display,'grid','Count stepper lost its layout in the portal');assert(row.buttons.every(button=>button.height>=44),'Count stepper touch targets are too small');assert(Math.abs(row.buttons[0].top-row.buttons[1].top)<2,'Count stepper controls do not share a row');await dialog.getByRole('button',{name:'Generate cards',exact:true}).click();await dialog.getByRole('alert').filter({hasText:'Retry in 30 seconds'}).waitFor();assert(await dialog.getByRole('button',{name:/Try again in/}).isDisabled(),'Generate ignores the rate-limit deadline');await shot('editable-card-count-and-rate-limit');

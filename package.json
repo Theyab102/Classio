@@ -62,7 +62,8 @@
     "check:security-canaries": "node scripts/security-canaries.cjs",
     "check:audit": "npm audit --audit-level=low",
     "test:auth-browser": "node scripts/auth-flow-browser.cjs",
-    "test:podcast-background": "node scripts/podcast-background-browser.cjs"
+    "test:podcast-background": "node scripts/podcast-background-browser.cjs",
+    "test:navigation": "node scripts/navigation-browser.cjs"
   },
   "eslintConfig": {
     "extends": [

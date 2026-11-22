@@ -28,6 +28,30 @@
     {
       "source": "/copyright",
       "destination": "/index.html"
+    },
+    {
+      "source": "/library",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/guides",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/settings",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/folders/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/files/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/groups/:path*",
+      "destination": "/index.html"
     }
   ],
   "headers": [
