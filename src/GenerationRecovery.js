@@ -1,24 +1,27 @@
 import { resumable } from "./generationJobs";
 import "./aiUpgrade.css";
+import useRetryDelay from './useRetryDelay';
 export default function GenerationRecovery({
   job,
   busy,
   onResume,
   onUseDraft,
 }) {
+  const wait = useRetryDelay(job?.failure?.retryAt);
   if (!resumable(job)) return null;
   const saved = job.sections?.length || 0;
   if (busy && !saved) return null;
   if (!saved && !job.outline)
     return (
       <div className="generation-retry" role="status">
-        <span>Generation hasn’t started yet.</span>
+        <span>{job.status === 'failed' ? 'No new sections were completed. Your existing work is kept.' : 'Generation hasn’t started yet.'}</span>
         <button
           type="button"
           className="text-button"
+          disabled={busy || wait > 0}
           onClick={() => onResume(job)}
         >
-          Try again
+          {wait ? `Try again in ${wait}s` : 'Try again'}
         </button>
       </div>
     );
@@ -43,9 +46,10 @@ export default function GenerationRecovery({
           <button
             type="button"
             className="quiet-button is-primary"
+            disabled={wait > 0}
             onClick={() => onResume(job)}
           >
-            Resume generation
+            {wait ? `Resume in ${wait}s` : 'Resume generation'}
           </button>
         )}
         {!busy && saved > 0 && onUseDraft && (

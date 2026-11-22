@@ -1,3 +1,5 @@
+import PodcastJobNotice from './PodcastJobNotice';
+import {cancelPodcastJobs,cancelOtherPodcastOwners,cancelAllPodcastJobs} from './podcastJobs';
 import {generatePresentation} from './checkpointGenerators';
 import {checkpointPatch,appliedGenerationPatch,useGenerationJob,deleteGenerationJobs} from './generationJobs';
 import GenerationRecovery from './GenerationRecovery';
@@ -57,6 +59,7 @@ import "./mobileFixes.css";
 import "./noteEditing.css";
 import "./interactionPolish.css";
 import "./sessionVoicePolish.css";
+import "./podcastStudyFixes.css";
 import AssistantPanel from "./AssistantPanel";
 import WorkspaceArt from "./WorkspaceArt";
 import FlashcardStudio from "./FlashcardStudio";
@@ -1284,6 +1287,7 @@ async function idbDelete(id) {
 }
 
 async function deleteLocalMaterial(id){
+  cancelPodcastJobs(id);
   await deleteGenerationJobs(id);
   if(!auth.currentUser){const keys=[id,...[...FILE_STORE.keys()].filter(key=>key===id||key.startsWith(`podcast:${id}:`))];for(const key of keys)FILE_STORE.delete(key);await Promise.all(keys.map(removeGuestBlob));return;}
   for(const key of FILE_STORE.keys())if(key===id||key.startsWith(`podcast:${id}:`))FILE_STORE.delete(key);
@@ -2105,11 +2109,12 @@ function WebLinkModal({ folders, onClose, onSaveDirect }) {
 }
 
 
-export default function App() { return <LearningSession><ClassioApp /></LearningSession>; }
+export default function App() { return <LearningSession><ClassioApp /><PodcastJobNotice /></LearningSession>; }
 
 function ClassioApp() {
   const { isMobile, isTablet } = useResponsive();
   const [user, setUser] = useState(undefined);
+  useEffect(() => { cancelOtherPodcastOwners(); }, [user?.uid]);
   const isGuest = !user;
   const [signInPending, setSignInPending] = useState(false);
   const [signInError, setSignInError] = useState("");
@@ -2360,8 +2365,12 @@ function ClassioApp() {
     if (activeFolder?.id === updated.id) setActiveFolder(updated);
   }
 
-  function updateFile(folderId, updated) {
-    const previous = foldersRef.current.find(folder => folder.id === folderId)?.files.find(file => file.id === updated.id);
+  function updateFile(folderId, updated, fileId) {
+    const id = typeof updated === "function" ? fileId : updated.id;
+    if (typeof updated === "function") folderId = foldersRef.current.find(folder => folder.files.some(file => file.id === id))?.id || folderId;
+    const previous = foldersRef.current.find(folder => folder.id === folderId)?.files.find(file => file.id === id);
+    if (!previous) return;
+    if (typeof updated === "function") updated = updated(previous);
     const staleHtml = previous && updated.notes !== previous.notes && updated.notesHtml === previous.notesHtml;
     const appendedHtml = staleHtml && previous.notesHtml && previous.notes && updated.notes?.startsWith(previous.notes)
       ? previous.notesHtml + markdownToNoteHtml(updated.notes.slice(previous.notes.length))
@@ -2384,6 +2393,7 @@ function ClassioApp() {
   }
 
   function resetWorkspace() {
+    cancelAllPodcastJobs();
     try { setCharacter({ ...DEFAULT_CHARACTER, ...(JSON.parse(localStorage.getItem("classio_char") || "null") || {}) }); } catch { setCharacter({ ...DEFAULT_CHARACTER }); }
     setWorkspaceWarning("");
     replaceFolders([]);
@@ -2619,7 +2629,7 @@ function ClassioApp() {
           user={user} isGuest={isGuest}
           activeTab={fileTab} onTabChange={setFileTab}
           onBack={() => { cleanupEmptyNotes(); if (activeFolder?.id === "inbox") { setScreen("home"); setActiveFile(null); } else { setScreen("folder"); setActiveFile(null); setFileTab("view"); } }}
-          onUpdate={(u) => updateFile(activeFolder.id, u)} />
+          onUpdate={(u) => updateFile(activeFolder.id, u, activeFile.id)} />
     );
   }
 

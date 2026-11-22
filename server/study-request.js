@@ -30,7 +30,7 @@ function parseStudyRequest(body) {
     messages.push({ role, content: [{ type: "image_url", image_url: { url } }, { type: "text", text: text.text }] });
   }
   if (textLength > MAX_TEXT_LENGTH || !messages.some(message => message.role === "user")) return null;
-  const tasks=new Set(["classification","style","notes","questions","flashcards","conversation","presentation","avatar-fit"]);
+  const tasks=new Set(["classification","style","notes","questions","flashcards","conversation","podcast","presentation","avatar-fit"]);
   const modes=new Set(['auto','groq','gemini','cloudflare','openrouter','ollama']);
   if(body.provider&&!modes.has(body.provider))return null;
   return { ...(body.provider?{provider:body.provider}:{}),messages, maxTokens: body.maxTokens, vision: imageCount === 1, ...(tasks.has(body.task)?{task:body.task}:{}) };

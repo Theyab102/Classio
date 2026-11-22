@@ -4,6 +4,8 @@ Classio is a React study workspace for organizing documents, taking notes, revie
 
 Current implementation: [assistant and study workflow fixes](docs/CLASSIO-WORKFLOW-FIXES.md), [presentation/product report](docs/CLASSIO-PRESENTATION-REDESIGN.md), [security/privacy review](docs/CLASSIO-SECURITY-PRIVACY-REVIEW.md), and [combined development brief](docs/CLASSIO-CONSOLIDATED-REQUEST.md).
 
+The [podcast and study-control repair](docs/CLASSIO-PODCAST-BACKGROUND-AND-UI.md) keeps podcast creation running across workspace navigation, preserves failed voice questions for retry, and makes count fields visibly editable. Reviewed, pinned development skills are included under `.agents/skills`.
+
 ## Run locally
 
 Use Node.js 22 or 24. Run `npm ci`, then `npm start` for the browser app. The guest workspace and policy pages work with the browser app alone. Use Vercel’s local development server to test the server-side AI endpoints with a configured provider. Copy the setting names you need from [.env.example](.env.example).

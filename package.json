@@ -61,7 +61,8 @@
     "test:ai-upgrade": "node scripts/ai-upgrade-browser.cjs",
     "check:security-canaries": "node scripts/security-canaries.cjs",
     "check:audit": "npm audit --audit-level=low",
-    "test:auth-browser": "node scripts/auth-flow-browser.cjs"
+    "test:auth-browser": "node scripts/auth-flow-browser.cjs",
+    "test:podcast-background": "node scripts/podcast-background-browser.cjs"
   },
   "eslintConfig": {
     "extends": [

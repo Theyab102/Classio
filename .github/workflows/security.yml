@@ -26,6 +26,7 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:auth-browser
+      - run: npm run test:podcast-background
       - run: npm run check:security
         env:
           GITLEAKS_BIN: /tmp/classio-security-tools/gitleaks

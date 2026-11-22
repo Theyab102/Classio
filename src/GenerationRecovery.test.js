@@ -35,3 +35,8 @@ test("completed sections and a saved outline keep a real recovery path", () => {
     screen.getByRole("button", { name: "Resume generation" }),
   ).toBeInTheDocument();
 });
+test('rate-limited jobs retain a deadline and cannot be resubmitted early',()=>{
+ const retryAt=Date.now()+30000;
+ render(<GenerationRecovery job={{status:'failed',sections:[],failure:{status:429,retryAt}}} onResume={()=>{throw new Error('Retried during provider cooldown');}}/>);
+ expect(screen.getByRole('button',{name:/Try again in/})).toBeDisabled();expect(screen.queryByText('Generation hasn’t started yet.')).not.toBeInTheDocument();
+});

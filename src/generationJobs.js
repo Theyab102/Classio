@@ -306,6 +306,7 @@ export async function runCheckpointJob({
             ? error.code.slice(0, 60)
             : "GENERATION_FAILED",
         status: Number(error.status) || 0,
+        retryAt: error.status === 429 ? Date.now() + Math.min(600, Math.max(0, Number(error.retryAfter) || 0)) * 1000 : 0,
       };
       try {
         await store.put(JSON.parse(JSON.stringify(job)));

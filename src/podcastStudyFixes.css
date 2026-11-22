@@ -1,0 +1,78 @@
+.classio-shell .podcast-studio .podcast-voice-options {
+  box-sizing: border-box;
+  padding: 20px;
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  min-width: 0;
+}
+.classio-shell .podcast-voice-options .choice-trigger { width: 100%; min-width: 0; }
+.classio-shell .podcast-voice-options .studio-controls { gap: 12px; flex-wrap: wrap; }
+.classio-shell :is(.podcast-studio,.quiz-studio,.flashcard-studio) > .tool-error {
+  box-sizing: border-box;
+  max-width: 100%;
+  width: auto;
+  padding: 14px 18px;
+  margin: 16px 0;
+  text-align: start;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+.study-count-field { display: grid; gap: 7px; min-width: 0; }
+.study-count-field > label { display: block; margin: 0; font-size: .85rem; color: var(--app-text); }
+.study-count-field > small { color: var(--app-muted); font-size: .75rem; line-height: 1.5; }
+:is(.classio-shell,.studio-dialog) .study-count-control {
+  display: grid;
+  grid-template-columns: 44px minmax(48px,1fr) 22px 44px;
+  align-items: center;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  background: var(--app-surface);
+  min-height: 48px;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+:is(.classio-shell,.studio-dialog) .study-count-control:focus-within { outline: 2px solid var(--app-link); outline-offset: 3px; }
+:is(.classio-shell,.studio-dialog) .study-count-control input {
+  width: 100%!important; min-width: 0; margin: 0; padding: 10px 8px;
+  box-sizing: border-box; border: 0; border-radius: 0;
+  background: var(--app-surface); color: var(--app-text);
+  font: inherit; font-size: 1rem; text-align: center; appearance: textfield;
+}
+:is(.classio-shell,.studio-dialog) .study-count-control input::-webkit-inner-spin-button,
+:is(.classio-shell,.studio-dialog) .study-count-control input::-webkit-outer-spin-button { appearance: none; margin: 0; }
+:is(.classio-shell,.studio-dialog) .study-count-control button {
+  min-height: 44px; min-width: 44px; padding: 4px; margin: 0;
+  border: 0; border-radius: 0; font: inherit; font-size: 1.4rem;
+  color: var(--app-link); background: var(--panel-soft); cursor: pointer;
+}
+:is(.classio-shell,.studio-dialog) .study-count-control button:disabled { opacity: .45; cursor: default; }
+.study-count-edit { color: var(--app-muted); pointer-events: none; }
+.classio-shell :is(.quiz-regenerate,.course-generator) > .study-count-field { flex: 0 1 230px; }
+.podcast-preparing p { margin: 5px 0 0; color: var(--app-muted); font-size: .8rem; line-height: 1.6; }
+.podcast-background-notice {
+  position: fixed; inset-inline-end: 18px; bottom: calc(84px + env(safe-area-inset-bottom,0px)); z-index: 80;
+  width: min(390px,calc(100vw - 36px)); padding: 14px 16px;
+  box-sizing: border-box; background: var(--app-surface); color: var(--app-text);
+  border: 1px solid var(--app-border); border-radius: 12px; box-shadow: 0 4px 20px #0002;
+}
+.podcast-background-notice > div { display: flex; gap: 12px; align-items: center; }
+.podcast-background-notice [role=status] { display: grid; gap: 5px; min-width: 0; flex: 1; }
+.podcast-background-notice strong { font-size: .85rem; overflow-wrap: anywhere; }
+.podcast-background-notice span { font-size: .78rem; color: var(--app-muted); }
+.podcast-background-notice button { min-height: 44px; flex-shrink: 0; }
+.podcast-question-transcript,.podcast-answer-transcript { text-align: start; font-size: .85rem; line-height: 1.6; width: 100%; overflow-wrap: anywhere; }
+.podcast-question-transcript { color: var(--app-muted); margin: 12px 0; }
+.podcast-answer-transcript summary { cursor: pointer; color: var(--app-link); padding: 10px 0; }
+.podcast-question-retry { min-height: 44px; margin-top: 8px; }
+@media(max-width:600px) {
+  .classio-shell .podcast-studio .podcast-voice-options { padding: 18px 16px; }
+  .classio-shell :is(.quiz-regenerate,.course-generator) > .study-count-field { flex: 1 1 190px; }
+}
+
+.studio-dialog .simple-workspace-form > [role=alert] {
+  box-sizing: border-box; padding: 12px 14px; margin: 12px 0;
+  border: 1px solid color-mix(in srgb,#dc2626 35%,var(--app-border));
+  border-radius: 10px; background: color-mix(in srgb,#dc2626 5%,var(--app-surface));
+  text-align: start; line-height: 1.6; overflow-wrap: anywhere;
+}

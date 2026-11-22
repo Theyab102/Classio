@@ -32,3 +32,14 @@ test('a permission grant arriving after cancel is closed without recording',asyn
 test('a failed speech service preserves a retry, and completing playback returns to the podcast',async()=>{
  synthesizeSpeech.mockRejectedValueOnce(new Error('Voice service unavailable.'));const onFinish=jest.fn();render(<PodcastConversation episode={episode} voice="aria" onFinish={onFinish}/>);fireEvent.click(screen.getByRole('button',{name:'Ask the hosts aloud'}));fireEvent.click(await screen.findByRole('button',{name:'Send voice question'}));await screen.findByText('Voice service unavailable.');fireEvent.click(screen.getByRole('button',{name:'Retry spoken answer'}));await screen.findByRole('button',{name:'Ask a follow-up aloud'});fireEvent.ended(screen.getByLabelText('Spoken podcast answer'));expect(screen.getByRole('button',{name:'Ask the hosts aloud'})).toBeInTheDocument();expect(onFinish).toHaveBeenCalledWith({forceResume:false});
 });
+test('a failed host answer preserves the recognized question and retries without another recording',async()=>{
+ sendStudyRequest.mockRejectedValueOnce(new Error('The AI service is busy.'));
+ render(<PodcastConversation episode={episode} voice="aria"/>);fireEvent.click(screen.getByRole('button',{name:'Ask the hosts aloud'}));fireEvent.click(await screen.findByRole('button',{name:'Send voice question'}));
+ await screen.findByRole('button',{name:'Retry question'});expect(screen.getByText('Why does gravity act downwards?')).toBeInTheDocument();expect(track.stop).toHaveBeenCalled();
+ fireEvent.click(screen.getByRole('button',{name:'Retry question'}));await screen.findByRole('button',{name:'Ask a follow-up aloud'});expect(transcribeAudio).toHaveBeenCalledTimes(1);expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledTimes(1);expect(sendStudyRequest).toHaveBeenCalledTimes(2);expect(screen.getByText('Read host answer')).toBeInTheDocument();
+});
+test('a transcription outage preserves captured audio for an explicit retry',async()=>{
+ transcribeAudio.mockRejectedValueOnce(new Error('Transcription is busy.'));
+ render(<PodcastConversation episode={episode} voice="aria"/>);fireEvent.click(screen.getByRole('button',{name:'Ask the hosts aloud'}));fireEvent.click(await screen.findByRole('button',{name:'Send voice question'}));
+ fireEvent.click(await screen.findByRole('button',{name:'Retry transcription'}));await screen.findByRole('button',{name:'Ask a follow-up aloud'});expect(transcribeAudio).toHaveBeenCalledTimes(2);expect(transcribeAudio.mock.calls[0][0]).toBe(transcribeAudio.mock.calls[1][0]);expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledTimes(1);
+});

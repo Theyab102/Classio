@@ -19,6 +19,7 @@ export async function sendStudyRequest(payload, signal) {
       const error = new Error(data.error || "The AI service could not finish this request. Your work is still open.");
       error.code = data.code || "STUDY_UNAVAILABLE"; error.status = response.status;
       error.retryAfter = Math.min(600, Math.max(0, Number(response.headers.get("retry-after")) || 0));
+      if (response.status === 429 && error.retryAfter && !/\d+ seconds/.test(error.message)) error.message += ` Retry in ${error.retryAfter} seconds.`;
       throw error;
     }
     return data.text;

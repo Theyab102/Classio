@@ -1,3 +1,5 @@
+import useRetryDelay from './useRetryDelay';
+import CountInput from './CountInput';
 import {generateStudySet} from './checkpointGenerators';
 import {checkpointPatch,appliedGenerationPatch,useGenerationJob} from './generationJobs';
 import GenerationRecovery from './GenerationRecovery';
@@ -31,6 +33,7 @@ export default function FlashcardStudio({ file, onUpdate, getFileText }) {
   const [activeId, setActiveId] = useState(progress.activeCardId || cards[0]?.id), [edited, setEdited] = useState(null), [remove, setRemove] = useState(null), [generator, setGenerator] = useState(false);
   const [count, setCount] = useState("0"), [topic, setTopic] = useState(""), [replace, setReplace] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState("");
   const flashcardJob=useGenerationJob(file,"flashcards");
+  const retryIn=useRetryDelay(flashcardJob?.failure?.retryAt);
   const [generationProgress,setGenerationProgress]=useState("");
   const [shuffle, setShuffle] = useState([]), [reviewed, setReviewed] = useState([]), [finished, setFinished] = useState(false), [showAll, setShowAll] = useState(false);
   const pending = useRef(null), latest = useRef({ file, onUpdate }); latest.current = { file, onUpdate };
@@ -80,14 +83,14 @@ export default function FlashcardStudio({ file, onUpdate, getFileText }) {
   }
   function closeGenerator(){pending.current?.abort();pending.current=null;setBusy(false);setGenerator(false);setConfirmReplace(false);}
   async function generate(event) {
-    event.preventDefault(); if (busy) return;
+    event.preventDefault(); if (busy || retryIn > 0) return;
     if(!Number.isInteger(Number(count))||Number(count)<1||Number(count)>50){setError("Choose a whole number from 1 to 50 cards.");return;}
     if (replace && cards.length) {setConfirmReplace(true);return;}
     await generateCards();
   }
   async function generateCards(resume){
     if(resume?.nativeEvent)resume=null;
-    if(pending.current)return;
+    if(pending.current || retryIn > 0)return;
     setConfirmReplace(false);
     const controller=new AbortController();pending.current=controller;setBusy(true);setError("");
     try{
@@ -119,8 +122,8 @@ export default function FlashcardStudio({ file, onUpdate, getFileText }) {
       <section className="card-list"><div className="section-heading"><h3>Your cards</h3><span>{visible.length} in this view</span></div>{(showAll ? visible : visible.slice(0, 6)).map(item => <article key={item.id}><div><StudyMarkdown className="card-list-question" text={item.question} /><StudyMarkdown text={item.answer} /></div><span className={`card-status category-${status(item)}`}>{status(item)}</span><button className="quiet-button" aria-label={`Edit card: ${item.question}`} onClick={() => setEdited({ ...item })}><UiIcon name="edit" /></button><button className="quiet-button" aria-label={`Delete card: ${item.question}`} onClick={() => setRemove(item)}><UiIcon name="trash" /></button></article>)}{visible.length > 6 && <button className="text-button" onClick={() => setShowAll(value => !value)}>{showAll ? "Show fewer cards" : `Show all ${visible.length} cards`}</button>}</section>
     </> : <div className="tool-empty"><WorkspaceArt /><h3>Make your first set</h3><p>Add a card yourself or generate a set from this file. Your study progress is kept with your material.</p><button className="quiet-button" onClick={() => setEdited({ question: "", answer: "" })}>Write a flashcard</button></div>}
     {edited && <StudioDialog title={edited.id ? "Edit flashcard" : "Add flashcard"} onClose={() => setEdited(null)}><form className="simple-workspace-form" onSubmit={saveCard}><label>Question<textarea aria-label="Question" required rows={3} value={edited.question} onChange={event => setEdited({ ...edited, question: event.target.value })} maxLength={2000} /></label><label>Answer<textarea aria-label="Answer" required rows={4} value={edited.answer} onChange={event => setEdited({ ...edited, answer: event.target.value })} maxLength={4000} /></label><footer><button className="quiet-button" type="button" onClick={() => setEdited(null)}>Cancel</button><button className="quiet-button is-primary" type="submit">Save card</button></footer></form></StudioDialog>}
-    {generator && <StudioDialog title="Generate flashcards" onClose={closeGenerator}><form className="simple-workspace-form" onSubmit={generate}><label>Topic<input value={topic} onChange={event => setTopic(event.target.value)} placeholder="Optional with study material" /></label><label>Number of cards<input type="number" aria-label="Number of cards" min="0" max="50" step="1" value={count} onChange={event=>setCount(event.target.value)}/></label>{!!cards.length && <label className="check-label"><input type="checkbox" checked={replace} onChange={event => setReplace(event.target.checked)} />Replace my existing cards</label>}<p>New cards are added to this file. Existing cards and progress are kept unless you choose Replace.</p>{error && <p role="alert">{error}</p>}<footer><button type="button" className="quiet-button" onClick={closeGenerator}>Cancel</button><button type="submit" className="quiet-button is-primary" disabled={busy}>{busy ? "Generating…" : "Generate cards"}</button></footer></form></StudioDialog>}
+    {generator && <StudioDialog title="Generate flashcards" onClose={closeGenerator}><form className="simple-workspace-form" onSubmit={generate}><label>Topic<input value={topic} onChange={event => setTopic(event.target.value)} placeholder="Optional with study material" /></label><CountInput label="Number of cards" value={count} onChange={setCount} disabled={busy}/>{!!cards.length && <label className="check-label"><input type="checkbox" checked={replace} onChange={event => setReplace(event.target.checked)} />Replace my existing cards</label>}<p>New cards are added to this file. Existing cards and progress are kept unless you choose Replace.</p>{error && <p role="alert">{error}</p>}<footer><button type="button" className="quiet-button" onClick={closeGenerator}>Cancel</button><button type="submit" className="quiet-button is-primary" disabled={busy||retryIn>0}>{retryIn>0 ? `Try again in ${retryIn}s` : busy ? "Generating…" : "Generate cards"}</button></footer></form></StudioDialog>}
     {remove && <StudioDialog title="Delete flashcard?" onClose={() => setRemove(null)}><p>This removes the selected card and its review progress.</p><div className="dialog-actions"><button className="quiet-button" onClick={() => setRemove(null)}>Cancel</button><button className="quiet-button is-danger" onClick={() => { const clean = map => Object.fromEntries(Object.entries(map).filter(([id]) => id !== remove.id)); update({ studyCards: cards.filter(item => item.id !== remove.id), cardProgress: { ...progress, known: clean(known), starred: clean(starred), review: clean(reviews) } }); setRemove(null); }}>Delete card</button></div></StudioDialog>}
-    {confirmReplace&&<StudioDialog title="Replace these flashcards?" onClose={()=>setConfirmReplace(false)}><p>Your current cards and progress are replaced only after the new cards are ready.</p><div className="dialog-actions"><button className="quiet-button" onClick={()=>setConfirmReplace(false)}>Cancel</button><button className="quiet-button is-primary" onClick={generateCards}>Generate replacement</button></div></StudioDialog>}
+    {confirmReplace&&<StudioDialog title="Replace these flashcards?" onClose={()=>setConfirmReplace(false)}><p>Your current cards and progress are replaced only after the new cards are ready.</p><div className="dialog-actions"><button className="quiet-button" onClick={()=>setConfirmReplace(false)}>Cancel</button><button className="quiet-button is-primary" disabled={retryIn>0} onClick={generateCards}>Generate replacement</button></div></StudioDialog>}
   </section>;
 }
