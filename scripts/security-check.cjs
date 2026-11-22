@@ -1,4 +1,4 @@
-require('./check-security-vendor.cjs');
+require("./check-security-vendor.cjs");
 const fs = require("node:fs"),
   path = require("node:path"),
   os = require("node:os"),
@@ -10,8 +10,10 @@ const run = (args, options = {}) =>
   cp.spawnSync("git", args, { cwd: root, encoding: "utf8", ...options });
 const scanner = process.env.GITLEAKS_BIN || "gitleaks",
   temp = fs.mkdtempSync(path.join(os.tmpdir(), "classio-security-"));
-const publicFirebaseHash =
-  "f44974192bbe24af103ac60856d08e20f1dcc9de8b0aae2a205644596555c596";
+const {
+  publicFirebaseHash,
+  reviewedFirebaseConfig,
+} = require("./reviewed-firebase.cjs");
 const sha = (value) => crypto.createHash("sha256").update(value).digest("hex");
 let errors = [];
 function classify(rows, history, bundle = false, staged = false) {
@@ -31,7 +33,9 @@ function classify(rows, history, bundle = false, staged = false) {
     }
     if (
       row.RuleID !== "gcp-api-key" ||
-      row.File.replaceAll("\\", "/") !== "src/App.js"
+      !["src/App.js", "src/firebase.js"].includes(
+        row.File.replaceAll("\\", "/"),
+      )
     )
       return true;
     const content = history
@@ -39,16 +43,10 @@ function classify(rows, history, bundle = false, staged = false) {
       : staged
         ? run(["show", ":" + row.File]).stdout
         : fs.readFileSync(path.join(root, row.File), "utf8");
-    const line = content.split("\n")[row.StartLine - 1] || "",
-      key = /apiKey:\s*["'](AIza[\w-]+)["']/.exec(line)?.[1];
+    const line = content.split("\n")[row.StartLine - 1] || "";
     // Exact reviewed Firebase public web-config value only. Other Google/provider
     // keys, different values, locations or files remain blocking findings.
-    return !(
-      key &&
-      sha(key) === publicFirebaseHash &&
-      content.includes("firebaseapp.com") &&
-      content.includes("initializeApp")
-    );
+    return !reviewedFirebaseConfig(row.File, content, line);
   });
 }
 function scan(args, name, history = false) {

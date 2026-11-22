@@ -187,11 +187,24 @@ function verificationError(error, phase = "token_verification") {
       "FIREBASE_ADMIN_CONFIGURATION_FAILED",
     );
   if (
-    ["MODULE_NOT_FOUND", "ERR_MODULE_NOT_FOUND", "ERR_REQUIRE_ESM"].includes(
-      error?.code,
-    )
-  )
-    return failure(503, "AUTH_UNAVAILABLE", "FIREBASE_SDK_LOAD_FAILED");
+    [
+      "MODULE_NOT_FOUND",
+      "ERR_MODULE_NOT_FOUND",
+      "ERR_REQUIRE_ESM",
+      "ERR_REQUIRE_ASYNC_MODULE",
+      "ERR_PACKAGE_PATH_NOT_EXPORTED",
+    ].includes(error?.code)
+  ) {
+    const result = failure(503, "AUTH_UNAVAILABLE", "FIREBASE_SDK_LOAD_FAILED");
+    result.supportReference = {
+      MODULE_NOT_FOUND: "A101",
+      ERR_MODULE_NOT_FOUND: "A101",
+      ERR_REQUIRE_ESM: "A102",
+      ERR_REQUIRE_ASYNC_MODULE: "A103",
+      ERR_PACKAGE_PATH_NOT_EXPORTED: "A104",
+    }[error.code];
+    return result;
+  }
   if (
     [
       "app/network-error",

@@ -190,26 +190,29 @@ test("OpenRouter image-output models cannot be selected for text requests", asyn
   );
 });
 test("authentication failures retain fixed phase/reason diagnostics and never raw SDK details", () => {
-  for (const [error, reason] of [
+  for (const [error, reason, reference] of [
     [
       Object.assign(Error("private module path and credential"), {
         code: "MODULE_NOT_FOUND",
       }),
       "FIREBASE_SDK_LOAD_FAILED",
+      "A101",
     ],
     [
       Object.assign(Error("private network response"), {
         code: "app/network-error",
       }),
       "FIREBASE_NETWORK_FAILED",
+      "A202",
     ],
     [
       Object.assign(Error("private administrator response"), {
         code: "auth/insufficient-permission",
       }),
       "FIREBASE_ADMIN_CONFIGURATION_FAILED",
+      "A301",
     ],
-    [Error("unknown private token details"), "FIREBASE_VERIFICATION_FAILED"],
+    [Error("unknown private token details"), "FIREBASE_VERIFICATION_FAILED", "A500"],
   ]) {
     const safe = verificationError(error, "app_initialization");
     assert.equal(safe.reason, reason);
@@ -217,6 +220,7 @@ test("authentication failures retain fixed phase/reason diagnostics and never ra
       code: safe.code,
       reason,
       phase: "app_initialization",
+      reference,
     });
     assert(!JSON.stringify(safe).includes("private"));
   }
