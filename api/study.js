@@ -1,5 +1,6 @@
 const { authorize } = require("../server/ai-auth");
 const { accessFailure } = require("../server/access-errors");
+const { accessDiagnostic } = require("../server/access-diagnostic");
 const { configured, reserveRequest } = require("../server/ai-quota");
 const {
   parseAudioRequest,
@@ -51,10 +52,7 @@ module.exports = async function study(req, res) {
     req.aiIdentity = await authorize(req);
   } catch (error) {
     const failure = accessFailure(error);
-    console.warn("study_access", {
-      code: failure.body.code,
-      ...(error.reason ? { reason: error.reason } : {}),
-    });
+    console.warn("study_access", accessDiagnostic(error, failure.body.code));
     return res.status(failure.status).json(failure.body);
   }
 

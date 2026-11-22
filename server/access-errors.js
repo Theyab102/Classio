@@ -1,4 +1,5 @@
 // Only fixed, public messages leave an authorization boundary.
+const { supportReference } = require("./access-diagnostic");
 const messages = {
   AUTH_EXPIRED:
     "Your sign-in session expired. Retry to refresh it. Your work is kept.",
@@ -21,6 +22,11 @@ function accessFailure(error) {
   const code = Object.hasOwn(messages, error?.code)
     ? error.code
     : "AUTH_UNAVAILABLE";
+  const reference =
+    code === "AUTH_UNAVAILABLE" || code === "AI_NOT_CONFIGURED"
+      ? supportReference(error) ||
+        (code === "AI_NOT_CONFIGURED" ? "A300" : "A500")
+      : null;
   return {
     status:
       code === "AI_NOT_CONFIGURED" || code === "AUTH_UNAVAILABLE"
@@ -28,7 +34,10 @@ function accessFailure(error) {
         : code === "ORIGIN_REJECTED" || code === "AUTH_PROVIDER_REQUIRED"
           ? 403
           : 401,
-    body: { code, error: messages[code] },
+    body: {
+      code,
+      error: messages[code] + (reference ? ` Reference: ${reference}.` : ""),
+    },
   };
 }
 module.exports = { accessFailure };
