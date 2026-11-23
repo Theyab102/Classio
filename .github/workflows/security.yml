@@ -28,6 +28,7 @@ jobs:
       - run: npm run test:auth-browser
       - run: npm run test:navigation
       - run: npm run test:source-input
+      - run: npm run test:reliable-generation
       - run: npm run test:podcast-background
       - run: npm run check:security
         env:

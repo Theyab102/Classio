@@ -1,7 +1,8 @@
+import {startStudyWork,useStudyWork,cancelStudyWork,hasStudyWorkspace,isStudyWorkRunning} from './studyWork';
 import useRetryDelay from './useRetryDelay';
 import CountInput from './CountInput';
 import {generateStudySet} from './checkpointGenerators';
-import {checkpointPatch,appliedGenerationPatch,useGenerationJob} from './generationJobs';
+import {appliedGenerationPatch,useGenerationJob} from './generationJobs';
 import GenerationRecovery from './GenerationRecovery';
 import {playStudySound} from "./studySounds";
 import useStudyFullscreen from './useStudyFullscreen';
@@ -26,15 +27,17 @@ export function parseFlashcards(raw, count) {
   return rows.slice(0, count).map(card => ({ id: makeStudyId(), question: card.question.trim().slice(0, 2000), answer: card.answer.trim().slice(0, 4000) }));
 }
 export default function FlashcardStudio({ file, onUpdate, getFileText }) {
+  const background=useStudyWork(file.id,"flashcards");
   const [styleOpen,setStyleOpen]=useState(false),[confirmReplace,setConfirmReplace]=useState(false);
   const fullscreen=useStudyFullscreen();
   const cards = file.studyCards || [], progress = file.cardProgress || {}, known = progress.known || {}, starred = progress.starred || {}, reviews = progress.review || {};
   const [filter, setFilter] = useState("all"), [query, setQuery] = useState(""), [mode, setMode] = useState("browse"), [flipped, setFlipped] = useState(false);
   const [activeId, setActiveId] = useState(progress.activeCardId || cards[0]?.id), [edited, setEdited] = useState(null), [remove, setRemove] = useState(null), [generator, setGenerator] = useState(false);
-  const [count, setCount] = useState("0"), [topic, setTopic] = useState(""), [replace, setReplace] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const [count, setCount] = useState("8"), [topic, setTopic] = useState(""), [replace, setReplace] = useState(false), [localBusy, setBusy] = useState(false), [error, setError] = useState("");
+  const busy=localBusy||background.running;
   const flashcardJob=useGenerationJob(file,"flashcards");
   const retryIn=useRetryDelay(flashcardJob?.failure?.retryAt);
-  const [generationProgress,setGenerationProgress]=useState("");
+  const [generationProgress]=useState("");
   const [shuffle, setShuffle] = useState([]), [reviewed, setReviewed] = useState([]), [finished, setFinished] = useState(false), [showAll, setShowAll] = useState(false);
   const pending = useRef(null), latest = useRef({ file, onUpdate }); latest.current = { file, onUpdate };
   const status = card => known[card.id] ? "mastered" : reviews[card.id] ? "learning" : "new";
@@ -46,7 +49,7 @@ export default function FlashcardStudio({ file, onUpdate, getFileText }) {
   })();
   const index = Math.max(0, visible.findIndex(card => card.id === activeId)), card = visible[index];
   useStudyActivity(file.id, "Flashcard tutor", card ? `Front: ${card.question}${flipped ? `\nBack: ${card.answer}` : "\nThe learner is viewing the front. Offer a clue before revealing the answer."}` : "The learner is preparing flashcards.");
-  useEffect(() => () => pending.current?.abort(), []);
+  useEffect(() => () => {if(!hasStudyWorkspace()||!isStudyWorkRunning(file.id,"flashcards"))pending.current?.abort();}, [file.id]);
   function update(patch) { const data = latest.current; data.onUpdate({ ...data.file, ...patch }); }
   function select(next) {
     if (!visible[next]) return;
@@ -81,7 +84,7 @@ export default function FlashcardStudio({ file, onUpdate, getFileText }) {
     const next = { id: edited.id || makeStudyId(), question: edited.question.trim(), answer: edited.answer.trim() };
     update({ studyCards: edited.id ? cards.map(item => item.id === next.id ? { ...item, ...next } : item) : [...cards, next] }); setEdited(null);
   }
-  function closeGenerator(){pending.current?.abort();pending.current=null;setBusy(false);setGenerator(false);setConfirmReplace(false);}
+  function closeGenerator(){cancelStudyWork(file.id,"flashcards");pending.current?.abort();pending.current=null;setBusy(false);setGenerator(false);setConfirmReplace(false);}
   async function generate(event) {
     event.preventDefault(); if (busy || retryIn > 0) return;
     if(!Number.isInteger(Number(count))||Number(count)<1||Number(count)>50){setError("Choose a whole number from 1 to 50 cards.");return;}
@@ -90,24 +93,23 @@ export default function FlashcardStudio({ file, onUpdate, getFileText }) {
   }
   async function generateCards(resume){
     if(resume?.nativeEvent)resume=null;
-    if(pending.current || retryIn > 0)return;
-    setConfirmReplace(false);
-    const controller=new AbortController();pending.current=controller;setBusy(true);setError("");
-    try{
-      const source=resume?.input.source??await studySource(file,getFileText);
-      if(!source&&!topic.trim()&&!resume)throw new Error("Add study material or enter a topic to generate flashcards.");
-      let checkpoint;
+    if(pending.current||background.running)return;
+    setConfirmReplace(false);setBusy(true);setError('');
+    const task=startStudyWork({file,kind:'flashcards',fallback:patch=>{const data=latest.current;data.file=patch(data.file);data.onUpdate(data.file);},work:async context=>{
+      const source=resume?.input.source??await studySource(file,getFileText);context.check();
+      if(!source&&!topic.trim()&&!resume)throw new Error('Add study material or enter a topic to generate flashcards.');
       const input=resume?.input||{source,topic:topic.trim()||file.name,count:Number(count),replace,avoid:replace?[]:cards.map(card=>card.question)};
-      const next=await generateStudySet({fileId:file.id,kind:'flashcards',input,resume,parse:parseFlashcards,signal:controller.signal,onProgress:setGenerationProgress,onCheckpoint:job=>{checkpoint=job;const data=latest.current;data.file=checkpointPatch(data.file,'flashcards',job);data.onUpdate(data.file);}});
-      if(controller.signal.aborted)return;
-      update({...appliedGenerationPatch(latest.current.file,'flashcards',checkpoint),studyCards:input.replace?next:[...(latest.current.file.studyCards||[]),...next],...(input.replace?{cardProgress:{}}:{})});
-      setActiveId(next[0].id);setFlipped(false);setGenerator(false);setFilter("all");setFinished(false);
-    }catch(failure){if(!controller.signal.aborted)setError(failure.message);}
-    finally{if(pending.current===controller){setBusy(false);pending.current=null;}}
+      let checkpoint;const next=await generateStudySet({fileId:file.id,kind:'flashcards',input,resume,parse:parseFlashcards,signal:context.signal,onProgress:context.progress,onCheckpoint:job=>{checkpoint=job;context.checkpoint(job);}});
+      context.finishing();context.commit(current=>({...current,...appliedGenerationPatch(current,'flashcards',checkpoint),studyCards:input.replace?next:[...(current.studyCards||[]),...next],...(input.replace?{cardProgress:{}}:{})}));return next;
+    }});pending.current=task.controller;
+    try{const next=await task.promise;setActiveId(next[0].id);setFlipped(false);setGenerator(false);setFilter('all');setFinished(false);}
+    catch(failure){if(failure.name!=='AbortError')setError(failure.message);}
+    finally{if(pending.current===task.controller){pending.current=null;setBusy(false);}}
   }
+
   const exportCards = () => downloadStudyFile(new Blob([cards.map(item => [item.question, item.answer].map(text => text.replace(/[\t\r\n]+/g, " ")).join("\t")).join("\n")], { type: "text/tab-separated-values" }), "classio-flashcards.tsv");
   return <section ref={fullscreen.ref} className={`flashcard-studio ${mode === "study" ? "is-studying" : ""} ${fullscreen.full?"is-fullscreen":""}`} data-custom-style={!!file.contentStyle} style={styleVariables(file.contentStyle,activeTheme())}>{styleOpen&&<AIStyleDialog value={file.contentStyle} previous={file.previousContentStyle} onClose={()=>setStyleOpen(false)} onApply={style=>update({contentStyle:style,previousContentStyle:file.contentStyle||null})}/>}<header className="tool-heading"><div><p className="eyebrow">A LITTLE PRACTICE, OFTEN</p><h2>Flashcards</h2><p>{cards.length ? `${cards.length} cards from your material. Study at your own pace.` : "Turn important ideas into something you can remember."}</p></div><div className="studio-controls"><button className="quiet-button" aria-label="Customize flashcard style" onClick={()=>setStyleOpen(true)}><UiIcon name="generate"/>Style</button><button className="quiet-button" onClick={() => setEdited({ question: "", answer: "" })}><UiIcon name="plus" />Add card</button><button className="quiet-button is-primary" onClick={() => { setGenerator(true); setError(""); }}><UiIcon name="generate" />Generate cards</button></div></header>
-    <GenerationRecovery job={flashcardJob} busy={busy} onResume={generateCards}/>{busy&&<div className="generation-feedback" role="status">{generationProgress}<button className="quiet-button" onClick={closeGenerator}>Cancel generation</button></div>}{error&&!generator&&<p role="alert" className="tool-error">{error}</p>}
+    <GenerationRecovery job={flashcardJob} busy={busy} onResume={generateCards}/>{busy&&<div className="generation-feedback" role="status">{background.progress||generationProgress}<button className="quiet-button" onClick={closeGenerator}>Cancel generation</button></div>}{error&&!generator&&<p role="alert" className="tool-error">{error}</p>}
     <div className="card-category-bar" aria-label="Card categories">{["new", "learning", "mastered"].map(type => <button key={type} aria-pressed={filter === type} className={`category-${type}`} onClick={() => { setFilter(filter === type ? "all" : type); setFlipped(false); setFinished(false); }}>{groups[type]} {type[0].toUpperCase() + type.slice(1)}</button>)}</div>
     {cards.length ? <><div className="flashcard-actions"><label className="library-search"><UiIcon name="search" /><input type="search" aria-label="Search flashcards" placeholder="Find a card" value={query} onChange={event => setQuery(event.target.value)} /></label><ChoiceMenu aria-label="Flashcard filter" value={filter} onChange={event => { setFilter(event.target.value); setFlipped(false); }}><option value="all">All cards</option><option value="due">Due for review</option><option value="new">New</option><option value="learning">Learning</option><option value="mastered">Mastered</option><option value="starred">Starred</option></ChoiceMenu><button className="quiet-button" onClick={() => { setShuffle(previous => previous.length ? [] : cards.map(item => item.id).sort(() => Math.random() - .5)); setFlipped(false); }} aria-pressed={!!shuffle.length}><UiIcon name="shuffle" />Shuffle</button><button className="quiet-button" onClick={exportCards} title="Download flashcards"><UiIcon name="download" /></button></div>
       {card ? <div className={`flashcard-stage ${mode === "study" ? "is-studying" : ""}`}>
@@ -122,7 +124,7 @@ export default function FlashcardStudio({ file, onUpdate, getFileText }) {
       <section className="card-list"><div className="section-heading"><h3>Your cards</h3><span>{visible.length} in this view</span></div>{(showAll ? visible : visible.slice(0, 6)).map(item => <article key={item.id}><div><StudyMarkdown className="card-list-question" text={item.question} /><StudyMarkdown text={item.answer} /></div><span className={`card-status category-${status(item)}`}>{status(item)}</span><button className="quiet-button" aria-label={`Edit card: ${item.question}`} onClick={() => setEdited({ ...item })}><UiIcon name="edit" /></button><button className="quiet-button" aria-label={`Delete card: ${item.question}`} onClick={() => setRemove(item)}><UiIcon name="trash" /></button></article>)}{visible.length > 6 && <button className="text-button" onClick={() => setShowAll(value => !value)}>{showAll ? "Show fewer cards" : `Show all ${visible.length} cards`}</button>}</section>
     </> : <div className="tool-empty"><WorkspaceArt /><h3>Make your first set</h3><p>Add a card yourself or generate a set from this file. Your study progress is kept with your material.</p><button className="quiet-button" onClick={() => setEdited({ question: "", answer: "" })}>Write a flashcard</button></div>}
     {edited && <StudioDialog title={edited.id ? "Edit flashcard" : "Add flashcard"} onClose={() => setEdited(null)}><form className="simple-workspace-form" onSubmit={saveCard}><label>Question<textarea aria-label="Question" required rows={3} value={edited.question} onChange={event => setEdited({ ...edited, question: event.target.value })} maxLength={2000} /></label><label>Answer<textarea aria-label="Answer" required rows={4} value={edited.answer} onChange={event => setEdited({ ...edited, answer: event.target.value })} maxLength={4000} /></label><footer><button className="quiet-button" type="button" onClick={() => setEdited(null)}>Cancel</button><button className="quiet-button is-primary" type="submit">Save card</button></footer></form></StudioDialog>}
-    {generator && <StudioDialog title="Generate flashcards" onClose={closeGenerator}><form className="simple-workspace-form" onSubmit={generate}><label>Topic<input value={topic} onChange={event => setTopic(event.target.value)} placeholder="Optional with study material" /></label><CountInput label="Number of cards" value={count} onChange={setCount} disabled={busy}/>{!!cards.length && <label className="check-label"><input type="checkbox" checked={replace} onChange={event => setReplace(event.target.checked)} />Replace my existing cards</label>}<p>New cards are added to this file. Existing cards and progress are kept unless you choose Replace.</p>{error && <p role="alert">{error}</p>}<footer><button type="button" className="quiet-button" onClick={closeGenerator}>Cancel</button><button type="submit" className="quiet-button is-primary" disabled={busy||retryIn>0}>{retryIn>0 ? `Try again in ${retryIn}s` : busy ? "Generating…" : "Generate cards"}</button></footer></form></StudioDialog>}
+    {generator && <StudioDialog title="Generate flashcards" onClose={()=>{if(background.running&&hasStudyWorkspace())setGenerator(false);else closeGenerator();}}><form className="simple-workspace-form" onSubmit={generate}><label>Topic<input value={topic} onChange={event => setTopic(event.target.value)} placeholder="Optional topic or focus" /></label><CountInput label="Number of cards" value={count} onChange={setCount} disabled={busy}/>{!!cards.length && <label className="check-label"><input type="checkbox" checked={replace} onChange={event => setReplace(event.target.checked)} />Replace my existing cards</label>}<p>{busy?"You can close this window and keep studying. Generation continues in the background.":""}</p><p>New cards are added to this file. Existing cards and progress are kept unless you choose Replace.</p>{error && <p role="alert">{error}</p>}<footer><button type="button" className="quiet-button" onClick={closeGenerator}>Cancel</button><button type="submit" className="quiet-button is-primary" disabled={busy||retryIn>0}>{retryIn>0 ? `Try again in ${retryIn}s` : busy ? "Generating…" : "Generate cards"}</button></footer></form></StudioDialog>}
     {remove && <StudioDialog title="Delete flashcard?" onClose={() => setRemove(null)}><p>This removes the selected card and its review progress.</p><div className="dialog-actions"><button className="quiet-button" onClick={() => setRemove(null)}>Cancel</button><button className="quiet-button is-danger" onClick={() => { const clean = map => Object.fromEntries(Object.entries(map).filter(([id]) => id !== remove.id)); update({ studyCards: cards.filter(item => item.id !== remove.id), cardProgress: { ...progress, known: clean(known), starred: clean(starred), review: clean(reviews) } }); setRemove(null); }}>Delete card</button></div></StudioDialog>}
     {confirmReplace&&<StudioDialog title="Replace these flashcards?" onClose={()=>setConfirmReplace(false)}><p>Your current cards and progress are replaced only after the new cards are ready.</p><div className="dialog-actions"><button className="quiet-button" onClick={()=>setConfirmReplace(false)}>Cancel</button><button className="quiet-button is-primary" disabled={retryIn>0} onClick={generateCards}>Generate replacement</button></div></StudioDialog>}
   </section>;

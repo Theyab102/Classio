@@ -330,3 +330,25 @@ test("Cloudflare model billing restrictions do not rotate backup tokens", async 
   );
   assert.deepEqual(seen, ["Bearer fixture-primary"]);
 });
+
+test('planning uses a fast model and a short algebra conversation uses a study model', async()=>{
+ const models=[];const options={env:settings,fetcher:async(url,options)=>url.endsWith('/models')?catalog():(models.push(JSON.parse(options.body).model),answer())};
+ await generateStudy({...request,task:'planning'},options);await generateStudy({...request,task:'conversation',messages:[{role:'user',content:'Solve this quadratic equation step by step: x^2-3*x+2=0.'}]},options);
+ assert.deepEqual(models,['llama-3.1-8b-instant','llama-3.3-70b-versatile']);
+});
+test('a later failed provider does not hide a recoverable capacity reset or consume a backup key',async()=>{
+ const calls=[];await assert.rejects(generateStudy(request,{env:{...settings,OPENROUTER_API_KEY:'fixture-router-fallback',AI_OPENROUTER_STUDENT_USE_APPROVED:'true'},fetcher:async(url,options)=>{
+  if(url.includes('groq')&&url.endsWith('/models'))return catalog();
+  if(url.includes('groq')){calls.push(options.headers.Authorization);return {...response({},429),headers:{get:()=> '86400'}};}
+  return response({},503);
+ }}),error=>error.code==='PROVIDER_RATE_LIMIT'&&error.retryAfter===86400);
+ assert.deepEqual(calls,['Bearer fixture-routing-primary']);
+});
+test('small planning jobs prefer Cloudflare and teaching jobs prefer Groq when both are eligible',async()=>{
+ const calls=[],env={...settings,CLOUDFLARE_API_TOKEN:'fixture-cf-lanes',CLOUDFLARE_ACCOUNT_ID:'a'.repeat(32),AI_CLOUDFLARE_STUDENT_USE_APPROVED:'true',AI_CLOUDFLARE_FREE_TIER_CONFIRMED:'true'};
+ const options={env,fetcher:async(url,options)=>{
+  if(url.endsWith('/search'))return response({result:[{name:'@cf/meta/llama-3.1-8b-instruct',properties:{context_window:131072}}]});
+  if(url.endsWith('/models'))return catalog();calls.push(url.includes('cloudflare')?'cloudflare':'groq');return url.includes('cloudflare')?response({result:{response:'A complete response.'}}):answer();
+ }};
+ await generateStudy({...request,task:'planning'},options);await generateStudy({...request,task:'notes'},options);assert.deepEqual(calls,['cloudflare','groq']);
+});

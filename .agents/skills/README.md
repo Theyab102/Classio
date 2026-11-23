@@ -12,3 +12,7 @@ Only text files were imported. No installers, executable scripts, hooks, binarie
 ## Navigation follow-up
 
 Two more reviewed text-only Vercel skills were added for native navigation and maintainable component design: `web-design-guidelines` (semantic links, URL state, focus and accessibility) and `vercel-composition-patterns` (decoupled React state and composition). The Web Interface Guidelines snapshot is bundled and its declared SHA-256 verified; no remote rules are fetched during its use. Their hashes/source commits are in `provenance.json`.
+
+## Reliable study generation
+
+`llm-evaluation` and `rag-implementation` are pinned text-only imports from https://github.com/wshobson/agents. They guide coverage, source grounding and regression evaluation. Licenses and hashes are retained. No example clients, paid frameworks, scripts, vector databases or external evaluation services were installed or executed.

@@ -2,10 +2,13 @@
 function workload(input) {
   if (input.audio) return "transcription";
   if (input.vision) return "vision";
-  if (["classification", "style", "avatar-fit"].includes(input.task))
+  if (["classification", "style", "avatar-fit", "planning"].includes(input.task))
     return "fast";
+  const latest=[...(input.messages||[])].reverse().find(message=>message.role==='user')?.content;
+  const question=typeof latest==='string'?latest:Array.isArray(latest)?latest.filter(part=>part.type==='text').map(part=>part.text).join(' '):'';
+  const mathematics=/\b(?:solve|simplif\w*|factori[sz]\w*|polynomial|quadratic|algebra|equation|end behavior|step.by.step)\b|\b[fx]\s*\(/i.test(question);
   if (
-    ["notes", "questions", "flashcards", "presentation", "podcast"].includes(input.task) ||
+    mathematics || ["notes", "questions", "flashcards", "presentation", "podcast"].includes(input.task) ||
     input.maxTokens > 1600
   )
     return "study";

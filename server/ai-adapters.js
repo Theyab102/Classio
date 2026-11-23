@@ -41,7 +41,7 @@ function retrySeconds(response, data) {
       item["@type"]?.endsWith("RetryInfo"),
     )?.retryDelay;
   return Math.min(
-    3600,
+    7 * 86400,
     Math.max(
       1,
       Number(value) ||

@@ -7,6 +7,8 @@ import { courseSections } from "./courseGeneration";
 import { sendStudyRequest } from "./studyTools";
 import { languageInstruction } from "./studyContext";
 import { MATH_OUTPUT_GUIDE } from "./mathMarkdown";
+import {lessonCoverage,lessonReference,LESSON_SCOPE_GUIDE,allowsAdvancedMethods,validateLessonCoverage,sourceQuestionIds} from './lessonCoverage';
+import {GRAPH_OUTPUT_GUIDE,validateGraphBlocks,includeSourceGraph} from './mathGraphs';
 
 function deck(raw, count) {
   const value = parseAiJson(raw);
@@ -37,6 +39,7 @@ export function generatePresentation({
           const raw = await send(
             {
               ...frozen.request,
+              task:"planning",
               messages: [
                 {
                   role: "system",
@@ -140,11 +143,31 @@ function validateNotes(text, previous) {
   return text.trim();
 }
 export function generateNotes({
+  readPageImage,
   input,
   resume,
   send = sendStudyRequest,
   ...options
 }) {
+  const current=resume?.input||input;
+  if(current.coverageVersion===2){
+    const units=lessonCoverage(current.source||'');
+    return runCheckpointJob({...options,kind:'notes',input:current,resume,total:units.length,
+      plan:async()=>units.map(({title,page,file})=>({title,page,file})),
+      step:async(index,job,signal,attempt)=>{
+        const unit=units[index];
+        const needsDiagram=unit.page&&(/\b(?:graph|diagram|figure|shown|sketch|plot)\b/i.test(unit.source)||unit.source.trim().length<40);
+        const image=needsDiagram&&readPageImage?await readPageImage(unit.file,unit.page):null;
+        const payload={task:'notes',messages:[
+          {role:'system',content:current.request.messages[0].content+'\n'+LESSON_SCOPE_GUIDE+'\n'+GRAPH_OUTPUT_GUIDE+`\nTeach this entire assigned section with explanations, worked examples and a reasoned solution for each readable source question. Do not stop after the first problem. ${attempt?'Repair the previous incomplete section; use prerequisite-level language and no unsupported advanced notation.':''}`},
+          {role:'user',content:`Source file: ${current.topic}\nLearner prompt: ${current.prompt||'Explain the supplied lessons and questions fully.'}\nCoverage: section ${index+1} of ${units.length}; ${unit.title}\nLesson map (do not introduce material outside this scope):\n${job.outline.map(item=>item.title).join('\n').slice(0,4000)}\nAssigned source section (cover every question here):\n${unit.source}\nLinked source / answer-key reference:\n${lessonReference(current.source,unit,6000)}\nWrite only this section. State the original page/question labels. Explain the lesson, then show solutions with steps and an example. Omit exam logistics.`}
+        ],maxTokens:Math.min(7500,Math.ceil(Math.max(2200,1200+sourceQuestionIds(unit.source).length*900+unit.source.length/4)*(attempt?1.4:1)))};
+        if(image)payload.messages[1].content=[{type:'image_url',image_url:{url:image}},{type:'text',text:payload.messages[1].content+'\nThe attached image is this exact PDF page. Read its graphs and diagrams alongside the text. If a detail is illegible, identify it explicitly.'}];
+        const raw=await send(payload,signal);
+        if(!allowsAdvancedMethods(unit.source,current.prompt)&&/\\lim\b|\blimit\s+as\b/i.test(raw))throw new Error('This explanation introduced a method outside the supplied lesson. Retrying the unfinished section.');
+        const illustrated=includeSourceGraph(raw,unit.source);validateGraphBlocks(illustrated);return validateLessonCoverage(illustrated,job.sections,unit.source);
+      },assemble:job=>job.sections.join('\n\n')});
+  }
   const frozen = resume?.input || input,
     count = Math.max(
       1,
@@ -262,7 +285,7 @@ export function generateStudySet({
           messages: [
             {
               role: "system",
-              content: `Create exactly ${batch} distinct ${frozen.difficulty || "standard"} ${kind === "quiz" ? (short ? "short-answer study questions" : "multiple-choice study questions") : "study flashcards"}. Return only a JSON array with ${format}. ${languageInstruction(frozen.source)} Use source evidence when supplied; otherwise teach the topic without claiming document evidence. ${MATH_OUTPUT_GUIDE} ${attempt ? "Keep every explanation concise." : ""}`,
+              content: `Create exactly ${batch} distinct ${frozen.difficulty || "standard"} ${kind === "quiz" ? (short ? "short-answer study questions" : "multiple-choice study questions") : "study flashcards"}. Return only a JSON array with ${format}. ${languageInstruction(frozen.source)} Use source evidence when supplied; otherwise teach the topic without claiming document evidence. ${MATH_OUTPUT_GUIDE} ${LESSON_SCOPE_GUIDE} ${attempt ? "Keep every explanation concise." : ""}`,
             },
             {
               role: "user",

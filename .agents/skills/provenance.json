@@ -414,5 +414,51 @@
         "sha256": "587f7d16b0660eb61fee4a4d3d7df2b3077d6835de170602c7d6e60bee559131"
       }
     ]
+  },
+  {
+    "skill": "llm-evaluation",
+    "repository": "https://github.com/wshobson/agents.git",
+    "commit": "51b9ae3ac68d9c236549a9b57f5dca7e6c0c168c",
+    "source": "plugins/llm-application-dev/skills/llm-evaluation",
+    "observedDate": "2026-11-23",
+    "files": [
+      {
+        "path": ".agents/skills/llm-evaluation/SKILL.md",
+        "sha256": "d1c980c9674e3ed5d9c067bc7972c88953f5e3dfd06a5cd09877fb16021e3d39"
+      },
+      {
+        "path": ".agents/skills/llm-evaluation/references/details.md",
+        "sha256": "22cef4c0bd3cbceda2719d6f4a8e76c3248cbb3c14ab6c3ce2f025759bb6270b"
+      },
+      {
+        "path": ".agents/skills/llm-evaluation/LICENSE",
+        "sha256": "f89abb55d9f073f38f1703e4518f0613c788c6174be7f13b8dfe48a1c076c746"
+      }
+    ],
+    "review": "Text only; reviewed references; no installers, dependencies, remote services, executable files or bundled examples executed.",
+    "starsObserved": 42821
+  },
+  {
+    "skill": "rag-implementation",
+    "repository": "https://github.com/wshobson/agents.git",
+    "commit": "51b9ae3ac68d9c236549a9b57f5dca7e6c0c168c",
+    "source": "plugins/llm-application-dev/skills/rag-implementation",
+    "observedDate": "2026-11-23",
+    "files": [
+      {
+        "path": ".agents/skills/rag-implementation/SKILL.md",
+        "sha256": "d10cae11471ad26fcfa830ff25a345cda2fa99fd6c4fc56b5a64445c954c7045"
+      },
+      {
+        "path": ".agents/skills/rag-implementation/references/details.md",
+        "sha256": "be21c38da342969f70d788bf55d027bae57f757f26dc0e434afc7e1f5515534d"
+      },
+      {
+        "path": ".agents/skills/rag-implementation/LICENSE",
+        "sha256": "f89abb55d9f073f38f1703e4518f0613c788c6174be7f13b8dfe48a1c076c746"
+      }
+    ],
+    "review": "Text only; reviewed references; no installers, dependencies, remote services, executable files or bundled examples executed.",
+    "starsObserved": 42821
   }
 ]

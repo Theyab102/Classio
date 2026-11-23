@@ -1,3 +1,5 @@
+import {GRAPH_OUTPUT_GUIDE} from './mathGraphs';
+import {LESSON_SCOPE_GUIDE} from './lessonCoverage';
 import {sourceBundleStart} from './sourceBundle';
 import {runCheckpointJob,distinct} from './generationJobs';
 import {parseAiJson} from './aiJson';
@@ -63,7 +65,7 @@ export async function generateCourseLessons({source,topic,count,signal,onProgres
   const crossReference=source.startsWith(sourceBundleStart)?`\n\nLinked-source reference for checking answers:\n${materialExcerpt(source,'',5000)}`:'';
   const language=languageInstruction(source),sections=courseSections(source,count),shortSource=source.length<count*300;
   onProgress('Planning the course…');
-  const plan=()=>request(compact=>({messages:[
+  const plan=()=>request(compact=>({task:'planning',messages:[
     {role:'system',content:`Create a compact course outline for a self-paced course. Return only a JSON array of ${count} objects with title and focus (strings). No lessons or questions yet. ${source?shortSource?'Use the entire short source to plan distinct small lessons. Do not pretend it contains independent chapters.':'Each object must cover its correspondingly numbered source section in order. Do not skip the later sections.':'Progress from foundations to applications of the requested topic.'} ${language} Keep titles under 80 characters and focus under ${compact?100:240} characters.`},
     {role:'user',content:`Topic: ${topic}\n\n${source?shortSource?'SHORT SOURCE:\n'+source:sections.map((part,i)=>`SOURCE SECTION ${i+1}:\n${materialExcerpt(part,'',1200)}`).join('\n\n'):'No source supplied: teach the requested topic, without claiming to quote a file.'}`},
   ],maxTokens:1600}),raw=>{
@@ -75,7 +77,7 @@ export async function generateCourseLessons({source,topic,count,signal,onProgres
     const outline=job.outline;
     check();onProgress(`Writing lesson ${index+1} of ${count}…`);
     const lesson=await request(compact=>({messages:[
-      {role:'system',content:`Write one complete lesson for this self-paced course. Return only a JSON array containing exactly ONE object: title, lesson (Markdown), question, options (exactly three strings), correct (zero-based integer), explanation. ${language} ${MATH_OUTPUT_GUIDE} Explain the assigned focus with short sections, a worked example and a takeaway. ${compact?'Keep the lesson under 900 characters and the check concise.':'Keep the lesson under 2400 characters and the check concise.'} ${source?'Use the assigned source section as evidence. Label supplemental explanations and do not invent source facts.':'Teach the requested topic without claiming source evidence.'} Do not repeat prior lessons or return the whole course.`},
+      {role:'system',content:`${LESSON_SCOPE_GUIDE} Write one complete lesson for this self-paced course. Return only a JSON array containing exactly ONE object: title, lesson (Markdown), question, options (exactly three strings), correct (zero-based integer), explanation. ${language} ${MATH_OUTPUT_GUIDE} ${GRAPH_OUTPUT_GUIDE} Escape graph-block backslashes and newlines correctly inside JSON strings. Explain the assigned focus with short sections, a worked example and a takeaway. ${compact?'Keep the lesson under 900 characters and the check concise.':'Keep the lesson under 2400 characters and the check concise.'} ${source?'Use the assigned source section as evidence. Label supplemental explanations and do not invent source facts.':'Teach the requested topic without claiming source evidence.'} Do not repeat prior lessons or return the whole course.`},
       {role:'user',content:`Topic: ${topic}\nCourse outline:\n${outline.map((item,i)=>`${i+1}. ${item.title}: ${item.focus}`).join('\n')}\n\nLesson ${index+1} of ${count}: ${outline[index].title}\nFocus: ${outline[index].focus}\n\nAssigned source section ${index+1} (excerpt):\n${materialExcerpt(shortSource?source:sections[index],'',12000)||'(No source supplied; teach only the explicitly requested topic without claiming file evidence.)'}${crossReference}`},
     ],maxTokens:compact?1400:2600}),raw=>{
       const parsed=parseLessonPlan(raw);

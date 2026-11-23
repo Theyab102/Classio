@@ -93,9 +93,9 @@ export function removeEmptyImageSections(root) {
   });
 }
 
-export async function enrichNoteImages(markdown, { pdfFile, fileObj, useWeb, signal, originalHtml = "", existingHtml, sourceFigures:providedFigures,sourceOnly=!!fileObj, search = searchStudyImages } = {}) {
+export async function enrichNoteImages(markdown, { pdfFile, fileObj, useWeb, signal, originalHtml = "", existingHtml, generatedImages=new Set(), sourceFigures:providedFigures,sourceOnly=!!fileObj, search = searchStudyImages } = {}) {
   const root = document.createElement("div"); root.innerHTML = existingHtml === undefined ? markdownToNoteHtml(markdown) : sanitizeNoteHtml(existingHtml);
-  if (existingHtml === undefined) root.querySelectorAll("img").forEach(image => image.replaceWith(image.alt || ""));
+  if (existingHtml === undefined) root.querySelectorAll("img").forEach(image => {if(!generatedImages.has(image.getAttribute("src")))image.replaceWith(image.alt || "");});
   const sourceFigures=providedFigures||(fileObj&&useWeb?await getSourceFigures(fileObj).catch(()=>[]):[]);
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT), texts = [];
   while (walker.nextNode()) if (!walker.currentNode.parentElement.closest("pre,code,[data-classio-equation]")) texts.push(walker.currentNode);

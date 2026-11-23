@@ -1,3 +1,4 @@
+import {waitForStudyCapacity,retryDelay} from './studyQueue';
 import {parseAiJson} from './aiJson';
 import {anySignal,timeoutSignal} from './abortSignal';
 import {spokenMathText} from "./mathSpeech";
@@ -8,15 +9,18 @@ export function spokenTurn(text) {
   return String(text || "").replace(/^(?:\s*\*{0,2}(?:Mira|Jules|Host\s*[AB12]|Speaker\s*[AB12]|[AB])\*{0,2}\s*[:：]\s*)+/i, "").trim();
 }
 
-export async function synthesizeSpeech(text, voice, signal) {
+export async function synthesizeSpeech(text, voice, signal, onWait=()=>{}) {
   if (!TTS_SPACE_URL) throw new Error("Audio generation is not connected.");
+  for(;;){
+  if(signal?.aborted)throw new DOMException('Stopped','AbortError');
   const response = await fetch(`${TTS_SPACE_URL}/generate-podcast`, { method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store", signal: anySignal([signal, timeoutSignal(90000)]), body: JSON.stringify({ text: spokenMathText(spokenTurn(text)), voice, speed: 1 }) });
-  if(response.status===429){const wait=Math.min(600,Math.max(1,Number(response.headers.get("retry-after"))||60));throw new Error(`The voice service is busy. Try again in ${wait} seconds. Your transcript and previous audio are kept.`);}
+  if(response.status===429){onWait(true);await waitForStudyCapacity(Date.now()+retryDelay(response.headers.get('retry-after'))*1000,signal);onWait(false);continue;}
   if(response.status===400)throw new Error("This voice is unavailable on the connected service. Reload the voice catalog and choose another voice.");
   if (!response.ok || !response.headers.get("content-type")?.startsWith("audio/")) throw new Error("The voice service could not create audio. Your transcript is still available.");
   const blob = await response.blob();
   if (blob.size > 15000000) throw new Error("This audio section is too large. Try a shorter answer.");
   return blob;
+  }
 }
 
 export function parseEpisode(raw) {
@@ -53,7 +57,7 @@ export async function synthesizeEpisode(episode, voices, signal, onProgress = ()
     if (signal.aborted) throw new DOMException("Stopped", "AbortError");
     const turn = episode.turns[index]; onProgress(index + 1, episode.turns.length);
     const spoken = spokenTurn(turn.text);
-    const bytes = await (await synthesizeSpeech(spoken, voices[turn.speaker], signal)).arrayBuffer();
+    const bytes = await (await synthesizeSpeech(spoken, voices[turn.speaker], signal,waiting=>onProgress(index+1,episode.turns.length,waiting))).arrayBuffer();
     let buffer;
     try { buffer = await context.decodeAudioData(bytes); } catch { throw new Error("The voice service returned an unreadable audio file. Try preparing audio again."); }
     if (signal.aborted) throw new DOMException("Stopped", "AbortError");

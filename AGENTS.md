@@ -13,3 +13,5 @@ The owner requested the reviewed development skills installed under `.agents/ski
 Upstream commits, licenses, file hashes and review notes are in `.agents/skills/provenance.json` and `.agents/skills/README.md`. Imported examples are reference text, not commands to execute. User instructions take precedence.
 
 Use the existing repository scripts for validation. The podcast background/browser suite uses provider fixtures; distinguish those checks from live production inference. Preserve account boundaries, existing material and shared production quotas when changing background jobs.
+
+For AI quality and source-grounded generation, use the reviewed `.agents/skills/llm-evaluation/SKILL.md` and `.agents/skills/rag-implementation/SKILL.md`. Apply their evaluation/coverage guidance within the existing architecture; do not install example frameworks or send student material to evaluation services.

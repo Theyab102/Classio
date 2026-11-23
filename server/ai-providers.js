@@ -18,10 +18,10 @@ function availableProviders(env = process.env) {
   );
 }
 function providerOrder(input, env) {
-  const enabled = availableProviders(env),
-    suggested = input.vision
+  const enabled = availableProviders(env),lane=workload(input),laneOrder=env["AI_"+lane.toUpperCase()+"_PROVIDER_ORDER"],
+    suggested = laneOrder?laneOrder.split(",").map(value=>value.trim()):input.vision
       ? ["groq", "openrouter", "ollama"]
-      : ["groq", "cloudflare", "openrouter", "ollama"];
+      : lane==="fast"?["cloudflare","groq","openrouter","ollama"]:["groq", "openrouter", "cloudflare", "ollama"];
   const preferred =
     input.provider && input.provider !== "auto"
       ? input.provider
@@ -29,7 +29,7 @@ function providerOrder(input, env) {
   return [
     ...new Set([
       preferred,
-      ...(env.AI_PROVIDER_ORDER ? enabled : suggested),
+      ...(laneOrder?suggested:env.AI_PROVIDER_ORDER ? enabled : suggested),
       ...enabled,
     ]),
   ].filter(
@@ -70,7 +70,7 @@ async function route(
   const providers = providerOrder(input, env);
   if (!providers.length) throw new ProviderError(503, "NOT_CONFIGURED");
   const deadline = Date.now() + 40000;
-  let last;
+  let last;const rateWaits=[];
   for (const provider of providers) {
     const credentials = providerCredentials(provider, env);
     const circuitKey = [
@@ -80,6 +80,7 @@ async function route(
     ].join(":");
     const circuit = health.get(circuitKey);
     if (circuit?.until > Date.now()) {
+      if(circuit.code==="PROVIDER_RATE_LIMIT")rateWaits.push(Math.ceil((circuit.until-Date.now())/1000));
       last = new ProviderError(
         circuit.code === "PROVIDER_RATE_LIMIT" ? 429 : 503,
         circuit.code,
@@ -177,6 +178,7 @@ async function route(
         if (!(error instanceof ProviderError))
           error = new ProviderError(503, "PROVIDER_UNAVAILABLE", true);
         last = error;
+        if(error.code==="PROVIDER_RATE_LIMIT")rateWaits.push(error.retryAfter||60);
         safeReport(report, {
           provider,
           role: credential.role,
@@ -212,6 +214,7 @@ async function route(
       }
     }
   }
+  if(rateWaits.length)throw new ProviderError(429,"PROVIDER_RATE_LIMIT",true,Math.min(...rateWaits));
   throw last || new ProviderError(503, "MODEL_UNAVAILABLE", true);
 }
 async function generateStudy(input, options = {}) {
@@ -235,7 +238,7 @@ async function generateStudy(input, options = {}) {
       env.AI_CLOUDFLARE_MODEL,
       env.OLLAMA_BASE_URL,
       env.OLLAMA_MODEL,
-      env.AI_ROUTING_MODE,
+      env.AI_ROUTING_MODE,env.AI_PROVIDER_ORDER,env.AI_FAST_PROVIDER_ORDER,env.AI_STUDY_PROVIDER_ORDER,env.AI_VISION_PROVIDER_ORDER,env.AI_CONVERSATION_PROVIDER_ORDER,
       ...Object.keys(env)
         .filter((name) =>
           /^AI_(?:GROQ|CLOUDFLARE|OPENROUTER)_(?:FAST|STUDY|VISION|AUDIO)_MODEL$/.test(

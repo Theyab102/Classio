@@ -24,7 +24,7 @@ test('original Arabic source takes priority over saved notes and determines outp
 });
 test('only empty blank notes are disposable; uploads and any learning content are kept',()=>{
   expect(hasBlankContent({id:'blank_1',_isBlank:true,notes:'',notesHtml:'<p><br></p>'})).toBe(false);
-  for(const file of [{id:'upload',notes:''},{id:'blank_1',_fileObj:new Blob([''])},{id:'blank_1',quiz:{questions:[{}]}},{id:'blank_1',course:{units:[{}]}},{id:'blank_1',notesHtml:'<img src="x">'},{id:'blank_1',notes:'تعريف'}])expect(hasBlankContent(file)).toBe(true);
+  for(const file of [{id:'upload',notes:''},{id:'blank_1',_fileObj:new Blob([''])},{id:'blank_1',quiz:{questions:[{}]}},{id:'blank_1',course:{units:[{}]}},{id:'blank_1',notesHtml:'<img src="x">'},{id:'blank_1',notes:'تعريف'},{id:'blank_1',generationJobs:{notes:{status:'waiting'}}},{id:'blank_1',pendingPresentation:{slides:[{}]}}])expect(hasBlankContent(file)).toBe(true);
 });
 test('legacy chats migrate and changing one conversation preserves the others',()=>{
   const record=normalizeChats([{role:'user',content:'Original question'}]),second=newChat();
@@ -45,4 +45,9 @@ test('automatic illustrations reject a matching landscape photograph from Geogra
  expect(likelyStudyImage('bomb crater',[forest])).toBeNull();expect(likelyStudyImage('bomb crater',[forest,diagram])).toBe(diagram);
 });
 
-test('speech rate limits show a retry interval instead of a generic generation error',async()=>{const previous=global.fetch;global.fetch=jest.fn(async()=>({status:429,ok:false,headers:{get:()=>"45"}}));try{await expect(synthesizeSpeech("A useful study explanation.","nova",new AbortController().signal)).rejects.toThrow("45 seconds");}finally{global.fetch=previous;}});
+test('speech waits for the actual capacity reset and retries the same turn automatically',async()=>{
+ jest.useFakeTimers();const previous=global.fetch,controller=new AbortController(),states=[];const blob=new Blob(['fixture audio']);
+ global.fetch=jest.fn().mockResolvedValueOnce({status:429,ok:false,headers:{get:()=>"45"}}).mockResolvedValueOnce({status:200,ok:true,headers:{get:()=>"audio/wav"},blob:async()=>blob});
+ const flush=async()=>{for(let i=0;i<30;i++)await Promise.resolve();};
+ try{const pending=synthesizeSpeech("A useful study explanation.","nova",controller.signal,state=>states.push(state));await flush();expect(states).toEqual([true]);jest.advanceTimersByTime(20000);await flush();jest.advanceTimersByTime(20000);await flush();jest.advanceTimersByTime(4999);await flush();expect(global.fetch).toHaveBeenCalledTimes(1);jest.advanceTimersByTime(1);await flush();await expect(pending).resolves.toBe(blob);expect(global.fetch).toHaveBeenCalledTimes(2);expect(states).toEqual([true,false]);}finally{controller.abort();global.fetch=previous;jest.useRealTimers();}
+});

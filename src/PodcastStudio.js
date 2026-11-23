@@ -73,7 +73,7 @@ export default function PodcastStudio({ file, onUpdate, getFileText, audioStore 
   }
   async function prepareAudio(target, task, chosenVoices, save) {
     task.update({ phase: "audio", progress: "Preparing the hosts’ audio" });
-    const result = await synthesizeEpisode(target, chosenVoices, task.signal, (part, total) => task.update({ progress: `Preparing audio ${part} of ${total}` }));
+    const result = await synthesizeEpisode(target, chosenVoices, task.signal, (part, total, waiting) => task.update({ progress: waiting?'Waiting for voice capacity. Audio will continue automatically.':`Preparing audio ${part} of ${total}` }));
     task.check();
     const key = `podcast:${file.id}:${target.id}:${Date.now()}`;
     await audioStore.save(key, result.blob);

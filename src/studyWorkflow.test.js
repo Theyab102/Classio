@@ -16,7 +16,7 @@ beforeEach(()=>{jest.clearAllMocks();localStorage.clear();});
 test('quizzes accept a cleared typed count and generate an arbitrary amount in bounded batches',async()=>{
  const changed=jest.fn();sendStudyRequest.mockResolvedValueOnce(JSON.stringify(Array.from({length:8},(_,i)=>({...q,question:"Question "+i})))).mockResolvedValueOnce(JSON.stringify(Array.from({length:5},(_,i)=>({...q,question:"Question "+(i+8)}))));
  render(<Harness Component={QuizStudio} initial={{id:'quiz',name:'Chapter'}} changed={changed}/>);
- const input=screen.getByRole('spinbutton',{name:'Number of questions'});expect(input).toHaveValue(0);fireEvent.change(input,{target:{value:''}});expect(input).toHaveValue(null);fireEvent.change(input,{target:{value:'13'}});
+ const input=screen.getByRole('spinbutton',{name:'Number of questions'});expect(input).toHaveValue(5);fireEvent.change(input,{target:{value:''}});expect(input).toHaveValue(null);fireEvent.change(input,{target:{value:'13'}});
  fireEvent.click(screen.getByRole('button',{name:'Generate quiz',exact:true}));await waitFor(()=>expect(changed.mock.calls.at(-1)?.[0].quiz?.questions).toHaveLength(13));
  expect(changed.mock.calls.at(-1)[0].quiz.questions).toHaveLength(13);expect(sendStudyRequest).toHaveBeenCalledTimes(2);
 });
@@ -24,7 +24,7 @@ test('regeneration uses an app dialog and keeps the old attempt if a later batch
  const changed=jest.fn(),confirm=jest.spyOn(window,'confirm');sendStudyRequest.mockResolvedValueOnce(JSON.stringify(Array.from({length:8},(_,i)=>({...q,question:"Question "+i})))).mockRejectedValue(new Error('Provider temporarily unavailable'));
  render(<Harness Component={QuizStudio} initial={{id:'q',name:'Saved',quiz:{questions:[q],answers:{0:1},checked:{},settings:{count:13}}}} changed={changed}/>);
  fireEvent.click(screen.getByRole('button',{name:'Generate new questions'}));expect(screen.getByRole('dialog',{name:'Generate new questions?'})).toBeInTheDocument();fireEvent.click(screen.getByRole('button',{name:'Generate new quiz',exact:true}));
- await screen.findByText('Provider temporarily unavailable');expect(changed.mock.calls.at(-1)[0].quiz.questions).toEqual([q]);expect(changed.mock.calls.at(-1)[0].generationJobs.quiz.sections).toHaveLength(1);expect(confirm).not.toHaveBeenCalled();confirm.mockRestore();
+ await screen.findByText('Provider temporarily unavailable',{}, {timeout:4000});expect(changed.mock.calls.at(-1)[0].quiz.questions).toEqual([q]);expect(changed.mock.calls.at(-1)[0].generationJobs.quiz.sections).toHaveLength(1);expect(confirm).not.toHaveBeenCalled();confirm.mockRestore();
 });
 test('restarting guided lessons resets checks and keeps lesson text and written notes',()=>{
  const changed=jest.fn();render(<Harness Component={LearnMode} initial={{id:'lesson',name:'Chapter',notes:'Keep notes',course:{units:[unit,unit],answers:{0:0},completed:[0],active:1}}} changed={changed}/>);

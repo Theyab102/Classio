@@ -49,3 +49,9 @@ test("existing suggestions can be repaired without dropping formatting or existi
   expect(html).toContain('text-align: center'); expect(html).toContain('font-size: 20px'); expect(html).toContain('<strong');
   expect(html).toContain('src="https://example.com/original.png"'); expect(html).toContain('src="https://example.com/trajectory.png"'); expect(html).not.toContain("[[IMAGE:");
 });
+
+test('locally rendered graph images survive cleanup while model-supplied images still need review',async()=>{
+ const png='data:image/png;base64,dGVzdA==',other='data:image/png;base64,b3RoZXI=';
+ const {html}=await enrichNoteImages(`![Quadratic graph](${png})\n\n![Unreviewed image](${other})`,{useWeb:false,generatedImages:new Set([png])});
+ const host=document.createElement('div');host.innerHTML=html;expect(host.querySelectorAll('img')).toHaveLength(1);expect(host.querySelector('img').getAttribute('src')).toBe(png);expect(host.textContent).toContain('Unreviewed image');
+});

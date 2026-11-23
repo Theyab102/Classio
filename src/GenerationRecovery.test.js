@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { act, render, screen, fireEvent } from "@testing-library/react";
 import GenerationRecovery from "./GenerationRecovery";
 test("an auth failure before the first section never claims generated progress was saved", () => {
   const resume = jest.fn(),
@@ -35,8 +35,9 @@ test("completed sections and a saved outline keep a real recovery path", () => {
     screen.getByRole("button", { name: "Resume generation" }),
   ).toBeInTheDocument();
 });
-test('rate-limited jobs retain a deadline and cannot be resubmitted early',()=>{
- const retryAt=Date.now()+30000;
- render(<GenerationRecovery job={{status:'failed',sections:[],failure:{status:429,retryAt}}} onResume={()=>{throw new Error('Retried during provider cooldown');}}/>);
- expect(screen.getByRole('button',{name:/Try again in/})).toBeDisabled();expect(screen.queryByText('Generation hasn’t started yet.')).not.toBeInTheDocument();
+test('rate-limited jobs show saved percentage and resume only after the reset without a manual retry',()=>{
+ jest.useFakeTimers();const resume=jest.fn(),retryAt=Date.now()+30000,job={id:'queued',status:'failed',sections:[{title:'Saved'}],total:4,failure:{status:429,retryAt}};
+ const view=render(<GenerationRecovery job={job} onResume={resume}/>);
+ expect(screen.getByRole('progressbar',{name:'Generation progress'})).toHaveAttribute('value','25');expect(screen.getByText('Queued to continue')).toBeInTheDocument();expect(screen.queryByRole('button')).not.toBeInTheDocument();expect(screen.queryByText(/limit.*reached|Retry in/i)).not.toBeInTheDocument();
+ act(()=>jest.advanceTimersByTime(29999));expect(resume).not.toHaveBeenCalled();act(()=>jest.advanceTimersByTime(1));expect(resume).toHaveBeenCalledWith(job);view.unmount();jest.useRealTimers();
 });

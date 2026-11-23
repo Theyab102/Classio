@@ -82,6 +82,7 @@ export async function aiHeaders(signal) {
   return { "X-Classio-CSRF": session.csrf };
 }
 export async function authorizedFetch(url, options = {}) {
+  if(options.signal?.aborted)throw new DOMException("Cancelled","AbortError");
   const headers = await cancellable(aiHeaders(options.signal), options.signal);
   const owner = aiOwner(),
     sessionUsed = guest;

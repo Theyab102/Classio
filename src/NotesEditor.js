@@ -1,3 +1,6 @@
+import {startStudyWork,useStudyWork,cancelStudyWork,hasStudyWorkspace,isStudyWorkRunning} from './studyWork';
+import {notesWithMathGraphs,GRAPH_OUTPUT_GUIDE} from './mathGraphs';
+import {LESSON_SCOPE_GUIDE} from './lessonCoverage';
 import {materialExcerpt} from './assistantRequest';
 import {generateNotes} from './checkpointGenerators';
 import {checkpointPatch,appliedGenerationPatch,useGenerationJob} from './generationJobs';
@@ -44,7 +47,7 @@ const editorExtensions = [
 ];
 
 
-export default function NotesEditor({ file, fileObj, getFileText, onUpdate, readSavedNotes, initialMode, onModeChange }) {
+export default function NotesEditor({ file, fileObj, getFileText, onUpdate, readSavedNotes, initialMode, onModeChange, readPageImage }) {
   const promptId=useId();
   const [error, setError] = useState("");
   const [styleOpen,setStyleOpen]=useState(false);
@@ -59,7 +62,8 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
   const [noteLength,setNoteLength]=useState(file.noteGenerationPreferences?.length || "Medium");
   const [language, setLanguage] = useState("Same as source");
   const [webImages, setWebImages] = useState(!!fileObj);
-  const [busy, setBusy] = useState(false);
+  const [localBusy, setBusy] = useState(false);
+  const background=useStudyWork(file.id,"notes"),busy=localBusy||background.running;
   const notesJob=useGenerationJob(file,"notes");
   const [panel, setPanel] = useState(file.notesMode === "generate" ? "generate" : null);
   const [view, setView] = useState(initialMode || ((file.notesMode || (file.defaultTab === "learn" ? "lessons" : "write")) === "lessons" ? "lessons" : "write"));
@@ -104,7 +108,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
     },
     onUpdate({ editor: current }) {
       const notesHtml = current.getHTML();
-      updateFields({ notesHtml, notes: noteHtmlToMarkdown(notesHtml) });
+      updateFields({ notesHtml, notes: noteHtmlToMarkdown(notesHtml).replace(/!\[([^\]]*)\]\(data:[^)]*\)/g,"$1") });
       setSavedAt(Date.now());
     },
   });
@@ -129,9 +133,9 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
     }),
   });
   useEffect(() => () => {
-    aiRequest.current?.abort();
+    if(!hasStudyWorkspace()||!isStudyWorkRunning(file.id,"notes"))aiRequest.current?.abort();
     mediaRequest.current?.abort();
-  }, []);
+  }, [file.id]);
 
   useEffect(() => {
     if (file.namedNotes || !readSavedNotes) return;
@@ -193,8 +197,46 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
     }
   }
 
-  function closePanel(){if(panel==="generate"&&aiRequest.current){aiRequest.current.abort();aiRequest.current=null;setBusy(false);setStatus("Generation cancelled. Your existing writing is kept.");}setPanel(null);}
+  const lastFileHtml=useRef(file.notesHtml||markdownToNoteHtml(file.notes||''));
+  useEffect(()=>{
+    const previous=lastFileHtml.current;lastFileHtml.current=file.notesHtml||'';
+    if(!editor||!file.notesHtml||editor.getHTML()===file.notesHtml||!file.notesHtml.startsWith(previous))return;
+    const added=sanitizeNoteHtml(file.notesHtml.slice(previous.length));if(!added)return;
+    if(editor.isEmpty)editor.commands.setContent(added,{emitUpdate:false});
+    else editor.commands.insertContentAt(editor.state.doc.content.size,added,{updateSelection:false});
+  },[editor,file.notesHtml]);
+
+  async function generateBackgroundNotes(resume){
+    if(aiRequest.current||background.running||!editor)return;
+    const existing=noteHtmlToMarkdown(editor.getHTML()),preferences={layout:noteLayout,level,length:noteLength,prompt};
+    setError('');setBusy(true);
+    const task=startStudyWork({file,kind:'notes',fallback:patch=>{const data=latest.current;data.file=patch(data.file);data.onUpdate(data.file);},work:async context=>{
+      const {signal,checkpoint,commit,finishing}=context;
+      const source=resume?.input.source??((await getFileText?.(900000))||(pdfFile?await getPdfContext(pdfFile):existing));
+      context.check();if(!source?.trim()&&!prompt.trim())throw new Error('Enter a prompt or choose a file with readable text.');
+      const figures=webImages&&fileObj?await getSourceFigures(fileObj).catch(()=>[]):[];context.check();
+      const request={task:'notes',messages:[
+        {role:'system',content:`Create ${style.toLowerCase()} study notes with clear headings, explanations, worked examples and step-by-step solutions. ${languageInstruction(source,language)} Explanation level: ${level}. Length: ${noteLength}. Organization: ${noteLayout}. Read filenames and grade/year labels together with the actual source text. The learner prompt overrides an inferred level. Explain why each step works, match revision questions to linked answer keys and flag conflicting evidence. ${LESSON_SCOPE_GUIDE} Learner prompt: ${prompt||'Teach the supplied lessons fully.'}. Custom instructions: ${instructions||'Use the selected defaults.'}. ${MATH_OUTPUT_GUIDE} ${GRAPH_OUTPUT_GUIDE} Return Markdown only. ${figures.length?'Relevant source figures may use [[SOURCE_FIGURE:0]] markers from this catalog: '+sourceFigureGuide(figures):''}`},
+        {role:'user',content:`Source file: ${file.name}\nLearner prompt: ${prompt}\n\n${materialExcerpt(source||'',prompt,14000)}`}
+      ],maxTokens:6000};
+      let saved;
+      const raw=await generateNotes({fileId:file.id,input:{source:source||'',topic:file.name,prompt,request,coverageVersion:2,preferences},resume,signal,readPageImage,onProgress:context.progress,onCheckpoint:job=>{saved=job;checkpoint(job);}});
+      finishing();let generatedStyle=null;
+      if(/handwrit|colou?r|pastel|notebook|visual theme|font|rounded cards/i.test(instructions))try{const rawStyle=await sendStudyRequest(styleRequest(instructions),signal);generatedStyle={...normalizeStyle(parseAiJson(rawStyle)),prompt:instructions};}catch(error){if(signal.aborted)throw error;}
+      const generatedImages=new Set(),graphed=await notesWithMathGraphs(raw,signal,generatedImages);
+      const enriched=await enrichNoteImages(graphed,{pdfFile,fileObj,useWeb:webImages,sourceFigures:figures,sourceOnly:!!fileObj,generatedImages,signal});context.check();
+      commit(current=>({...current,...appliedGenerationPatch(current,'notes',saved),notesHtml:(current.notesHtml||markdownToNoteHtml(current.notes||''))+enriched.html,notes:[current.notes,noteHtmlToMarkdown(enriched.html).replace(/!\[([^\]]*)\]\(data:[^)]*\)/g,'$1')].filter(Boolean).join('\n\n'),notesMode:'write',...(generatedStyle?{contentStyle:generatedStyle,previousContentStyle:current.contentStyle||null}:{}),noteGenerationPreferences:preferences,noteLayout,noteCoverage:{sections:saved.total,completed:saved.sections.length}}));
+      return raw;
+    }});
+    aiRequest.current=task.controller;
+    try{await task.promise;setPanel(null);setStatus('Notes generated and saved in your notebook.');}
+    catch(failure){if(failure.name!=='AbortError')setError(failure.message);}
+    finally{if(aiRequest.current===task.controller){aiRequest.current=null;setBusy(false);}}
+  }
+
+  function closePanel(){if(panel==="generate"&&aiRequest.current&&!hasStudyWorkspace()){aiRequest.current.abort();aiRequest.current=null;setBusy(false);setStatus("Generation cancelled. Your existing writing is kept.");}setPanel(null);}
   async function generate(action,resume) {
+    if(action==="generate")return generateBackgroundNotes(resume);
     if (!editor || aiRequest.current) return;
     const controller = new AbortController();
     aiRequest.current = controller;
@@ -358,7 +400,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
         {tools?.image && !preview && <div className="studio-controls note-table-tools"><button onClick={() => run(chain => chain.deleteSelection())}>Remove selected image</button></div>}
         <div className="note-document-meta"><span>{editor.getText().trim() ? editor.getText().trim().split(/\s+/).length : 0} words</span><span>{savedAt ? "Saved in workspace" : "Changes save automatically"}</span></div>
         <GenerationRecovery job={notesJob} busy={busy} onResume={job=>generate("generate",job)}/>
-        {busy && <div className="note-generation-status" role="status"><span className="mini-spinner" />{status||'Preparing your notes…'}<button className="text-button" onClick={() => { aiRequest.current?.abort(); aiRequest.current = null; setBusy(false); setStatus("Generation cancelled. Your writing is unchanged."); }}>Cancel generation</button></div>}
+        {busy && <div className="note-generation-status" role="status"><span className="mini-spinner" />{background.progress||status||'Preparing your notes…'}<button className="text-button" onClick={() => { cancelStudyWork(file.id,"notes"); aiRequest.current?.abort(); aiRequest.current = null; setBusy(false); setStatus("Generation cancelled. Your writing is unchanged."); }}>Cancel generation</button></div>}
         {error&&!panel&&<p className="studio-error" role="alert">{error}</p>}
         <div className={`note-paper note-layout-${(file.noteLayout || noteLayout).toLowerCase().replace(/[^a-z]/g, "")} ${preview ? "is-reading" : ""}`}><EditorContent dir="auto" editor={editor} /></div>
         {status && !busy && <p className="note-local-status" role="status">{status}</p>}
@@ -373,14 +415,14 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
             <button type="submit" className="quiet-button is-primary">Add table</button>
           </form>}
           {panel === "generate" && <div className="notes-panel-body">
-            <p>Notes go straight into your notebook. Existing writing is kept; you can undo generation.</p>
+            <p>Notes go straight into your notebook. Existing writing is kept.</p>{busy&&<p role="status">{background.progress||"Preparing your notes…"} You can close this window and keep studying.<button className="text-button" onClick={()=>{cancelStudyWork(file.id,"notes");aiRequest.current?.abort();aiRequest.current=null;setBusy(false);}}>Cancel generation</button></p>}
             <div className="note-topic-field"><label htmlFor={promptId}>Prompt</label><textarea id={promptId} rows={2} maxLength={2000} value={prompt} onChange={event => setPrompt(event.target.value)} placeholder="For example: Explain this revision pack simply for Grade 5. Use the linked answer key and show each step." /></div>
             <div className="notes-panel-options"><label>Style<ChoiceMenu aria-label="Note style" value={style} onChange={event => setStyle(event.target.value)}><option>Detailed</option><option>Exam review</option><option>Concise summary</option><option>Simple explanations</option></ChoiceMenu></label>
               <label>Language<ChoiceMenu aria-label="Note language" value={language} onChange={event => setLanguage(event.target.value)}><option>Same as source</option><option>English</option><option>Arabic</option><option>Chinese</option><option>French</option><option>Spanish</option></ChoiceMenu></label></div>
             <label>Custom notes instructions<textarea aria-label="Custom notes instructions" value={instructions} onChange={event=>setInstructions(event.target.value)} maxLength={3000} rows={3} placeholder="Describe the formatting, examples or explanation style you want…" /></label>
             <div className="studio-controls"><button type="button" className="text-button" onClick={()=>{setPanel(null);setStyleOpen(true);}}>Choose visual style</button>{instructions&&<button type="button" className="text-button" onClick={()=>setInstructions("")}>Clear instructions</button>}</div>
             <details className="note-generation-options"><summary>Explanation, layout & length</summary><div className="notes-panel-options"><label>Explanation level<ChoiceMenu aria-label="Explanation level" value={level} onChange={event=>setLevel(event.target.value)}>{["Simple","Standard","Detailed"].map(value=><option key={value}>{value}</option>)}</ChoiceMenu></label><label>Notes layout<ChoiceMenu aria-label="Notes layout" value={noteLayout} onChange={event=>setNoteLayout(event.target.value)}>{["Structured","Notebook","Revision Sheet","Cornell","Q&A","Custom"].map(value=><option key={value}>{value}</option>)}</ChoiceMenu></label><label>Length<ChoiceMenu aria-label="Notes length" value={noteLength} onChange={event=>setNoteLength(event.target.value)}>{["Short","Medium","Detailed"].map(value=><option key={value}>{value}</option>)}</ChoiceMenu></label></div></details>
-            <button type="button" className="note-image-toggle" aria-pressed={webImages} onClick={()=>setWebImages(value=>!value)}><UiIcon name="image"/><span>Include relevant images<small>{webImages?'On · only relevant source figures or diagrams':'Off · text only'}</small></span><UiIcon name={webImages?'check':'close'}/></button>
+            <button type="button" className="note-image-toggle" aria-pressed={webImages} onClick={()=>setWebImages(value=>!value)}><UiIcon name="image"/><span>Include relevant images<small>{webImages?'On · only relevant source figures or diagrams':'Off · no extra source images'}</small></span><UiIcon name={webImages?'check':'close'}/></button>
             <button className="quiet-button is-primary" type="button" disabled={busy} onClick={() => generate("generate")}>{busy ? "Generating…" : "Generate notes"}</button>
             <details><summary>Use my writing</summary><div className="studio-controls">
               <button type="button" disabled={busy} onClick={() => generate("organize")}>Organize notes</button>

@@ -1,7 +1,8 @@
+import {startStudyWork,useStudyWork,cancelStudyWork,hasStudyWorkspace,isStudyWorkRunning} from './studyWork';
 import useRetryDelay from './useRetryDelay';
 import CountInput from './CountInput';
 import {generateStudySet} from './checkpointGenerators';
-import {checkpointPatch,appliedGenerationPatch,useGenerationJob} from './generationJobs';
+import {appliedGenerationPatch,useGenerationJob} from './generationJobs';
 import GenerationRecovery from './GenerationRecovery';
 import {playStudySound} from "./studySounds";
 import {studySource} from './studyContext';
@@ -29,20 +30,22 @@ export function parseQuiz(raw) {
 }
 export function isQuizCorrect(question,answer){const normalize=value=>String(value??'').normalize('NFKC').toLocaleLowerCase().replace(/\s+/g,' ').trim().replace(/[.!؟。]$/,'');return question.type==='short-answer'?typeof answer==='string'&&[question.answer,...(question.acceptedAnswers||[])].some(expected=>normalize(expected)===normalize(answer)):answer===question.correct;}
 export default function QuizStudio({ file, onUpdate, getFileText }) {
-  const [settingsOpen, setSettingsOpen] = useState(false), [count, setCount] = useState(String(file.quiz?.settings?.count ?? 0)), [difficulty, setDifficulty] = useState(file.quiz?.settings?.difficulty || "standard"), [topic, setTopic] = useState("");
-  const [busy, setBusy] = useState(false), [error, setError] = useState(""), [hint, setHint] = useState(false), [review, setReview] = useState(false);
+  const background=useStudyWork(file.id,"quiz");
+  const [settingsOpen, setSettingsOpen] = useState(false), [count, setCount] = useState(String(file.quiz?.settings?.count || 5)), [difficulty, setDifficulty] = useState(file.quiz?.settings?.difficulty || "standard"), [topic, setTopic] = useState("");
+  const [localBusy, setBusy] = useState(false), [error, setError] = useState(""), [hint, setHint] = useState(false), [review, setReview] = useState(false);
+  const busy=localBusy||background.running;
   const [questionType,setQuestionType]=useState(file.quiz?.settings?.type||"multiple-choice");
   const quizJob=useGenerationJob(file,"quiz");
   const retryIn=useRetryDelay(quizJob?.failure?.retryAt);
-  const [confirmation,setConfirmation]=useState(false),[progress,setProgress]=useState("");
+  const [confirmation,setConfirmation]=useState(false),[progress]=useState("");
   const pending = useRef(null), latest = useRef({ file, onUpdate }); latest.current = { file, onUpdate };
   const quiz = file.quiz, questions = quiz?.questions || [], index = Math.min(quiz?.active || 0, Math.max(questions.length - 1, 0)), current = questions[index], answers = quiz?.answers || {}, checked = quiz?.checked || {};
   const correct = questions.filter((question, i) => checked[i] && isQuizCorrect(question,answers[i])).length;
   const done = Object.keys(checked).filter(key => checked[key]).length;
   useStudyActivity(file.id, "Quiz hints", current ? `${current.question}\nChoices:\n${(current.options||[]).join("\n")}${checked[index] ? `\nExplanation: ${current.explanation}` : "\nGive a hint first without revealing the answer."}` : "The learner is preparing a quiz.");
-  useEffect(() => () => pending.current?.abort(), []);
+  useEffect(() => () => {if(!hasStudyWorkspace()||!isStudyWorkRunning(file.id,"quiz"))pending.current?.abort();}, [file.id]);
   const update = patch => { const data = latest.current; data.onUpdate({ ...data.file, quiz: { ...data.file.quiz, ...patch } }); };
-  function closeSettings(){pending.current?.abort();pending.current=null;setBusy(false);setSettingsOpen(false);}
+  function closeSettings(){cancelStudyWork(file.id,"quiz");pending.current?.abort();pending.current=null;setBusy(false);setSettingsOpen(false);}
   async function generate(event) {
     event?.preventDefault(); if (busy || retryIn > 0) return;
     if(!Number.isInteger(Number(count))||Number(count)<1||Number(count)>50){setError("Choose a whole number from 1 to 50 questions.");return;}
@@ -51,29 +54,28 @@ export default function QuizStudio({ file, onUpdate, getFileText }) {
   }
   async function generateQuiz(resume) {
     if(resume?.nativeEvent)resume=null;
-    if(pending.current || retryIn > 0)return;
-    setConfirmation(false);
-    const controller=new AbortController();pending.current=controller;setBusy(true);setError("");
-    try {
-      const source=resume?.input.source??await studySource(file,getFileText);
-      if(!source&&!topic.trim()&&!resume)throw new Error("Add study material or enter a topic before generating a quiz.");
-      let checkpoint;
+    if(pending.current||background.running)return;
+    setConfirmation(false);setBusy(true);setError('');
+    const task=startStudyWork({file,kind:'quiz',fallback:patch=>{const data=latest.current;data.file=patch(data.file);data.onUpdate(data.file);},work:async context=>{
+      const source=resume?.input.source??await studySource(file,getFileText);context.check();
+      if(!source&&!topic.trim()&&!resume)throw new Error('Add study material or enter a topic before generating a quiz.');
       const input=resume?.input||{source,topic:topic.trim()||file.name,count:Number(count),difficulty,type:questionType};
-      const next=await generateStudySet({fileId:file.id,kind:'quiz',input,resume,parse:parseQuiz,signal:controller.signal,onProgress:setProgress,onCheckpoint:job=>{checkpoint=job;const data=latest.current;data.file=checkpointPatch(data.file,'quiz',job);data.onUpdate(data.file);}});
-      if(controller.signal.aborted)return;
-      const data=latest.current;data.onUpdate({...data.file,...appliedGenerationPatch(data.file,'quiz',checkpoint),quiz:{id:checkpoint.id,questions:next,answers:{},checked:{},active:0,completed:false,settings:{count:input.count,difficulty:input.difficulty,type:input.type}}});
-      setSettingsOpen(false);setReview(false);setHint(false);
-    }catch(failure){if(!controller.signal.aborted)setError(failure.message);}
-    finally{if(pending.current===controller){setBusy(false);pending.current=null;}}
+      let checkpoint;const next=await generateStudySet({fileId:file.id,kind:'quiz',input,resume,parse:parseQuiz,signal:context.signal,onProgress:context.progress,onCheckpoint:job=>{checkpoint=job;context.checkpoint(job);}});
+      context.finishing();context.commit(current=>({...current,...appliedGenerationPatch(current,'quiz',checkpoint),quiz:{id:checkpoint.id,questions:next,answers:{},checked:{},active:0,completed:false,settings:{count:input.count,difficulty:input.difficulty,type:input.type}}}));return next;
+    }});pending.current=task.controller;
+    try{await task.promise;setSettingsOpen(false);setReview(false);setHint(false);}
+    catch(failure){if(failure.name!=='AbortError')setError(failure.message);}
+    finally{if(pending.current===task.controller){pending.current=null;setBusy(false);}}
   }
+
   const go = next => { update({ active: next }); setHint(false); };
   const finished = quiz?.completed;
   return <section className="quiz-studio"><header className="tool-heading"><div><p className="eyebrow">ACTIVE RECALL</p><h2>Quizzes</h2><p>Check what you understand, then work through the explanations.</p></div><button className="quiet-button" onClick={() => setSettingsOpen(true)}><UiIcon name="settings" />Quiz settings</button></header>
     {current&&<div className="quiz-regenerate studio-controls"><CountInput label="Number of questions" value={count} onChange={setCount} disabled={busy}/><button className="quiet-button is-primary" disabled={busy||retryIn>0} onClick={generate}><UiIcon name="generate"/>{retryIn>0?`Generate in ${retryIn}s`:busy?"Generating quiz…":"Generate new questions"}</button></div>}
     <GenerationRecovery job={quizJob} busy={busy} onResume={generateQuiz}/>
-    {busy&&<div className="generation-feedback" role="status"><span className="mini-spinner"/>{progress}<button className="quiet-button" onClick={()=>{pending.current?.abort();pending.current=null;setBusy(false);}}>Cancel generation</button></div>}
+    {busy&&<div className="generation-feedback" role="status"><span className="mini-spinner"/>{background.progress||progress}<button className="quiet-button" onClick={()=>{cancelStudyWork(file.id,"quiz");pending.current?.abort();pending.current=null;setBusy(false);}}>Cancel generation</button></div>}
     {error && <p className="tool-error" role="alert">{error}</p>}
-    {!current ? <><form onSubmit={generate} className="course-generator"><CountInput label="Number of questions" value={count} onChange={setCount} disabled={busy}/><label>Question type<ChoiceMenu aria-label="Question type" value={questionType} onChange={event=>setQuestionType(event.target.value)}><option value="multiple-choice">Multiple choice</option><option value="short-answer">Short answer</option></ChoiceMenu></label><label>Topic<input value={topic} onChange={event => setTopic(event.target.value)} placeholder="Optional with study material" /></label><button className="quiet-button is-primary" disabled={busy||retryIn>0}><UiIcon name="generate" />{retryIn>0 ? `Generate in ${retryIn}s` : busy ? "Generating quiz…" : "Generate quiz"}</button></form>
+    {!current ? <><form onSubmit={generate} className="course-generator"><CountInput label="Number of questions" value={count} onChange={setCount} disabled={busy}/><label>Question type<ChoiceMenu aria-label="Question type" value={questionType} onChange={event=>setQuestionType(event.target.value)}><option value="multiple-choice">Multiple choice</option><option value="short-answer">Short answer</option></ChoiceMenu></label><label>Topic<input value={topic} onChange={event => setTopic(event.target.value)} placeholder="Optional topic or focus" /></label><button className="quiet-button is-primary" disabled={busy||retryIn>0}><UiIcon name="generate" />{retryIn>0 ? `Generate in ${retryIn}s` : busy ? "Generating quiz…" : "Generate quiz"}</button></form>
       {!busy && <div className="tool-empty"><WorkspaceArt /><h3>Put your understanding into practice</h3><p>Generate questions from this material. Each question includes a hint and an explanation, and your answers stay with this file.</p></div>}</>
       : finished ? <div className="quiz-results"><span className="result-icon"><UiIcon name="check" size={32} /></span><p className="eyebrow">QUIZ COMPLETE</p><h3>{correct} of {questions.length} correct</h3><p>{done < questions.length ? `${questions.length - done} questions were not checked.` : "Use the explanations to revisit anything that felt uncertain."}</p><div className="studio-controls"><button className="quiet-button is-primary" onClick={() => setReview(value => !value)}>{review ? "Hide explanations" : "Review answers"}</button><button className="quiet-button" onClick={() => { update({ answers: {}, checked: {}, active: 0, completed: false }); setReview(false); }}>Try again</button></div>
         {review && <div className="quiz-answer-review">{questions.map((question, i) => <article key={i}><StudyMarkdown text={`${i + 1}. ${question.question}`} /><StudyMarkdown text={`Your answer: ${question.type==="short-answer"?answers[i]||"Not answered":question.options[answers[i]]||"Not answered"}`} /><StudyMarkdown text={`Correct answer: ${question.type==="short-answer"?question.answer:question.options[question.correct]}`} /><StudyMarkdown text={question.explanation} /></article>)}</div>}</div>
@@ -85,7 +87,7 @@ export default function QuizStudio({ file, onUpdate, getFileText }) {
             <div className="quiz-check-actions"><button className="text-button" onClick={() => setHint(value => !value)} disabled={checked[index]}><UiIcon name="bulb" />{hint ? "Hide hint" : "Show hint"}</button><button className="quiet-button is-primary" disabled={answers[index] === undefined || (current.type==="short-answer"&&!String(answers[index]).trim()) || checked[index]} onClick={() => {playStudySound(isQuizCorrect(current,answers[index])?"correct":"wrong");update({ checked: { ...checked, [index]: true } });}}>Check answer</button></div>
             <footer className="lesson-navigation"><button className="quiet-button" disabled={index === 0} onClick={() => go(index - 1)}><UiIcon name="back" />Previous</button><span>{index + 1} / {questions.length}</span>{index < questions.length - 1 ? <button className="quiet-button" onClick={() => go(index + 1)}>Next<UiIcon name="arrow" /></button> : <button className="quiet-button is-primary" disabled={done !== questions.length} onClick={() => update({ completed: true, finishedAt: Date.now() })}>See results</button>}</footer>
           </article></>}
-    {settingsOpen && <StudioDialog title="Quiz settings" onClose={closeSettings}><form className="simple-workspace-form" onSubmit={generate}><CountInput label="Number of questions" value={count} onChange={setCount} disabled={busy}/><label>Difficulty<ChoiceMenu value={difficulty} onChange={event => setDifficulty(event.target.value)}><option value="foundation">Foundation</option><option value="standard">Standard</option><option value="challenge">Challenge</option></ChoiceMenu></label><label>Question type<ChoiceMenu aria-label="Question type" value={questionType} onChange={event=>setQuestionType(event.target.value)}><option value="multiple-choice">Multiple choice</option><option value="short-answer">Short answer</option></ChoiceMenu></label><label>Topic<input value={topic} onChange={event => setTopic(event.target.value)} placeholder="Optional with study material" /></label><p>These settings apply to a new quiz. Your existing quiz stays in place until generation succeeds.</p>{error && <p role="alert">{error}</p>}<footer><button className="quiet-button" type="button" onClick={closeSettings}>Cancel</button><button className="quiet-button is-primary" type="submit" disabled={busy||retryIn>0}>{retryIn>0 ? `Try again in ${retryIn}s` : busy ? "Generating…" : "Generate quiz"}</button></footer></form></StudioDialog>}
+    {settingsOpen && <StudioDialog title="Quiz settings" onClose={closeSettings}><form className="simple-workspace-form" onSubmit={generate}><CountInput label="Number of questions" value={count} onChange={setCount} disabled={busy}/><label>Difficulty<ChoiceMenu value={difficulty} onChange={event => setDifficulty(event.target.value)}><option value="foundation">Foundation</option><option value="standard">Standard</option><option value="challenge">Challenge</option></ChoiceMenu></label><label>Question type<ChoiceMenu aria-label="Question type" value={questionType} onChange={event=>setQuestionType(event.target.value)}><option value="multiple-choice">Multiple choice</option><option value="short-answer">Short answer</option></ChoiceMenu></label><label>Topic<input value={topic} onChange={event => setTopic(event.target.value)} placeholder="Optional topic or focus" /></label><p>These settings apply to a new quiz. Your existing quiz stays in place until generation succeeds.</p>{error && <p role="alert">{error}</p>}<footer><button className="quiet-button" type="button" onClick={closeSettings}>Cancel</button><button className="quiet-button is-primary" type="submit" disabled={busy||retryIn>0}>{retryIn>0 ? `Try again in ${retryIn}s` : busy ? "Generating…" : "Generate quiz"}</button></footer></form></StudioDialog>}
     {confirmation&&<StudioDialog title="Generate new questions?" onClose={()=>setConfirmation(false)}><p>Your current attempt is replaced only when the new quiz is ready. Your other study work is kept.</p><div className="dialog-actions"><button className="quiet-button" onClick={()=>setConfirmation(false)}>Cancel</button><button className="quiet-button is-primary" disabled={retryIn>0} onClick={generateQuiz}>Generate new quiz</button></div></StudioDialog>}
   </section>;
 }

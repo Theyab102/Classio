@@ -27,7 +27,7 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
    }
    if(prompt.includes('one complete lesson')){
     const index=Number(data.messages[1].content.match(/Lesson (\d+) of/)?.[1]);
-    if(index===2&&mode==='fail')return route.fulfill({status:429,contentType:'application/json',body:'{"error":"Provider limit: wait before trying again.","code":"RATE_LIMIT"}'});
+    if(index===2&&mode==='fail')return route.fulfill({status:503,contentType:'application/json',body:'{"error":"Provider temporarily unavailable.","code":"NETWORK"}'});
     if(index===2&&!truncated){truncated=true;return route.fulfill({status:503,contentType:'application/json',body:'{"error":"The answer was too long to finish.","code":"OUTPUT_LIMIT"}'});}
     return route.fulfill({contentType:'application/json',body:JSON.stringify({text:JSON.stringify([{title:'Source section '+index,lesson:'## شرح الدرس\n\nشرح يستند إلى المصدر مع مثال وخلاصة.',question:'ما الإجابة الصحيحة؟',options:['أ','ب','ج'],correct:0,explanation:'الإجابة الأولى مستندة إلى المصدر.'}])})});
    }
@@ -91,7 +91,7 @@ const server=http.createServer((req,res)=>{const name=new URL(req.url,'http://lo
   await choose('Notes mode','Guided lessons with questions');await choose('Number of lessons','4');await page.getByRole('button',{name:'Generate lessons',exact:true}).click();await page.locator('.lesson-outline button').nth(3).waitFor();assert(truncated,'Truncation fixture did not execute');assert(calls.filter(call=>call.messages[0].content.includes('one complete lesson')).some(call=>call.maxTokens===1400),'No shorter retry after truncation');
   await page.locator('.answer-choices button').first().click();await page.getByText('1 of 4 lessons completed',{exact:true}).waitFor();
   const last=calls.filter(call=>call.messages[0].content.includes('one complete lesson')).at(-1);assert(last.messages[1].content.split('Assigned source section')[1].includes('SOURCE4'),'Later source section was not used');assert(last.messages[0].content.includes('in Arabic'));
-  mode='fail';await page.getByRole('button',{name:'New course',exact:true}).click();await page.getByRole('button',{name:'Generate new course',exact:true}).click();await page.getByRole('alert').filter({hasText:'Provider limit'}).waitFor();assert.equal(await page.locator('.lesson-outline button').count(),4);await page.getByText('1 of 4 lessons completed',{exact:true}).waitFor();
+  mode='fail';await page.getByRole('button',{name:'New course',exact:true}).click();await page.getByRole('button',{name:'Generate new course',exact:true}).click();await page.getByRole('alert').filter({hasText:'Provider temporarily unavailable'}).waitFor();assert.equal(await page.locator('.lesson-outline button').count(),4);await page.getByText('1 of 4 lessons completed',{exact:true}).waitFor();
   mode='cancel';const blockedRequest=new Promise(resolve=>lateRequested=resolve);await page.getByRole('button',{name:'New course',exact:true}).click();await page.getByRole('button',{name:'Generate new course',exact:true}).click();await blockedRequest;await page.getByRole('button',{name:'Cancel generation',exact:true}).click();releaseLate();await page.waitForTimeout(100);assert.equal(await page.getByText('Late 0',{exact:true}).count(),0);await page.getByText('1 of 4 lessons completed',{exact:true}).waitFor();
   await shot('lessons-light');
   // Source form controls share a baseline and touch size.

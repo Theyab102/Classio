@@ -18,7 +18,7 @@ function pdf(){const objects=['<< /Type /Catalog /Pages 2 0 R >>','<< /Type /Pag
   await context.route('**/api/images',route=>route.fulfill({json:{searchProviders:[],backgroundRemoval:false}}));
   await context.route('**/api/study',route=>{
    const body=route.request().postDataJSON();assert(parseStudyRequest(body),'Invalid study request from UI');calls.push(body);let text='Mathematics';
-   if(body.task==='notes')text='# Six groups of seven\n\nFor Grade 5, think of six bags. Put seven counters in each bag. Count the counters or add seven six times. You get 42. The revision pack asks this question and its answer key confirms the result.\n\n## Try it\n\nDraw six groups, count carefully, and check your work.';
+   if(body.task==='notes')text='# Six groups of seven\n\n## Question 1\n\nFor Grade 5, think of six bags. Put seven counters in each bag. Count the counters or add seven six times. You get 42. The revision pack asks this question and its answer key confirms the result.\n\n## Try it\n\nDraw six groups, count carefully, and check your work.';
    else if(JSON.stringify(body.messages).includes('multiple-choice')){const count=Number(body.messages[0].content.match(/exactly (\d+)/)?.[1]||3);text=JSON.stringify(Array.from({length:count},(_,i)=>({question:`Question ${i+1}: What is six times seven?`,options:['42','35','49','12'],correct:0,hint:'Think of equal groups.',explanation:'Six groups of seven make 42.'})));}
    else if(body.task!=='classification')text='The revision pack asks for six groups of seven. The linked answer key confirms that the answer is 42.';
    return route.fulfill({json:{text}});

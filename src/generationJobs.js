@@ -1,7 +1,10 @@
+import {bindStudyWait,waitForStudyCapacity} from './studyQueue';
 import { useEffect, useState } from "react";
 import { aiOwner } from "./aiAccess";
 import { saveGuestBlob, getGuestBlob, removeGuestBlob } from "./guestWorkspace";
 let database;
+const generationEpochs=new Map(),epochKey=(owner,file)=>JSON.stringify([owner,file]);
+const generationEpoch=(owner,file)=>generationEpochs.get(epochKey(owner,file))||0;
 const active = new Set(),
   uuid = () =>
     window.crypto?.randomUUID?.() ||
@@ -50,6 +53,7 @@ export const jobStorage = {
     );
   },
   async put(job) {
+    if(job.generationEpoch!==undefined&&job.generationEpoch!==generationEpoch(job.owner,job.file))throw new DOMException('Material was deleted','AbortError');
     if (job.owner.startsWith("guest:"))
       return saveGuestBlob(
         guestId(job.file, job.kind),
@@ -65,9 +69,9 @@ export const jobStorage = {
       const tx = db.transaction("leases", "readwrite"),
         store = tx.objectStore("leases"),
         request = store.get(key(owner, file, kind));
-      let accepted = false;
+      let accepted = false,waitUntil=0;
       request.onsuccess = () => {
-        const old = request.result;
+        const old = request.result;waitUntil=old?.until||0;
         if (!old || old.until < Date.now() || old.token === token) {
           accepted = true;
           store.put(
@@ -80,9 +84,7 @@ export const jobStorage = {
         accepted
           ? resolve()
           : reject(
-              new Error(
-                "This generation job is running in another tab. Wait briefly before resuming.",
-              ),
+              Object.assign(new Error("This generation is continuing in another tab."),{status:429,code:'GENERATION_LEASE_BUSY',retryAfter:Math.max(1,Math.ceil((waitUntil-Date.now())/1000))}),
             );
       tx.onerror = tx.onabort = () =>
         reject(new Error("The generation job could not be locked."));
@@ -175,27 +177,28 @@ export async function runCheckpointJob({
   const owner = aiOwner(),
     lockKey = key(owner, fileId, kind),
     token = uuid();
+  const epoch=generationEpoch(owner,fileId);
   if (active.has(lockKey))
     throw new Error("This generation job is already running.");
   active.add(lockKey);
-  let job,
+  let job,unbindWait=()=>{},
     claimed = false;
   const check = () => {
-    if (signal?.aborted || aiOwner() !== owner)
+    if (signal?.aborted || aiOwner() !== owner || generationEpoch(owner,fileId)!==epoch)
       throw new DOMException("Generation paused", "AbortError");
   };
   const save = async () => {
     check();
     job.updatedAt = Date.now();
     if (store.claim) await store.claim(owner, fileId, kind, token);
+    check();
     await store.put(JSON.parse(JSON.stringify(job)));
     check();
     onCheckpoint(JSON.parse(JSON.stringify(job)));
   };
   try {
     if (store.claim) {
-      await store.claim(owner, fileId, kind, token);
-      claimed = true;
+      for(;;){try{await store.claim(owner,fileId,kind,token);claimed=true;break;}catch(error){if(error.code!=='GENERATION_LEASE_BUSY')throw error;onProgress('Waiting for the saved generation to become available…');await waitForStudyCapacity(Date.now()+error.retryAfter*1000,signal,owner);}}
     }
     const saved = resume ? await store.get(owner, fileId, kind) : null;
     if (resume) {
@@ -231,13 +234,21 @@ export async function runCheckpointJob({
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
+    unbindWait=bindStudyWait(signal,async event=>{
+      check();
+      if(event.phase==='heartbeat'){if(store.claim)await store.claim(owner,fileId,kind,token);return;}
+      job.status=event.until?'waiting':'running';job.retryAt=event.until;await save();
+      onProgress(event.until?'Waiting for capacity. Generation will continue automatically.':'Continuing saved work…');
+    });
+    const attemptPhase=async work=>{for(;;){check();try{return await work();}catch(error){if(error.status!==429||signal?.aborted)throw error;await waitForStudyCapacity(Date.now()+Math.max(1,error.retryAfter||30)*1000,signal,owner);}}};
     job.status = "running";
+    job.generationEpoch=epoch;
     job.error = "";
     delete job.failure;
     await save();
     if (plan && !job.outline) {
       onProgress("Planning and saving the outline…");
-      job.outline = await plan(job, signal);
+      job.outline = await attemptPhase(()=>plan(job, signal));
       check();
       await save();
     }
@@ -253,7 +264,7 @@ export async function runCheckpointJob({
       let result;
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          result = await step(index, job, signal, attempt);
+          result = await attemptPhase(()=>step(index, job, signal, attempt));
           check();
           break;
         } catch (error) {
@@ -277,7 +288,7 @@ export async function runCheckpointJob({
           )
             throw error;
           onProgress("Retrying this unfinished section…");
-          await new Promise((resolve) => setTimeout(resolve, 200));
+          await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt+1)));
           check();
         }
       }
@@ -290,7 +301,7 @@ export async function runCheckpointJob({
     await save();
     return result;
   } catch (error) {
-    if (job && aiOwner() === owner) {
+    if (job && aiOwner() === owner && generationEpoch(owner,fileId)===epoch) {
       job.status =
         signal?.aborted || error.name === "AbortError" ? "paused" : "failed";
       job.error =
@@ -306,9 +317,10 @@ export async function runCheckpointJob({
             ? error.code.slice(0, 60)
             : "GENERATION_FAILED",
         status: Number(error.status) || 0,
-        retryAt: error.status === 429 ? Date.now() + Math.min(600, Math.max(0, Number(error.retryAfter) || 0)) * 1000 : 0,
+        retryAt: error.status === 429 ? Date.now() + Math.min(7*86400, Math.max(0, Number(error.retryAfter) || 0)) * 1000 : 0,
       };
       try {
+        if(store.claim&&claimed)await store.claim(owner,fileId,kind,token);
         await store.put(JSON.parse(JSON.stringify(job)));
         onCheckpoint(JSON.parse(JSON.stringify(job)));
       } catch {
@@ -317,6 +329,7 @@ export async function runCheckpointJob({
     }
     throw error;
   } finally {
+    unbindWait();
     active.delete(lockKey);
     if (claimed) await store.release?.(owner, fileId, kind, token);
   }
@@ -330,6 +343,7 @@ export function appliedGenerationPatch(file, kind, job) {
 }
 export async function deleteGenerationJobs(file) {
   const owner = aiOwner();
+  generationEpochs.set(epochKey(owner,file),generationEpoch(owner,file)+1);
   for (const kind of [
     "presentation",
     "notes",

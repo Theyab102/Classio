@@ -1,7 +1,10 @@
+import {aiOwner} from './aiAccess';
+import {acquireStudySlot,studyCapacityDeadline,deferStudyCapacity,waitForStudyCapacity,retryDelay} from './studyQueue';
 import {aiMode} from './aiPreferences';
 import {authorizedFetch} from './aiAccess';
 import {studyStyleInstruction} from './studyContext';
-export async function sendStudyRequest(payload, signal) {
+async function sendStudyOnce(payload, signal) {
+  if(signal?.aborted)throw new DOMException("Cancelled","AbortError");
   const mode=aiMode();if(mode==="browser-local"){const{generateLocal}=await import("./localAi");return generateLocal(payload,signal);}
   const controller = new AbortController();
   const cancel = () => controller.abort();
@@ -18,8 +21,7 @@ export async function sendStudyRequest(payload, signal) {
     if (!response.ok || typeof data.text !== "string" || !data.text.trim()) {
       const error = new Error(data.error || "The AI service could not finish this request. Your work is still open.");
       error.code = data.code || "STUDY_UNAVAILABLE"; error.status = response.status;
-      error.retryAfter = Math.min(600, Math.max(0, Number(response.headers.get("retry-after")) || 0));
-      if (response.status === 429 && error.retryAfter && !/\d+ seconds/.test(error.message)) error.message += ` Retry in ${error.retryAfter} seconds.`;
+      error.retryAfter = retryDelay(response.headers.get("retry-after"));
       throw error;
     }
     return data.text;
@@ -30,6 +32,24 @@ export async function sendStudyRequest(payload, signal) {
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener("abort", cancel);
+  }
+}
+
+
+export async function sendStudyRequest(payload,signal) {
+  const owner=aiOwner();
+  for(;;){
+    if(signal?.aborted||aiOwner()!==owner)throw new DOMException('Generation cancelled','AbortError');
+    const until=studyCapacityDeadline(owner);
+    if(until>Date.now())await waitForStudyCapacity(until,signal,owner);
+    const release=await acquireStudySlot(owner,signal);
+    try{
+      if(studyCapacityDeadline(owner)>Date.now())continue;
+      return await sendStudyOnce(payload,signal);
+    }catch(error){
+      if(error.status!==429||signal?.aborted)throw error;
+      deferStudyCapacity(owner,error.retryAfter||30);
+    }finally{release();}
   }
 }
 

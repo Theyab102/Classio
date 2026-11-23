@@ -64,7 +64,8 @@
     "test:auth-browser": "node scripts/auth-flow-browser.cjs",
     "test:podcast-background": "node scripts/podcast-background-browser.cjs",
     "test:navigation": "node scripts/navigation-browser.cjs",
-    "test:source-input": "node scripts/source-input-linked-browser.cjs"
+    "test:source-input": "node scripts/source-input-linked-browser.cjs",
+    "test:reliable-generation": "node scripts/reliable-generation-browser.cjs"
   },
   "eslintConfig": {
     "extends": [

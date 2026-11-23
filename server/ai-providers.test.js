@@ -71,7 +71,7 @@ test('circuit cooldown expires without being extended by skipped requests',async
  try{const options={env,fetcher:upstream(async url=>{if(url.includes('groq')){if(++primary===1)throw Error('offline');return answered('Restored');}return response({result:{response:'Fallback'}});})};assert.equal((await generateStudy(input,options)).provider,'cloudflare');offset=5000;assert.equal((await generateStudy({...input,maxTokens:501},options)).provider,'cloudflare');offset=11000;assert.equal((await generateStudy({...input,maxTokens:502},options)).provider,'groq');assert.equal(primary,2);}finally{Date.now=now;}
 });
 test('style request deduplication/cache is private to the authorized account',async()=>{
- let calls=0;const options={env,identity:'user:a',fetcher:upstream(async()=>{calls++;return answered('style');})};
+ let calls=0;const options={env,identity:'user:a',fetcher:upstream(async url=>{calls++;return url.includes('cloudflare')?response({result:{response:'style'}}):answered('style');})};
  await Promise.all([generateStudy({...input,task:'style'},options),generateStudy({...input,task:'style'},options)]);await generateStudy({...input,task:'style'},options);assert.equal(calls,1);await generateStudy({...input,task:'style'},{...options,identity:'user:b'});assert.equal(calls,2);
 });
 test('audio only chooses a listed transcription model and never falls back to text-only providers',async()=>{
