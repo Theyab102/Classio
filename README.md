@@ -1,5 +1,7 @@
 # Classio
 
+Source page keys, drawing-tablet compatibility, notes prompts, reciprocal file links and the app Back button are documented in [Source input and linked material](docs/CLASSIO-SOURCE-INPUT-AND-LINKED-MATERIAL.md).
+
 Classio is a React study workspace for organizing documents, taking notes, reviewing flashcards and building presentations. Classio is free for all users and the study workspace opens in guest mode after the 13+ check.
 
 Current implementation: [assistant and study workflow fixes](docs/CLASSIO-WORKFLOW-FIXES.md), [presentation/product report](docs/CLASSIO-PRESENTATION-REDESIGN.md), [security/privacy review](docs/CLASSIO-SECURITY-PRIVACY-REVIEW.md), and [combined development brief](docs/CLASSIO-CONSOLIDATED-REQUEST.md).

@@ -1,3 +1,4 @@
+import {sourceBundleStart} from './sourceBundle';
 import {runCheckpointJob,distinct} from './generationJobs';
 import {parseAiJson} from './aiJson';
 import {languageInstruction} from './studyContext';
@@ -59,6 +60,7 @@ export async function generateCourseLessons({source,topic,count,signal,onProgres
       }
     }
   };
+  const crossReference=source.startsWith(sourceBundleStart)?`\n\nLinked-source reference for checking answers:\n${materialExcerpt(source,'',5000)}`:'';
   const language=languageInstruction(source),sections=courseSections(source,count),shortSource=source.length<count*300;
   onProgress('Planning the course…');
   const plan=()=>request(compact=>({messages:[
@@ -74,7 +76,7 @@ export async function generateCourseLessons({source,topic,count,signal,onProgres
     check();onProgress(`Writing lesson ${index+1} of ${count}…`);
     const lesson=await request(compact=>({messages:[
       {role:'system',content:`Write one complete lesson for this self-paced course. Return only a JSON array containing exactly ONE object: title, lesson (Markdown), question, options (exactly three strings), correct (zero-based integer), explanation. ${language} ${MATH_OUTPUT_GUIDE} Explain the assigned focus with short sections, a worked example and a takeaway. ${compact?'Keep the lesson under 900 characters and the check concise.':'Keep the lesson under 2400 characters and the check concise.'} ${source?'Use the assigned source section as evidence. Label supplemental explanations and do not invent source facts.':'Teach the requested topic without claiming source evidence.'} Do not repeat prior lessons or return the whole course.`},
-      {role:'user',content:`Topic: ${topic}\nCourse outline:\n${outline.map((item,i)=>`${i+1}. ${item.title}: ${item.focus}`).join('\n')}\n\nLesson ${index+1} of ${count}: ${outline[index].title}\nFocus: ${outline[index].focus}\n\nAssigned source section ${index+1} (excerpt):\n${materialExcerpt(shortSource?source:sections[index],'',12000)||'(No source supplied; teach only the explicitly requested topic without claiming file evidence.)'}`},
+      {role:'user',content:`Topic: ${topic}\nCourse outline:\n${outline.map((item,i)=>`${i+1}. ${item.title}: ${item.focus}`).join('\n')}\n\nLesson ${index+1} of ${count}: ${outline[index].title}\nFocus: ${outline[index].focus}\n\nAssigned source section ${index+1} (excerpt):\n${materialExcerpt(shortSource?source:sections[index],'',12000)||'(No source supplied; teach only the explicitly requested topic without claiming file evidence.)'}${crossReference}`},
     ],maxTokens:compact?1400:2600}),raw=>{
       const parsed=parseLessonPlan(raw);
       if(parsed.length!==1)throw new Error('The AI returned more than the requested lesson. Your current course is kept.');

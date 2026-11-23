@@ -11,6 +11,7 @@ import UiIcon from "./UiIcon";
 import {InkToolbar,useInkTool} from './DocumentInk';
 import usePageTurn from './usePageTurn';
 import {powerPointPagePreview} from './pageTurnPreviews';
+import useSourcePageKeys from './useSourcePageKeys';
 
 const noStrokes=[];
 
@@ -42,7 +43,7 @@ export default function DocumentWorkspace({ file, fileObj, onUpdate, type, child
     preview});
   const move=turn.goTo;
   useDocumentGestures(viewport,delta=>move(page+delta),type+':'+page,turn.gesture);
-  useEffect(()=>{if(type!=="pptx")return;const keys=event=>{if(document.querySelector(".studio-dialog,.assistant-panel[aria-modal=true],.command-search-dialog")||event.target.closest?.("input,textarea,select,[contenteditable],.assistant-panel,.classio-navigation"))return;if(event.key==="ArrowRight"||event.key==="ArrowLeft"){event.preventDefault();move(page+(event.key==="ArrowRight"?1:-1));}};window.addEventListener("keydown",keys);return()=>window.removeEventListener("keydown",keys);});
+  useSourcePageKeys(delta=>move(page+delta),type==='pptx');
   const explain = async (_read, label) => {if(fullscreen.full)await fullscreen.toggle();ask(`Explain ${label || "the current source"} of this document with a worked example.`);};
   return <section ref={fullscreen.ref} className={`source-workspace ${fullscreen.full?"source-is-fullscreen":""}`} aria-label="Source document"><header className="source-heading"><span className="source-heading-icon"><UiIcon name="source" size={24} /></span><div><p className="eyebrow">ORIGINAL MATERIAL</p><h2>Source</h2><p>{fileObj.name}</p></div><button className="quiet-button" onClick={() => downloadStudyFile(fileObj, fileObj.name)}><UiIcon name="download" /><span>Download original</span></button></header>
     {type === "pdf" ? <LocalPdfViewer file={file} fileObj={fileObj} onUpdate={onUpdate} explain={explain} />

@@ -11,6 +11,7 @@ export default function useDocumentGestures(viewport,onPage,scope,motion={}) {
     const center=touches=>({x:Array.from(touches).reduce((n,t)=>n+t.clientX,0)/touches.length,y:Array.from(touches).reduce((n,t)=>n+t.clientY,0)/touches.length});
     const distance=touches=>touches.length===2?Math.hypot(touches[1].clientX-touches[0].clientX,touches[1].clientY-touches[0].clientY):0;
     function start(event){
+      if(event.target.closest('.studio-ink[data-tablet-mode=true]:not([data-tool=pan])')){gesture=null;return;}
       effects.current.start?.();
       if(event.target.closest('button,input,textarea,select,[contenteditable],[role=combobox]')){gesture=null;return;}
       if(event.touches.length>2){effects.current.cancel?.();gesture=null;return;}

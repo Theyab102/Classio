@@ -77,7 +77,7 @@ export default function AssistantPanel({ onClose, context, activity, library = [
       let material='';
       if(context&&!greeting){
         if(attachedImage)material='The original file is not included in this image question. Use the attached image and these saved notes, if relevant:\n'+String(context.notes||context.transcript||'').slice(0,6500);
-        else material=await studySource(context,readSource?()=>readSource(context):undefined);
+        else material=await studySource(context,readSource?limit=>readSource(context,limit,text):undefined,6500);
       }
       const focus = !greeting && activity && context && activity.fileId === context.id ? `\nCurrent activity: ${activity.type}\n${activity.title || ""}\n${/^notes/i.test(activity.type) ? "" : materialExcerpt(activity.text || "", text, 1600)}` : "";
       const scope = context ? `Current material: ${context.name}\nSelected excerpts (other sections may be omitted):\n${materialExcerpt(material, text)}${focus}`
@@ -119,7 +119,7 @@ export default function AssistantPanel({ onClose, context, activity, library = [
             <button type="button" className="quiet-button" disabled={pending||capture.busy} aria-label={capture.recording ? "Stop microphone" : "Dictate question"} aria-pressed={capture.recording} onClick={capture.recording?capture.stop:capture.start}><UiIcon name={capture.recording?'stop':'mic'} /></button>
             <small>Enter to send · Shift + Enter for a new line</small>
             {pending ? <button className="quiet-button" type="button" onClick={() => request.current?.abort()}>Stop</button> : <button className="quiet-button is-primary" type="submit" disabled={attaching||capture.busy||capture.recording||retryIn > 0 || (!draft.trim() && !attachment)}><UiIcon name="send" /><span>Send</span></button>}</div>
-        </form><p className="assistant-privacy">{context ? "Only this material, your conversation and attachments are sent." : "Only Library titles, your conversation and attachments are sent."} AI can make mistakes; check important details.</p>
+        </form><p className="assistant-privacy">{context ? "Only this material, its linked sources, your conversation and attachments are sent." : "Only Library titles, your conversation and attachments are sent."} AI can make mistakes; check important details.</p>
       </div>
     </aside>
     {rename&&<StudioDialog title="Rename chat" onClose={()=>setRename(null)}><form className="simple-workspace-form" onSubmit={event=>{event.preventDefault();if(rename.title.trim()){onRenameChat(rename.id,rename.title.trim());setRename(null);}}}><label>Chat name<input required maxLength={60} value={rename.title} onChange={event=>setRename({...rename,title:event.target.value})}/></label><button className="quiet-button is-primary">Save name</button></form></StudioDialog>}

@@ -1,9 +1,11 @@
+import {excerptSourceBundle} from './sourceBundle';
 export function isSimpleGreeting(text) {
   return /^(?:(?:hi|hey|hay|hello|hiya|bonjour|salut|hola|مرحبا|مرحباً|اهلا|أهلاً|السلام عليكم|你好)(?:\s+classio)?)[\s!.?،؟]*$/i.test(String(text).trim());
 }
 
 export function materialExcerpt(text, question, limit = 6500) {
   const source = String(text || ""); if (source.length <= limit) return source;
+  const bundle=excerptSourceBundle(source,question,limit,materialExcerpt);if(bundle!==null)return bundle;
   const terms = new Set(String(question).toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []);
   ["explain", "what", "please", "give", "main", "ideas", "this", "about", "example"].forEach(word => terms.delete(word));
   const blocks = source.split(/\n\s*\n/).map((content, index) => ({ content, index, score: [...terms].reduce((score, term) => score + (content.toLowerCase().includes(term) ? 1 : 0), 0) }));

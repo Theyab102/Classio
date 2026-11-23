@@ -8,6 +8,7 @@ import "./documentStudio.css";
 import useDocumentGestures from './useDocumentGestures';
 import usePageTurn from './usePageTurn';
 import {pdfPagePreview} from './pageTurnPreviews';
+import useSourcePageKeys from './useSourcePageKeys';
 
 const noStrokes = [];
 
@@ -142,6 +143,7 @@ export default function LocalPdfViewer({ file, fileObj, onUpdate, explain }) {
   const turn=usePageTurn({viewport:scroll,surface,page,total:document?.pdf.numPages||1,ready,failed:!!error,preview,previewAtTop:true,resetKey:file.id+':'+scale,
     onChange:value=>{setPage(value);onUpdate({...file,pdfPage:value});if(scroll.current)scroll.current.scrollTop=0;}});
   const goTo=turn.goTo;
+  useSourcePageKeys(delta=>goTo(page+delta),!!document);
   useDocumentGestures(scroll,delta=>goTo(page+delta),page,turn.gesture);
 
   function changeZoom(value) {

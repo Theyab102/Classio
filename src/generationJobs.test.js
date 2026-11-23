@@ -5,6 +5,7 @@ import {generatePresentation,generateNotes,generateStudySet} from './checkpointG
 import {generateCourseLessons} from './courseGeneration';
 import {parseQuiz,isQuizCorrect} from './QuizStudio';
 import {parseFlashcards} from './FlashcardStudio';
+import {makeSourceBundle} from './sourceBundle';
 jest.mock('./pdf',()=>({openPdf:jest.fn(),loadPdfLibrary:jest.fn()}));
 let owner;beforeEach(()=>{owner='fixture-'+expect.getState().currentTestName;setAiIdentityProvider(()=>({uid:owner}));});
 const request={task:'presentation',messages:[{role:'system',content:'Create a JSON educational slide deck.'},{role:'user',content:'Teach forces.'}],maxTokens:5000};
@@ -29,6 +30,16 @@ test('long notes save their outline and complete sections, retain math and resum
  const options={fileId:'notes',input:{source,topic:'Energy',request:{...request,task:'notes'}},send};
  await expect(generateNotes(options)).rejects.toThrow();const saved=await jobStorage.get(owner,'notes','notes');expect(saved.sections).toHaveLength(1);
  broken=false;sections=0;const notes=await generateNotes({...options,resume:saved});expect(sections).toBe(2);expect(notes).toContain('\\frac{1}{2}');expect(notes.match(/## Section 1/g)).toHaveLength(1);
+});
+test('a long linked revision pack retains the Grade 5 prompt and answer key in every note section',async()=>{
+ const source=makeSourceBundle([{name:'Grade 5 revision pack.txt',text:'Revision question about six groups.\n\n'.repeat(200)},{name:'Grade 5 answer key.txt',text:'Answer: forty-two, because six times seven is 42.\n\n'.repeat(200)}]);
+ const count=Math.ceil(source.length/10000),prompt='Make it easy for Grade 5 students.';
+ const send=jest.fn(async payload=>{
+  const user=payload.messages[1].content;expect(user).toContain(prompt);expect(user).toContain('Grade 5 revision pack.txt');expect(user).toContain('Grade 5 answer key.txt');expect(user).toContain('forty-two');
+  if(payload.messages[0].content.startsWith('Plan exactly'))return JSON.stringify(Array.from({length:count},(_,i)=>({title:'Part '+i,focus:'Explain focus '+i})));
+  const index=Number(/ONLY section (\d+)/.exec(user)[1]);return `## Part ${index}\n\nA distinct explanation for part ${index}: equal groups let us check multiplication against the revision answer key.`;
+ });
+ const result=await generateNotes({fileId:'linked-notes',input:{source,topic:'Grade 5 revision pack.txt',prompt,request:{...request,task:'notes'}},send});expect(result).toContain('Part 1');expect(send).toHaveBeenCalledTimes(count+1);
 });
 test('courses save each validated lesson and resume without regenerating the outline or earlier knowledge checks',async()=>{
  let broken=true;const seen=[];const send=jest.fn(async payload=>{if(payload.messages[0].content.includes('compact course outline'))return JSON.stringify([1,2,3].map(i=>({title:'Lesson '+i,focus:'Focus '+i})));const i=Number(/Lesson (\d+) of/.exec(payload.messages[1].content)[1]);seen.push(i);if(i===3&&broken)throw fail();return JSON.stringify([{title:'Lesson '+i,lesson:'## Learning\n\nEvidence '+i,question:'Question '+i,options:['One','Two','Three'],correct:0,explanation:'Evidence '+i}]);});

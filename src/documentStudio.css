@@ -69,6 +69,8 @@
 .ink-finger-option input {width:16px;height:16px}
 .pdf-scroll,.presentation-source-scroll {touch-action:pinch-zoom}
 .studio-ink[data-tool=pan] { pointer-events:none; touch-action:auto; }
+.studio-ink[data-tablet-mode=true]:not([data-tool=pan]),.studio-ink[data-finger-drawing=true]:not([data-tool=pan]){touch-action:none;user-select:none;-webkit-user-select:none}
+.ink-tablet-hint{max-width:34rem;line-height:1.5;color:var(--app-muted)}
 .ppt-document { width:100%; max-width:1000px; margin-inline:auto; min-height:0; }
 .ppt-page { container-type:inline-size; position:relative; width:100%; color:#182420; line-height:1.3; overflow:auto; padding:2.8%; }
 .ppt-positioned-page { overflow:hidden; padding:0; }

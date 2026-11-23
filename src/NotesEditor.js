@@ -1,3 +1,4 @@
+import {materialExcerpt} from './assistantRequest';
 import {generateNotes} from './checkpointGenerators';
 import {checkpointPatch,appliedGenerationPatch,useGenerationJob} from './generationJobs';
 import GenerationRecovery from './GenerationRecovery';
@@ -44,13 +45,13 @@ const editorExtensions = [
 
 
 export default function NotesEditor({ file, fileObj, getFileText, onUpdate, readSavedNotes, initialMode, onModeChange }) {
-  const topicId=useId();
+  const promptId=useId();
   const [error, setError] = useState("");
   const [styleOpen,setStyleOpen]=useState(false);
   const [equation, setEquation] = useState("E = mc^2");
   const [savedAt, setSavedAt] = useState(0);
   const [status, setStatus] = useState("");
-  const [topic, setTopic] = useState("");
+  const [prompt, setPrompt] = useState(file.noteGenerationPreferences?.prompt || "");
   const [style, setStyle] = useState("Detailed");
   const [instructions,setInstructions]=useState("");
   const [noteLayout,setNoteLayout]=useState(file.noteGenerationPreferences?.layout || "Structured");
@@ -204,20 +205,20 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
       const originalHtml = editor.getHTML();
       const existing = noteHtmlToMarkdown(originalHtml);
       const source = resume?.input.source ?? (action === "organize" || action === "table" ? existing
-        : pdfFile ? await getPdfContext(pdfFile) : (await getFileText?.()) || existing);
-      if (!source?.trim() && (action !== "generate" || !topic.trim())) {
-        throw new Error(action === "generate" ? "Enter a topic or choose a file with readable text." : "Write a few notes before using this tool.");
+        : (await getFileText?.(120000)) || (pdfFile ? await getPdfContext(pdfFile) : existing));
+      if (!source?.trim() && (action !== "generate" || !prompt.trim())) {
+        throw new Error(action === "generate" ? "Enter a prompt or choose a file with readable text." : "Write a few notes before using this tool.");
       }
       const instruction = action === "table"
         ? `Return one compact GFM Markdown table based on the notes, with at most ${columnLimit} columns so it fits this editor. Include clear column names and only supported information.`
         : `Create ${style.toLowerCase()} study notes. Use a clear H1 title, H2 sections, concise paragraphs, lists, bold key terms and callout blockquotes. Use GFM Markdown tables for comparisons or structured facts. ${action === "organize" ? "Preserve the author's facts and order where useful. Fix wording and organization without inventing facts." : "Stay grounded in the source when provided."}`;
       const sourceFigures=webImages&&fileObj&&action!=="table"?await getSourceFigures(fileObj).catch(()=>[]):[];
       const request = {task:"notes", messages: [
-        { role: "system", content: `${instruction} ${languageInstruction(source,language)} Explanation level: ${level}. Length: ${noteLength}. Organization: ${noteLayout}. ${noteLayout === "Cornell" ? "Use a two-column cues/notes table and a concise summary." : noteLayout === "Q&A" ? "Structure each section as a question and its answer." : noteLayout === "Revision Sheet" ? "Prioritize compact definitions, key formulas and quick worked examples." : ""} Apply the learner’s custom instructions to the actual explanations, structure, examples and formatting while keeping source facts accurate. Custom instructions: ${instructions || "Use the selected defaults."}. ${MATH_OUTPUT_GUIDE} Return Markdown only. Do not write raw HTML or external URLs. ${pdfFile ? "For up to three relevant source figures, put [[PDF:3]] on a separate line with an actual page number from the source markers." : ""} ${sourceFigures.length?"Use up to three numbered source figures by putting [[SOURCE_FIGURE:0]] immediately after the related paragraph. Only use IDs from the supplied catalog; do not invent figures. Available figures: "+sourceFigureGuide(sourceFigures):""} ${webImages && !fileObj && action !== "table" ? "Include up to three relevant illustrations using [[IMAGE:specific subject]] on their own lines immediately after the paragraph that explains that subject. Never collect image searches or figure markers into a section at the end. Skip decorative or uncertain images." : ""}` },
-        { role: "user", content: `Topic: ${topic.trim() || file.name}\nLearner instructions: ${instructions}\n\n${(source || "").slice(0, 16000)}` },
+        { role: "system", content: `${instruction} ${languageInstruction(source,language)} Explanation level: ${level}. Length: ${noteLength}. Organization: ${noteLayout}. ${noteLayout === "Cornell" ? "Use a two-column cues/notes table and a concise summary." : noteLayout === "Q&A" ? "Structure each section as a question and its answer." : noteLayout === "Revision Sheet" ? "Prioritize compact definitions, key formulas and quick worked examples." : ""} Read all supplied source files before writing, including their filenames and grade/year labels. Use grade clues from the filename together with the actual source content; never invent file contents or an answer key. When the learner requests a grade or explanation level, it takes priority over an inferred level. Use linked revision packs and answer keys together, match question numbers and check answers against their sources. Explain the reasoning rather than copying an answer list. Apply the learner’s prompt and custom instructions to the actual explanations, vocabulary, structure, examples and formatting while keeping source facts accurate. Learner prompt: ${prompt.trim() || "Explain the supplied material clearly at its indicated level."}. Custom instructions: ${instructions || "Use the selected defaults."}. ${MATH_OUTPUT_GUIDE} Return Markdown only. Do not write raw HTML or external URLs. ${pdfFile ? "For up to three relevant source figures, put [[PDF:3]] on a separate line with an actual page number from the source markers." : ""} ${sourceFigures.length?"Use up to three numbered source figures by putting [[SOURCE_FIGURE:0]] immediately after the related paragraph. Only use IDs from the supplied catalog; do not invent figures. Available figures: "+sourceFigureGuide(sourceFigures):""} ${webImages && !fileObj && action !== "table" ? "Include up to three relevant illustrations using [[IMAGE:specific subject]] on their own lines immediately after the paragraph that explains that subject. Never collect image searches or figure markers into a section at the end. Skip decorative or uncertain images." : ""}` },
+        { role: "user", content: `Source file: ${file.name}\nLearner prompt: ${prompt.trim() || "Create notes from the supplied sources."}\nLearner instructions: ${instructions}\n\n${materialExcerpt(source || "",prompt,16000)}` },
       ], maxTokens: action === "table" ? 1500 : 5500 };
       let savedJob;
-      const raw = action==="generate"?await generateNotes({fileId:file.id,input:{source:source.slice(0,120000),topic:topic.trim()||file.name,request},resume,signal:controller.signal,onProgress:setStatus,onCheckpoint:job=>{savedJob=job;updateFields({generationJobs:checkpointPatch(latest.current.file,"notes",job).generationJobs});}}):await sendStudyRequest(request,controller.signal);
+      const raw = action==="generate"?await generateNotes({fileId:file.id,input:{source:materialExcerpt(source,"",120000),topic:file.name,prompt:prompt.trim(),request},resume,signal:controller.signal,onProgress:setStatus,onCheckpoint:job=>{savedJob=job;updateFields({generationJobs:checkpointPatch(latest.current.file,"notes",job).generationJobs});}}):await sendStudyRequest(request,controller.signal);
       let generatedStyle=null,styleUnavailable=false;
       if(action!=="table" && /handwrit|colou?r|pastel|notebook|visual theme|font|rounded cards/i.test(instructions)) {
         try {const rawStyle=await sendStudyRequest(styleRequest(instructions),controller.signal);generatedStyle={...normalizeStyle(parseAiJson(rawStyle)),prompt:instructions};}
@@ -241,7 +242,7 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
           if (replace) chain.selectAll(); else chain.focus("end");
           chain.insertContent(html).run();
           editor.setEditable(true); setPreview(false); setView("write"); onModeChange?.("write");
-          updateFields({ ...appliedGenerationPatch(latest.current.file,"notes",savedJob),notesMode: "write",noteGenerationPreferences:{layout:noteLayout,level,length:noteLength},noteLayout,...(generatedStyle?{contentStyle:generatedStyle,previousContentStyle:file.contentStyle||null}:{}) }); setPanel(null);
+          updateFields({ ...appliedGenerationPatch(latest.current.file,"notes",savedJob),notesMode: "write",noteGenerationPreferences:{layout:noteLayout,level,length:noteLength,prompt},noteLayout,...(generatedStyle?{contentStyle:generatedStyle,previousContentStyle:file.contentStyle||null}:{}) }); setPanel(null);
           setStatus((wasEmpty ? "Notes generated and saved in your notebook." : replace ? "Notes organized. Undo restores your previous writing." : "Generated notes added below your writing. You can undo this change.") + (enriched.missing ? " Some illustrations were unavailable. Use Images to choose another source." : "")+(styleUnavailable?" The visual style could not be generated; your notes are saved with the current appearance.":""));
           editor.commands.focus(wasEmpty ? "start" : "end", { scrollIntoView: false });
         }
@@ -373,10 +374,10 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
           </form>}
           {panel === "generate" && <div className="notes-panel-body">
             <p>Notes go straight into your notebook. Existing writing is kept; you can undo generation.</p>
-            <div className="note-topic-field"><label htmlFor={topicId}>Topic</label><textarea id={topicId} rows={2} maxLength={2000} value={topic} onChange={event => setTopic(event.target.value)} placeholder="Optional with source material" /></div>
+            <div className="note-topic-field"><label htmlFor={promptId}>Prompt</label><textarea id={promptId} rows={2} maxLength={2000} value={prompt} onChange={event => setPrompt(event.target.value)} placeholder="For example: Explain this revision pack simply for Grade 5. Use the linked answer key and show each step." /></div>
             <div className="notes-panel-options"><label>Style<ChoiceMenu aria-label="Note style" value={style} onChange={event => setStyle(event.target.value)}><option>Detailed</option><option>Exam review</option><option>Concise summary</option><option>Simple explanations</option></ChoiceMenu></label>
               <label>Language<ChoiceMenu aria-label="Note language" value={language} onChange={event => setLanguage(event.target.value)}><option>Same as source</option><option>English</option><option>Arabic</option><option>Chinese</option><option>French</option><option>Spanish</option></ChoiceMenu></label></div>
-            <label>Custom notes instructions<textarea aria-label="Custom notes instructions" value={instructions} onChange={event=>setInstructions(event.target.value)} maxLength={3000} rows={3} placeholder="Describe how you want your notes to look or how you want the topic explained..." /></label>
+            <label>Custom notes instructions<textarea aria-label="Custom notes instructions" value={instructions} onChange={event=>setInstructions(event.target.value)} maxLength={3000} rows={3} placeholder="Describe how you want your notes to look or how you want the prompt explained..." /></label>
             <div className="studio-controls"><button type="button" className="text-button" onClick={()=>{setPanel(null);setStyleOpen(true);}}>Choose visual style</button>{instructions&&<button type="button" className="text-button" onClick={()=>setInstructions("")}>Clear instructions</button>}</div>
             <details className="note-generation-options"><summary>Explanation, layout & length</summary><div className="notes-panel-options"><label>Explanation level<ChoiceMenu aria-label="Explanation level" value={level} onChange={event=>setLevel(event.target.value)}>{["Simple","Standard","Detailed"].map(value=><option key={value}>{value}</option>)}</ChoiceMenu></label><label>Notes layout<ChoiceMenu aria-label="Notes layout" value={noteLayout} onChange={event=>setNoteLayout(event.target.value)}>{["Structured","Notebook","Revision Sheet","Cornell","Q&A","Custom"].map(value=><option key={value}>{value}</option>)}</ChoiceMenu></label><label>Length<ChoiceMenu aria-label="Notes length" value={noteLength} onChange={event=>setNoteLength(event.target.value)}>{["Short","Medium","Detailed"].map(value=><option key={value}>{value}</option>)}</ChoiceMenu></label></div></details>
             <button type="button" className="note-image-toggle" aria-pressed={webImages} onClick={()=>setWebImages(value=>!value)}><UiIcon name="image"/><span>Include relevant images<small>{webImages?'On · only relevant source figures or diagrams':'Off · text only'}</small></span><UiIcon name={webImages?'check':'close'}/></button>

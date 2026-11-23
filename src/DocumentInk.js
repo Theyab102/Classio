@@ -9,10 +9,12 @@ export function useInkTool(scopeKey) {
   const [color, setColor] = useState("#b52332");
   const [size, setSize] = useState(3);
   const [fingerDrawing,setFingerDrawing]=useState(false);
+  const [tabletMode,setTabletModeValue]=useState(()=>{try{return localStorage.getItem('classio_tablet_mode_v1')==='true';}catch{return false;}});
+  const setTabletMode=value=>{setTabletModeValue(!!value);try{localStorage.setItem('classio_tablet_mode_v1',String(!!value));}catch{}};
   const [future,setFuture]=useState([]),expected=useRef(null);
   const [past,setPast]=useState([]),scope=useRef(scopeKey);
   useLayoutEffect(()=>{if(scope.current!==scopeKey){scope.current=scopeKey;setPast([]);setFuture([]);expected.current=null;}},[scopeKey]);
-  return { tool, setTool, color, setColor, size, setSize,fingerDrawing,setFingerDrawing,future,setFuture,expected,past,setPast };
+  return { tool, setTool, color, setColor, size, setSize,fingerDrawing,setFingerDrawing,tabletMode,setTabletMode,future,setFuture,expected,past,setPast };
 }
 
 export function InkToolbar({ ink, strokes, onChange }) {
@@ -27,6 +29,8 @@ export function InkToolbar({ ink, strokes, onChange }) {
     <div className="ink-tool-details studio-controls" hidden={!options&&ink.tool==="pan"}><div className="ink-colors" role="group" aria-label="Ink colors">{[["#b52332", "Red"], ["#286a9b", "Blue"], ["#2f7b59", "Green"], ["#d19a16", "Gold"], ["#7b54a0", "Purple"]].map(([color, name]) => <button type="button" key={color} className="ink-color-swatch" aria-label={name + " ink"} aria-pressed={ink.color === color} style={{ "--swatch": color }} onClick={() => ink.setColor(color)}>{ink.color === color && <UiIcon name="check" size={13} />}</button>)}<label className="ink-custom-color" title="Custom ink color"><span style={{ background: ink.color }} /><ColorField aria-label="Ink color" value={ink.color} onChange={event => ink.setColor(event.target.value)} /></label></div>
     <div className="ink-size-choices" role="group" aria-label="Ink size">{[[2, "Fine"], [5, "Medium"], [10, "Broad"]].map(([size, name]) => <button type="button" key={size} aria-label={name + " stroke"} aria-pressed={size === (ink.size <= 3 ? 2 : ink.size <= 7 ? 5 : 10)} onClick={() => ink.setSize(size)}><span style={{ width: size + 3, height: size + 3 }} /><small>{name}</small></button>)}</div>
     <label className="ink-finger-option"><input type="checkbox" checked={ink.fingerDrawing} onChange={event=>ink.setFingerDrawing(event.target.checked)}/>Draw with finger</label>
+    <label className="ink-finger-option"><input type="checkbox" checked={ink.tabletMode} onChange={event=>ink.setTabletMode(event.target.checked)}/>Drawing tablet mode</label>
+    {ink.tabletMode&&<small className="ink-tablet-hint">For Huion and other writing pads. Drag to write with the selected tool; choose Scroll to navigate.</small>}
     <button type="button" disabled={!strokes.length} onClick={()=>commitInk(ink,strokes,[],onChange)}>Clear ink</button></div>
   </div>;
 }
@@ -112,12 +116,14 @@ export function InkLayer({ ink, strokes, onChange }) {
     if(event.pointerType==="touch"){
       touches.current.add(event.pointerId);
       if(touches.current.size>1){active.current=null;redraw();return;}
-      if(!ink.fingerDrawing)return;
+      if(!ink.fingerDrawing&&!ink.tabletMode)return;
     }
-    if (ink.tool === "pan" || active.current || event.button !== 0) return;
+    if (ink.tool === "pan" || active.current || (event.button !== 0 && !(event.pointerType==='pen' && (event.buttons&1)))) return;
     event.preventDefault();
     event.currentTarget.focus({preventScroll:true});
-    event.currentTarget.setPointerCapture(event.pointerId);
+    // Drivers can end capture as the pen lifts; save on pointerup first and
+    // ignore the later lost-capture notification. Unsupported capture is safe.
+    try{event.currentTarget.setPointerCapture(event.pointerId);}catch{}
     active.current = { pointer: event.pointerId, stroke: { tool: ink.tool, size: ink.size, color: ink.color, points: [point(event)] } };
     redraw();
   }
@@ -125,11 +131,12 @@ export function InkLayer({ ink, strokes, onChange }) {
   function move(event) {
     const session = active.current;
     if (!session || session.pointer !== event.pointerId) return;
-    const [x, y] = point(event);
-    const points = session.stroke.points;
-    const [lastX, lastY] = points[points.length - 1];
-    if (Math.hypot(x - lastX, y - lastY) < .001) return;
-    if (points.length < 1200) points.push([x, y]);
+    event.preventDefault();
+    const samples=event.nativeEvent.getCoalescedEvents?.()||[event];
+    for(const sample of samples.length?samples:[event]){
+      const [x,y]=point(sample),points=session.stroke.points,[lastX,lastY]=points[points.length-1];
+      if(Math.hypot(x-lastX,y-lastY)>=.0003&&points.length<12000)points.push([x,y]);
+    }
     if (frame.current === null) frame.current = requestAnimationFrame(() => { frame.current = null; redraw(); });
   }
 
@@ -138,11 +145,13 @@ export function InkLayer({ ink, strokes, onChange }) {
     const session = active.current;
     if (!session || session.pointer !== event.pointerId) return;
     active.current = null;
-    commitInk(ink,strokes,[...strokes,session.stroke],onChange);
+    const final=point(event),last=session.stroke.points.at(-1);
+    if(Math.hypot(final[0]-last[0],final[1]-last[1])>=.0003)session.stroke.points.push(final);
+    commitInk(ink,latestStrokes.current,[...latestStrokes.current,session.stroke],onChange);
   }
 
   function cancel(event){touches.current.delete(event.pointerId);if(active.current?.pointer===event.pointerId){active.current=null;redraw();}}
 
   return <canvas tabIndex={0} onKeyDown={event=>{if(!(event.ctrlKey||event.metaKey)||event.altKey||!["z","y"].includes(event.key.toLowerCase()))return;event.preventDefault();event.stopPropagation();const redo=event.key.toLowerCase()==="y"||event.shiftKey;if(redo)redoInk(ink,strokes,onChange);else undoInk(ink,strokes,onChange);}} ref={canvas} aria-label="Ink layer" className="studio-ink" data-tool={ink.tool}
-    data-finger-drawing={ink.fingerDrawing} onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={cancel} onLostPointerCapture={cancel} />;
+    data-finger-drawing={ink.fingerDrawing} data-tablet-mode={ink.tabletMode} onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={cancel} onLostPointerCapture={cancel} />;
 }

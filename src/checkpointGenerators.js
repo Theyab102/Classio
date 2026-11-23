@@ -1,3 +1,5 @@
+import {sourceBundleStart} from './sourceBundle';
+import {materialExcerpt} from './assistantRequest';
 import { runCheckpointJob, distinct } from "./generationJobs";
 import { parseAiJson } from "./aiJson";
 import { parseDeckResponse } from "./DeckDesign";
@@ -97,7 +99,7 @@ export function generatePresentation({
             },
             {
               role: "user",
-              content: `Topic: ${frozen.topic}\nOutline: ${JSON.stringify(job.outline.outline)}\nAssigned slide: ${JSON.stringify(job.outline.outline[index])}\nSource section:\n${assigned.slice(0, 14000)}\nFigure catalog:\n${frozen.figureGuide || "None"}\nAlready saved slide titles: ${job.sections.map((slide) => slide.title).join("; ")}`,
+              content: `Topic: ${frozen.topic}\nOutline: ${JSON.stringify(job.outline.outline)}\nAssigned slide: ${JSON.stringify(job.outline.outline[index])}\nSource section:\n${assigned.slice(0, 14000)}${frozen.source?.startsWith(sourceBundleStart)?'\nLinked-source reference:\n'+materialExcerpt(frozen.source,'',5000):''}\nFigure catalog:\n${frozen.figureGuide || "None"}\nAlready saved slide titles: ${job.sections.map((slide) => slide.title).join("; ")}`,
             },
           ],
           maxTokens: attempt ? 1000 : 1800,
@@ -170,7 +172,7 @@ export function generateNotes({
                     {
                       role: "user",
                       content:
-                        `Topic: ${frozen.topic}\n` +
+                        `Source file: ${frozen.topic}\nLearner prompt: ${frozen.prompt || "Use the supplied material and indicated grade level."}\nSource overview (all linked files):\n${materialExcerpt(frozen.source,frozen.prompt,6000)}\n` +
                         sections
                           .map(
                             (part, i) =>
@@ -212,7 +214,7 @@ export function generateNotes({
                 frozen.request.messages[0],
                 {
                   role: "user",
-                  content: `Topic: ${frozen.topic}\nSaved outline: ${JSON.stringify(job.outline)}\nWrite ONLY section ${index + 1}: ${JSON.stringify(job.outline[index])}. Use H2 for this section, a H1 title only on section 1. Do not repeat any other section. Keep this section under ${attempt ? 1800 : 3200} characters.\nAssigned source section:\n${sections[index]}\nAlready covered: ${job.outline
+                  content: `Source file: ${frozen.topic}\nLearner prompt: ${frozen.prompt || "Use the supplied material and indicated grade level."}\nCross-reference all linked sources when checking answers:\n${materialExcerpt(frozen.source,frozen.prompt,5000)}\nSaved outline: ${JSON.stringify(job.outline)}\nWrite ONLY section ${index + 1}: ${JSON.stringify(job.outline[index])}. Use H2 for this section, a H1 title only on section 1. Do not repeat any other section. Keep this section under ${attempt ? 1800 : 3200} characters.\nAssigned source section:\n${sections[index]}\nAlready covered: ${job.outline
                     .slice(0, index)
                     .map((item) => item.title)
                     .join("; ")}`,

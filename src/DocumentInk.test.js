@@ -16,7 +16,7 @@ test('Undo and Redo stay visible with Drawing options collapsed',()=>{
 describe('stylus and finger input ownership',()=>{
  let originalObserver,callbacks,paint;
  beforeEach(()=>{
-  callbacks=[];paint=jest.fn();originalObserver=global.ResizeObserver;global.ResizeObserver=class{constructor(callback){callbacks.push(callback);}observe(){}disconnect(){}};
+  localStorage.removeItem('classio_tablet_mode_v1');callbacks=[];paint=jest.fn();originalObserver=global.ResizeObserver;global.ResizeObserver=class{constructor(callback){callbacks.push(callback);}observe(){}disconnect(){}};
   jest.spyOn(HTMLCanvasElement.prototype,'getBoundingClientRect').mockReturnValue({left:0,top:0,width:700,height:400});
   jest.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue({save(){},restore(){},clearRect:jest.fn(),beginPath(){},moveTo(){},lineTo(){},stroke:paint});
   HTMLCanvasElement.prototype.setPointerCapture=jest.fn();
@@ -40,6 +40,15 @@ describe('stylus and finger input ownership',()=>{
   expect(screen.getByLabelText('Saved strokes')).toHaveTextContent('[]');
   pointer('pointerdown',4,'touch');pointer('pointermove',4,'touch',80);pointer('pointerup',4,'touch');
   expect(JSON.parse(screen.getByLabelText('Saved strokes').textContent)).toHaveLength(1);
+ });
+ test('mouse-emulated tablet strokes write with Pen; hover and Scroll do not write',()=>{
+  render(<Fixture/>);pointer('pointerdown',1,'mouse');pointer('pointerup',1,'mouse');expect(screen.getByLabelText('Saved strokes')).toHaveTextContent('[]');
+  fireEvent.click(screen.getByRole('button',{name:'Pen',exact:true}));pointer('pointermove',2,'mouse',80);expect(screen.getByLabelText('Saved strokes')).toHaveTextContent('[]');
+  pointer('pointerdown',2,'mouse');pointer('pointermove',2,'mouse',80);pointer('pointerup',2,'mouse',90);const saved=JSON.parse(screen.getByLabelText('Saved strokes').textContent);expect(saved).toHaveLength(1);expect(saved[0].points).toHaveLength(3);
+ });
+ test('drawing tablet mode handles touch-emulated pen input without enabling finger drawing',()=>{
+  render(<Fixture/>);fireEvent.click(screen.getByRole('button',{name:'Pen',exact:true}));fireEvent.click(screen.getByLabelText('Drawing tablet mode'));expect(screen.getByLabelText('Draw with finger')).not.toBeChecked();
+  pointer('pointerdown',1,'touch');pointer('pointermove',1,'touch',80);pointer('pointerup',1,'touch',80);expect(JSON.parse(screen.getByLabelText('Saved strokes').textContent)).toHaveLength(1);
  });
  test('a queued resize redraw cannot resurrect a stroke after Undo',()=>{
   render(<Fixture/>);fireEvent.click(screen.getByRole('button',{name:'Pen',exact:true}));pointer('pointerdown',1);pointer('pointermove',1,'pen',70);pointer('pointerup',1);
