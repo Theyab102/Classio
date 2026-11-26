@@ -312,7 +312,7 @@ const server = http.createServer((req, res) => {
       await shot("short-answer");
       await nav("Presentations");waitingSetup=true;
       await page.getByRole("button",{name:"Generate",exact:true}).click();
-      await page.getByText("AI tools are waiting for the site’s server setup. Your work is kept.",{exact:true}).waitFor();
+      await page.getByRole("alert").filter({hasText:"AI tools are waiting for the site’s server setup. Your work is kept."}).waitFor();
       await page.getByText("Generation hasn’t started yet.",{exact:true}).waitFor();
       assert.equal(await page.getByText("Generation progress saved",{exact:true}).count(),0,"Empty attempt claimed progress was generated");
       assert.equal(await page.getByText(/0 of 1 sections saved/).count(),0);
@@ -325,10 +325,7 @@ const server = http.createServer((req, res) => {
           .getByRole("button", { name: "Generate", exact: true })
           .click();
         await page
-          .getByText(
-            "The free providers are temporarily unavailable. Saved progress is kept.",
-            { exact: true },
-          )
+          .getByRole("alert").filter({hasText:"The free providers are temporarily unavailable. Saved progress is kept."})
           .waitFor();
         await page.getByText(/14 of 20 sections saved/).waitFor();
         const encrypted = await page.evaluate(

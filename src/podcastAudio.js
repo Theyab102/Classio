@@ -11,9 +11,13 @@ export function spokenTurn(text) {
 
 export async function synthesizeSpeech(text, voice, signal, onWait=()=>{}) {
   if (!TTS_SPACE_URL) throw new Error("Audio generation is not connected.");
+  let transientAttempts=0;
   for(;;){
   if(signal?.aborted)throw new DOMException('Stopped','AbortError');
-  const response = await fetch(`${TTS_SPACE_URL}/generate-podcast`, { method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store", signal: anySignal([signal, timeoutSignal(90000)]), body: JSON.stringify({ text: spokenMathText(spokenTurn(text)), voice, speed: 1 }) });
+  let response;
+  try{response=await fetch(`${TTS_SPACE_URL}/generate-podcast`, { method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store", signal: anySignal([signal, timeoutSignal(90000)]), body: JSON.stringify({ text: spokenMathText(spokenTurn(text)), voice, speed: 1 }) });}
+  catch(error){if(signal?.aborted)throw new DOMException('Stopped','AbortError');if(transientAttempts>=1)throw new Error('The voice service could not be reached. Your transcript and previous audio are kept.');transientAttempts++;onWait(true);await waitForStudyCapacity(Date.now()+2000,signal);onWait(false);continue;}
+  if([500,502,503,504].includes(response.status)&&transientAttempts<1){transientAttempts++;onWait(true);const reset=response.headers.get('retry-after');await waitForStudyCapacity(Date.now()+(reset?retryDelay(reset)*1000:2000),signal);onWait(false);continue;}
   if(response.status===429){onWait(true);await waitForStudyCapacity(Date.now()+retryDelay(response.headers.get('retry-after'))*1000,signal);onWait(false);continue;}
   if(response.status===400)throw new Error("This voice is unavailable on the connected service. Reload the voice catalog and choose another voice.");
   if (!response.ok || !response.headers.get("content-type")?.startsWith("audio/")) throw new Error("The voice service could not create audio. Your transcript is still available.");

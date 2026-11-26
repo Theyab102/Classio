@@ -208,13 +208,13 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
 
   async function generateBackgroundNotes(resume){
     if(aiRequest.current||background.running||!editor)return;
-    const existing=noteHtmlToMarkdown(editor.getHTML()),preferences={layout:noteLayout,level,length:noteLength,prompt};
+    const existing=noteHtmlToMarkdown(editor.getHTML()),preferences=resume?.input?.preferences||{layout:noteLayout,level,length:noteLength,prompt,style,language,instructions,includeImages:webImages};
     setError('');setBusy(true);
     const task=startStudyWork({file,kind:'notes',fallback:patch=>{const data=latest.current;data.file=patch(data.file);data.onUpdate(data.file);},work:async context=>{
       const {signal,checkpoint,commit,finishing}=context;
       const source=resume?.input.source??((await getFileText?.(900000))||(pdfFile?await getPdfContext(pdfFile):existing));
       context.check();if(!source?.trim()&&!prompt.trim())throw new Error('Enter a prompt or choose a file with readable text.');
-      const figures=webImages&&fileObj?await getSourceFigures(fileObj).catch(()=>[]):[];context.check();
+      const useImages=preferences.includeImages??webImages,figures=useImages&&fileObj?await getSourceFigures(fileObj).catch(()=>[]):[];context.check();
       const request={task:'notes',messages:[
         {role:'system',content:`Create ${style.toLowerCase()} study notes with clear headings, explanations, worked examples and step-by-step solutions. ${languageInstruction(source,language)} Explanation level: ${level}. Length: ${noteLength}. Organization: ${noteLayout}. Read filenames and grade/year labels together with the actual source text. The learner prompt overrides an inferred level. Explain why each step works, match revision questions to linked answer keys and flag conflicting evidence. ${LESSON_SCOPE_GUIDE} Learner prompt: ${prompt||'Teach the supplied lessons fully.'}. Custom instructions: ${instructions||'Use the selected defaults.'}. ${MATH_OUTPUT_GUIDE} ${GRAPH_OUTPUT_GUIDE} Return Markdown only. ${figures.length?'Relevant source figures may use [[SOURCE_FIGURE:0]] markers from this catalog: '+sourceFigureGuide(figures):''}`},
         {role:'user',content:`Source file: ${file.name}\nLearner prompt: ${prompt}\n\n${materialExcerpt(source||'',prompt,14000)}`}
@@ -222,10 +222,10 @@ export default function NotesEditor({ file, fileObj, getFileText, onUpdate, read
       let saved;
       const raw=await generateNotes({fileId:file.id,input:{source:source||'',topic:file.name,prompt,request,coverageVersion:2,preferences},resume,signal,readPageImage,onProgress:context.progress,onCheckpoint:job=>{saved=job;checkpoint(job);}});
       finishing();let generatedStyle=null;
-      if(/handwrit|colou?r|pastel|notebook|visual theme|font|rounded cards/i.test(instructions))try{const rawStyle=await sendStudyRequest(styleRequest(instructions),signal);generatedStyle={...normalizeStyle(parseAiJson(rawStyle)),prompt:instructions};}catch(error){if(signal.aborted)throw error;}
+      if(/handwrit|colou?r|pastel|notebook|visual theme|font|rounded cards/i.test(preferences.instructions||""))try{const rawStyle=await sendStudyRequest(styleRequest(preferences.instructions),signal);generatedStyle={...normalizeStyle(parseAiJson(rawStyle)),prompt:preferences.instructions};}catch(error){if(signal.aborted)throw error;}
       const generatedImages=new Set(),graphed=await notesWithMathGraphs(raw,signal,generatedImages);
-      const enriched=await enrichNoteImages(graphed,{pdfFile,fileObj,useWeb:webImages,sourceFigures:figures,sourceOnly:!!fileObj,generatedImages,signal});context.check();
-      commit(current=>({...current,...appliedGenerationPatch(current,'notes',saved),notesHtml:(current.notesHtml||markdownToNoteHtml(current.notes||''))+enriched.html,notes:[current.notes,noteHtmlToMarkdown(enriched.html).replace(/!\[([^\]]*)\]\(data:[^)]*\)/g,'$1')].filter(Boolean).join('\n\n'),notesMode:'write',...(generatedStyle?{contentStyle:generatedStyle,previousContentStyle:current.contentStyle||null}:{}),noteGenerationPreferences:preferences,noteLayout,noteCoverage:{sections:saved.total,completed:saved.sections.length}}));
+      const enriched=await enrichNoteImages(graphed,{pdfFile,fileObj,useWeb:useImages,sourceFigures:figures,sourceOnly:!!fileObj,generatedImages,signal});context.check();
+      commit(current=>({...current,...appliedGenerationPatch(current,'notes',saved),notesHtml:(current.notesHtml||markdownToNoteHtml(current.notes||''))+enriched.html,notes:[current.notes,noteHtmlToMarkdown(enriched.html).replace(/!\[([^\]]*)\]\(data:[^)]*\)/g,'$1')].filter(Boolean).join('\n\n'),notesMode:'write',...(generatedStyle?{contentStyle:generatedStyle,previousContentStyle:current.contentStyle||null}:{}),noteGenerationPreferences:preferences,noteLayout:preferences.layout,noteCoverage:{sections:saved.total,completed:saved.sections.length}}));
       return raw;
     }});
     aiRequest.current=task.controller;

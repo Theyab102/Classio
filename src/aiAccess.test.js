@@ -119,3 +119,12 @@ test("requests wait for Firebase initialization instead of issuing an accidental
     "Bearer fixture-initialized-token",
   );
 });
+
+test('an account change while authentication initializes cancels the old signed-in request',async()=>{
+ let user={uid:'alice',getIdToken:async()=> 'fixture-alice'},finish;const ready=new Promise(resolve=>{finish=resolve;});setAiIdentityProvider(()=>user,()=>ready);global.fetch=jest.fn();
+ const pending=authorizedFetch('/api/study',post);const rejected=expect(pending).rejects.toHaveProperty('name','AbortError');user={uid:'bob',getIdToken:async()=> 'fixture-bob'};finish();await rejected;expect(global.fetch).not.toHaveBeenCalled();
+});
+test('a successful response from the previous account is not returned to the new account',async()=>{
+ let user={uid:'alice',getIdToken:async()=> 'fixture-alice'},finish;setAiIdentityProvider(()=>user);global.fetch=jest.fn(()=>new Promise(resolve=>{finish=()=>resolve(response(200,{text:'Private old answer'}));}));
+ const pending=authorizedFetch('/api/study',post);const rejected=expect(pending).rejects.toHaveProperty('name','AbortError');while(!finish)await Promise.resolve();user={uid:'bob',getIdToken:async()=> 'fixture-bob'};finish();await rejected;expect(global.fetch).toHaveBeenCalledTimes(1);
+});

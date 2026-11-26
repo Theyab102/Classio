@@ -34,8 +34,10 @@ function cancellable(promise, signal) {
   });
 }
 export async function aiHeaders(signal) {
+  const startingUser=identity()?.uid;
   await cancellable(Promise.resolve(ready()), signal);
   const user = identity();
+  if(startingUser&&startingUser!==user?.uid)throw new DOMException("Account changed","AbortError");
   if (user?.getIdToken) {
     const token = await cancellable(user.getIdToken(), signal);
     if (identity()?.uid !== user.uid)
@@ -61,6 +63,7 @@ export async function aiHeaders(signal) {
           );
           error.code = result.code;
           error.status = response.status;
+          if(response.status===429)error.capacityScope="session";
           error.retryAfter =
             Number(response.headers?.get?.("retry-after")) || 0;
           throw error;
@@ -81,13 +84,14 @@ export async function aiHeaders(signal) {
   }
   return { "X-Classio-CSRF": session.csrf };
 }
-export async function authorizedFetch(url, options = {}) {
+export async function authorizedFetch(url, options = {}, expectedOwner) {
+  const startingUser=identity()?.uid;
   if(options.signal?.aborted)throw new DOMException("Cancelled","AbortError");
   const headers = await cancellable(aiHeaders(options.signal), options.signal);
   const owner = aiOwner(),
     sessionUsed = guest;
-  if (options.signal?.aborted)
-    throw new DOMException("Cancelled", "AbortError");
+  if (options.signal?.aborted||(startingUser&&startingUser!==owner)||(expectedOwner!==undefined&&expectedOwner!==owner))
+    throw new DOMException("Cancelled or account changed", "AbortError");
   const send = (access) =>
     fetch(url, {
       ...options,
@@ -95,6 +99,7 @@ export async function authorizedFetch(url, options = {}) {
       headers: { ...options.headers, ...access },
     });
   const response = await send(headers);
+  if(options.signal?.aborted||aiOwner()!==owner)throw new DOMException("Cancelled or account changed","AbortError");
   if (response.status !== 401) return response;
   const failure = await response
     .clone()

@@ -51,3 +51,13 @@ test('speech waits for the actual capacity reset and retries the same turn autom
  const flush=async()=>{for(let i=0;i<30;i++)await Promise.resolve();};
  try{const pending=synthesizeSpeech("A useful study explanation.","nova",controller.signal,state=>states.push(state));await flush();expect(states).toEqual([true]);jest.advanceTimersByTime(20000);await flush();jest.advanceTimersByTime(20000);await flush();jest.advanceTimersByTime(4999);await flush();expect(global.fetch).toHaveBeenCalledTimes(1);jest.advanceTimersByTime(1);await flush();await expect(pending).resolves.toBe(blob);expect(global.fetch).toHaveBeenCalledTimes(2);expect(states).toEqual([true,false]);}finally{controller.abort();global.fetch=previous;jest.useRealTimers();}
 });
+
+test('a temporary voice outage retries the unfinished turn once and preserves cancellation',async()=>{
+ jest.useFakeTimers();const previous=global.fetch,controller=new AbortController(),blob=new Blob(['audio']);global.fetch=jest.fn().mockResolvedValueOnce({status:503,ok:false,headers:{get:()=>null}}).mockResolvedValueOnce({status:200,ok:true,headers:{get:()=> 'audio/wav'},blob:async()=>blob});
+ const flush=async()=>{for(let i=0;i<30;i++)await Promise.resolve();};
+ try{const pending=synthesizeSpeech('A clear explanation.','aria',controller.signal);await flush();jest.advanceTimersByTime(1999);await flush();expect(global.fetch).toHaveBeenCalledTimes(1);jest.advanceTimersByTime(1);await flush();await expect(pending).resolves.toBe(blob);expect(global.fetch).toHaveBeenCalledTimes(2);expect(global.fetch.mock.calls[0][1].body).toBe(global.fetch.mock.calls[1][1].body);}finally{controller.abort();global.fetch=previous;jest.useRealTimers();}
+});
+test('a persistent voice outage stops after a bounded retry and cancellation prevents a new attempt',async()=>{
+ jest.useFakeTimers();const previous=global.fetch,controller=new AbortController();global.fetch=jest.fn().mockResolvedValue({status:503,ok:false,headers:{get:()=>null}});const flush=async()=>{for(let i=0;i<30;i++)await Promise.resolve();};
+ try{const pending=synthesizeSpeech('A clear explanation.','aria',controller.signal);const failed=expect(pending).rejects.toThrow('transcript is still available');await flush();jest.advanceTimersByTime(2000);await flush();await failed;expect(global.fetch).toHaveBeenCalledTimes(2);const cancelled=synthesizeSpeech('Another explanation.','aria',controller.signal);const stopped=expect(cancelled).rejects.toHaveProperty('name','AbortError');await flush();controller.abort();await stopped;jest.advanceTimersByTime(3000);await flush();expect(global.fetch).toHaveBeenCalledTimes(3);}finally{controller.abort();global.fetch=previous;jest.useRealTimers();}
+});

@@ -57,3 +57,5 @@
 .theme-motion-switch[data-dragging=true]>span{transition:none!important}
 
 @media(min-width:600px) and (max-width:899px){.classio-shell .assistant-resizer{display:grid!important}.classio-shell .assistant-size-button{display:inline-flex!important}.assistant-panel-backdrop::after{width:var(--assistant-width,400px)}}
+/* Study controls stay unobscured; the sidebar still opens the assistant. */
+.classio-shell:has(.flashcard-studio.is-studying) .assistant-dock{display:none}

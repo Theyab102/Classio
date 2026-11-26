@@ -23,15 +23,16 @@ export async function waitForStudyCapacity(until,signal,owner=aiOwner()){
   }finally{if(!signal?.aborted&&aiOwner()===owner)await reportStudyWait(signal,{until:0,phase:'running'});}
   check();
 }
-export const studyCapacityDeadline=owner=>deadlines.get(owner)||0;
-export function deferStudyCapacity(owner,seconds){const until=Date.now()+seconds*1000;deadlines.set(owner,Math.max(until,deadlines.get(owner)||0));return deadlines.get(owner);}
-export function acquireStudySlot(owner,signal){
+const scopeKey=(owner,scope='study')=>JSON.stringify([owner,scope]);
+export const studyCapacityDeadline=(owner,scope)=>deadlines.get(scopeKey(owner,scope))||0;
+export function deferStudyCapacity(owner,seconds,scope){const key=scopeKey(owner,scope),until=Date.now()+seconds*1000;deadlines.set(key,Math.max(until,deadlines.get(key)||0));return deadlines.get(key);}
+export function acquireStudySlot(owner,signal,scope){
   if(signal?.aborted)return Promise.reject(aborted());
-  const lane=lanes.get(owner)||{busy:false,queue:[]};lanes.set(owner,lane);
+  const key=scopeKey(owner,scope),lane=lanes.get(key)||{busy:false,queue:[]};lanes.set(key,lane);
   return new Promise((resolve,reject)=>{
     const entry={grant:()=>{
       signal?.removeEventListener('abort',cancel);lane.busy=true;let released=false;
-      resolve(()=>{if(released)return;released=true;const next=lane.queue.shift();if(next)next.grant();else{lane.busy=false;lanes.delete(owner);}});
+      resolve(()=>{if(released)return;released=true;const next=lane.queue.shift();if(next)next.grant();else{lane.busy=false;lanes.delete(key);}});
     }};
     const cancel=()=>{lane.queue=lane.queue.filter(item=>item!==entry);reject(aborted());};
     if(lane.busy){lane.queue.push(entry);signal?.addEventListener('abort',cancel,{once:true});}else entry.grant();

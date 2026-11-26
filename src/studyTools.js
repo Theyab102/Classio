@@ -3,9 +3,9 @@ import {acquireStudySlot,studyCapacityDeadline,deferStudyCapacity,waitForStudyCa
 import {aiMode} from './aiPreferences';
 import {authorizedFetch} from './aiAccess';
 import {studyStyleInstruction} from './studyContext';
-async function sendStudyOnce(payload, signal) {
-  if(signal?.aborted)throw new DOMException("Cancelled","AbortError");
-  const mode=aiMode();if(mode==="browser-local"){const{generateLocal}=await import("./localAi");return generateLocal(payload,signal);}
+async function sendStudyOnce(payload, signal, owner) {
+  if(signal?.aborted||aiOwner()!==owner)throw new DOMException("Cancelled","AbortError");
+  const mode=aiMode();if(mode==="browser-local"){const{generateLocal}=await import("./localAi");if(signal?.aborted||aiOwner()!==owner)throw new DOMException("Cancelled","AbortError");return generateLocal(payload,signal);}
   const controller = new AbortController();
   const cancel = () => controller.abort();
   if (signal?.aborted) cancel();
@@ -16,7 +16,7 @@ async function sendStudyOnce(payload, signal) {
     const response = await authorizedFetch("/api/study", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({...payload,provider:payload.provider||mode,messages:(payload.messages || []).map((message,index)=>index===0&&message.role==="system"&&!(["style","classification"].includes(payload.task))?{...message,content:message.content+"\n"+studyStyleInstruction()}:message)}), signal: controller.signal,
-    });
+    },owner);
     const data = await response.json().catch(() => ({}));
     if (!response.ok || typeof data.text !== "string" || !data.text.trim()) {
       const error = new Error(data.error || "The AI service could not finish this request. Your work is still open.");
@@ -37,18 +37,19 @@ async function sendStudyOnce(payload, signal) {
 
 
 export async function sendStudyRequest(payload,signal) {
-  const owner=aiOwner();
+  const owner=aiOwner(),modality=payload.audio||payload.kind==='audio'?'audio':payload.vision||(payload.messages||[]).some(message=>Array.isArray(message.content)&&message.content.some(part=>part.type==='image_url'))?'vision':'text',quota=modality==='audio'?'audio':'study';
+  const check=()=>{if(signal?.aborted||aiOwner()!==owner)throw new DOMException('Generation cancelled','AbortError');};
+  const deadline=()=>aiMode()==='browser-local'?0:Math.max(studyCapacityDeadline(owner,modality),studyCapacityDeadline(owner,'quota:'+quota),studyCapacityDeadline(owner,'session'));
   for(;;){
-    if(signal?.aborted||aiOwner()!==owner)throw new DOMException('Generation cancelled','AbortError');
-    const until=studyCapacityDeadline(owner);
+    check();const until=deadline();
     if(until>Date.now())await waitForStudyCapacity(until,signal,owner);
-    const release=await acquireStudySlot(owner,signal);
+    const release=await acquireStudySlot(owner,signal,quota);
     try{
-      if(studyCapacityDeadline(owner)>Date.now())continue;
-      return await sendStudyOnce(payload,signal);
+      check();if(deadline()>Date.now())continue;
+      const text=await sendStudyOnce(payload,signal,owner);check();return text;
     }catch(error){
-      if(error.status!==429||signal?.aborted)throw error;
-      deferStudyCapacity(owner,error.retryAfter||30);
+      if(error.status!==429||signal?.aborted||aiOwner()!==owner)throw error;
+      deferStudyCapacity(owner,error.retryAfter||30,error.capacityScope==='session'?'session':error.code==='CLIENT_RATE_LIMIT'?'quota:'+quota:modality);
     }finally{release();}
   }
 }
